@@ -54,6 +54,8 @@ def step1_plant_bug(clone: Path) -> str:
     """提交并 push demo bug（幂等：已埋过则直接用远端 HEAD）。返回 base_sha。"""
     (clone / "calc.py").write_text(BUG_DIV, encoding="utf-8")
     (clone / "test_div.py").write_text(TEST, encoding="utf-8")
+    # PR 不得带构建产物：回归测试在本地跑过会生成 __pycache__
+    (clone / ".gitignore").write_text("__pycache__/\n*.pyc\n.pytest_cache/\n", encoding="utf-8")
     st = subprocess.run(["git", "status", "--porcelain"], cwd=clone,
                         capture_output=True, text=True).stdout.strip()
     if not st:

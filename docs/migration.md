@@ -15,7 +15,7 @@
 | P2 | Modal adapter + Bug Hunter MVP（默认 dry-run） | ✅ 完成：硬限制确认（$30/$0）+ token 就绪 + billing 解析适配实测结构（Decimal 字符串）+ fail-closed 验证通过 |
 | P3 | Actions adapter + 通用 worker 真实执行 | ✅ 通道冒烟通过（dispatch→执行→stdout 信封收集→校验，run 40108140605）。注意：账号 Actions artifact 存储配额已满，小结果走日志信封（与 Modal 同协议），大补丁需清理存储配额；真实 repair 等价验证待 P4 接入 OpenCode |
 | P4 | OpenCode 模型路由实测 | ⬜ 需安装 OpenCode CLI + 免费模型登录验证 |
-| P5 | 完整贡献闭环（谨慎上线） | ⬜ |
+| P5 | 完整贡献闭环（谨慎上线） | ✅ 内部仓库闭环验证：合规门→OpenCode 修复→证据链→质量闸→干净 PR→合并（PR#2，仅 calc.py 1 行）。外部仓库动作仍未发生 |
 | P6 | 7 天只读试运行 → 事件驱动消费（默认不启用） | ⬜ |
 
 ## 数据迁移语义
