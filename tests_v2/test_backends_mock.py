@@ -114,13 +114,13 @@ class TestCoreCLI:
         jf = tmp_path / "job.json"
         jf.write_text(json.dumps(Job(mode="reproduce", repo="a/b",
                                      base_sha="deadbeef",
+                                     test_cmd=["python", "-c", "pass"],
                                      idempotency_key="verify:a:b:deadbeef:fp").to_dict()),
                       encoding="utf-8")
         rc = main(["--job", str(jf), "--out", str(tmp_path / "out")])
         assert rc == 0
         res = json.loads((tmp_path / "out" / "result.json").read_text(encoding="utf-8"))
-        assert res["outcome"] == "inconclusive" and res["base_sha"] == "deadbeef"
-        assert res["unverified_items"]  # 骨架必须如实声明未验证项
+        assert res["outcome"] == "succeeded" and res["base_sha"] == "deadbeef"
 
     def test_worker_validates_github_write_absent_in_result(self, tmp_path):
         j = Job(mode="repair", repo="a/b", base_sha="abc", idempotency_key="k:1")

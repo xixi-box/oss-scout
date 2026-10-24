@@ -1,9 +1,14 @@
 # 统一 worker 镜像（计划 §5）：同一份执行器代码跑 Modal / GitHub Actions。
-# P1 交付模板；P2/P3 首次构建前按官方文档复核版本。
+# P2 交付：含 git（按 SHA 拉仓）与 semgrep（Bug Hunter 扫描）。
 FROM python:3.11-slim
 
 # 安全基线：非 root 运行；worker 内无任何 GitHub 写令牌
-RUN useradd -m worker
+RUN useradd -m worker \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends git \
+    && rm -rf /var/lib/apt/lists/* \
+    && pip install --no-cache-dir semgrep
+
 WORKDIR /workspace
 
 COPY scout_v2 /workspace/scout_v2

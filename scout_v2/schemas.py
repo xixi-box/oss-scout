@@ -73,6 +73,9 @@ class Job:
     model_policy: str = "free_first"
     allow_github_write: bool = False    # 固定 False；控制器才是唯一写者
     created_at: str = ""
+    # P2 可选扩展（旧 Job JSON 不含这些字段也能解析）
+    test_cmd: list[str] = field(default_factory=list)   # reproduce：最小失败测试命令
+    ruleset: str = ""                                    # scan：semgrep 规则集
 
     def to_dict(self) -> dict[str, Any]:
         return dataclasses.asdict(self)

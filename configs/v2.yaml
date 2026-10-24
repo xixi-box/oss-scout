@@ -25,15 +25,20 @@ queue:
 
 budget:
   modal:
-    enabled: false                    # P2 前保持 false；Spend Limit 未确认 $0 前禁止置 true
+    enabled: false                    # MODAL_TOKEN 配置好并跑通 smoke 后置 true
     monthly_soft_cap_usd: 25.0
     max_concurrent_sandboxes: 1
     max_task_minutes: 30
     fail_closed_on_billing_error: true
-    # 用户约束（2026-10-25）：只用临时 Sandbox；不创建长期付费 Volume；
-    # 不使用额外计费的模型推理端点
+    # 平台硬限制（用户控制台确认 2026-10-25：Usage limit $30 / Spend limit $0 / 本期 $0）
+    platform_hard_limits:
+      included_credits_usd: 30.0
+      usage_limit_usd: 30.0
+      spend_limit_usd: 0.0            # 额度耗尽即停，零自付
+    # 用户约束：只用临时 Sandbox；不创建长期付费 Volume；不使用额外计费的模型推理端点
     persistent_volumes: false
     paid_inference_endpoints: false
+    semgrep_ruleset: "p/python"       # MVP 精选规则集；扩容前人工复核误报率
   actions:
     enabled: false                    # P3 前保持 false；测试仓库已就绪 xixi-box/oss-scout-v2-test
     max_minutes_per_job: 60

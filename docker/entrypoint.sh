@@ -10,4 +10,9 @@ if [ -n "${GH_TOKEN:-}" ] || [ -n "${GITHUB_TOKEN:-}" ]; then
 fi
 JOB="${1:-/workspace/job.json}"
 OUT="${2:-/workspace/artifacts}"
+# Modal 路径用 --job-b64 + --emit-envelope（无持久卷，结果走 stdout），见 modal_backend.py
+if [ -n "${OSSCOUT_JOB_B64:-}" ]; then
+  exec python -m scout_v2.workers.core --job-b64 "$OSSCOUT_JOB_B64" --out "$OUT" \
+    --repo-dir /workspace/repo --emit-envelope
+fi
 exec python -m scout_v2.workers.core --job "$JOB" --out "$OUT"

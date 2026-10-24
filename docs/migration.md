@@ -12,7 +12,7 @@
 |---|---|---|
 | P0 | 审计 + git 快照（commit `08d16e0`）+ 冲突报告 `docs/p0_audit.md` | ✅ 完成 |
 | P1 | Schema/队列/策略/预算/路由/守门 + 89 项测试 | ✅ 本仓库已交付 |
-| P2 | Modal adapter + Bug Hunter MVP（默认 dry-run） | ⬜ 需用户确认 Modal 账户与预算 |
+| P2 | Modal adapter + Bug Hunter MVP（默认 dry-run） | ✅ 代码完成（平台硬限制已确认：usage limit $30 / spend limit $0）；待用户 `modal token set` 后跑 `python scripts/modal_smoke.py --yes` 实测 Sandbox 链路 |
 | P3 | Actions adapter + 通用 worker 真实执行 | ⬜ 需用户的测试仓库 |
 | P4 | OpenCode 模型路由实测 | ⬜ 需安装 OpenCode CLI + 免费模型登录验证 |
 | P5 | 完整贡献闭环（谨慎上线） | ⬜ |

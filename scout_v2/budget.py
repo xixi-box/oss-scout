@@ -26,6 +26,66 @@ class DisabledBilling:
         return False
 
 
+class ModalCliBilling:
+    """从 `modal billing summary --json` 读当月计量成本（计划 §12）。
+
+    防御性解析：官方返回结构未实测锁定，因此只认明确像成本的数值字段；
+    解析不出 → 返回 None → BudgetGuard fail-closed 拒绝创建（宁可停也不超支）。
+    """
+
+    COMMAND = ("modal", "billing", "summary", "--json")
+
+    def __init__(self, runner=None):
+        self._runner = runner or self._run_cli
+
+    @staticmethod
+    def _run_cli(cmd: tuple[str, ...]) -> tuple[int, str]:
+        import subprocess
+        p = subprocess.run(cmd, capture_output=True, text=True,
+                           encoding="utf-8", errors="replace", timeout=30)
+        return p.returncode, p.stdout
+
+    def healthy(self) -> bool:
+        try:
+            rc, out = self._runner(self.COMMAND)
+        except Exception:  # noqa: BLE001 — CLI 缺失/超时/任何异常都视为不健康
+            return False
+        return rc == 0 and bool(out.strip())
+
+    def metered_usage_usd(self) -> float | None:
+        try:
+            rc, out = self._runner(self.COMMAND)
+            if rc != 0:
+                return None
+            import json
+            data = json.loads(out)
+        except Exception:  # noqa: BLE001
+            return None
+        return self._extract_usd(data)
+
+    @staticmethod
+    def _extract_usd(data) -> float | None:
+        """在（可能嵌套的）账单 JSON 里找明确的成本字段；找不到 = None（fail-closed）。"""
+        import numbers
+        COST_HINTS = ("metered_cost", "total_cost", "cost", "charges", "spend", "usage_usd")
+        if isinstance(data, dict):
+            for k, v in data.items():
+                kl = str(k).lower()
+                if isinstance(v, numbers.Number) and not isinstance(v, bool) \
+                        and any(h in kl for h in COST_HINTS):
+                    return float(v)
+            for v in data.values():
+                found = ModalCliBilling._extract_usd(v)
+                if found is not None:
+                    return found
+        elif isinstance(data, list):
+            for item in data:
+                found = ModalCliBilling._extract_usd(item)
+                if found is not None:
+                    return found
+        return None
+
+
 @dataclass
 class BudgetGuard:
     soft_cap_usd: float
