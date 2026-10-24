@@ -3,7 +3,7 @@
 # 默认节奏完全对齐 Playbook §1.5；更激进的频率仅作注释示例，切换前必须人工修订 Playbook。
 
 version: 1
-business_timezone: "Asia/Shanghai"   # 每日认领上限按此时区切"当日"（待用户最终确认）
+business_timezone: "Asia/Shanghai"   # 每日认领上限按此时区切"当日"（用户已确认 2026-10-25）
 
 scheduler:
   # 当前生效（= Playbook 节奏）
@@ -30,8 +30,12 @@ budget:
     max_concurrent_sandboxes: 1
     max_task_minutes: 30
     fail_closed_on_billing_error: true
+    # 用户约束（2026-10-25）：只用临时 Sandbox；不创建长期付费 Volume；
+    # 不使用额外计费的模型推理端点
+    persistent_volumes: false
+    paid_inference_endpoints: false
   actions:
-    enabled: false                    # P3 前保持 false
+    enabled: false                    # P3 前保持 false；测试仓库已就绪 xixi-box/oss-scout-v2-test
     max_minutes_per_job: 60
   opencode:
     allow_paid_api: false
@@ -40,7 +44,17 @@ features:
   bug_hunter_light: false             # P2 启用
   bug_hunter_deep_modal: false        # P2 且 modal.enabled 后启用
   actions_backend: false              # P3 启用
-  opencode_models: false              # P4 启用
+  opencode_models: false              # P4 启用（本地 opencode 1.18.27 已在位）
+
+bug_hunter:
+  # MVP 3~5 个中小型 Python 仓库，从 config.json 现有监控名单里选（用户 2026-10-25 确认来源）
+  mvp_repos:
+    - "openai/openai-agents-python"
+    - "browser-use/browser-use"
+    - "langchain-ai/langsmith-sdk"
+    - "Arize-ai/phoenix"
+    - "crewAIInc/crewAI"
+  target_repos_total: 10              # 误报率/成本达标后再扩到 10~20
 
 security:
   worker_github_write_token: false    # worker 固定无 GitHub 写令牌（计划 §4.2/§10）
