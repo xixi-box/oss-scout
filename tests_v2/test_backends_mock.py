@@ -125,4 +125,4 @@ class TestCoreCLI:
     def test_worker_validates_github_write_absent_in_result(self, tmp_path):
         j = Job(mode="repair", repo="a/b", base_sha="abc", idempotency_key="k:1")
         r = execute(j, tmp_path)
-        assert r.outcome == "inconclusive"
+        assert r.outcome == "blocked"   # repair 需要 --repo-dir（P5 起真实实现）

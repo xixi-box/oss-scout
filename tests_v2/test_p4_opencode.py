@@ -108,6 +108,62 @@ class TestOpenCodeClient:
         assert not ok and "empty" in detail
 
 
+    def test_nested_session_env_cleared_and_dir_explicit(self, tmp_path, monkeypatch):
+        """在 opencode 会话内调用时，子进程必须脱离父会话并把 workdir 显式传给 CLI。"""
+        import scout_v2.workers.opencode_client as oc
+        monkeypatch.setenv("OPENCODE", "1")
+        monkeypatch.setenv("OPENCODE_PID", "12345")
+        monkeypatch.setenv("PWD", "/tmp/elsewhere")
+        seen = {}
+
+        def fake_run(cmd, **kw):
+            seen.update(cmd=cmd, env=kw["env"], cwd=kw["cwd"])
+            return type("P", (), {
+                "stdout": json.dumps({"type": "text", "part": {"text": "OK"}}),
+                "stderr": "", "returncode": 0})()
+        monkeypatch.setattr(oc.subprocess, "run", fake_run)
+        ok, _ = OpenCodeClient(workdir=tmp_path).run("m", "line1\nline2")
+        assert ok
+        assert "--dir" in seen["cmd"] and str(tmp_path) in seen["cmd"]
+        assert seen["cmd"][-1] == "line1\nline2"
+        assert "OPENCODE" not in seen["env"]
+        assert "OPENCODE_PID" not in seen["env"]
+        assert "PWD" not in seen["env"]
+
+
+class TestResolveBinary:
+    def test_shim_exe_extracted(self, tmp_path):
+        """npm .cmd shim → 取旁边原生 .exe（绕过 cmd.exe 的换行截断）。"""
+        from scout_v2.workers.opencode_client import _native_exe_from_shim
+        exe = tmp_path / "node_modules" / "opencode-ai" / "bin" / "opencode.exe"
+        exe.parent.mkdir(parents=True)
+        exe.write_bytes(b"")
+        shim = tmp_path / "opencode.cmd"
+        shim.write_text('@ECHO off\r\n"%dp0%\\node_modules\\opencode-ai\\bin\\opencode.exe"   %*\r\n',
+                        encoding="utf-8")
+        assert _native_exe_from_shim(shim) == exe
+
+    def test_shim_without_exe_returns_none(self, tmp_path):
+        from scout_v2.workers.opencode_client import _native_exe_from_shim
+        shim = tmp_path / "opencode.cmd"
+        shim.write_text("@ECHO off\r\nopencode-js \"%*\"\r\n", encoding="utf-8")
+        assert _native_exe_from_shim(shim) is None
+
+    def test_resolve_prefers_native_exe_on_windows(self, tmp_path, monkeypatch):
+        import os
+        import shutil
+        from scout_v2.workers import opencode_client as oc
+        if os.name != "nt":
+            pytest.skip("shim handling is Windows-specific")
+        exe = tmp_path / "bin" / "opencode.exe"
+        exe.parent.mkdir(parents=True)
+        exe.write_bytes(b"")
+        shim = tmp_path / "opencode.cmd"
+        shim.write_text('"%dp0%\\bin\\opencode.exe" %*\n', encoding="utf-8")
+        monkeypatch.setattr(shutil, "which", lambda _b: str(shim))
+        assert oc.resolve_binary("opencode") == str(exe)
+
+
 class TestDiscoverFreeModels:
     def test_filters_free_suffix(self, monkeypatch):
         import scout_v2.workers.opencode_client as oc

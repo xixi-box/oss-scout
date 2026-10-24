@@ -49,3 +49,6 @@ repositories:
 
   # ---- 仅观测 ----
   google-gemini/gemini-cli:    {lane: observe}
+
+  # ---- 内部测试仓库（P5 闭环演练用；不承载真实开源贡献）----
+  xixi-box/oss-scout-v2-test:  {lane: open, internal_test_repo: true}

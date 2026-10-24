@@ -64,17 +64,25 @@ def execute(job: Job, out_dir: Path, backend: str = "local",
         from .reproduce import run_reproduce
         return run_reproduce(job, repo_dir or out_dir, out_dir,
                              test_cmd=list(job.test_cmd))
-    if job.mode in {"repair", "review", "ci"}:
+    if job.mode == "repair":
+        if repo_dir is None:
+            return Result(job_id=job.job_id, backend=backend, outcome="blocked",
+                          base_sha=job.base_sha,
+                          unverified_items=["repair requires --repo-dir"])
+        from .repair import run_repair
+        return run_repair(job, repo_dir, out_dir, test_cmd=list(job.test_cmd),
+                          context=job.context)
+    if job.mode in {"review", "ci"}:
         return _run_repair_like(job, out_dir, backend)
     return Result(job_id=job.job_id, backend=backend, outcome="blocked",
                   base_sha=job.base_sha, unverified_items=[f"unsupported mode {job.mode}"])
 
 
 def _run_repair_like(job: Job, out_dir: Path, backend: str) -> Result:
-    # P3 接入 OpenCode + 项目工作流。当前骨架，如实声明未验证。
+    # review/ci：P5 后段接入项目工作流。当前骨架，如实声明未验证。
     return Result(job_id=job.job_id, backend=backend, outcome="inconclusive",
                   base_sha=job.base_sha,
-                  unverified_items=[f"{job.mode} engine not implemented (P3); skeleton only"])
+                  unverified_items=[f"{job.mode} engine not implemented yet; skeleton only"])
 
 
 def emit_envelope(result: Result, out_dir: Path) -> None:

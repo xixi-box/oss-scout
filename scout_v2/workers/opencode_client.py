@@ -9,21 +9,74 @@
 from __future__ import annotations
 
 import json
+import os
+import re
 import subprocess
 from pathlib import Path
 
 # 需要原样透传给 model_fallback 的 HTTP 状态码（会出现在 error 事件里）
 _STATUS_MARKERS = ("statusCode", "status_code")
 
+# npm 生成的 .cmd shim 形如 `"%dp0%\node_modules\<pkg>\bin\<name>.exe" %*`
+_SHIM_EXE_RE = re.compile(r'"([^"]+\.exe)"', re.IGNORECASE)
+
+
+def resolve_binary(binary: str) -> str:
+    """解析出真正可执行的原生路径。
+
+    实测（2026-10-25）：Windows 上 `shutil.which` 返回 opencode.CMD；batch 文件经
+    cmd.exe 执行时**多行参数会在第一个换行处被截断**（模型只收到 prompt 第一行，
+    导致空补丁）。shim 旁边通常有原生 .exe，优先直接用 .exe 绕开 cmd.exe。
+    找不到原生 exe 时保持原路径，由调用方决定是否可用。
+    """
+    import shutil
+    path = shutil.which(binary) or binary
+    p = Path(path)
+    if os.name == "nt" and p.suffix.lower() in {".cmd", ".bat"}:
+        native = _native_exe_from_shim(p)
+        if native is not None:
+            return str(native)
+    return path
+
+
+def _native_exe_from_shim(shim: Path) -> Path | None:
+    try:
+        text = shim.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    for m in _SHIM_EXE_RE.finditer(text):
+        raw = m.group(1)
+        for token in ("%~dp0%", "%~dp0", "%dp0%", "%dp0"):
+            raw = raw.replace(token, str(shim.parent))
+        cand = Path(raw)
+        if not cand.is_absolute():
+            cand = shim.parent / cand
+        if cand.is_file():
+            return cand
+    return None
+
+
+def _child_env() -> dict[str, str]:
+    """子进程环境：去掉 OPENCODE_* 标记。
+
+    实测（2026-10-25）：在 opencode 会话内（OPENCODE=1/OPENCODE_PID 存在）调用 CLI，
+    它会附着到父会话的项目，**忽略 cwd 与 --dir**（模型读写了错误的仓库）。清掉
+    这些标记后 worker 才会在最初指定的目录里独立运行。
+    """
+    return {k: v for k, v in os.environ.items()
+            if not k.startswith("OPENCODE") and k != "PWD"}
+
 
 class OpenCodeClient:
     def __init__(self, binary: str = "opencode", timeout_seconds: int = 600,
                  workdir: Path | None = None):
-        # Windows 下 opencode 常是 .cmd shim，CreateProcess 不解析——必须 which 出全路径
-        import shutil
-        self.binary = shutil.which(binary) or binary
+        self.binary = resolve_binary(binary)
         self.timeout = timeout_seconds
         self.workdir = workdir
+        if Path(self.binary).suffix.lower() in {".cmd", ".bat"}:
+            raise RuntimeError(
+                f"{self.binary} is a shell shim with no native .exe beside it; "
+                "multi-line prompts would be truncated by cmd.exe — refusing to run")
 
     def run(self, model: str, prompt: str) -> tuple[bool, str]:
         """执行一次 opencode run。返回 (ok, detail)。
@@ -31,11 +84,15 @@ class OpenCodeClient:
         ok=True 时 detail 为模型输出文本；ok=False 时 detail 含可分类的错误
         串（包含 "401"/"403"/"429"/状态码与消息），由调用方决定停链还是换挡。
         """
-        cmd = [self.binary, "run", "-m", model, "--format", "json", prompt]
+        cmd = [self.binary, "run", "-m", model, "--format", "json"]
+        if self.workdir is not None:
+            cmd += ["--dir", str(self.workdir)]
+        cmd.append(prompt)
         try:
             p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
                                errors="replace", timeout=self.timeout,
-                               cwd=str(self.workdir) if self.workdir else None)
+                               cwd=str(self.workdir) if self.workdir else None,
+                               env=_child_env())
         except FileNotFoundError:
             return False, "opencode binary not found"
         except subprocess.TimeoutExpired:
@@ -90,7 +147,7 @@ class OpenCodeClient:
 def discover_free_models(binary: str = "opencode") -> list[str]:
     """动态解析当前目录里的免费模型 ID（计划 §11：不把免费模型名写死在执行器中）。"""
     try:
-        p = subprocess.run([binary, "models"], capture_output=True, text=True,
+        p = subprocess.run([resolve_binary(binary), "models"], capture_output=True, text=True,
                            encoding="utf-8", errors="replace", timeout=120)
     except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
         return []
