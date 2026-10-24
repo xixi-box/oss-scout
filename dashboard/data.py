@@ -318,7 +318,7 @@ class DataSource:
 
     def pr_list(self, repo: str):
         return self._gh_json([
-            "pr", "list", "-R", repo,
+            "pr", "list", "-R", repo, "--state", "all",
             "--json", "number,title,state,createdAt,url,statusCheckRollup,comments",
             "--limit", "30",
         ])

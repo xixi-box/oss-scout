@@ -36,6 +36,10 @@ def ensure_repo(repo_dir: Path, repo: str, base_sha: str) -> Path:
     url = f"https://github.com/{repo}.git"
     subprocess.run(["git", "clone", "--filter=blob:none", url, str(repo_dir)],
                    check=True, capture_output=True, text=True, timeout=900)
+    # Modal Sandbox 以 root 跑，镜像内 /workspace 属于 worker → dubious ownership；
+    # 本地 docker（worker 用户）同理可能有属主差。对当前用户加豁免（仅本沙箱内生效）。
+    subprocess.run(["git", "config", "--global", "--add", "safe.directory",
+                    str(repo_dir)], capture_output=True, timeout=60)
     co = subprocess.run(["git", "-C", str(repo_dir), "checkout", "--detach", base_sha],
                         capture_output=True, text=True, timeout=120)
     if co.returncode != 0:
