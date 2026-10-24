@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}任务中心 · oss-scout{% endblock %}
+{% block content %}
+<h1 class="display">任务中心</h1>
+<div class="card">
+  {% if not jobs %}<p class="muted">state/scout_v2.sqlite3 不存在或 jobs 表为空</p>{% endif %}
+  <table>
+    <thead><tr><th>job_id</th><th>mode</th><th>scope</th><th>state</th><th>result 摘要</th><th>updated_at</th></tr></thead>
+    <tbody>
+      {% for j in jobs %}
+      {% set p = j.payload or {} %}
+      {% set r = j.result or {} %}
+      <tr>
+        <td class="nowrap"><a href="/jobs/{{ j.job_id }}">{{ j.job_id|truncate(28) }}</a></td>
+        <td>{{ p.get("mode", p.get("job_type", "—")) }}</td>
+        <td>{{ p.get("execution_scope", p.get("scope", "—")) }}</td>
+        <td><span class="chip {{ 'chip-green' if j.state == 'succeeded' }}">{{ j.state }}</span></td>
+        <td class="wrap muted small">{% if r %}{{ (r.get("outcome") or r.get("backend") or r|tojson)|mask|truncate(90) }}{% else %}—{% endif %}</td>
+        <td class="nowrap muted small">{{ j.updated_at }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

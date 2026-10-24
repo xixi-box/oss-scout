@@ -88,16 +88,29 @@ class OpenCodeClient:
         if self.workdir is not None:
             cmd += ["--dir", str(self.workdir)]
         cmd.append(prompt)
-        try:
-            p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
-                               errors="replace", timeout=self.timeout,
-                               cwd=str(self.workdir) if self.workdir else None,
-                               env=_child_env())
-        except FileNotFoundError:
-            return False, "opencode binary not found"
-        except subprocess.TimeoutExpired:
-            return False, f"429 opencode run timed out after {self.timeout}s"
-        return self._parse_events(p.stdout, p.stderr, p.returncode)
+        last: tuple[bool, str] = (False, "")
+        for attempt in range(3):
+            try:
+                p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
+                                   errors="replace", timeout=self.timeout,
+                                   cwd=str(self.workdir) if self.workdir else None,
+                                   env=_child_env())
+            except FileNotFoundError:
+                return False, "opencode binary not found"
+            except subprocess.TimeoutExpired:
+                return False, f"429 opencode run timed out after {self.timeout}s"
+            ok, detail = self._parse_events(p.stdout, p.stderr, p.returncode)
+            if ok:
+                return True, detail
+            last = (ok, detail)
+            # 本机 TLS 抖动是常态：证书/握手/EOF 类瞬时错误有限重试；
+            # 401/403 认证错误绝不重试（停链语义归调用方）
+            transient = any(m in detail.lower() for m in
+                            ("certificate", "handshake", "eof", "connection reset",
+                             "temporarily unavailable"))
+            if not transient or "401" in detail or "403" in detail:
+                return last
+        return last
 
     # ---- 内部 ----
 

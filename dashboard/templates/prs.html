@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}PR 管理 · oss-scout{% endblock %}
+{% block content %}
+<h1 class="display">PR 管理</h1>
+{% if any_unknown %}
+<div class="banner warn">部分仓库 gh 查询失败 → 显示"未知"（TLS 抖动 / 未登录 / 限流），60 秒后自动重试</div>
+{% endif %}
+{% if not repo_prs %}
+<div class="card"><p class="muted">worklog / artifacts 中未发现自有仓库（xixi-box/*）</p></div>
+{% endif %}
+{% for rp in repo_prs %}
+<div class="card mt">
+  <h2>{{ rp.repo }}</h2>
+  {% if rp.prs is none %}
+  <p class="muted">未知（gh 查询失败）</p>
+  {% elif not rp.prs %}
+  <p class="muted">无 open/closed PR 记录</p>
+  {% else %}
+  <table>
+    <thead><tr><th>#</th><th>标题</th><th>state</th><th>创建时间</th><th>48h 响应窗口</th><th>review/评论</th><th>CI</th></tr></thead>
+    <tbody>
+      {% for pr in rp.prs %}
+      <tr>
+        <td><a href="{{ pr.url }}" target="_blank" rel="noreferrer">#{{ pr.number }}</a></td>
+        <td class="wrap">{{ pr.title|mask }}</td>
+        <td><span class="chip {{ 'chip-green' if pr.state == 'OPEN' }}">{{ pr.state }}</span></td>
+        <td class="nowrap muted small">{{ pr.createdAt or "未知" }}</td>
+        <td>
+          {% if pr._deadline_left_h is none %}未知
+          {% elif pr.state != 'OPEN' %}—
+          {% elif pr._deadline_left_h >= 0 %}<span class="chip chip-warn">剩 {{ '%.1f'|format(pr._deadline_left_h) }}h</span>
+          {% else %}<span class="chip">已过 {{ '%.1f'|format(-pr._deadline_left_h) }}h</span>{% endif %}
+        </td>
+        <td>
+          {% if pr.state == 'OPEN' and not pr._has_review %}
+          <span class="chip chip-warn">无 review 记录</span>
+          {% else %}{{ pr.comments|length }} 条评论{% endif %}
+        </td>
+        <td>{{ pr._ci }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</div>
+{% endfor %}
+<div class="card mt">
+  <h2>合并历史（worklog）</h2>
+  {% if merge_history %}
+  <table>
+    <thead><tr><th>时间</th><th>动作</th><th>对象</th><th>结果</th></tr></thead>
+    <tbody>
+      {% for r in merge_history %}
+      <tr>
+        <td class="nowrap muted">{{ r.get("ts", "") }}</td>
+        <td><span class="chip">{{ r.get("action", "") }}</span></td>
+        <td class="nowrap">{{ r.get("target", "") }}</td>
+        <td class="wrap muted small">{{ (r.get("result") or r.get("detail") or "")|mask|truncate(120) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}<p class="muted">暂无 pr/merge 相关 worklog 记录</p>{% endif %}
+</div>
+{% endblock %}

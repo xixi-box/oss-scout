@@ -14,6 +14,9 @@ WORKDIR /workspace
 COPY scout_v2 /workspace/scout_v2
 COPY configs /workspace/configs
 
+# worker 用户需要写 artifacts；/workspace 默认归 root（P6-A 实测修复）
+RUN mkdir -p /workspace/artifacts /workspace/repo && chown -R worker:worker /workspace
+
 # OpenCode CLI 版本锁定（P4 启用；构建时复核当前版本号）
 # ARG OPENCODE_VERSION=<pinned>
 # RUN curl -fsSL https://opencode.ai/install | bash

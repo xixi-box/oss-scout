@@ -1,0 +1,26 @@
+{
+ "started": "2026-10-25T01:13:07",
+ "repos": [
+  {
+   "repo": "openai/openai-agents-python",
+   "sha": "0dc4cf152bff1f50bdc0e41f28808563406545b2",
+   "sandbox_state": "failed",
+   "findings": 0,
+   "metered_after": 1.977e-05
+  },
+  {
+   "repo": "browser-use/browser-use",
+   "sha": "3df5806a0d097a1546d92c49bcf1b28c9972c3bd",
+   "error": "submit refused/failed: G:\\project\\oss-scout\\scout_v2\\workers\\opencode_client.py was modified during build process."
+  },
+  {
+   "repo": "langchain-ai/langsmith-sdk",
+   "sha": "290f06a628dffb2ca690e389dc48b629f5623312",
+   "sandbox_state": "failed",
+   "findings": 0,
+   "metered_after": 2.139e-05
+  }
+ ],
+ "errors": [],
+ "finished": "2026-10-25T01:18:00"
+}

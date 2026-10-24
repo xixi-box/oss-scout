@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}oss-scout Dashboard{% endblock %}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/style.css">
+<script src="/static/htmx.min.js" defer></script>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">oss-scout<span class="brand-dot">.</span><span class="brand-sub">只读监控台</span></div>
+  <nav>
+    {% for href, label in [("/", "总览"), ("/candidates", "候选池"), ("/jobs", "任务中心"),
+                          ("/prs", "PR 管理"), ("/policies", "策略"), ("/quota", "额度"), ("/logs", "日志")] %}
+    <a href="{{ href }}" class="{{ 'nav-active' if active == href }}">{{ label }}</a>
+    {% endfor %}
+  </nav>
+</header>
+<main class="container">
+{% block content %}{% endblock %}
+</main>
+<footer class="footer">read-only · 127.0.0.1:8787 · 所有写操作已禁用（POST → 501）</footer>
+</body>
+</html>

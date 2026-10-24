@@ -1,0 +1,68 @@
+<div id="overview-cards" class="pollable"
+     hx-get="/fragment/overview-cards" hx-trigger="every 20s" hx-swap="outerHTML">
+  {% if o.health_expired %}
+  <div class="banner warn">health.json 已过期（{{ o.health_date }}，&gt;7 天）— 建议重跑 health_check.py</div>
+  {% endif %}
+  <div class="grid stats-grid">
+    <div class="card stat">
+      <div class="stat-label">最近扫描</div>
+      <div class="stat-value">{{ o.last_scan or "未知" }}</div>
+      <div class="muted small">state/runs 最新文件 mtime</div>
+    </div>
+    <div class="card stat">
+      <div class="stat-label">今日新增候选</div>
+      <div class="stat-value big">{{ o.today_new }}</div>
+      <div class="muted small">共 {{ o.total_candidates }} 条候选</div>
+    </div>
+    <div class="card stat">
+      <div class="stat-label">任务 Jobs</div>
+      <div class="stat-value big">{{ o.jobs_active }} / {{ o.jobs_terminal }}</div>
+      <div class="muted small">进行中 / 终态（共 {{ o.jobs_total }}）</div>
+    </div>
+    <div class="card stat">
+      <div class="stat-label">PR（自有仓库）</div>
+      <div class="stat-value big">
+        {% if o.pr_counts %}{{ o.pr_counts.open }} / {{ o.pr_counts.merged }} / {{ o.pr_counts.closed }}
+        {% else %}未知{% endif %}
+      </div>
+      <div class="muted small">open / merged / closed{% if not o.pr_counts %}（gh 查询失败）{% endif %}</div>
+    </div>
+  </div>
+
+  <div class="grid two-col">
+    <div class="card">
+      <h2>候选状态</h2>
+      <div class="chips">
+        {% for s, n in o.status_counts.items() %}
+        <span class="chip {{ 'chip-green' if s == 'new' else '' }}">{{ s }} · {{ n }}</span>
+        {% endfor %}
+        {% if not o.status_counts %}<span class="muted">候选池为空或不可读</span>{% endif %}
+      </div>
+      <h2 class="mt">分级</h2>
+      <div class="chips">
+        {% for s, n in o.class_counts.items() %}<span class="chip">{{ s }} · {{ n }}</span>{% endfor %}
+      </div>
+      <h2 class="mt">车道</h2>
+      <div class="chips">
+        {% for s, n in o.lane_counts.items() %}<span class="chip">{{ s }} · {{ n }}</span>{% endfor %}
+      </div>
+    </div>
+    <div class="card">
+      <h2>Modal 额度</h2>
+      {% if o.modal.metered is none %}
+      <div class="stat-value">未知</div>
+      <div class="muted small">modal billing 不可用（不显示为 0）</div>
+      {% else %}
+      <div class="stat-value">${{ '%.4f'|format(o.modal.metered) }}</div>
+      {% endif %}
+      {% if o.modal.softcap %}
+      <div class="bar"><div class="bar-fill" style="width: {{ [ (o.modal.metered or 0) / o.modal.softcap * 100, 100 ] | min }}%"></div></div>
+      <div class="muted small">metered / soft cap ${{ o.modal.softcap }}</div>
+      {% endif %}
+      <div class="small mt">
+        平台硬限制：usage limit ${{ o.modal.hard_limits.get('usage_limit_usd', '未知') }} ·
+        spend limit ${{ o.modal.hard_limits.get('spend_limit_usd', '未知') }}
+      </div>
+    </div>
+  </div>
+</div>

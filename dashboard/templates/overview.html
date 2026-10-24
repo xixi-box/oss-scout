@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}总览 · oss-scout{% endblock %}
+{% block content %}
+<h1 class="display">总览</h1>
+{% include "_overview_cards.html" %}
+<section class="pollable" id="overview-worklog"
+         hx-get="/fragment/overview-worklog" hx-trigger="every 20s" hx-swap="outerHTML">
+  {% include "_worklog_recent.html" %}
+</section>
+{% endblock %}

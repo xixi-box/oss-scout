@@ -95,18 +95,19 @@ class ModalSandboxBackend:
         import modal
 
         job_id = job["job_id"]
-        image = modal.Image.from_dockerfile(str(self.dockerfile))
-        app = modal.App.lookup(f"oss-scout-worker", create_if_missing=True)
+        # context_dir 必须是项目根：Dockerfile 里 COPY scout_v2/configs/docker
+        image = modal.Image.from_dockerfile(str(self.dockerfile),
+                                            context_dir=str(self.dockerfile.resolve().parents[1]))
+        app = modal.App.lookup("oss-scout-worker", create_if_missing=True)
         job_b64 = base64.b64encode(json.dumps(job, ensure_ascii=False).encode("utf-8")).decode()
-        cmd = ["python", "-m", "scout_v2.workers.core",
-               "--job-b64", job_b64,
-               "--out", "/workspace/artifacts",
-               "--repo-dir", "/workspace/repo",
-               "--emit-envelope"]
+        # 镜像带 ENTRYPOINT：Sandbox 命令参数会追加到 entrypoint 之后（P6-A 实测教训，
+        # rc=2 = entrypoint 拿 $1/$2 当 job/out 再 exec argparse 报错）。
+        # 走 entrypoint 支持的 OSSCOUT_JOB_B64 环境变量通道，命令参数用无害占位。
         sb = modal.Sandbox.create(
-            *cmd, app=app, image=image,
-            timeout_seconds=min(int(job.get("timeout_seconds", 1800)),
-                                self.max_task_minutes * 60),
+            "/bin/true", app=app, image=image,
+            env={"OSSCOUT_JOB_B64": job_b64},
+            timeout=min(int(job.get("timeout_seconds", 1800)),
+                        self.max_task_minutes * 60),
             cpu=job.get("cpu", 2),
             memory=job.get("memory_mb", 4096),
         )

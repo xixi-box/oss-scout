@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Job {{ job.job_id if job else "?" }} · oss-scout{% endblock %}
+{% block content %}
+<h1 class="display">Job 详情</h1>
+{% if not job %}
+<div class="card"><p class="muted">job 不存在</p></div>
+{% else %}
+<div class="card">
+  <h2>{{ job.job_id }}</h2>
+  <div class="chips">
+    <span class="chip">{{ job.state }}</span>
+    <span class="chip">lease: {{ job.lease_until or "—" }}</span>
+    <span class="chip">updated: {{ job.updated_at }}</span>
+  </div>
+  <h3 class="mt">Payload</h3>
+  <pre class="code">{{ job.payload|tojson(indent=2)|mask }}</pre>
+  <h3 class="mt">Result</h3>
+  {% if job.result %}<pre class="code">{{ job.result|tojson(indent=2)|mask }}</pre>
+  {% else %}<p class="muted">无 result</p>{% endif %}
+  {% if artifact %}
+  <h3 class="mt">Artifacts（{{ artifact.name }}）</h3>
+  <ul>
+    {% for f in artifact.files %}
+    <li><a href="/artifacts/{{ artifact.name }}/{{ f }}">{{ f }}</a></li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  <p><a href="/jobs">← 返回任务中心</a></p>
+</div>
+{% endif %}
+{% endblock %}

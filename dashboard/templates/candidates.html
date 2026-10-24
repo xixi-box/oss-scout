@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}候选池 · oss-scout{% endblock %}
+{% block content %}
+<h1 class="display">候选池</h1>
+<div class="card">
+  <form method="get" class="filters">
+    <input type="text" name="q" value="{{ q }}" placeholder="标题 / 仓库子串">
+    <select name="lane">
+      <option value="">全部车道</option>
+      {% for l in ["open", "gated", "restricted"] %}
+      <option value="{{ l }}" {{ 'selected' if lane == l }}>{{ l }}</option>
+      {% endfor %}
+    </select>
+    <select name="class">
+      <option value="">全部分级</option>
+      {% for c in ["A", "B", "C"] %}
+      <option value="{{ c }}" {{ 'selected' if class_ == c }}>{{ c }}</option>
+      {% endfor %}
+    </select>
+    <select name="status">
+      <option value="">全部状态</option>
+      {% for s in statuses %}<option value="{{ s }}" {{ 'selected' if status == s }}>{{ s }}</option>{% endfor %}
+    </select>
+    <select name="repo">
+      <option value="">全部仓库</option>
+      {% for r in repos %}<option value="{{ r }}" {{ 'selected' if repo == r }}>{{ r }}</option>{% endfor %}
+    </select>
+    <button class="btn pill" type="submit">筛选</button>
+    <a class="btn pill ghost" href="/candidates">清空</a>
+    <span class="muted small">{{ items|length }} / {{ total }} 条</span>
+  </form>
+
+  <table>
+    <thead><tr><th></th><th>标题</th><th>仓库 #</th><th>车道</th><th>分级</th><th>分</th><th>状态</th><th>发现时间</th><th></th></tr></thead>
+    <tbody>
+      {% for c in items %}
+      {% set k = c.get("id", "") %}
+      {% set slug = k | replace('/', '-') | replace('#', '-') %}
+      <tr class="cand-row" hx-get="/candidates/{{ k | urlencode }}/detail"
+          hx-target="#detail-{{ slug }}" hx-swap="innerHTML">
+        <td class="muted">▸</td>
+        <td class="wrap"><a href="{{ c.get('url', '#') }}" target="_blank" rel="noreferrer">{{ c.get("title", "") }}</a></td>
+        <td class="nowrap">{{ c.get("repo", "") }}#{{ c.get("number", "") }}</td>
+        <td><span class="chip lane-{{ c.get('lane', 'open') }}">{{ c.get("lane", "?") }}</span></td>
+        <td><span class="chip {{ 'chip-a' if c.get('class') == 'A' }}">{{ c.get("class") or "—" }}</span></td>
+        <td>{{ c.get("score", "") }}</td>
+        <td><span class="chip">{{ c.get("status", "") }}</span></td>
+        <td class="nowrap muted small">{{ c.get("discovered_at", "") }}</td>
+        <td></td>
+      </tr>
+      <tr class="detail-row"><td colspan="9" id="detail-{{ slug }}"></td></tr>
+      {% else %}
+      <tr><td colspan="9" class="muted">无匹配候选</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="card mt">
+  <h2>Bug 车道任务（sqlite jobs）</h2>
+  {% if bug_jobs %}
+  <table>
+    <thead><tr><th>job_id</th><th>state</th><th>updated_at</th></tr></thead>
+    <tbody>
+      {% for j in bug_jobs %}
+      <tr><td><a href="/jobs/{{ j.job_id }}">{{ j.job_id }}</a></td><td>{{ j.state }}</td><td class="muted">{{ j.updated_at }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">暂无 bug 车道任务（artifacts 也无 findings.json）</p>
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,36 @@
+<td colspan="9" class="detail-cell">
+  <div class="detail-box">
+    <h3>{{ c.get("title", "") }}</h3>
+    <p>
+      <a href="{{ c.get('url', '#') }}" target="_blank" rel="noreferrer">{{ c.get("url", "") }}</a>
+      · {{ c.get("repo", "") }}#{{ c.get("number", "") }}
+    </p>
+    <div class="detail-cols">
+      <div>
+        <h4>Signals</h4>
+        <table class="mini">
+          <tbody>
+          {% for k, v in (c.get("signals") or {}).items() %}
+          <tr><th>{{ k }}</th><td>{{ v }}</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div>
+        <h4>Blockers</h4>
+        {% if c.get("blockers") %}
+        <ul class="blockers">{% for b in c.get("blockers") %}<li>{{ b|mask }}</li>{% endfor %}</ul>
+        {% else %}<p class="muted">无</p>{% endif %}
+        <h4>其他</h4>
+        <table class="mini">
+          <tbody>
+          <tr><th>created_at</th><td>{{ c.get("created_at", "") }}</td></tr>
+          <tr><th>discovered_at</th><td>{{ c.get("discovered_at", "") }}</td></tr>
+          <tr><th>status</th><td>{{ c.get("status", "") }}</td></tr>
+          <tr><th>lease</th><td>{{ c.get("lease") or "—" }}</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</td>

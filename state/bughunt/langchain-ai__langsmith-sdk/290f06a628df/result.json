@@ -1,0 +1,8 @@
+{
+ "job_id": "job-725d49e9-7a8b-4b6e-b50f-0e771c164bbc",
+ "outcome": "inconclusive",
+ "unverified_items": [
+  "no result envelope in sandbox stdout"
+ ],
+ "stdout_tail": ""
+}

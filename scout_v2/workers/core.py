@@ -94,6 +94,9 @@ def emit_envelope(result: Result, out_dir: Path) -> None:
     report = out_dir / "test-report.json"
     if result.test_report_path and report.is_file():
         envelope["test_report"] = json.loads(report.read_text(encoding="utf-8"))
+    findings = out_dir / "findings.json"
+    if findings.is_file():
+        envelope["findings"] = json.loads(findings.read_text(encoding="utf-8"))
     print(RESULT_MARKER + json.dumps(envelope, ensure_ascii=False))
 
 

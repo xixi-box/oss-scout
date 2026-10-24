@@ -1,0 +1,21 @@
+<div id="overview-worklog" class="pollable"
+     hx-get="/fragment/overview-worklog" hx-trigger="every 20s" hx-swap="outerHTML">
+  <div class="card">
+    <h2>最近审计（worklog 10 条）</h2>
+    <table>
+      <thead><tr><th>时间</th><th>动作</th><th>对象</th><th>结果</th></tr></thead>
+      <tbody>
+        {% for r in recent %}
+        <tr>
+          <td class="nowrap muted">{{ r.get("ts", "") }}</td>
+          <td><span class="chip">{{ r.get("action", "") }}</span></td>
+          <td class="nowrap">{{ r.get("target", "") }}</td>
+          <td class="wrap">{{ (r.get("result") or r.get("detail") or "")|mask|truncate(140) }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="4" class="muted">worklog 为空或不可读</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
