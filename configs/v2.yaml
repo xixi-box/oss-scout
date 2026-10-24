@@ -1,0 +1,47 @@
+# oss-scout v2 调度、预算与功能开关
+# 约束：与 AGENTS.md（Playbook）冲突时以 Playbook 为准（见 docs/p0_audit.md §3）。
+# 默认节奏完全对齐 Playbook §1.5；更激进的频率仅作注释示例，切换前必须人工修订 Playbook。
+
+version: 1
+business_timezone: "Asia/Shanghai"   # 每日认领上限按此时区切"当日"（待用户最终确认）
+
+scheduler:
+  # 当前生效（= Playbook 节奏）
+  observe_interval_minutes: 120        # 观测任务：每 2h，仅 discover.py
+  consume_windows_local: ["10:30", "16:30", "22:30"]
+  pr_monitor_per_consume: true         # 消费窗口开头先跑 PR 监控段
+  health_refresh_after_days: 7
+  # v2 计划中的激进节奏（注释，未启用；启用前须修订 Playbook）：
+  # watch_interval_minutes: 15
+  # broad_search_interval_minutes: 30
+  # pr_monitor_interval_minutes: 60
+
+continuous_consume: false             # 计划 §14：事件驱动消费默认关闭
+
+queue:
+  store: "json"                       # 候选真值 = queue/candidates.json（discover.py 兼容）
+  sqlite_path: "state/scout_v2.sqlite3"   # Job/租约/认领锁；单一可信写者
+  lease_timeout_seconds: 1800
+
+budget:
+  modal:
+    enabled: false                    # P2 前保持 false；Spend Limit 未确认 $0 前禁止置 true
+    monthly_soft_cap_usd: 25.0
+    max_concurrent_sandboxes: 1
+    max_task_minutes: 30
+    fail_closed_on_billing_error: true
+  actions:
+    enabled: false                    # P3 前保持 false
+    max_minutes_per_job: 60
+  opencode:
+    allow_paid_api: false
+
+features:
+  bug_hunter_light: false             # P2 启用
+  bug_hunter_deep_modal: false        # P2 且 modal.enabled 后启用
+  actions_backend: false              # P3 启用
+  opencode_models: false              # P4 启用
+
+security:
+  worker_github_write_token: false    # worker 固定无 GitHub 写令牌（计划 §4.2/§10）
+  sanitize_logs: true

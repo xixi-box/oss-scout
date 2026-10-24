@@ -1,0 +1,16 @@
+# OpenCode 模型策略（计划 §11）。
+# 免费模型会随时下线：执行时通过 `opencode models --refresh` 动态解析真实模型 ID，
+# 本文件只存偏好顺序，不把模型名写死进执行器代码。
+
+mode: free_first
+allow_paid_api: false          # 付费默认禁用；启用需明确批准 + 可验证预付额度
+max_retries_per_model: 1
+
+free_preferences:              # 按序尝试；名称须在运行时与 provider 目录比对后解析
+  - "DeepSeek V4.1 Flash Free"
+  - "GLM-5.3 Flash Free"
+
+paid_fallback:
+  provider: "deepseek"
+  model: "resolve_from_provider_catalog"
+  enabled: false               # fail-closed：无授权/无预算验证 = 暂停任务而非切付费

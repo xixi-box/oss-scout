@@ -1,0 +1,20 @@
+# 仅测试 oss-scout v2 本系统自身；绝不用于扫描无关第三方项目（计划 §1/§9）。
+name: v2-tests
+on:
+  push:
+    paths: ["scout_v2/**", "tests_v2/**", "configs/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install pyyaml pytest
+      - run: python -m pytest tests_v2 -q

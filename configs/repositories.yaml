@@ -1,0 +1,51 @@
+# 仓库策略覆盖（计划 §6）。
+# 优先级：AGENTS.md 及人工批准的例外 > 官方 CONTRIBUTING 最新规则 > 本文件 > LLM 提取建议。
+# 本文件只做保守覆盖；与 AGENTS.md 冲突时以 AGENTS.md 为准，冲突记录到 worklog 并 hold。
+# lane 取值：open | gated（assignment_gate） | restricted | observe
+# 与 config.json 的差异点：config.json 是发现层监控名单（每仓库另有 notes/pr_rules），
+# 本文件是 v2 策略引擎的保守基线；两处都存在时取更严格者。
+
+defaults:
+  unknown_repo_action: hold_for_review
+  auto_comment: false
+  auto_pr: false
+  min_issue_age_hours: 2
+  max_new_claims_per_business_day: 1
+  allow_force_push: false
+  allow_merge_upstream: false
+
+repositories:
+  # ---- 开放池（config.json open_pool）----
+  aaif-goose/goose:            {lane: open}
+  openai/openai-agents-python: {lane: open}
+  OpenHands/software-agent-sdk: {lane: open, verify_before_first_pr: true}
+  browser-use/browser-use:     {lane: open}
+  OpenHands/OpenHands:         {lane: open, verify_before_first_pr: true}
+  deepset-ai/haystack:
+    lane: open
+    pr_rules: [ai_disclaimer, conventional_commits]
+  langfuse/langfuse:           {lane: open, draft_ok_unverified: true}
+  Arize-ai/phoenix:            {lane: open}
+  anomalyco/opencode:
+    lane: open
+    default_branch: dev
+    pr_rules: [no_ai_walls]
+  langchain-ai/langsmith-sdk:  {lane: open}
+  e2b-dev/e2b:                 {lane: open}
+  infiniflow/ragflow:          {lane: open, verify_before_first_pr: true}
+  openai/openai-python:        {lane: open}
+  crewAIInc/crewAI:            {lane: open}
+
+  # ---- 闸门池：先评论对齐、等指派，绝不直接 PR ----
+  pydantic/pydantic-ai:        {lane: gated}
+  microsoft/playwright:        {lane: gated, cla: true}
+  microsoft/agent-framework:   {lane: gated, python_side_only: true}
+
+  # ---- 限制档 ----
+  BerriAI/litellm:
+    lane: restricted
+    only: maintainer_confirmed
+    pr_rules: [tests_required]
+
+  # ---- 仅观测 ----
+  google-gemini/gemini-cli:    {lane: observe}

@@ -1,0 +1,18 @@
+# 统一 worker 镜像（计划 §5）：同一份执行器代码跑 Modal / GitHub Actions。
+# P1 交付模板；P2/P3 首次构建前按官方文档复核版本。
+FROM python:3.11-slim
+
+# 安全基线：非 root 运行；worker 内无任何 GitHub 写令牌
+RUN useradd -m worker
+WORKDIR /workspace
+
+COPY scout_v2 /workspace/scout_v2
+COPY configs /workspace/configs
+
+# OpenCode CLI 版本锁定（P4 启用；构建时复核当前版本号）
+# ARG OPENCODE_VERSION=<pinned>
+# RUN curl -fsSL https://opencode.ai/install | bash
+
+USER worker
+COPY docker/entrypoint.sh /entrypoint.sh
+ENTRYPOINT ["/entrypoint.sh"]
