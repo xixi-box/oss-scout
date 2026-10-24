@@ -43,12 +43,19 @@ class TestOpenCodeClient:
     def test_success_text_events(self):
         events = "\n".join([
             json.dumps({"type": "session", "id": "s1"}),
-            json.dumps({"type": "text", "text": "OK"}),
+            json.dumps({"type": "text", "part": {"type": "text", "text": "OK"}}),
         ])
         c, monkey = self._client_with_stdout(events)
         ok, out = c.run("m", "p")
         monkey.undo()
         assert ok and out == "OK"
+
+    def test_success_legacy_top_level_text(self):
+        events = json.dumps({"type": "text", "text": "OLD SHAPE"})
+        c, monkey = self._client_with_stdout(events)
+        ok, out = c.run("m", "p")
+        monkey.undo()
+        assert ok and out == "OLD SHAPE"
 
     def test_real_401_event_classified(self):
         c, monkey = self._client_with_stdout(REAL_401_EVENT, rc=1)
@@ -124,6 +131,11 @@ class TestPolicyConfig:
         cfg = yaml.safe_load((root / "configs" / "model_policy.yaml").read_text(encoding="utf-8"))
         p = ModelPolicy.from_yaml(cfg)
         assert p.mode == "fixed"
-        assert p.models()[0] == "opencode-go/deepseek-v4-flash"
+        assert p.models()[0] == "opencode-go/deepseek-v4.1-flash"
         assert p.allow_paid_api is True          # 用户批准的订阅通道
         assert p.paid_fallback_enabled is False  # 无第二付费兜底
+
+    def test_binary_resolved_via_which(self):
+        """Windows .cmd shim：binary 必须经 shutil.which 解析成可执行全路径。"""
+        c = OpenCodeClient()
+        assert c.binary.lower().endswith((".cmd", ".exe", ".bat")) or "/" in c.binary or "\\" in c.binary

@@ -9,7 +9,7 @@ billing_basis: opencode_go_subscription
 max_retries_per_model: 1
 
 primary_models:
-  - "opencode-go/deepseek-v4-flash"
+  - "opencode-go/deepseek-v4.1-flash"
 
 # 免费偏好仅作记录（2026-10-25 目录快照，随时会变；需要时可切回 mode: free_first）
 free_preferences:

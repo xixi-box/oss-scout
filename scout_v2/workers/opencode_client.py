@@ -19,7 +19,9 @@ _STATUS_MARKERS = ("statusCode", "status_code")
 class OpenCodeClient:
     def __init__(self, binary: str = "opencode", timeout_seconds: int = 600,
                  workdir: Path | None = None):
-        self.binary = binary
+        # Windows 下 opencode 常是 .cmd shim，CreateProcess 不解析——必须 which 出全路径
+        import shutil
+        self.binary = shutil.which(binary) or binary
         self.timeout = timeout_seconds
         self.workdir = workdir
 
@@ -57,7 +59,10 @@ class OpenCodeClient:
             if ev.get("type") == "error":
                 err_detail = OpenCodeClient._format_error(ev)
             elif ev.get("type") == "text":
-                texts.append(str(ev.get("text") or ev.get("part") or ""))
+                # 实测（2026-10-25）：文本在 part.text 里，老版本可能直接在顶层 text
+                part = ev.get("part")
+                t = part.get("text") if isinstance(part, dict) else ev.get("text")
+                texts.append(str(t or ""))
         if err_detail is not None:
             return False, err_detail
         if rc != 0:
