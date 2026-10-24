@@ -1,0 +1,59 @@
+== openai/openai-agents-python [open]
+    原始池 24，新入库 0
+== OpenHands/OpenHands [open]
+    [C   6] #17492 Failed browser, glob, grep, and file editor tool calls render as succe  ←['cross_ref_pr']
+    [C   6] #17490 Terminal commands that fail with an ordinary non-zero exit render as s  ←['cross_ref_pr']
+    [C   6] #17485 Git info probe on the shared bash-events socket can resolve with anoth  ←['cross_ref_pr']
+    [C   6] #17476 Planning socket stats overwrite the main conversation's context meter  ←['cross_ref_pr']
+    [C   6] #17473 [Bug]: macOS desktop window cannot be dragged and the sidebar logo sit  ←['cross_ref_pr']
+    [C   6] #17471 [Bug]: Chat attachment picker silently ignores re-picking the same fil  ←['cross_ref_pr']
+    [B  4] #17470 Agent server crashes with SIGILL on Apple Silicon under Colima (OpenSS
+    [C   6] #17468 [Bug]: Context window meter shows "1000.0k" instead of "1.0M" for 999,  ←['cross_ref_pr']
+    原始池 62，新入库 1
+== deepset-ai/haystack [open]
+    原始池 30，新入库 0
+== langfuse/langfuse [open]
+    [C   1] #190 [LFC-182] [Python-SDK] Track OpenAI response headers as metadata in La  ←['cross_ref_pr']
+    [C   1] #502 feat: full support of google vertex models, #characters and costs
+    [C   0] #630 feat: Monitor Vector DB
+    原始池 9，新入库 0
+== Arize-ai/phoenix [open]
+    [C   5] #16219 [BUG]: Prompt-level and prompt-version metadata are mixed up on create  ←['claim_signal']
+    [C   5] #16189 [server-evals] One evaluator's failing filter query stops scheduling f  ←['cross_ref_pr']
+    [B  4] #16113 Ingest replicas can deadlock each other on trace/session range updates
+    原始池 59，新入库 1
+== anomalyco/opencode [open]
+    [C   5] #47514 desktop: refocus prompt input when switching tabs with Cmd+number  ←['cross_ref_pr', 'claim_signal']
+    原始池 50，新入库 0
+== langchain-ai/langsmith-sdk [open]
+    [B  4] #3529 Tools tab disappears when invocation_params.tools contains a server to
+    原始池 37，新入库 1
+== e2b-dev/e2b [open]
+    [C   3] #1839 JS chart deserializer keeps unrecognized x_scale and y_scale  ←['cross_ref_pr', 'claim_signal']
+    [C   3] #1834 Python chart deserializer raises ValueError for an unrecognized chart   ←['cross_ref_pr', 'claim_signal']
+    [C   3] #1823 files.read / volume.read return None for an unrecognized format instea  ←['cross_ref_pr', 'claim_signal']
+    [C   3] #1821 JS SuperChart deserializer reads data instead of elements, and Result   ←['cross_ref_pr', 'claim_signal']
+    原始池 23，新入库 0
+== openai/openai-python [open]
+    原始池 51，新入库 0
+== pydantic/pydantic-ai [gated]
+    原始池 60，新入库 0
+== microsoft/playwright [gated]
+    原始池 30，新入库 0
+== microsoft/agent-framework [gated]
+    原始池 32，新入库 0
+== BerriAI/litellm [restricted]
+    [C   4] #41435 [Bug]: Fix "vertex_ai/xai/grok-4.6" entry in "model_prices_and_context  ←['cross_ref_pr', 'claim_signal', 'restricted_requires_confirm']
+    [C   4] #41420 [Bug]: LiteLLM Proxy (Prisma) does not close idle connections during l  ←['restricted_requires_confirm']
+    [C   4] #41417 [Bug]: end users identified via `user_header_name` are never created a  ←['restricted_requires_confirm']
+    [C   6] #41411 [Bug]: `websearch_interception` with `stream=true` crashes: `ModelResp  ←['cross_ref_pr', 'restricted_requires_confirm']
+    [C   4] #41392 [Bug]: hosted_vllm drops reasoning_content from replayed assistant mes  ←['cross_ref_pr', 'restricted_requires_confirm']
+    原始池 78，新入库 0
+
+[oss-scout 2026-09-18T16:31:26] 新候选 3（A: 0, B: 3）
+[B/open] OpenHands/OpenHands#17470 Agent server crashes with SIGILL on Apple Silicon under Coli
+https://github.com/OpenHands/OpenHands/issues/17470
+[B/open] Arize-ai/phoenix#16113 Ingest replicas can deadlock each other on trace/session ran
+https://github.com/Arize-ai/phoenix/issues/16113
+[B/open] langchain-ai/langsmith-sdk#3529 Tools tab disappears when invocation_params.tools contains a
+https://github.com/langchain-ai/langsmith-sdk/issues/3529

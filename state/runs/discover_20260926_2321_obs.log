@@ -1,0 +1,46 @@
+    [gh] Get "https://api.github.com/search/issues?order=desc&per_page=30&q=repo%3AArize-ai%2Fphoenix+is%3Aissue+is%3Aopen+no%3Aassignee+-label%3A%22invalid%22
+    [gh] Get "https://api.github.com/search/issues?order=desc&per_page=30&q=repo%3Aanomalyco%2Fopencode+is%3Aissue+is%3Aopen+no%3Aassignee+label%3Abug+-label%3
+    [gh] Get "https://api.github.com/search/issues?order=desc&per_page=30&q=repo%3Alangchain-ai%2Flangsmith-sdk+is%3Aissue+is%3Aopen+no%3Aassignee+label%3Abug+
+    [gh] Get "https://api.github.com/search/issues?order=desc&per_page=30&q=repo%3Ainfiniflow%2Fragflow+is%3Aissue+is%3Aopen+no%3Aassignee+-label%3A%22invalid%
+    [gh] Get "https://api.github.com/search/issues?order=desc&per_page=30&q=repo%3Aopenai%2Fopenai-python+is%3Aissue+is%3Aopen+no%3Aassignee+-label%3A%22invali
+    [gh] Get "https://api.github.com/search/issues?order=desc&per_page=30&q=repo%3Aopenai%2Fopenai-python+is%3Aissue+is%3Aopen+no%3Aassignee+label%3Abug+-label
+    [gh] Get "https://api.github.com/search/issues?order=desc&per_page=30&q=repo%3Aopenai%2Fopenai-python+is%3Aissue+is%3Aopen+no%3Aassignee+label%3Abug+-label
+    [gh] Get "https://api.github.com/search/issues?order=desc&per_page=30&q=repo%3Apydantic%2Fpydantic-ai+is%3Aissue+is%3Aopen+no%3Aassignee+label%3Abug+-label
+    [gh] Get "https://api.github.com/repos/pydantic/pydantic-ai/issues/5966": EOF
+== openai/openai-agents-python [open]
+    [C   2] #5183 Feature request: calling x402-paywalled tools from an agent  ←['question_or_feature_title']
+    原始池 12，新入库 0
+== OpenHands/software-agent-sdk [open]
+    原始池 60，新入库 0
+== browser-use/browser-use [open]
+    原始池 54，新入库 0
+== OpenHands/OpenHands [open]
+    原始池 64，新入库 0
+== deepset-ai/haystack [open]
+    原始池 30，新入库 0
+== langfuse/langfuse [open]
+    原始池 12，新入库 0
+== Arize-ai/phoenix [open]
+    原始池 30，新入库 0
+== anomalyco/opencode [open]
+    原始池 50，新入库 0
+== langchain-ai/langsmith-sdk [open]
+    原始池 36，新入库 0
+== e2b-dev/e2b [open]
+    原始池 27，新入库 0
+== infiniflow/ragflow [open]
+    原始池 1，新入库 0
+== openai/openai-python [open]
+    无原始候选
+== pydantic/pydantic-ai [gated]
+    [C   1] #3898 Support image and video generation models directly  ←['cross_ref_pr', 'claim_signal', 'feature_label', 'question_or_feature_title']
+    原始池 60，新入库 0
+== microsoft/playwright [gated]
+    原始池 30，新入库 0
+== microsoft/agent-framework [gated]
+    原始池 32，新入库 0
+== BerriAI/litellm [restricted]
+    原始池 62，新入库 0
+
+[oss-scout 2026-09-26T23:21:05] 新候选 0（A: 0, B: 0）
+

@@ -1,0 +1,54 @@
+== openai/openai-agents-python [open]
+    [C   2] #5185 Codex CLI stderr decoded as strict UTF-8 raises UnicodeDecodeError ins  ←['cross_ref_pr']
+    [B  4] #5184 Sandbox: skipping "data" in a snapshot also drops app/data/ on Daytona
+    原始池 14，新入库 1
+== OpenHands/software-agent-sdk [open]
+    [C   6] #5330 [Bug]: /btw causes prompt-cache invalidation  ←['cross_ref_pr']
+    [C   6] #5322 [Bug]: Pager guard from #3660/#3684 doesn't cover TmuxPanePool or Wind  ←['cross_ref_pr']
+    原始池 57，新入库 0
+== browser-use/browser-use [open]
+    原始池 56，新入库 0
+== OpenHands/OpenHands [open]
+    [A  6] #17710 [Bug]: Secret edit/deletion leads to duplicate secret being created an
+    [C   6] #17706 [Bug]: Canvas conversations on openhands/claude-* fail with 400 on pro  ←['cross_ref_pr', 'org_bot_claimed']
+    [C   6] #17704 [Bug]: A non-ASCII file name in a script bundle shows garbled (café.py  ←['cross_ref_pr', 'claim_signal']
+    原始池 61，新入库 1
+== deepset-ai/haystack [open]
+    原始池 30，新入库 0
+== langfuse/langfuse [open]
+    [C   7] #17969 bug: Codex Desktop code-mode MCP calls omitted from tracing plugin  ←['cross_ref_pr', 'claim_signal']
+    原始池 13，新入库 0
+== Arize-ai/phoenix [open]
+    [C   5] #16534 Evaluator runs fail on mappings for variables removed from the templat  ←['cross_ref_pr']
+    原始池 59，新入库 0
+== anomalyco/opencode [open]
+    [A  6] #50155 opencode-go: DeepSeek V4 Flash requires Global regions but Privacy set
+    原始池 50，新入库 1
+== langchain-ai/langsmith-sdk [open]
+    原始池 36，新入库 0
+== e2b-dev/e2b [open]
+    [C   4] #1895 [Bug]: JS SDK: filesystem watch handle.stop() always fires onExit with  ←['cross_ref_pr']
+    原始池 27，新入库 0
+== infiniflow/ragflow [open]
+    原始池 31，新入库 0
+== openai/openai-python [open]
+    原始池 42，新入库 0
+== pydantic/pydantic-ai [gated]
+    [C   6] #8767 Breaking out of `stream_text()` inside `run_stream()` logs "asynchrono  ←['claim_signal']
+    原始池 60，新入库 0
+== microsoft/playwright [gated]
+    原始池 30，新入库 0
+== microsoft/agent-framework [gated]
+    原始池 32，新入库 0
+== BerriAI/litellm [restricted]
+    [C   5] #43146 [Bug]: Databricks model map needs to be updated for Unity Gateway  ←['cross_ref_pr', 'restricted_requires_confirm']
+    [C   6] #43098 [Bug]: OpenAI to Anthropic conversion downloads http:// image URLs ins  ←['cross_ref_pr', 'claim_signal', 'restricted_requires_confirm']
+    原始池 61，新入库 0
+
+[oss-scout 2026-09-27T19:21:10] 新候选 3（A: 2, B: 1）
+[B/open] openai/openai-agents-python#5184 Sandbox: skipping "data" in a snapshot also drops app/data/ 
+https://github.com/openai/openai-agents-python/issues/5184
+[A/open] OpenHands/OpenHands#17710 [Bug]: Secret edit/deletion leads to duplicate secret being 
+https://github.com/OpenHands/OpenHands/issues/17710
+[A/open] anomalyco/opencode#50155 opencode-go: DeepSeek V4 Flash requires Global regions but P
+https://github.com/anomalyco/opencode/issues/50155

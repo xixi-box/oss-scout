@@ -1,0 +1,21 @@
+使用“1”个参数调用“Connect”时发生异常:“操作已超时。”
+所在位置 G:\project\oss-scout\state\pipe_query.ps1:3 字符: 1
++ $pipe.Connect(3000)
++ ~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (:) [], MethodInvocationException
+    + FullyQualifiedErrorId : TimeoutException
+ 
+设置“AutoFlush”时发生异常:“管道尚未连接。”
+所在位置 G:\project\oss-scout\state\pipe_query.ps1:5 字符: 48
++ $w = New-Object System.IO.StreamWriter($pipe); $w.AutoFlush = $true
++                                                ~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (:) [], SetValueInvocationException
+    + FullyQualifiedErrorId : ExceptionWhenSetting
+ 
+使用“1”个参数调用“Write”时发生异常:“管道尚未连接。”
+所在位置 G:\project\oss-scout\state\pipe_query.ps1:6 字符: 1
++ $w.Write($req)
++ ~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (:) [], MethodInvocationException
+    + FullyQualifiedErrorId : InvalidOperationException
+ 

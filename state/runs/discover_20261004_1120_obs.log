@@ -1,0 +1,56 @@
+== openai/openai-agents-python [open]
+    [C   2] #5290 After an approval, the resumed run records the approved tool span outs  ←['feature_label']
+    [C   5] #5289 RunConfig(tracing_disabled=True) still records the run spans inside a   ←['feature_label']
+    [C   1] #3902 Add minia2a to ecosystem — x402 marketplace for agent monetization  ←['thin_body']
+    原始池 4，新入库 0
+== OpenHands/software-agent-sdk [open]
+    [C   9] #5466 [Bug]: A stale codex-acp / claude-agent-acp on PATH silently replaces   ←['cross_ref_pr']
+    [C   9] #5465 [Bug]: A forked conversation loses its LLM API key and fails its first  ←['cross_ref_pr']
+    [A  6] #5447 [Bug]: claude-opus-5-5 requests ending in an assistant (prefill) messa
+    原始池 56，新入库 1
+== browser-use/browser-use [open]
+    原始池 55，新入库 0
+== OpenHands/OpenHands [open]
+    [C   6] #17872 [Bug]: Mock-LLM E2E Tests have failed on every main run since at least  ←['cross_ref_pr']
+    [C   6] #17871 [Bug]: live ACP e2e harness crashes: __EXTENSIONS_SKILLS_DIR__ is not   ←['cross_ref_pr', 'claim_signal']
+    原始池 55，新入库 0
+== deepset-ai/haystack [open]
+    原始池 30，新入库 0
+== langfuse/langfuse [open]
+    原始池 21，新入库 0
+== Arize-ai/phoenix [open]
+    [B  5] #16688 Missing-annotation pie charts in the experiments table re-animate when
+    原始池 59，新入库 1
+== anomalyco/opencode [open]
+    原始池 47，新入库 0
+== langchain-ai/langsmith-sdk [open]
+    原始池 36，新入库 0
+== e2b-dev/e2b [open]
+    [C   4] #1933 [Bug]: Dockerignore **.txt patterns do not exclude template files in e  ←['cross_ref_pr']
+    原始池 29，新入库 0
+== infiniflow/ragflow [open]
+    原始池 31，新入库 0
+== openai/openai-python [open]
+    [B  4] #4021 Responses create spends CPU proportional to the body size transforming
+    原始池 42，新入库 1
+== pydantic/pydantic-ai [gated]
+    [C   4] #9628 Chat app Database.connect does not shut down its ThreadPoolExecutor  ←['cross_ref_pr']
+    原始池 60，新入库 0
+== microsoft/playwright [gated]
+    原始池 30，新入库 0
+== microsoft/agent-framework [gated]
+    原始池 32，新入库 0
+== BerriAI/litellm [restricted]
+    [C   6] #44217 [Bug]: ⏺ API Error: The response stream was malformed. The response ab  ←['restricted_requires_confirm']
+    [C   6] #44197 [Bug]: ChatOpenAI + LiteLLM not forwarding thinking parameter to Anthr  ←['cross_ref_pr', 'restricted_requires_confirm']
+    [C   7] #44182 [Bug]: Team ID not verified on JWT  ←['restricted_requires_confirm']
+    [C   6] #44154 [Bug]: Background health check results are attributed to every deploym  ←['cross_ref_pr', 'claim_signal', 'restricted_requires_confirm']
+    原始池 60，新入库 0
+
+[oss-scout 2026-10-04T11:20:59] 新候选 3（A: 1, B: 2）
+[A/open] OpenHands/software-agent-sdk#5447 [Bug]: claude-opus-5-5 requests ending in an assistant (pref
+https://github.com/OpenHands/software-agent-sdk/issues/5447
+[B/open] Arize-ai/phoenix#16688 Missing-annotation pie charts in the experiments table re-an
+https://github.com/Arize-ai/phoenix/issues/16688
+[B/open] openai/openai-python#4021 Responses create spends CPU proportional to the body size tr
+https://github.com/openai/openai-python/issues/4021

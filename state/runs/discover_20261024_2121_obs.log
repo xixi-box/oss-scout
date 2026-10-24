@@ -1,0 +1,55 @@
+    [gh] Get "https://api.github.com/search/issues?order=desc&per_page=30&q=repo%3Aaaif-goose%2Fgoose+is%3Aissue+is%3Aopen+no%3Aassignee+-label%3A%22invalid%22
+    [gh] Get "https://api.github.com/search/issues?order=desc&per_page=30&q=repo%3Aaaif-goose%2Fgoose+is%3Aissue+is%3Aopen+no%3Aassignee+label%3Abug+-label%3A%
+    [gh] Get "https://api.github.com/search/issues?order=desc&per_page=30&q=repo%3Alangfuse%2Flangfuse+is%3Aissue+is%3Aopen+no%3Aassignee+label%3Abug+-label%3A
+    [gh] Get "https://api.github.com/search/issues?order=desc&per_page=30&q=repo%3AArize-ai%2Fphoenix+is%3Aissue+is%3Aopen+no%3Aassignee+label%3Abug+-label%3A%
+    [gh] Get "https://api.github.com/search/issues?order=desc&per_page=30&q=repo%3Aanomalyco%2Fopencode+is%3Aissue+is%3Aopen+no%3Aassignee+-label%3A%22invalid%
+    [gh] Get "https://api.github.com/search/issues?order=desc&per_page=30&q=repo%3Aanomalyco%2Fopencode+is%3Aissue+is%3Aopen+no%3Aassignee+label%3Abug+-label%3
+    [gh] Get "https://api.github.com/search/issues?order=desc&per_page=30&q=repo%3Aanomalyco%2Fopencode+is%3Aissue+is%3Aopen+no%3Aassignee+label%3Abug+-label%3
+    [gh] Get "https://api.github.com/search/issues?order=desc&per_page=30&q=repo%3Alangchain-ai%2Flangsmith-sdk+is%3Aissue+is%3Aopen+no%3Aassignee+-label%3A%22
+    [gh] Get "https://api.github.com/search/issues?order=desc&per_page=30&q=repo%3Alangchain-ai%2Flangsmith-sdk+is%3Aissue+is%3Aopen+no%3Aassignee+label%3Abug+
+    [gh] Get "https://api.github.com/search/issues?order=desc&per_page=30&q=repo%3Ae2b-dev%2Fe2b+is%3Aissue+is%3Aopen+no%3Aassignee+label%3Abug+-label%3A%22inv
+    [gh] Get "https://api.github.com/search/issues?order=desc&per_page=30&q=repo%3AcrewAIInc%2FcrewAI+is%3Aissue+is%3Aopen+no%3Aassignee+label%3Abug+-label%3A%
+    [gh] Get "https://api.github.com/search/issues?order=desc&per_page=30&q=repo%3ABerriAI%2Flitellm+is%3Aissue+is%3Aopen+no%3Aassignee+-label%3A%22invalid%22+
+    [gh] Get "https://api.github.com/search/issues?order=desc&per_page=30&q=repo%3ABerriAI%2Flitellm+is%3Aissue+is%3Aopen+no%3Aassignee+label%3Abug+-label%3A%2
+    [gh] Get "https://api.github.com/search/issues?order=desc&per_page=30&q=repo%3ABerriAI%2Flitellm+is%3Aissue+is%3Aopen+no%3Aassignee+label%3Abug+-label%3A%2
+== aaif-goose/goose [open]
+    无原始候选
+== openai/openai-agents-python [open]
+    原始池 17，新入库 0
+== OpenHands/software-agent-sdk [open]
+    原始池 61，新入库 0
+== browser-use/browser-use [open]
+    原始池 57，新入库 0
+== OpenHands/OpenHands [open]
+    原始池 64，新入库 0
+== deepset-ai/haystack [open]
+    原始池 30，新入库 0
+== langfuse/langfuse [open]
+    原始池 23，新入库 0
+== Arize-ai/phoenix [open]
+    原始池 59，新入库 0
+== anomalyco/opencode [open]
+    无原始候选
+== langchain-ai/langsmith-sdk [open]
+    无原始候选
+== e2b-dev/e2b [open]
+    [B  4] #2017 [SDK]: E2B-Desktop Pillow Vulnerability
+    原始池 32，新入库 1
+== infiniflow/ragflow [open]
+    原始池 31，新入库 0
+== openai/openai-python [open]
+    原始池 38，新入库 0
+== crewAIInc/crewAI [open]
+    原始池 43，新入库 0
+== pydantic/pydantic-ai [gated]
+    原始池 37，新入库 0
+== microsoft/playwright [gated]
+    原始池 30，新入库 0
+== microsoft/agent-framework [gated]
+    原始池 32，新入库 0
+== BerriAI/litellm [restricted]
+    无原始候选
+
+[oss-scout 2026-10-24T21:21:09] 新候选 1（A: 0, B: 1）
+[B/open] e2b-dev/e2b#2017 [SDK]: E2B-Desktop Pillow Vulnerability
+https://github.com/e2b-dev/E2B/issues/2017

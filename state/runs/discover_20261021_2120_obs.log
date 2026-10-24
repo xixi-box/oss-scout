@@ -1,0 +1,56 @@
+== openai/openai-agents-python [open]
+    [C   2] #5405 docs(mcp): clarify client_session_timeout_seconds default (5s), npx/cl  ←['docs_only']
+    原始池 11，新入库 0
+== OpenHands/software-agent-sdk [open]
+    [C   6] #6088 [Bug]: Unlocked installs resolve litellm 1.106.0, which cannot import   ←['cross_ref_pr']
+    [C   6] #6086 [Bug]: Agent-server tests run from an OpenHands sandbox kill the sandb  ←['cross_ref_pr']
+    [C   4] #6085 [Bug]: Empty LLM responses are not retried and end the run as STUCK  ←['cross_ref_pr', 'claim_signal']
+    原始池 61，新入库 0
+== browser-use/browser-use [open]
+    [C   6] #6135 Bug: cloud browser 403 hides the server's reason and says "check subsc  ←['cross_ref_pr', 'billing_complaint']
+    原始池 54，新入库 0
+== OpenHands/OpenHands [open]
+    [C   6] #18673 [Bug]: Drag-selecting text in a message taller than the viewport makes  ←['cross_ref_pr']
+    [C   6] #18637 [Bug]: Responses serializer emits duplicate function_call_output items  ←['cross_ref_pr']
+    原始池 61，新入库 0
+== deepset-ai/haystack [open]
+    原始池 30，新入库 0
+== langfuse/langfuse [open]
+    [C   7] #19118 bug(playground): "Save as new prompt version" builds the new version f  ←['cross_ref_pr']
+    原始池 21，新入库 0
+== Arize-ai/phoenix [open]
+    原始池 59，新入库 0
+== anomalyco/opencode [open]
+    [C   4] #42670 tui: prompt and steer selected subagents  ←['cross_ref_pr']
+    [A  6] #55211 OAuth Authorization Fails with HTTP 400 in OpenCode Desktop 2.0.28 on 
+    [C   4] #49986 [FEATURE]: Add a native V2 replacement for provider model filtering  ←['cross_ref_pr']
+    原始池 43，新入库 1
+== langchain-ai/langsmith-sdk [open]
+    原始池 36，新入库 0
+== e2b-dev/e2b [open]
+    [C   4] #1996 [Feature] Allow raw/ordered network.rules passthrough for compatible b  ←['feature_label']
+    原始池 33，新入库 0
+== infiniflow/ragflow [open]
+    原始池 31，新入库 0
+== openai/openai-python [open]
+    原始池 42，新入库 0
+== pydantic/pydantic-ai [gated]
+    [C   2] #10854 Core hooks that would simplify harness `Memory`: owning-capability loo  ←['cross_ref_pr', 'feature_label']
+    [C   4] #10853 An `asyncpg` pool does not type-check as `PostgresMemoryStore`'s `Post  ←['cross_ref_pr', 'claim_signal']
+    [C   2] #10842 Memory: index-friendly Postgres prefix filters, and direct-children li  ←['cross_ref_pr']
+    [C   2] #10826 Workspace API gaps that `FileSystem` works around: ranged reads, typed  ←['cross_ref_pr']
+    [C   4] #10808 Memory: tenant scope aliasing, delimiter breakout, silent write loss,   ←['cross_ref_pr']
+    原始池 33，新入库 0
+== microsoft/playwright [gated]
+    原始池 30，新入库 0
+== microsoft/agent-framework [gated]
+    原始池 32，新入库 0
+== BerriAI/litellm [restricted]
+    [C   7] #47320 [Bug]: generic_api logger drops a full-queue batch when the logging wo  ←['cross_ref_pr', 'restricted_requires_confirm']
+    [C   5] #47308 [Bug]: Decisions feature not working with custom decision-capable mode  ←['cross_ref_pr', 'restricted_requires_confirm']
+    [C   6] #47297 [Bug]: Disk cache runs code from a tampered cache entry (CVE-2025-6987  ←['cross_ref_pr', 'restricted_requires_confirm']
+    原始池 69，新入库 0
+
+[oss-scout 2026-10-21T21:20:59] 新候选 1（A: 1, B: 0）
+[A/open] anomalyco/opencode#55211 OAuth Authorization Fails with HTTP 400 in OpenCode Desktop 
+https://github.com/anomalyco/opencode/issues/55211

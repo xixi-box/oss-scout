@@ -1,0 +1,41 @@
+    [gh] Get "https://api.github.com/search/issues?order=desc&per_page=30&q=repo%3Alangchain-ai%2Flangsmith-sdk+is%3Aissue+is%3Aopen+no%3Aassignee+-label%3A%22
+== openai/openai-agents-python [open]
+    [C   1] #4740 SQLAlchemySession(create_tables=True) cannot create tables on MySQL du  ←['cross_ref_pr', 'claim_signal', 'feature_label']
+    [C   0] #4827 Deferred interrupted-turn session items are never persisted when an ap  ←['cross_ref_pr', 'feature_label']
+    原始池 16，新入库 0
+== OpenHands/OpenHands [open]
+    原始池 59，新入库 0
+== deepset-ai/haystack [open]
+    原始池 30，新入库 0
+== langfuse/langfuse [open]
+    原始池 8，新入库 0
+== Arize-ai/phoenix [open]
+    原始池 59，新入库 0
+== anomalyco/opencode [open]
+    原始池 50，新入库 0
+== langchain-ai/langsmith-sdk [open]
+    [B  3] #433 Assign Succes or Fail to own custom metric 
+    [C   2] #963 LangSmith doesn't work in Brave browser  ←['feature_label']
+    [B  3] #1620 Issue: source_run_id missing from examples
+    [B  3] #1695 Issue: Group By columns in Metadata is not comprehensive
+    原始池 8，新入库 3
+== e2b-dev/e2b [open]
+    原始池 23，新入库 0
+== openai/openai-python [open]
+    原始池 45，新入库 0
+== pydantic/pydantic-ai [gated]
+    原始池 60，新入库 0
+== microsoft/playwright [gated]
+    原始池 30，新入库 0
+== microsoft/agent-framework [gated]
+    原始池 32，新入库 0
+== BerriAI/litellm [restricted]
+    原始池 63，新入库 0
+
+[oss-scout 2026-09-20T13:20:24] 新候选 3（A: 0, B: 3）
+[B/open] langchain-ai/langsmith-sdk#433 Assign Succes or Fail to own custom metric 
+https://github.com/langchain-ai/langsmith-sdk/issues/433
+[B/open] langchain-ai/langsmith-sdk#1620 Issue: source_run_id missing from examples
+https://github.com/langchain-ai/langsmith-sdk/issues/1620
+[B/open] langchain-ai/langsmith-sdk#1695 Issue: Group By columns in Metadata is not comprehensive
+https://github.com/langchain-ai/langsmith-sdk/issues/1695

@@ -1,0 +1,62 @@
+== openai/openai-agents-python [open]
+    [C   2] #5411 Feature request: a Hyperlight micro-VM sandbox backend  ←['question_or_feature_title']
+    [C   2] #5409 Approved tool runs again if the process stops after it ran but before 
+    [C   2] #5408 Pre-execution security guardrails for your agent execution loops  ←['feature_label']
+    [C   2] #5407 [Proposal] Payment guardrail: external spend authority + auditable rec
+    原始池 15，新入库 0
+== OpenHands/software-agent-sdk [open]
+    [C   6] #6139 [Bug]: Closing a terminal does not stop TerminalSession.execute() wait  ←['cross_ref_pr']
+    [C   6] #6133 [Bug]: `list_directory` reports a complete listing as truncated when a  ←['cross_ref_pr']
+    [C   6] #6131 [Bug]: version-bump-prs enterprise bump leaves the dev compose agent-s  ←['cross_ref_pr']
+    [C   6] #6120 [Bug]: PreToolUse hooks fail open: a permissionDecision: "deny" is ign  ←['cross_ref_pr', 'claim_signal']
+    [C   6] #6116 [Bug]: Command hook that exits 1 is treated as blocking when its stdou  ←['cross_ref_pr']
+    原始池 60，新入库 0
+== browser-use/browser-use [open]
+    [C   6] #6173 Bug: `Element.click` reports the mouse-release error and hides the pre  ←['cross_ref_pr', 'claim_signal']
+    [C   6] #6153 Bug: `get_element_coordinates` returns `None` for a visible element wh  ←['cross_ref_pr']
+    原始池 53，新入库 0
+== OpenHands/OpenHands [open]
+    [C   6] #18744 [Bug]: uvx-resolved litellm>=1.106 crashes every tool-calling LLM requ  ←['cross_ref_pr']
+    [A  6] #18728 [Bug]: Codex ACP loses conversation context after an in-flight prompt 
+    [C   6] #18716 [Bug]: Launching a recommended automation sends its skill's command wh  ←['cross_ref_pr']
+    [C   6] #18715 [Bug]: Header status says Running and offers Stop Runtime on a convers  ←['cross_ref_pr']
+    [C   4] #18701 [Feature]: Default new DigitalOcean agents to the smallest available V  ←['cross_ref_pr']
+    原始池 60，新入库 1
+== deepset-ai/haystack [open]
+    原始池 30，新入库 0
+== langfuse/langfuse [open]
+    [C   7] #19181 bug: pi-observability-plugin drops parent spans and mis-nests subagent  ←['cross_ref_pr']
+    原始池 22，新入库 0
+== Arize-ai/phoenix [open]
+    原始池 59，新入库 0
+== anomalyco/opencode [open]
+    [C   3] #43088 [FEATURE]: Make App prompt action shortcuts configurable  ←['cross_ref_pr']
+    原始池 42，新入库 0
+== langchain-ai/langsmith-sdk [open]
+    原始池 36，新入库 0
+== e2b-dev/e2b [open]
+    原始池 33，新入库 0
+== infiniflow/ragflow [open]
+    原始池 31，新入库 0
+== openai/openai-python [open]
+    原始池 37，新入库 0
+== pydantic/pydantic-ai [gated]
+    [C   4] #10769 `ConversationSearch` indexes a run twice when an `on_change='append'`   ←['cross_ref_pr']
+    [C   4] #10748 `ConversationSearch` returns one copy of inherited history per run and  ←['cross_ref_pr']
+    [C   4] #10744 Hosted-MCP harness capabilities raise on `client` with `auth=''`, thou  ←['cross_ref_pr', 'claim_signal', 'docs_only']
+    原始池 39，新入库 0
+== microsoft/playwright [gated]
+    原始池 30，新入库 0
+== microsoft/agent-framework [gated]
+    原始池 32，新入库 0
+== BerriAI/litellm [restricted]
+    [C   6] #47862 [Bug]: TypeError in litellm/proxy/utils.py  ←['restricted_requires_confirm']
+    [C   6] #47856 [Bug]: /toolset/{name}/mcp tools/list loses URL scope after catalog au  ←['cross_ref_pr', 'restricted_requires_confirm']
+    [C   6] #47831 [Bug]: RouterRateLimitError in litellm/router.py  ←['claim_signal', 'restricted_requires_confirm']
+    [C   6] #47825 [Bug]: Same-name deployments still load-balanced across access groups   ←['cross_ref_pr', 'claim_signal', 'restricted_requires_confirm']
+    [C   6] #47822 [Bug]: httpx.Timeout connect timeout ignored for non-OpenAI providers   ←['cross_ref_pr', 'claim_signal', 'restricted_requires_confirm']
+    原始池 62，新入库 0
+
+[oss-scout 2026-10-23T15:22:13] 新候选 1（A: 1, B: 0）
+[A/open] OpenHands/OpenHands#18728 [Bug]: Codex ACP loses conversation context after an in-flig
+https://github.com/OpenHands/OpenHands/issues/18728

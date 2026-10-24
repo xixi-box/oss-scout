@@ -1,0 +1,3 @@
+    [gh] Get "https://api.github.com/search/issues?order=desc&per_page=30&q=repo%3AOpenHands%2FOpenHands+is%3Aissue+is%3Aopen+no%3Aassignee+label%3Abug+-label%
+    [gh] gh: You have exceeded a secondary rate limit. Please wait a few minutes before you try again. For more on scraping GitHub and how it may affect your r
+    [gh] Get "https://api.github.com/search/issues?order=desc&per_page=30&q=repo%3Aanomalyco%2Fopencode+is%3Aissue+is%3Aopen+no%3Aassignee+label%3Abug+-label%3

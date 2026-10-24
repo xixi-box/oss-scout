@@ -1,0 +1,55 @@
+== openai/openai-agents-python [open]
+    [C   2] #5304 Sandbox `exec_command` / `view_image` abort the whole run on bad model  ←['claim_signal']
+    原始池 2，新入库 0
+== OpenHands/software-agent-sdk [open]
+    [A  6] #5481 [Bug]:
+    [B  4] #5475 [Bug]: version-bump-prs has never opened the enterprise SDK bump PR (4
+    原始池 58，新入库 2
+== browser-use/browser-use [open]
+    [C   4] #5988 [Bug]: CDP RareBooleanData stackingContexts indexing bug and missing d  ←['cross_ref_pr']
+    [C   4] #5987 [Bug]: Dataclass Rect.__post_init__ silently ignores inverted bounds a  ←['cross_ref_pr']
+    原始池 55，新入库 0
+== OpenHands/OpenHands [open]
+    [C   6] #17900 [Bug]: Settings switches are skipped by Tab and invisible to screen re  ←['cross_ref_pr']
+    [C   6] #17899 [Bug]: Git user name and email from Settings > Application are never a  ←['cross_ref_pr']
+    [C   6] #17898 [Bug]: VITE_DO_NOT_TRACK=1 still initializes PostHog and loads remote   ←['cross_ref_pr']
+    原始池 72，新入库 0
+== deepset-ai/haystack [open]
+    [C   4] #13109 Tool outputs_to_string fails when multi-output tools use "source", "ha  ←['cross_ref_pr', 'claim_signal']
+    [C   2] #13107 DocumentCleaner(remove_repeated_substrings=True) removes body text tha
+    原始池 30，新入库 0
+== langfuse/langfuse [open]
+    原始池 20，新入库 0
+== Arize-ai/phoenix [open]
+    [B  5] #16768 [BUG] [agents] UI SDK: Sequential `navigation.goTo` calls in a single 
+    [C   5] #16743 [online evals] duplicating an evaluator adds a space to its name and i  ←['cross_ref_pr']
+    [C   5] #16742 [online evals] eval gallery auto-selects the first evaluator and it ca  ←['cross_ref_pr']
+    原始池 60，新入库 1
+== anomalyco/opencode [open]
+    原始池 46，新入库 0
+== langchain-ai/langsmith-sdk [open]
+    原始池 36，新入库 0
+== e2b-dev/e2b [open]
+    [C   4] #1938 [Bug]: Code Interpreter JSON serialization drops Result.data  ←['cross_ref_pr']
+    原始池 29，新入库 0
+== infiniflow/ragflow [open]
+    原始池 31，新入库 0
+== openai/openai-python [open]
+    原始池 42，新入库 0
+== pydantic/pydantic-ai [gated]
+    原始池 60，新入库 0
+== microsoft/playwright [gated]
+    原始池 30，新入库 0
+== microsoft/agent-framework [gated]
+    原始池 32，新入库 0
+== BerriAI/litellm [restricted]
+    [C   6] #44496 [Bug]: RouterRateLimitError in litellm/router.py  ←['restricted_requires_confirm']
+    原始池 70，新入库 0
+
+[oss-scout 2026-10-06T13:21:13] 新候选 3（A: 1, B: 2）
+[A/open] OpenHands/software-agent-sdk#5481 [Bug]:
+https://github.com/OpenHands/software-agent-sdk/issues/5481
+[B/open] OpenHands/software-agent-sdk#5475 [Bug]: version-bump-prs has never opened the enterprise SDK 
+https://github.com/OpenHands/software-agent-sdk/issues/5475
+[B/open] Arize-ai/phoenix#16768 [BUG] [agents] UI SDK: Sequential `navigation.goTo` calls in
+https://github.com/Arize-ai/phoenix/issues/16768

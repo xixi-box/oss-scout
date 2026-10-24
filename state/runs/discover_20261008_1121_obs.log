@@ -1,0 +1,55 @@
+== openai/openai-agents-python [open]
+    [B  4] #5330 Tool input guardrails are per-call and stateless — run-scoped plan-exe
+    [C   2] #5329 RedisSession history replacement is not atomic: compaction can leave t
+    原始池 5，新入库 1
+== OpenHands/software-agent-sdk [open]
+    [C   6] #5558 [Bug]: Terminals fail with "File name too long" when TMUX_TMPDIR is de  ←['cross_ref_pr']
+    [C   6] #5553 [Bug]: Deleting a local conversation leaves its git worktree behind  ←['cross_ref_pr']
+    [C   6] #5539 [Bug]: download-trajectory fails or returns a broken zip when the same  ←['cross_ref_pr', 'claim_signal']
+    [C   6] #5533 Tmux can accept commands before slow Bash startup completes  ←['cross_ref_pr']
+    原始池 59，新入库 0
+== browser-use/browser-use [open]
+    原始池 55，新入库 0
+== OpenHands/OpenHands [open]
+    [C   6] #18090 [Bug]: Duplicate plugin install shows the API hint "Use force=true to   ←['cross_ref_pr', 'claim_signal']
+    [C   6] #18089 [Bug]: Available Hooks dialog shows an empty Commands box for prompt a  ←['cross_ref_pr']
+    [C   6] #18088 [Bug]: Available Hooks dialog says "Failed to fetch skills" when the A  ←['cross_ref_pr', 'claim_signal']
+    [C   6] #18063 [Bug]: Composer "More input actions" Model submenu runs off the right   ←['cross_ref_pr']
+    [C   6] #18062 [Bug]: Automations: a deleted automation stays on the dashboard, home   ←['cross_ref_pr']
+    [C   6] #18060 [Bug]: Agent profile row menu is not keyboard-operable: focus stays on  ←['cross_ref_pr']
+    [C   6] #18061 [Bug]: Automation setup: Agent profile field goes blank after switchin  ←['cross_ref_pr']
+    原始池 66，新入库 0
+== deepset-ai/haystack [open]
+    原始池 30，新入库 0
+== langfuse/langfuse [open]
+    [C   7] #18359 bug: trace tree silently omits observations with cyclic parent IDs  ←['cross_ref_pr']
+    原始池 21，新入库 0
+== Arize-ai/phoenix [open]
+    原始池 60，新入库 0
+== anomalyco/opencode [open]
+    原始池 46，新入库 0
+== langchain-ai/langsmith-sdk [open]
+    原始池 36，新入库 0
+== e2b-dev/e2b [open]
+    原始池 28，新入库 0
+== infiniflow/ragflow [open]
+    原始池 31，新入库 0
+== openai/openai-python [open]
+    原始池 43，新入库 0
+== pydantic/pydantic-ai [gated]
+    原始池 60，新入库 0
+== microsoft/playwright [gated]
+    原始池 30，新入库 0
+== microsoft/agent-framework [gated]
+    原始池 32，新入库 0
+== BerriAI/litellm [restricted]
+    [C   6] #44888 [Bug]: Admin UI files truncated to 0 bytes at startup when SERVER_ROOT  ←['cross_ref_pr', 'claim_signal', 'restricted_requires_confirm']
+    [C   6] #44852 [Bug]: Headroom guardrail skips tool-output-only OpenAI Responses requ  ←['claim_signal', 'restricted_requires_confirm']
+    [C   6] #44851 [Bug]: Headroom session affinity  ←['cross_ref_pr', 'claim_signal', 'restricted_requires_confirm']
+    [C   6] #44831 [Bug]: MCP tools/call with an unprefixed tool name on /{server_name}/m  ←['cross_ref_pr', 'restricted_requires_confirm']
+    [C   6] #44830 [Bug]: Character Sequence in API Key treated as special character  ←['restricted_requires_confirm']
+    原始池 63，新入库 0
+
+[oss-scout 2026-10-08T11:21:14] 新候选 1（A: 0, B: 1）
+[B/open] openai/openai-agents-python#5330 Tool input guardrails are per-call and stateless — run-scope
+https://github.com/openai/openai-agents-python/issues/5330

@@ -1,0 +1,43 @@
+    [gh] Get "https://api.github.com/search/issues?order=desc&per_page=30&q=repo%3AOpenHands%2Fsoftware-agent-sdk+is%3Aissue+is%3Aopen+no%3Aassignee+label%3Abu
+    [gh] Get "https://api.github.com/search/issues?order=desc&per_page=30&q=repo%3AOpenHands%2Fsoftware-agent-sdk+is%3Aissue+is%3Aopen+no%3Aassignee+label%3Abu
+    [gh] Get "https://api.github.com/repos/OpenHands/software-agent-sdk/issues/4239": EOF
+    [gh] Get "https://api.github.com/repos/OpenHands/software-agent-sdk/issues/2721": net/http: TLS handshake timeout
+== openai/openai-agents-python [open]
+    原始池 5，新入库 0
+== OpenHands/software-agent-sdk [open]
+    [C   2] #4240 [CLI / GUI] Conversations should be shared between CLI and GUI  ←['cross_ref_pr', 'feature_label']
+    [C   4] #5292 [Bug]: Bedrock GPT-6 Sol/Luna/Astra and GPT-5.6 fail with 400 "Unknown  ←['cross_ref_pr']
+    原始池 30，新入库 0
+== browser-use/browser-use [open]
+    原始池 56，新入库 0
+== OpenHands/OpenHands [open]
+    原始池 65，新入库 0
+== deepset-ai/haystack [open]
+    原始池 30，新入库 0
+== langfuse/langfuse [open]
+    原始池 22，新入库 0
+== Arize-ai/phoenix [open]
+    原始池 59，新入库 0
+== anomalyco/opencode [open]
+    原始池 45，新入库 0
+== langchain-ai/langsmith-sdk [open]
+    原始池 36，新入库 0
+== e2b-dev/e2b [open]
+    原始池 31，新入库 0
+== infiniflow/ragflow [open]
+    原始池 32，新入库 0
+== openai/openai-python [open]
+    原始池 42，新入库 0
+== pydantic/pydantic-ai [gated]
+    [C   2] #10300 Under DBOS, a plan tool's store reads after its emitted events race th
+    [C   6] #10296 MistralModel fails to import with mistralai>=3: No module named 'httpx  ←['cross_ref_pr']
+    原始池 10，新入库 0
+== microsoft/playwright [gated]
+    原始池 30，新入库 0
+== microsoft/agent-framework [gated]
+    原始池 32，新入库 0
+== BerriAI/litellm [restricted]
+    原始池 76，新入库 0
+
+[oss-scout 2026-10-15T17:22:32] 新候选 0（A: 0, B: 0）
+

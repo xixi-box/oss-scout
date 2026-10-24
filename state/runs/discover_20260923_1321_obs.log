@@ -1,0 +1,34 @@
+== openai/openai-agents-python [open]
+    [C   2] #5157 `ShellTool` and `ApplyPatchTool` default `needs_approval=False` for ho
+    原始池 15，新入库 0
+== OpenHands/OpenHands [open]
+    [C   6] #17599 fix(device-verify): replace undefined shadcn theme tokens so the devic  ←['cross_ref_pr']
+    原始池 68，新入库 0
+== deepset-ai/haystack [open]
+    原始池 30，新入库 0
+== langfuse/langfuse [open]
+    原始池 10，新入库 0
+== Arize-ai/phoenix [open]
+    原始池 60，新入库 0
+== anomalyco/opencode [open]
+    原始池 50，新入库 0
+== langchain-ai/langsmith-sdk [open]
+    原始池 37，新入库 0
+== e2b-dev/e2b [open]
+    原始池 23，新入库 0
+== openai/openai-python [open]
+    原始池 43，新入库 0
+== pydantic/pydantic-ai [gated]
+    [C   4] #8574 `VercelAIAdapter.dump_messages` emits `providerMetadata: null` instead  ←['cross_ref_pr']
+    原始池 60，新入库 0
+== microsoft/playwright [gated]
+    原始池 30，新入库 0
+== microsoft/agent-framework [gated]
+    原始池 32，新入库 0
+== BerriAI/litellm [restricted]
+    [C   6] #42201 [Bug]: Gemini /v1/responses previous_response_id replays malformed tho  ←['cross_ref_pr', 'restricted_requires_confirm']
+    [C   6] #42186 [Bug]: Moonshot: `400 Invalid request: text content is empty` when an   ←['cross_ref_pr', 'restricted_requires_confirm']
+    原始池 69，新入库 0
+
+[oss-scout 2026-09-23T13:21:20] 新候选 0（A: 0, B: 0）
+

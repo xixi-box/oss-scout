@@ -1,0 +1,60 @@
+== openai/openai-agents-python [open]
+    原始池 5，新入库 0
+== OpenHands/software-agent-sdk [open]
+    [C   6] #5985 [Bug]: A list call during Update (force reinstall) drops the extension  ←['cross_ref_pr', 'claim_signal']
+    [C   6] #5974 [Bug]: Workspace registry lock contention blocks /alive and the server  ←['cross_ref_pr']
+    [C   6] #5969 [Bug]: A slow webhook receiver makes POST /run answer 409 "already run  ←['cross_ref_pr']
+    [C   6] #5963 [Bug]: RemoteConversation.state.events keeps every StreamingDeltaEvent  ←['cross_ref_pr']
+    [C   6] #5962 [Bug]: A continued OpenAI-gateway conversation that stops in waiting_f  ←['cross_ref_pr']
+    原始池 61，新入库 0
+== browser-use/browser-use [open]
+    [A  6] #6068 Bug: agent enables a disabled button with evaluate, places the order, 
+    [C   6] #6065 Bug: Browser parameter accept_downloads is nonfunctional when running   ←['cross_ref_pr']
+    原始池 56，新入库 1
+== OpenHands/OpenHands [open]
+    [C   6] #18445 [Bug]: Completed conversation opens with empty history on cloud — sile  ←['cross_ref_pr']
+    [C   6] #18434 [Bug]: DigitalOcean sign-in always fails with "session key required" w  ←['cross_ref_pr']
+    [C   6] #18432 [Bug]: The agent's secret request dialog is wider than a phone screen,  ←['cross_ref_pr', 'claim_signal']
+    [C   9] #18421 [Bug]: Chat attachment upload fails with 422 "path must be inside the   ←['cross_ref_pr']
+    原始池 62，新入库 0
+== deepset-ai/haystack [open]
+    原始池 30，新入库 0
+== langfuse/langfuse [open]
+    原始池 23，新入库 0
+== Arize-ai/phoenix [open]
+    原始池 59，新入库 0
+== anomalyco/opencode [open]
+    原始池 45，新入库 0
+== langchain-ai/langsmith-sdk [open]
+    原始池 36，新入库 0
+== e2b-dev/e2b [open]
+    [C   4] #1981 [Bug]: JS Code Interpreter Result.formats() omits text and chart  ←['cross_ref_pr']
+    原始池 32，新入库 0
+== infiniflow/ragflow [open]
+    原始池 32，新入库 0
+== openai/openai-python [open]
+    原始池 42，新入库 0
+== pydantic/pydantic-ai [gated]
+    [C   2] #10397 gh-aw harness canonical capture is writable by agent tools and exposes  ←['cross_ref_pr']
+    [C   2] #10385 Change thinking effort mid-conversation via OpenAI `configuration_upda  ←['feature_label']
+    [C   2] #10382 Streamed response reports `state='complete'` when the stream ends befo  ←['cross_ref_pr']
+    [C   2] #10381 `OpenAIChatModel` raises on an unrecognized `finish_reason` instead of  ←['cross_ref_pr', 'claim_signal']
+    [C   4] #10371 Follow-ups from post-merge review of Agent Skills in harness (#9802) a  ←['cross_ref_pr', 'claim_signal']
+    [C   4] #10348 Close `FunctionModel` sources when cancelled before the first chunk  ←['cross_ref_pr', 'claim_signal']
+    [C   2] #10317 MCP Apps pages don't load in CopilotKit when the agent is served with   ←['cross_ref_pr']
+    原始池 15，新入库 0
+== microsoft/playwright [gated]
+    原始池 30，新入库 0
+== microsoft/agent-framework [gated]
+    原始池 32，新入库 0
+== BerriAI/litellm [restricted]
+    [C   6] #46499 [Bug]: Interrupted streaming /chat/completions logs partial spend inst  ←['claim_signal', 'restricted_requires_confirm']
+    [C   6] #46473 [Bug]: Image-generation prompt is not redacted by a pre-call PII guard  ←['cross_ref_pr', 'restricted_requires_confirm']
+    [C   6] #46435 [Bug]: Spend-log writes collapse and proxy memory grows unbounded unde  ←['claim_signal', 'restricted_requires_confirm']
+    [C   6] #46422 [Bug]: Discussion: Reliability of Jev-Based Decisions with External Co  ←['restricted_requires_confirm']
+    [C   5] #46407 [Bug]: gpt-image cost ignores data_residency uplift and deployment-lev  ←['cross_ref_pr', 'claim_signal', 'restricted_requires_confirm']
+    原始池 64，新入库 0
+
+[oss-scout 2026-10-16T11:23:00] 新候选 1（A: 1, B: 0）
+[A/open] browser-use/browser-use#6068 Bug: agent enables a disabled button with evaluate, places t
+https://github.com/browser-use/browser-use/issues/6068

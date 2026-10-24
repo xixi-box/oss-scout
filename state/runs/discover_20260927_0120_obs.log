@@ -1,0 +1,51 @@
+    [gh] Get "https://api.github.com/search/issues?order=desc&per_page=30&q=repo%3Abrowser-use%2Fbrowser-use+is%3Aissue+is%3Aopen+no%3Aassignee+-label%3A%22inv
+    [gh] Get "https://api.github.com/search/issues?order=desc&per_page=30&q=repo%3Abrowser-use%2Fbrowser-use+is%3Aissue+is%3Aopen+no%3Aassignee+label%3Abug+-la
+    [gh] Get "https://api.github.com/repos/browser-use/browser-use/issues/4877": EOF
+    [gh] Get "https://api.github.com/repos/browser-use/browser-use/issues/4868": EOF
+    [gh] Get "https://api.github.com/repos/browser-use/browser-use/issues/4786": EOF
+    [gh] Get "https://api.github.com/search/issues?order=desc&per_page=30&q=repo%3AOpenHands%2FOpenHands+is%3Aissue+is%3Aopen+no%3Aassignee+-label%3A%22invalid
+    [gh] Get "https://api.github.com/search/issues?order=desc&per_page=30&q=repo%3AOpenHands%2FOpenHands+is%3Aissue+is%3Aopen+no%3Aassignee+label%3Abug+-label%
+    [gh] Get "https://api.github.com/search/issues?order=desc&per_page=30&q=repo%3AOpenHands%2FOpenHands+is%3Aissue+is%3Aopen+no%3Aassignee+label%3Abug+-label%
+    [gh] Get "https://api.github.com/search/issues?order=desc&per_page=30&q=repo%3Adeepset-ai%2Fhaystack+is%3Aissue+is%3Aopen+no%3Aassignee+-label%3A%22invalid
+    [gh] Get "https://api.github.com/search/issues?order=desc&per_page=30&q=repo%3Adeepset-ai%2Fhaystack+is%3Aissue+is%3Aopen+no%3Aassignee+label%3Abug+-label%
+    [gh] Get "https://api.github.com/search/issues?order=desc&per_page=30&q=repo%3Adeepset-ai%2Fhaystack+is%3Aissue+is%3Aopen+no%3Aassignee+label%3Abug+-label%
+    [gh] Get "https://api.github.com/search/issues?order=desc&per_page=30&q=repo%3Alangfuse%2Flangfuse+is%3Aissue+is%3Aopen+no%3Aassignee+-label%3A%22invalid%2
+    [gh] Get "https://api.github.com/search/issues?order=desc&per_page=30&q=repo%3Alangfuse%2Flangfuse+is%3Aissue+is%3Aopen+no%3Aassignee+label%3Abug+-label%3A
+    [gh] Get "https://api.github.com/search/issues?order=desc&per_page=30&q=repo%3Alangfuse%2Flangfuse+is%3Aissue+is%3Aopen+no%3Aassignee+label%3Abug+-label%3A
+    [gh] Get "https://api.github.com/search/issues?order=desc&per_page=30&q=repo%3AArize-ai%2Fphoenix+is%3Aissue+is%3Aopen+no%3Aassignee+-label%3A%22invalid%22
+    [gh] Get "https://api.github.com/search/issues?order=desc&per_page=30&q=repo%3AArize-ai%2Fphoenix+is%3Aissue+is%3Aopen+no%3Aassignee+label%3Abug+-label%3A%
+== openai/openai-agents-python [open]
+    原始池 12，新入库 0
+== OpenHands/software-agent-sdk [open]
+    原始池 60，新入库 0
+== browser-use/browser-use [open]
+    原始池 30，新入库 0
+== OpenHands/OpenHands [open]
+    无原始候选
+== deepset-ai/haystack [open]
+    无原始候选
+== langfuse/langfuse [open]
+    无原始候选
+== Arize-ai/phoenix [open]
+    原始池 6，新入库 0
+== anomalyco/opencode [open]
+    原始池 50，新入库 0
+== langchain-ai/langsmith-sdk [open]
+    原始池 36，新入库 0
+== e2b-dev/e2b [open]
+    原始池 27，新入库 0
+== infiniflow/ragflow [open]
+    原始池 31，新入库 0
+== openai/openai-python [open]
+    原始池 42，新入库 0
+== pydantic/pydantic-ai [gated]
+    原始池 60，新入库 0
+== microsoft/playwright [gated]
+    原始池 30，新入库 0
+== microsoft/agent-framework [gated]
+    原始池 32，新入库 0
+== BerriAI/litellm [restricted]
+    原始池 62，新入库 0
+
+[oss-scout 2026-09-27T01:20:59] 新候选 0（A: 0, B: 0）
+

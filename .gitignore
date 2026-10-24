@@ -1,0 +1,10 @@
+# 懒 clone 缓存与 worktree 是外部仓库副本，不入快照
+repos/
+worktrees/
+__pycache__/
+*.pyc
+# 本地新目录由代码生成，历史状态以 git 提交为准
+artifacts/
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm

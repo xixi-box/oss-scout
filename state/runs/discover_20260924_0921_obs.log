@@ -1,0 +1,50 @@
+== openai/openai-agents-python [open]
+    原始池 15，新入库 0
+== OpenHands/OpenHands [open]
+    [C   6] #17623 [Feature]: Helm chart should not automount the ServiceAccount token in  ←['cross_ref_pr']
+    [C   6] #17622 [Bug]: Node.js version in README/SELF_HOSTING docs (22.12.x) contradic  ←['cross_ref_pr', 'docs_only']
+    [B  5] #17621 [Bug]: Compact context always fails after exactly 60s — client-side ti
+    [C   6] #17620 [Bug]: Fresh-clone npm run typecheck fails with TS2307 for #/i18n/decl  ←['cross_ref_pr']
+    [A  6] #17619 [Bug]: WebSocket reconnect resubscribes from a stale `after_timestamp`
+    [C   8] #17615 [Bug]: Old conversations cannot be loaded after upgrading to 1.21.0  ←['cross_ref_pr', 'org_bot_claimed']
+    [C   6] #17602 fix(mcp): replace undefined Tailwind tokens so the MCP install OAuth i  ←['cross_ref_pr']
+    原始池 62，新入库 2
+== deepset-ai/haystack [open]
+    [C   1] #11476 feat: Add EmbeddingCache component to avoid re-embedding identical tex
+    原始池 30，新入库 0
+== langfuse/langfuse [open]
+    原始池 11，新入库 0
+== Arize-ai/phoenix [open]
+    原始池 60，新入库 0
+== anomalyco/opencode [open]
+    原始池 50，新入库 0
+== langchain-ai/langsmith-sdk [open]
+    原始池 37，新入库 0
+== e2b-dev/e2b [open]
+    原始池 23，新入库 0
+== openai/openai-python [open]
+    原始池 43，新入库 0
+== pydantic/pydantic-ai [gated]
+    [C   4] #8643 `GoogleModel` returns Gemini's interim thought images as output when n  ←['cross_ref_pr']
+    [C   4] #8621 A boolean `$defs` entry crashes `JsonSchemaTransformer` when inlining   ←['cross_ref_pr', 'claim_signal']
+    [B  4] #8603 A model selector reads the prompt before any capability hook, so an `I
+    原始池 60，新入库 1
+== microsoft/playwright [gated]
+    原始池 30，新入库 0
+== microsoft/agent-framework [gated]
+    原始池 32，新入库 0
+== BerriAI/litellm [restricted]
+    [C   6] #42566 [Bug]: Two proxies on one host share the auto-created PROMETHEUS_MULTI  ←['cross_ref_pr', 'restricted_requires_confirm']
+    [C   5] #42477 [Bug]: MCP oauth2/authorization_code token exchange fails with generic  ←['cross_ref_pr', 'restricted_requires_confirm']
+    [C   6] #42476 [Bug]: Anthropic /v1/messages passthrough streams bypass post-call gua  ←['cross_ref_pr', 'restricted_requires_confirm']
+    [C   6] #42460 [Bug]: Zero data on /user/daily/activity/aggregated when filtered by u  ←['cross_ref_pr', 'restricted_requires_confirm']
+    [C   6] #42432 [Bug]: Anthropic→OpenAI translation can emit a `messages` array with n  ←['cross_ref_pr', 'restricted_requires_confirm']
+    原始池 67，新入库 0
+
+[oss-scout 2026-09-24T09:21:00] 新候选 3（A: 1, B: 2）
+[B/open] OpenHands/OpenHands#17621 [Bug]: Compact context always fails after exactly 60s — clie
+https://github.com/OpenHands/OpenHands/issues/17621
+[A/open] OpenHands/OpenHands#17619 [Bug]: WebSocket reconnect resubscribes from a stale `after_
+https://github.com/OpenHands/OpenHands/issues/17619
+[B/gated] pydantic/pydantic-ai#8603 A model selector reads the prompt before any capability hook
+https://github.com/pydantic/pydantic-ai/issues/8603

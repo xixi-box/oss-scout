@@ -1,0 +1,34 @@
+    [gh] Get "https://api.github.com/search/issues?order=desc&per_page=30&q=repo%3Alangfuse%2Flangfuse+is%3Aissue+is%3Aopen+no%3Aassignee+label%3Abug+-label%3A
+== openai/openai-agents-python [open]
+    原始池 14，新入库 0
+== OpenHands/OpenHands [open]
+    原始池 64，新入库 0
+== deepset-ai/haystack [open]
+    [C   1] #11521 Native `map` / fan-out component for iterating a sub-pipeline over a l  ←['claim_signal']
+    原始池 30，新入库 0
+== langfuse/langfuse [open]
+    [C   3] #17775 Feature Request: Closed-loop agent skill generation and continuous opt  ←['feature_label', 'question_or_feature_title']
+    原始池 10，新入库 0
+== Arize-ai/phoenix [open]
+    原始池 60，新入库 0
+== anomalyco/opencode [open]
+    原始池 50，新入库 0
+== langchain-ai/langsmith-sdk [open]
+    原始池 37，新入库 0
+== e2b-dev/e2b [open]
+    原始池 23，新入库 0
+== openai/openai-python [open]
+    原始池 44，新入库 0
+== pydantic/pydantic-ai [gated]
+    原始池 60，新入库 0
+== microsoft/playwright [gated]
+    原始池 30，新入库 0
+== microsoft/agent-framework [gated]
+    [B  3] #8586 .NET: Why has DeleteSessionAsync been removed from AgentSessionStore?
+    原始池 32，新入库 1
+== BerriAI/litellm [restricted]
+    原始池 66，新入库 0
+
+[oss-scout 2026-09-22T21:20:45] 新候选 1（A: 0, B: 1）
+[B/gated] microsoft/agent-framework#8586 .NET: Why has DeleteSessionAsync been removed from AgentSess
+https://github.com/microsoft/agent-framework/issues/8586

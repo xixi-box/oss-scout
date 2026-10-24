@@ -1,0 +1,61 @@
+== openai/openai-agents-python [open]
+    原始池 1，新入库 0
+== OpenHands/software-agent-sdk [open]
+    [C   6] #5354 [Bug]: Validation errors split a single tool-call response in SDK conv  ←['cross_ref_pr']
+    原始池 57，新入库 0
+== browser-use/browser-use [open]
+    原始池 55，新入库 0
+== OpenHands/OpenHands [open]
+    [C   6] #17774 [Bug]: Planner tab fails with "Conversation file path must stay inside  ←['cross_ref_pr', 'claim_signal']
+    [C   6] #17773 [Bug]:  Files tab always shows "No files in workspace" on Windows loca  ←['cross_ref_pr']
+    [C   6] #17763 [Bug]: Self-hosted LOCAL_BACKEND_API_KEY is not exported to OH_SESSION  ←['cross_ref_pr', 'claim_signal']
+    原始池 62，新入库 0
+== deepset-ai/haystack [open]
+    原始池 30，新入库 0
+== langfuse/langfuse [open]
+    [B  5] #18053 Codex observability Stop hook can exhaust memory on very large rollout
+    原始池 18，新入库 1
+== Arize-ai/phoenix [open]
+    原始池 59，新入库 0
+== anomalyco/opencode [open]
+    原始池 50，新入库 0
+== langchain-ai/langsmith-sdk [open]
+    原始池 36，新入库 0
+== e2b-dev/e2b [open]
+    原始池 28，新入库 0
+== infiniflow/ragflow [open]
+    原始池 31，新入库 0
+== openai/openai-python [open]
+    原始池 42，新入库 0
+== pydantic/pydantic-ai [gated]
+    [B  4] #8937 Modal: bound the output drain and native file reads
+    [B  4] #8936 E2B: run internal probes without the login shell
+    [B  4] #8933 Sprites: clean up and cap the per-command stderr capture file
+    [B  4] #8932 Sprites: exec handshake time counts against the command `timeout`
+    [C   4] #8930 CLAI2: count a capability function plugin that supplies a workspace  ←['claim_signal']
+    [B  4] #8927 `SubAgents` fails under Temporal with `agent_folders`, a named agent w
+    [C   4] #8923 Resolve `link/..` in file methods the way `realpath` and commands do  ←['claim_signal']
+    [C   4] #8921 Keep workspace error types when they leave a Temporal tool activity  ←['claim_signal']
+    原始池 60，新入库 5
+== microsoft/playwright [gated]
+    原始池 30，新入库 0
+== microsoft/agent-framework [gated]
+    原始池 32，新入库 0
+== BerriAI/litellm [restricted]
+    [C   6] #43620 [Bug]: Responses bridge keeps only the last reasoning item when stream  ←['cross_ref_pr', 'restricted_requires_confirm']
+    [C   6] #43518 [Bug]: Request Failed Error Code: 500 Message: litellm.APIConnectionEr  ←['restricted_requires_confirm']
+    原始池 63，新入库 0
+
+[oss-scout 2026-09-30T09:20:48] 新候选 6（A: 0, B: 6）
+[B/open] langfuse/langfuse#18053 Codex observability Stop hook can exhaust memory on very lar
+https://github.com/langfuse/langfuse/issues/18053
+[B/gated] pydantic/pydantic-ai#8937 Modal: bound the output drain and native file reads
+https://github.com/pydantic/pydantic-ai/issues/8937
+[B/gated] pydantic/pydantic-ai#8936 E2B: run internal probes without the login shell
+https://github.com/pydantic/pydantic-ai/issues/8936
+[B/gated] pydantic/pydantic-ai#8933 Sprites: clean up and cap the per-command stderr capture fil
+https://github.com/pydantic/pydantic-ai/issues/8933
+[B/gated] pydantic/pydantic-ai#8932 Sprites: exec handshake time counts against the command `tim
+https://github.com/pydantic/pydantic-ai/issues/8932
+[B/gated] pydantic/pydantic-ai#8927 `SubAgents` fails under Temporal with `agent_folders`, a nam
+https://github.com/pydantic/pydantic-ai/issues/8927

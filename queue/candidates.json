@@ -1,0 +1,954 @@
+{
+ "openai/openai-agents-python#5026": {
+  "id": "openai/openai-agents-python#5026",
+  "repo": "openai/openai-agents-python",
+  "number": 5026,
+  "lane": "open",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog"
+ },
+ "openai/openai-agents-python#5041": {
+  "id": "openai/openai-agents-python#5041",
+  "repo": "openai/openai-agents-python",
+  "number": 5041,
+  "lane": "open",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog"
+ },
+ "openai/openai-agents-python#2049": {
+  "id": "openai/openai-agents-python#2049",
+  "repo": "openai/openai-agents-python",
+  "number": 2049,
+  "lane": "open",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog"
+ },
+ "pydantic/pydantic-ai#7713": {
+  "id": "pydantic/pydantic-ai#7713",
+  "repo": "pydantic/pydantic-ai",
+  "number": 7713,
+  "lane": "gated",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog"
+ },
+ "pydantic/pydantic-ai#4927": {
+  "id": "pydantic/pydantic-ai#4927",
+  "repo": "pydantic/pydantic-ai",
+  "number": 4927,
+  "lane": "gated",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog"
+ },
+ "pydantic/pydantic-ai#5649": {
+  "id": "pydantic/pydantic-ai#5649",
+  "repo": "pydantic/pydantic-ai",
+  "number": 5649,
+  "lane": "gated",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog"
+ },
+ "OpenHands/OpenHands#16774": {
+  "id": "OpenHands/OpenHands#16774",
+  "repo": "OpenHands/OpenHands",
+  "number": 16774,
+  "lane": "open",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog"
+ },
+ "deepset-ai/haystack#10810": {
+  "id": "deepset-ai/haystack#10810",
+  "repo": "deepset-ai/haystack",
+  "number": 10810,
+  "lane": "open",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog"
+ },
+ "anomalyco/opencode#42985": {
+  "id": "anomalyco/opencode#42985",
+  "repo": "anomalyco/opencode",
+  "number": 42985,
+  "lane": "open",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog",
+  "last_known": "not a code bug: Go-plan quota multiplier by design (60/model"
+ },
+ "anomalyco/opencode#48973": {
+  "id": "anomalyco/opencode#48973",
+  "repo": "anomalyco/opencode",
+  "number": 48973,
+  "lane": "open",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog",
+  "last_known": "aborted_competed"
+ },
+ "langchain-ai/langsmith-sdk#1127": {
+  "id": "langchain-ai/langsmith-sdk#1127",
+  "repo": "langchain-ai/langsmith-sdk",
+  "number": 1127,
+  "lane": "open",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog"
+ },
+ "pydantic/pydantic-ai#708": {
+  "id": "pydantic/pydantic-ai#708",
+  "repo": "pydantic/pydantic-ai",
+  "number": 708,
+  "lane": "gated",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog",
+  "last_known": "aborted_stale"
+ },
+ "microsoft/agent-framework#2691": {
+  "id": "microsoft/agent-framework#2691",
+  "repo": "microsoft/agent-framework",
+  "number": 2691,
+  "lane": "gated",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog"
+ },
+ "pydantic/pydantic-ai#6071": {
+  "id": "pydantic/pydantic-ai#6071",
+  "repo": "pydantic/pydantic-ai",
+  "number": 6071,
+  "lane": "gated",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog",
+  "last_known": "aborted_blocked_upstream"
+ },
+ "anomalyco/opencode#40485": {
+  "id": "anomalyco/opencode#40485",
+  "repo": "anomalyco/opencode",
+  "number": 40485,
+  "lane": "open",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog",
+  "last_known": "server-side gateway failure complaint, not client code → C"
+ },
+ "pydantic/pydantic-ai#8415": {
+  "id": "pydantic/pydantic-ai#8415",
+  "repo": "pydantic/pydantic-ai",
+  "number": 8415,
+  "lane": "gated",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog",
+  "last_known": "COMPETED: chengwudi1 claimed with repro before us; user-orde"
+ },
+ "OpenHands/OpenHands#17470": {
+  "id": "OpenHands/OpenHands#17470",
+  "repo": "OpenHands/OpenHands",
+  "number": 17470,
+  "lane": "open",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog"
+ },
+ "Arize-ai/phoenix#16113": {
+  "id": "Arize-ai/phoenix#16113",
+  "repo": "Arize-ai/phoenix",
+  "number": 16113,
+  "lane": "open",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog"
+ },
+ "langchain-ai/langsmith-sdk#3529": {
+  "id": "langchain-ai/langsmith-sdk#3529",
+  "repo": "langchain-ai/langsmith-sdk",
+  "number": 3529,
+  "lane": "open",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog",
+  "last_known": "C: Tools tab fix belongs to closed-source LangSmith UI; SDK "
+ },
+ "OpenHands/OpenHands#17508": {
+  "id": "OpenHands/OpenHands#17508",
+  "repo": "OpenHands/OpenHands",
+  "number": 17508,
+  "lane": "open",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog",
+  "last_known": "first A-grade candidate evaluated → downgraded B: root cause"
+ },
+ "langchain-ai/langsmith-sdk#433": {
+  "id": "langchain-ai/langsmith-sdk#433",
+  "repo": "langchain-ai/langsmith-sdk",
+  "number": 433,
+  "lane": "open",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog"
+ },
+ "langchain-ai/langsmith-sdk#1620": {
+  "id": "langchain-ai/langsmith-sdk#1620",
+  "repo": "langchain-ai/langsmith-sdk",
+  "number": 1620,
+  "lane": "open",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog"
+ },
+ "langchain-ai/langsmith-sdk#1695": {
+  "id": "langchain-ai/langsmith-sdk#1695",
+  "repo": "langchain-ai/langsmith-sdk",
+  "number": 1695,
+  "lane": "open",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog"
+ },
+ "langfuse/langfuse#17691": {
+  "id": "langfuse/langfuse#17691",
+  "repo": "langfuse/langfuse",
+  "number": 17691,
+  "lane": "open",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog",
+  "last_known": "aborted_competed"
+ },
+ "OpenHands/OpenHands#17546": {
+  "id": "OpenHands/OpenHands#17546",
+  "repo": "OpenHands/OpenHands",
+  "number": 17546,
+  "lane": "open",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog",
+  "last_known": "aborted_competed"
+ },
+ "anomalyco/opencode#49953": {
+  "id": "anomalyco/opencode#49953",
+  "repo": "anomalyco/opencode",
+  "number": 49953,
+  "lane": "open",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog"
+ },
+ "anomalyco/opencode#49938": {
+  "id": "anomalyco/opencode#49938",
+  "repo": "anomalyco/opencode",
+  "number": 49938,
+  "lane": "open",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog",
+  "last_known": "PROMISING: workspace default missing after console rollout, "
+ },
+ "microsoft/agent-framework#8586": {
+  "id": "microsoft/agent-framework#8586",
+  "repo": "microsoft/agent-framework",
+  "number": 8586,
+  "lane": "gated",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog"
+ },
+ "langfuse/langfuse#17824": {
+  "id": "langfuse/langfuse#17824",
+  "repo": "langfuse/langfuse",
+  "number": 17824,
+  "lane": "open",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog"
+ },
+ "OpenHands/OpenHands#17621": {
+  "id": "OpenHands/OpenHands#17621",
+  "repo": "OpenHands/OpenHands",
+  "number": 17621,
+  "lane": "open",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog"
+ },
+ "OpenHands/OpenHands#17619": {
+  "id": "OpenHands/OpenHands#17619",
+  "repo": "OpenHands/OpenHands",
+  "number": 17619,
+  "lane": "open",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog",
+  "last_known": "COMPETED: ready-for-dev A-grade but claimed 22min after fili"
+ },
+ "pydantic/pydantic-ai#8603": {
+  "id": "pydantic/pydantic-ai#8603",
+  "repo": "pydantic/pydantic-ai",
+  "number": 8603,
+  "lane": "gated",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog"
+ },
+ "infiniflow/ragflow#3443": {
+  "id": "infiniflow/ragflow#3443",
+  "repo": "infiniflow/ragflow",
+  "number": 3443,
+  "lane": "open",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog"
+ },
+ "infiniflow/ragflow#3862": {
+  "id": "infiniflow/ragflow#3862",
+  "repo": "infiniflow/ragflow",
+  "number": 3862,
+  "lane": "open",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog"
+ },
+ "OpenHands/software-agent-sdk#5268": {
+  "id": "OpenHands/software-agent-sdk#5268",
+  "repo": "OpenHands/software-agent-sdk",
+  "number": 5268,
+  "lane": "open",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog",
+  "last_known": "duplicate cluster: all-hands-bot says identical crash tracke"
+ },
+ "openai/openai-agents-python#5180": {
+  "id": "openai/openai-agents-python#5180",
+  "repo": "openai/openai-agents-python",
+  "number": 5180,
+  "lane": "open",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog"
+ },
+ "Arize-ai/phoenix#16452": {
+  "id": "Arize-ai/phoenix#16452",
+  "repo": "Arize-ai/phoenix",
+  "number": 16452,
+  "lane": "open",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog"
+ },
+ "Arize-ai/phoenix#16437": {
+  "id": "Arize-ai/phoenix#16437",
+  "repo": "Arize-ai/phoenix",
+  "number": 16437,
+  "lane": "open",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog"
+ },
+ "Arize-ai/phoenix#16436": {
+  "id": "Arize-ai/phoenix#16436",
+  "repo": "Arize-ai/phoenix",
+  "number": 16436,
+  "lane": "open",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog"
+ },
+ "anomalyco/opencode#50144": {
+  "id": "anomalyco/opencode#50144",
+  "repo": "anomalyco/opencode",
+  "number": 50144,
+  "lane": "open",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog"
+ },
+ "anomalyco/opencode#50885": {
+  "id": "anomalyco/opencode#50885",
+  "repo": "anomalyco/opencode",
+  "number": 50885,
+  "lane": "open",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog",
+  "last_known": "out: Go subscription API-key provisioning — server-side, not"
+ },
+ "openai/openai-agents-python#5184": {
+  "id": "openai/openai-agents-python#5184",
+  "repo": "openai/openai-agents-python",
+  "number": 5184,
+  "lane": "open",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog"
+ },
+ "OpenHands/OpenHands#17710": {
+  "id": "OpenHands/OpenHands#17710",
+  "repo": "OpenHands/OpenHands",
+  "number": 17710,
+  "lane": "open",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog",
+  "last_known": "all-hands-bot flagged Decision-needed — blocked on design → "
+ },
+ "anomalyco/opencode#50155": {
+  "id": "anomalyco/opencode#50155",
+  "repo": "anomalyco/opencode",
+  "number": 50155,
+  "lane": "open",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog",
+  "last_known": "Go-plan server-side region family + spam in thread → aborted"
+ },
+ "langfuse/langfuse#18002": {
+  "id": "langfuse/langfuse#18002",
+  "repo": "langfuse/langfuse",
+  "number": 18002,
+  "lane": "open",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog"
+ },
+ "microsoft/agent-framework#8718": {
+  "id": "microsoft/agent-framework#8718",
+  "repo": "microsoft/agent-framework",
+  "number": 8718,
+  "lane": "gated",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog"
+ },
+ "anomalyco/opencode#45278": {
+  "id": "anomalyco/opencode#45278",
+  "repo": "anomalyco/opencode",
+  "number": 45278,
+  "lane": "open",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog"
+ },
+ "langfuse/langfuse#18040": {
+  "id": "langfuse/langfuse#18040",
+  "repo": "langfuse/langfuse",
+  "number": 18040,
+  "lane": "open",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog",
+  "last_known": "NOT ACTIONABLE: cloud regional-domain account migration (ser"
+ },
+ "langfuse/langfuse#18053": {
+  "id": "langfuse/langfuse#18053",
+  "repo": "langfuse/langfuse",
+  "number": 18053,
+  "lane": "open",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog"
+ },
+ "pydantic/pydantic-ai#8937": {
+  "id": "pydantic/pydantic-ai#8937",
+  "repo": "pydantic/pydantic-ai",
+  "number": 8937,
+  "lane": "gated",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog"
+ },
+ "pydantic/pydantic-ai#8936": {
+  "id": "pydantic/pydantic-ai#8936",
+  "repo": "pydantic/pydantic-ai",
+  "number": 8936,
+  "lane": "gated",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog"
+ },
+ "pydantic/pydantic-ai#8933": {
+  "id": "pydantic/pydantic-ai#8933",
+  "repo": "pydantic/pydantic-ai",
+  "number": 8933,
+  "lane": "gated",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog"
+ },
+ "pydantic/pydantic-ai#8932": {
+  "id": "pydantic/pydantic-ai#8932",
+  "repo": "pydantic/pydantic-ai",
+  "number": 8932,
+  "lane": "gated",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog"
+ },
+ "pydantic/pydantic-ai#8927": {
+  "id": "pydantic/pydantic-ai#8927",
+  "repo": "pydantic/pydantic-ai",
+  "number": 8927,
+  "lane": "gated",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog"
+ },
+ "OpenHands/software-agent-sdk#5375": {
+  "id": "OpenHands/software-agent-sdk#5375",
+  "repo": "OpenHands/software-agent-sdk",
+  "number": 5375,
+  "lane": "open",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog",
+  "last_known": "all-hands-bot flagged Decision needed — blocked-on-design → "
+ },
+ "pydantic/pydantic-ai#9517": {
+  "id": "pydantic/pydantic-ai#9517",
+  "repo": "pydantic/pydantic-ai",
+  "number": 9517,
+  "lane": "gated",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog"
+ },
+ "Arize-ai/phoenix#16687": {
+  "id": "Arize-ai/phoenix#16687",
+  "repo": "Arize-ai/phoenix",
+  "number": 16687,
+  "lane": "open",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog"
+ },
+ "OpenHands/software-agent-sdk#5447": {
+  "id": "OpenHands/software-agent-sdk#5447",
+  "repo": "OpenHands/software-agent-sdk",
+  "number": 5447,
+  "lane": "open",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog",
+  "last_known": "all-hands-bot Decision needed (3rd occurrence) → aborted_blo"
+ },
+ "Arize-ai/phoenix#16688": {
+  "id": "Arize-ai/phoenix#16688",
+  "repo": "Arize-ai/phoenix",
+  "number": 16688,
+  "lane": "open",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog"
+ },
+ "openai/openai-python#4021": {
+  "id": "openai/openai-python#4021",
+  "repo": "openai/openai-python",
+  "number": 4021,
+  "lane": "open",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog"
+ },
+ "OpenHands/software-agent-sdk#5481": {
+  "id": "OpenHands/software-agent-sdk#5481",
+  "repo": "OpenHands/software-agent-sdk",
+  "number": 5481,
+  "lane": "open",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog"
+ },
+ "OpenHands/software-agent-sdk#5475": {
+  "id": "OpenHands/software-agent-sdk#5475",
+  "repo": "OpenHands/software-agent-sdk",
+  "number": 5475,
+  "lane": "open",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog"
+ },
+ "Arize-ai/phoenix#16768": {
+  "id": "Arize-ai/phoenix#16768",
+  "repo": "Arize-ai/phoenix",
+  "number": 16768,
+  "lane": "open",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog",
+  "last_known": "COMPETED: claimed by jstar0 30h after filing → aborted_compe"
+ },
+ "openai/openai-agents-python#5082": {
+  "id": "openai/openai-agents-python#5082",
+  "repo": "openai/openai-agents-python",
+  "number": 5082,
+  "lane": "open",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog"
+ },
+ "e2b-dev/e2b#1947": {
+  "id": "e2b-dev/e2b#1947",
+  "repo": "e2b-dev/e2b",
+  "number": 1947,
+  "lane": "open",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog",
+  "last_known": "stays B: devin triage bot says bug/high/medium, affected_are"
+ },
+ "openai/openai-agents-python#5330": {
+  "id": "openai/openai-agents-python#5330",
+  "repo": "openai/openai-agents-python",
+  "number": 5330,
+  "lane": "open",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog"
+ },
+ "OpenHands/software-agent-sdk#5649": {
+  "id": "OpenHands/software-agent-sdk#5649",
+  "repo": "OpenHands/software-agent-sdk",
+  "number": 5649,
+  "lane": "open",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog"
+ },
+ "OpenHands/software-agent-sdk#5648": {
+  "id": "OpenHands/software-agent-sdk#5648",
+  "repo": "OpenHands/software-agent-sdk",
+  "number": 5648,
+  "lane": "open",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog"
+ },
+ "Arize-ai/phoenix#16891": {
+  "id": "Arize-ai/phoenix#16891",
+  "repo": "Arize-ai/phoenix",
+  "number": 16891,
+  "lane": "open",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog"
+ },
+ "openai/openai-agents-python#5352": {
+  "id": "openai/openai-agents-python#5352",
+  "repo": "openai/openai-agents-python",
+  "number": 5352,
+  "lane": "open",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog"
+ },
+ "langchain-ai/langsmith-sdk#1578": {
+  "id": "langchain-ai/langsmith-sdk#1578",
+  "repo": "langchain-ai/langsmith-sdk",
+  "number": 1578,
+  "lane": "open",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog"
+ },
+ "langchain-ai/langsmith-sdk#2019": {
+  "id": "langchain-ai/langsmith-sdk#2019",
+  "repo": "langchain-ai/langsmith-sdk",
+  "number": 2019,
+  "lane": "open",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog"
+ },
+ "langchain-ai/langsmith-sdk#1716": {
+  "id": "langchain-ai/langsmith-sdk#1716",
+  "repo": "langchain-ai/langsmith-sdk",
+  "number": 1716,
+  "lane": "open",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog"
+ },
+ "anomalyco/opencode#54833": {
+  "id": "anomalyco/opencode#54833",
+  "repo": "anomalyco/opencode",
+  "number": 54833,
+  "lane": "open",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog",
+  "last_known": "COMPETED out: server-side gateway credential family (opencod"
+ },
+ "langfuse/langfuse#18836": {
+  "id": "langfuse/langfuse#18836",
+  "repo": "langfuse/langfuse",
+  "number": 18836,
+  "lane": "open",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog",
+  "last_known": "COMPETED in 47 minutes (claim 03:57Z + PR #18837 open) — fas"
+ },
+ "pydantic/pydantic-ai#10243": {
+  "id": "pydantic/pydantic-ai#10243",
+  "repo": "pydantic/pydantic-ai",
+  "number": 10243,
+  "lane": "gated",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog"
+ },
+ "browser-use/browser-use#6068": {
+  "id": "browser-use/browser-use#6068",
+  "repo": "browser-use/browser-use",
+  "number": 6068,
+  "lane": "open",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog",
+  "last_known": "COMPETED: 2 open fix PRs (#6106/#6110) + multi-user 4-commen"
+ },
+ "OpenHands/software-agent-sdk#6024": {
+  "id": "OpenHands/software-agent-sdk#6024",
+  "repo": "OpenHands/software-agent-sdk",
+  "number": 6024,
+  "lane": "open",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog"
+ },
+ "langfuse/langfuse#18995": {
+  "id": "langfuse/langfuse#18995",
+  "repo": "langfuse/langfuse",
+  "number": 18995,
+  "lane": "open",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog"
+ },
+ "pydantic/pydantic-ai#10647": {
+  "id": "pydantic/pydantic-ai#10647",
+  "repo": "pydantic/pydantic-ai",
+  "number": 10647,
+  "lane": "gated",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog",
+  "last_known": "awaiting_assignment: proposed prose-rendering direction, cit"
+ },
+ "anomalyco/opencode#55211": {
+  "id": "anomalyco/opencode#55211",
+  "repo": "anomalyco/opencode",
+  "number": 55211,
+  "lane": "open",
+  "status": "queued_hist",
+  "rebuild_note": "rebuilt from seen.json after 0x00 corruption of candidates.json; status recovered from worklog"
+ },
+ "OpenHands/OpenHands#18728": {
+  "id": "OpenHands/OpenHands#18728",
+  "repo": "OpenHands/OpenHands",
+  "number": 18728,
+  "lane": "open",
+  "class": "C",
+  "status": "aborted_blocked_design",
+  "abort_reason": "all-hands-bot Decision needed + priority:low (5th Decision-needed kill) — discovered via 15:22 sweep but full entry lost in 0x00 incident; re-evaluated 10-24 from live API",
+  "recovered_from": "discover_20261023_1522_obs.log"
+ },
+ "aaif-goose/goose#12513": {
+  "id": "aaif-goose/goose#12513",
+  "repo": "aaif-goose/goose",
+  "number": 12513,
+  "title": "ACP: shell is always delegated to the client terminal (bypassing sandboxes)",
+  "url": "https://github.com/aaif-goose/goose/issues/12513",
+  "lane": "open",
+  "score": 4,
+  "class": "B",
+  "blockers": [],
+  "signals": {
+   "body_len": 7606,
+   "reactions": 1,
+   "labels": [],
+   "comments": 1,
+   "claim_signal": false,
+   "maintainer_confirm": false,
+   "duplicate_flag": false,
+   "billing_flag": false,
+   "bot_claim": false,
+   "cross_ref_pr": false,
+   "repro_signal": true
+  },
+  "created_at": "2026-09-25T08:59:54Z",
+  "discovered_at": "2026-10-24T19:21:11",
+  "status": "new",
+  "lease": null
+ },
+ "aaif-goose/goose#13067": {
+  "id": "aaif-goose/goose#13067",
+  "repo": "aaif-goose/goose",
+  "number": 13067,
+  "title": "FYI: 1 public goose tool-call failure case packaged as a free regression test",
+  "url": "https://github.com/aaif-goose/goose/issues/13067",
+  "lane": "open",
+  "score": 4,
+  "class": "B",
+  "blockers": [],
+  "signals": {
+   "body_len": 1623,
+   "reactions": 0,
+   "labels": [],
+   "comments": 0,
+   "claim_signal": false,
+   "maintainer_confirm": false,
+   "duplicate_flag": false,
+   "billing_flag": false,
+   "bot_claim": false,
+   "cross_ref_pr": false,
+   "repro_signal": true
+  },
+  "created_at": "2026-10-21T23:26:23Z",
+  "discovered_at": "2026-10-24T19:21:11",
+  "status": "new",
+  "lease": null
+ },
+ "aaif-goose/goose#13065": {
+  "id": "aaif-goose/goose#13065",
+  "repo": "aaif-goose/goose",
+  "number": 13065,
+  "title": "[Bug] Tooltip for context usage stays visible",
+  "url": "https://github.com/aaif-goose/goose/issues/13065",
+  "lane": "open",
+  "score": 4,
+  "class": "B",
+  "blockers": [],
+  "signals": {
+   "body_len": 1026,
+   "reactions": 0,
+   "labels": [],
+   "comments": 0,
+   "claim_signal": false,
+   "maintainer_confirm": false,
+   "duplicate_flag": false,
+   "billing_flag": false,
+   "bot_claim": false,
+   "cross_ref_pr": false,
+   "repro_signal": true
+  },
+  "created_at": "2026-10-21T23:08:32Z",
+  "discovered_at": "2026-10-24T19:21:11",
+  "status": "new",
+  "lease": null
+ },
+ "aaif-goose/goose#12791": {
+  "id": "aaif-goose/goose#12791",
+  "repo": "aaif-goose/goose",
+  "number": 12791,
+  "title": "Can't configure ChatGPT Codex provider on a headless machine",
+  "url": "https://github.com/aaif-goose/goose/issues/12791",
+  "lane": "open",
+  "score": 3,
+  "class": "B",
+  "blockers": [],
+  "signals": {
+   "body_len": 1022,
+   "reactions": 0,
+   "labels": [],
+   "comments": 0,
+   "claim_signal": false,
+   "maintainer_confirm": false,
+   "duplicate_flag": false,
+   "billing_flag": false,
+   "bot_claim": false,
+   "cross_ref_pr": false,
+   "repro_signal": true
+  },
+  "created_at": "2026-10-09T04:34:00Z",
+  "discovered_at": "2026-10-24T19:21:11",
+  "status": "new",
+  "lease": null
+ },
+ "OpenHands/OpenHands#18847": {
+  "id": "OpenHands/OpenHands#18847",
+  "repo": "OpenHands/OpenHands",
+  "number": 18847,
+  "title": "[Bug]: Agent sandbox fails to authenticate with GitHub using PAT/GitHub",
+  "url": "https://github.com/OpenHands/OpenHands/issues/18847",
+  "lane": "open",
+  "score": 6,
+  "class": "A",
+  "blockers": [],
+  "signals": {
+   "body_len": 5423,
+   "reactions": 0,
+   "labels": [
+    "bug",
+    "priority:low"
+   ],
+   "comments": 1,
+   "claim_signal": false,
+   "maintainer_confirm": false,
+   "duplicate_flag": false,
+   "billing_flag": false,
+   "bot_claim": false,
+   "cross_ref_pr": false,
+   "repro_signal": true
+  },
+  "created_at": "2026-10-22T22:11:52Z",
+  "discovered_at": "2026-10-24T19:21:11",
+  "status": "new",
+  "lease": null
+ },
+ "Arize-ai/phoenix#17161": {
+  "id": "Arize-ai/phoenix#17161",
+  "repo": "Arize-ai/phoenix",
+  "number": 17161,
+  "title": "[decision-models] Saving a decision from the playground requires a template variable in the state; prompts have no such rule",
+  "url": "https://github.com/Arize-ai/phoenix/issues/17161",
+  "lane": "open",
+  "score": 5,
+  "class": "B",
+  "blockers": [],
+  "signals": {
+   "body_len": 1846,
+   "reactions": 1,
+   "labels": [
+    "bug",
+    "c/playground"
+   ],
+   "comments": 0,
+   "claim_signal": false,
+   "maintainer_confirm": false,
+   "duplicate_flag": false,
+   "billing_flag": false,
+   "bot_claim": false,
+   "cross_ref_pr": false,
+   "repro_signal": false
+  },
+  "created_at": "2026-10-22T17:00:19Z",
+  "discovered_at": "2026-10-24T19:21:11",
+  "status": "new",
+  "lease": null
+ },
+ "Arize-ai/phoenix#17160": {
+  "id": "Arize-ai/phoenix#17160",
+  "repo": "Arize-ai/phoenix",
+  "number": 17160,
+  "title": "[decision-models] Playground decision columns show prompt evaluators; one evaluator input mapping is shared across task kinds",
+  "url": "https://github.com/Arize-ai/phoenix/issues/17160",
+  "lane": "open",
+  "score": 5,
+  "class": "B",
+  "blockers": [],
+  "signals": {
+   "body_len": 3016,
+   "reactions": 1,
+   "labels": [
+    "bug",
+    "c/evals",
+    "c/playground"
+   ],
+   "comments": 0,
+   "claim_signal": false,
+   "maintainer_confirm": false,
+   "duplicate_flag": false,
+   "billing_flag": false,
+   "bot_claim": false,
+   "cross_ref_pr": false,
+   "repro_signal": false
+  },
+  "created_at": "2026-10-22T17:00:12Z",
+  "discovered_at": "2026-10-24T19:21:11",
+  "status": "new",
+  "lease": null
+ },
+ "Arize-ai/phoenix#17159": {
+  "id": "Arize-ai/phoenix#17159",
+  "repo": "Arize-ai/phoenix",
+  "number": 17159,
+  "title": "[decision-models] Over a dataset, decision state problems should be per-row output errors, not a \"Run blocked\" banner",
+  "url": "https://github.com/Arize-ai/phoenix/issues/17159",
+  "lane": "open",
+  "score": 5,
+  "class": "B",
+  "blockers": [],
+  "signals": {
+   "body_len": 2483,
+   "reactions": 1,
+   "labels": [
+    "bug",
+    "c/playground"
+   ],
+   "comments": 0,
+   "claim_signal": false,
+   "maintainer_confirm": false,
+   "duplicate_flag": false,
+   "billing_flag": false,
+   "bot_claim": false,
+   "cross_ref_pr": false,
+   "repro_signal": false
+  },
+  "created_at": "2026-10-22T17:00:09Z",
+  "discovered_at": "2026-10-24T19:21:11",
+  "status": "new",
+  "lease": null
+ },
+ "e2b-dev/e2b#2017": {
+  "id": "e2b-dev/e2b#2017",
+  "repo": "e2b-dev/e2b",
+  "number": 2017,
+  "title": "[SDK]: E2B-Desktop Pillow Vulnerability",
+  "url": "https://github.com/e2b-dev/E2B/issues/2017",
+  "lane": "open",
+  "score": 4,
+  "class": "B",
+  "blockers": [],
+  "signals": {
+   "body_len": 889,
+   "reactions": 0,
+   "labels": [
+    "bug",
+    "python",
+    "sdk"
+   ],
+   "comments": 1,
+   "claim_signal": false,
+   "maintainer_confirm": false,
+   "duplicate_flag": false,
+   "billing_flag": false,
+   "bot_claim": false,
+   "cross_ref_pr": false,
+   "repro_signal": false
+  },
+  "created_at": "2026-10-22T04:56:08Z",
+  "discovered_at": "2026-10-24T21:21:09",
+  "status": "new",
+  "lease": null
+ }
+}

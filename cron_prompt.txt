@@ -1,0 +1,30 @@
+# oss-scout 定时任务迁移说明
+
+如果要把每日任务从 `G:\test` workspace 迁到当前 workspace（即你平时常开的项目），
+在当前 workspace 里打开 ZCode，对 agent 说：
+
+    按 G:\project\oss-scout\cron_prompt.txt 注册 oss-scout 每日定时任务
+
+注册成功后，再让 agent 删除旧任务：CronDelete id =
+automation-bd1fc8f2-bf6f-4dae-84e8-e6721d5fc297（它绑在 G:\test 上，不删会一天跑两次）。
+
+## 注册参数（agent 请原样使用）
+
+- cron: `30 10 * * *`（每天 10:30，本地时区）
+- recurring: true
+- title: `oss-scout 每日自动贡献（PR监控+发现+实现）`
+- prompt: 见下方 ``` 块内全文
+
+```
+这是 oss-scout 自动 OSS 贡献流水线的每日运行。开始前先切换到项目目录：cd /g/project/oss-scout（Windows 路径 G:\project\oss-scout），本任务所有读写都限制在该目录内。
+
+严格按该目录下 AGENTS.md（Playbook）执行，不得偏离其中的硬规则（每天至多 1 个新认领、认领前实时竞争复检、永不 force-push、永不合并上游、上游 403 记 blocker 不重试、所有 PR 必须符合目标仓库的 CONTRIBUTING/PR 模板/提交约定）。三段顺序执行，每段可独立提前退出：
+
+① PR 监控段：对 state/worklog.jsonl 中所有状态为 pr_open 的 PR 检查 CI 结论与 maintainer 评论；CI 因我们的改动失败则读日志修复并以新 commit 推送；review 修改意见 48 小时内必须响应；被合并/关闭则更新状态。
+
+② 发现段：若 state/health.json 不存在或 computed_at 距今超过 7 天，先运行 python health_check.py（约 5 分钟）；然后运行 python discover.py（约 5 分钟）获取新候选摘要。
+
+③ 消费段：按优先级（开放池 new A 级 > 闸门池 assigned_to_me > 限制档 maintainer_confirmed）消费至多 1 个候选：实时复检 issue 状态/assignees/新评论/关联 PR → gh repo sync xixi-box/<repo> → 懒 clone 到 repos/ 缓存（git clone --filter=blob:none）→ git worktree 建分支 fix/<issueN>-<slug> → 最小正确修复 + 照仓库现有风格写回归测试并实际运行 → 通过 AGENTS.md §4 合规门后开 PR（Fixes #issue；英文描述含根因/实现/测试/兼容性/未验证项；改动或测试不完整就开 Draft 并设 maintainer_can_modify）。闸门池仓库（pydantic/pydantic-ai、microsoft/playwright、microsoft/agent-framework）绝不直接开 PR：发英文分析评论对齐方案后状态记 awaiting_assignment，后续每天检查是否被指派给 xixi-box；绝不写 "please assign me" 类文字。特殊仓库规则（haystack 的 AI 声明、opencode 的禁 AI 长文、litellm 的必带测试等）见 AGENTS.md §6，逐条遵守。
+
+若发现段无新候选且无 PR 需要跟进，简短收尾即可（空跑是常态，不算异常）。结束时：更新 queue/candidates.json 的状态字段与 state/worklog.jsonl，写 state/runs/<当日日期>.md，并在最终回复里给用户一段简明中文总结（做了什么/发现了什么/什么被挡住了）。若 state/feishu_webhook.txt 存在则同时推送飞书通知。
+```

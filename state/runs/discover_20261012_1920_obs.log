@@ -1,0 +1,38 @@
+    [gh] gh: You have exceeded a secondary rate limit. Please wait a few minutes before you try again. For more on scraping GitHub and how it may affect your r
+    [gh] gh: You have exceeded a secondary rate limit. Please wait a few minutes before you try again. For more on scraping GitHub and how it may affect your r
+    [gh] Get "https://api.github.com/search/issues?order=desc&per_page=30&q=repo%3Amicrosoft%2Fagent-framework+is%3Aissue+is%3Aopen+no%3Aassignee+-label%3A%22i
+== openai/openai-agents-python [open]
+    原始池 18，新入库 0
+== OpenHands/software-agent-sdk [open]
+    原始池 61，新入库 0
+== browser-use/browser-use [open]
+    原始池 55，新入库 0
+== OpenHands/OpenHands [open]
+    原始池 68，新入库 0
+== deepset-ai/haystack [open]
+    原始池 30，新入库 0
+== langfuse/langfuse [open]
+    原始池 22，新入库 0
+== Arize-ai/phoenix [open]
+    原始池 60，新入库 0
+== anomalyco/opencode [open]
+    原始池 45，新入库 0
+== langchain-ai/langsmith-sdk [open]
+    原始池 36，新入库 0
+== e2b-dev/e2b [open]
+    原始池 29，新入库 0
+== infiniflow/ragflow [open]
+    原始池 32，新入库 0
+== openai/openai-python [open]
+    原始池 43，新入库 0
+== pydantic/pydantic-ai [gated]
+    原始池 46，新入库 0
+== microsoft/playwright [gated]
+    原始池 30，新入库 0
+== microsoft/agent-framework [gated]
+    原始池 2，新入库 0
+== BerriAI/litellm [restricted]
+    原始池 66，新入库 0
+
+[oss-scout 2026-10-12T19:20:56] 新候选 0（A: 0, B: 0）
+

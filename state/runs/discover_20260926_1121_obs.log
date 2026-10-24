@@ -1,0 +1,58 @@
+== openai/openai-agents-python [open]
+    [B  4] #5180 Sandbox: UnixLocal snapshots containing hardlinks fail to resume and l
+    [C   2] #5176 SQLiteSession serves edited, replayed and re-owned rows as genuine his  ←['feature_label']
+    原始池 9，新入库 1
+== OpenHands/software-agent-sdk [open]
+    [C   6] #5310 [Bug]: Docker conversation runtime cannot resolve configured title LLM  ←['cross_ref_pr']
+    [C   6] #5307 [Bug]: Docker conversation runtime creates linked worktree across inco  ←['cross_ref_pr']
+    原始池 60，新入库 0
+== browser-use/browser-use [open]
+    原始池 54，新入库 0
+== OpenHands/OpenHands [open]
+    [C   6] #17687 Restore consent-aware website-to-Canvas PostHog identity handoff  ←['cross_ref_pr']
+    [C   6] #17664 Cloud conversations fail to resume reliably after sandbox pause  ←['cross_ref_pr']
+    原始池 63，新入库 0
+== deepset-ai/haystack [open]
+    原始池 30，新入库 0
+== langfuse/langfuse [open]
+    原始池 12，新入库 0
+== Arize-ai/phoenix [open]
+    [A  7] #16452 [BUG]: Playground fails with "Playground task timed out" on high reaso
+    [B  5] #16437 [bug] [agents] PXI can preview but cannot persist a project code evalu
+    [B  5] #16436 [bug] [agents] timeRange.set remains unavailable after navigation to a
+    原始池 59，新入库 3
+== anomalyco/opencode [open]
+    [B  5] #50144 Homebrew support for OpenCode v2 Desktop
+    原始池 50，新入库 1
+== langchain-ai/langsmith-sdk [open]
+    原始池 36，新入库 0
+== e2b-dev/e2b [open]
+    原始池 26，新入库 0
+== infiniflow/ragflow [open]
+    原始池 31，新入库 0
+== openai/openai-python [open]
+    原始池 42，新入库 0
+== pydantic/pydantic-ai [gated]
+    原始池 60，新入库 0
+== microsoft/playwright [gated]
+    原始池 30，新入库 0
+== microsoft/agent-framework [gated]
+    原始池 32，新入库 0
+== BerriAI/litellm [restricted]
+    [C   6] #43059 [Bug]: Scheduler never removes admitted requests from the priority que  ←['cross_ref_pr', 'restricted_requires_confirm']
+    [C   6] #43019 [Bug]: Terraform resource `litellm_mcp_server.auth_type` does not supp  ←['cross_ref_pr', 'claim_signal', 'restricted_requires_confirm']
+    [C   6] #42959 [Bug]: per-turn-control-2026-07-01 filtered for azure_ai, but Azure AI  ←['cross_ref_pr', 'restricted_requires_confirm']
+    [C   6] #42886 [Bug]: /v1/messages passthrough skips temperature reconciliation for a  ←['cross_ref_pr', 'restricted_requires_confirm']
+    原始池 62，新入库 0
+
+[oss-scout 2026-09-26T11:21:18] 新候选 5（A: 1, B: 4）
+[B/open] openai/openai-agents-python#5180 Sandbox: UnixLocal snapshots containing hardlinks fail to re
+https://github.com/openai/openai-agents-python/issues/5180
+[A/open] Arize-ai/phoenix#16452 [BUG]: Playground fails with "Playground task timed out" on 
+https://github.com/Arize-ai/phoenix/issues/16452
+[B/open] Arize-ai/phoenix#16437 [bug] [agents] PXI can preview but cannot persist a project 
+https://github.com/Arize-ai/phoenix/issues/16437
+[B/open] Arize-ai/phoenix#16436 [bug] [agents] timeRange.set remains unavailable after navig
+https://github.com/Arize-ai/phoenix/issues/16436
+[B/open] anomalyco/opencode#50144 Homebrew support for OpenCode v2 Desktop
+https://github.com/anomalyco/opencode/issues/50144

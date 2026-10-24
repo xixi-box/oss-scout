@@ -1,0 +1,45 @@
+== openai/openai-agents-python [open]
+    原始池 1，新入库 0
+== OpenHands/software-agent-sdk [open]
+    原始池 57，新入库 0
+== browser-use/browser-use [open]
+    原始池 54，新入库 0
+== OpenHands/OpenHands [open]
+    [C   4] #17836 Automations list: "Load more" fails after 100 automations  ←['cross_ref_pr']
+    原始池 56，新入库 0
+== deepset-ai/haystack [open]
+    原始池 30，新入库 0
+== langfuse/langfuse [open]
+    原始池 21，新入库 0
+== Arize-ai/phoenix [open]
+    原始池 59，新入库 0
+== anomalyco/opencode [open]
+    原始池 47，新入库 0
+== langchain-ai/langsmith-sdk [open]
+    原始池 36，新入库 0
+== e2b-dev/e2b [open]
+    原始池 26，新入库 0
+== infiniflow/ragflow [open]
+    原始池 31，新入库 0
+== openai/openai-python [open]
+    原始池 42，新入库 0
+== pydantic/pydantic-ai [gated]
+    [B  4] #9517 Define host usage accounting and budgets for `BrowserUse`
+    [C   4] #9487 `Memory` tools fail inside Temporal activities because `ctx.tracer` is  ←['cross_ref_pr']
+    [C   4] #9444 A provider response with no usage object is recorded as zero tokens, n  ←['cross_ref_pr', 'claim_signal', 'duplicate_flagged']
+    原始池 60，新入库 1
+== microsoft/playwright [gated]
+    原始池 30，新入库 0
+== microsoft/agent-framework [gated]
+    原始池 32，新入库 0
+== BerriAI/litellm [restricted]
+    [C   6] #43867 [Bug]: default response format breaks gpt-realtime and is not overwrit  ←['cross_ref_pr', 'claim_signal', 'restricted_requires_confirm']
+    [C   6] #43850 [Documentation-Update]: The `completion()` related parameters should l  ←['cross_ref_pr', 'docs_only', 'restricted_requires_confirm']
+    [C   6] #43845 [Bug]:  ←['cross_ref_pr', 'restricted_requires_confirm']
+    [C   6] #43828 [Bug]: Gemini models can't be accessed through SDK  ←['claim_signal', 'restricted_requires_confirm']
+    [C   6] #43817 [Bug]: Responses bridge drops url_citation annotations when stream=Tru  ←['cross_ref_pr', 'restricted_requires_confirm']
+    原始池 62，新入库 0
+
+[oss-scout 2026-10-02T11:20:50] 新候选 1（A: 0, B: 1）
+[B/gated] pydantic/pydantic-ai#9517 Define host usage accounting and budgets for `BrowserUse`
+https://github.com/pydantic/pydantic-ai/issues/9517

@@ -1,0 +1,27 @@
+== OpenHands/software-agent-sdk [open]
+    [C   6] #5225 [Bug]: LLMBadRequestError from a poisoned tool_result permanently wedg  ←['cross_ref_pr']
+    [C   7] #5213 [Bug]: ask_agent 500: `AttributeError: 'PromptTokensDetailsWrapper' ob  ←['cross_ref_pr']
+    [C   4] #5207 OpenRouter: resolve shared connections across runtime paths and preser  ←['cross_ref_pr']
+    [C   6] #5181 [Bug]: DeepSeek V4.x reasoning_effort and output cap depend on proxy m  ←['cross_ref_pr']
+    [C   4] #5168 AttributeError in Telemetry._cache_buckets for providers without promp  ←['cross_ref_pr']
+    原始池 60，新入库 0
+== browser-use/browser-use [open]
+    [C   6] #5831 Bug: Depreciated syntax used to list development dependencies in pypro  ←['cross_ref_pr', 'claim_signal']
+    [C   6] #5829 Bug: schema cleanup removes fields named default, minItems, or min_ite  ←['cross_ref_pr']
+    [C   5] #5817 Bug: user-agent shadow roots are reported as SHADOW(open) in the seria  ←['cross_ref_pr']
+    [C   3] #4824 Feature Request: Too strict dependency version pinning (`==`) causes d  ←['cross_ref_pr', 'claim_signal', 'feature_label', 'question_or_feature_title']
+    [C   5] #4285 Bug: ... Browser Use 0.12.1 has a strict pin for OpenAI==2.16.0  ←['cross_ref_pr']
+    原始池 54，新入库 0
+== infiniflow/ragflow [open]
+    [C   3] #4214 ROADMAP 2025  ←['question_or_feature_title']
+    [C   4] #4406 [Feature Request]: Add Rerank capability for Ollama  ←['cross_ref_pr']
+    [B  4] #3443 [Feature Request]: Integrate Docling into ragflow
+    [B  3] #3862 [Feature Request]: Update GraphRAG to support LazyGraphRAG
+    [C   3] #12241 ROADMAP 2026  ←['question_or_feature_title']
+    原始池 31，新入库 2
+
+[oss-scout 2026-09-24T10:19:50] 新候选 2（A: 0, B: 2）
+[B/open] infiniflow/ragflow#3443 [Feature Request]: Integrate Docling into ragflow
+https://github.com/infiniflow/ragflow/issues/3443
+[B/open] infiniflow/ragflow#3862 [Feature Request]: Update GraphRAG to support LazyGraphRAG
+https://github.com/infiniflow/ragflow/issues/3862

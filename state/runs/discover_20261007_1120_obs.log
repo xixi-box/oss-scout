@@ -1,0 +1,59 @@
+== openai/openai-agents-python [open]
+    [C   2] #5325 A deterministic tool-level guardrail with no LLM in the judge — AgentD
+    [C   2] #5324 Run-wide tool exception formatting: add `tool_exception` kind to `RunC
+    [C   4] #5322 RedisSession fails on Redis Cluster: add_items/clear_session raise Att  ←['cross_ref_pr']
+    原始池 4，新入库 0
+== OpenHands/software-agent-sdk [open]
+    [C   6] #5523 [Bug]: deepseek-v4.1-flash is not detected as vision-capable (supports  ←['cross_ref_pr', 'duplicate_flagged']
+    [C   6] #5519 [Bug]: A scoped profile can't delegate to general-purpose because it l  ←['cross_ref_pr']
+    [C   6] #5514 [Bug]: Plaintext LLM profile reads omit linked provider credentials  ←['cross_ref_pr']
+    [C   6] #5501 [Bug]: Canvas extension manifest drops pages[].nav_label, so Agent Can  ←['cross_ref_pr']
+    [C   6] #5498 [Bug]: After deleting the active LLM profile, its provider connection   ←['cross_ref_pr']
+    原始池 59，新入库 0
+== browser-use/browser-use [open]
+    原始池 55，新入库 0
+== OpenHands/OpenHands [open]
+    [C   6] #17959 [Bug]: Automation templates: a search with no matches shows a blank pa  ←['cross_ref_pr']
+    [C   6] #17958 [Bug]: Custom MCP server editor reports a malformed header as an envir  ←['cross_ref_pr']
+    [C   6] #17957 [Bug]: Skill detail modal ignores Escape while its '+N' tag popover tr  ←['cross_ref_pr']
+    [C   6] #17955 [Bug]: Add LLM Profile shows the agent's current LLM options (such as   ←['cross_ref_pr']
+    [C   6] #17953 [Bug]: Backends and Cloud sign-in: Escape closes the whole Manage back  ←['cross_ref_pr']
+    [C   6] #17949 [Bug]: Launcher: --allow-lan-session-key is ignored, the port-in-use e  ←['cross_ref_pr']
+    [C   6] #17948 [Bug]: Automation detail and edit: schedule edit silently dropped, wro  ←['cross_ref_pr']
+    [C   6] #17946 [Bug]: Launcher never creates TMUX_TMPDIR, so local Agent Canvas insta  ←['cross_ref_pr']
+    原始池 66，新入库 0
+== deepset-ai/haystack [open]
+    原始池 30，新入库 0
+== langfuse/langfuse [open]
+    原始池 21，新入库 0
+== Arize-ai/phoenix [open]
+    原始池 60，新入库 0
+== anomalyco/opencode [open]
+    原始池 46，新入库 0
+== langchain-ai/langsmith-sdk [open]
+    原始池 36，新入库 0
+== e2b-dev/e2b [open]
+    [B  4] #1947 [Bug]: Creation-time environment defaults missing after resume-time en
+    [C   4] #1944 [Bug]: Code Interpreter corrupts Unicode split across response chunks  ←['cross_ref_pr']
+    原始池 28，新入库 1
+== infiniflow/ragflow [open]
+    原始池 31，新入库 0
+== openai/openai-python [open]
+    原始池 42，新入库 0
+== pydantic/pydantic-ai [gated]
+    原始池 60，新入库 0
+== microsoft/playwright [gated]
+    原始池 30，新入库 0
+== microsoft/agent-framework [gated]
+    原始池 32，新入库 0
+== BerriAI/litellm [restricted]
+    [C   6] #44694 [Bug]: Bedrock request metadata forwarding does not work for /embeddin  ←['cross_ref_pr', 'restricted_requires_confirm']
+    [C   6] #44657 [Bug]: /v1/responses streaming: reasoning output_item.done omits encry  ←['claim_signal', 'restricted_requires_confirm']
+    [C   4] #44575 [Bug]: latency-based-routing: LowestLatencyLoggingHandler callback not  ←['claim_signal', 'restricted_requires_confirm']
+    [C   6] #44560 [Bug]: output_config.effort is not translated to reasoning_effort for   ←['cross_ref_pr', 'restricted_requires_confirm']
+    [C   5] #44535 [Bug]: Anthropic response without a usage object leads to a retry and   ←['cross_ref_pr', 'restricted_requires_confirm']
+    原始池 69，新入库 0
+
+[oss-scout 2026-10-07T11:20:50] 新候选 1（A: 0, B: 1）
+[B/open] e2b-dev/e2b#1947 [Bug]: Creation-time environment defaults missing after resu
+https://github.com/e2b-dev/E2B/issues/1947

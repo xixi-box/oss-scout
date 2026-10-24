@@ -1,0 +1,30 @@
+# oss-scout 观测任务注册参数（每 2 小时）
+
+用途：在 G:\test 工作区新开一个 ZCode 会话（不能在被定时任务拉起的会话里注册），
+对 agent 说："按 G:\project\oss-scout\observer_task.txt 注册 oss-scout 观测定时任务"。
+
+## 注册参数（agent 请原样使用）
+
+- cron: `20 1-23/2 * * *`（每 2 小时，奇数点 20 分：01:20/03:20/…/23:20。
+  特意避开消费任务 10:30/16:30/22:30 窗口——原偶数点方案曾在 16:20 撞上 16:30
+  消费的 discover 补扫，双进程并发全量重扫互抢 GitHub 限流，单次拖长到 50 分钟）
+- recurring: true
+- title: `oss-scout 观测（每2h发现扫描）`
+- prompt: 见下方 ``` 块内全文
+
+```
+这是 oss-scout 的轻量观测任务（每 2 小时，奇数点 20 分，避开 10:30/16:30/22:30 的消费窗口），只做一件事：cd /g/project/oss-scout 后运行 `python discover.py 2>&1 | tee state/runs/discover_$(date +%Y%m%d_%H%M)_obs.log`（约 5~12 分钟，输出留档 state/runs/，候选写入 queue/candidates.json 队列）。运行完成后看输出的最后一行统计："新候选 0" → 一句话收尾即可；若有新增候选 → 列出每条的 [级别/车道] repo#编号 标题 链接。禁止执行发现之外的任何动作：不消费候选、不评论、不开 PR、不改代码（消费由每日 10:30/16:30/22:30 的消费任务负责）。运行若遇 GitHub 限流退避属正常，耐心等它跑完，不要中断重试。所有读写限制在 G:\project\oss-scout 目录内。
+```
+
+## 运维备注
+
+- **2026-10-16 紧急：anaconda 已卸载，裸 `python` 解析到 Windows Store 假桩（退出码 49、静默秒死）。**
+  两个定时任务 prompt 里的 `python discover.py` / `python health_check.py` 必须替换为绝对路径：
+  `/d/GeoScenePro/bin/Python/envs/arcgispro-py3/python.exe`（Python 3.11.11，已验证 discover.py 全量跑通）。
+  改法：对 automation-1078d57a（观测）和 automation-bd1fc8f2（消费）各做一次 CronUpdate，
+  仅替换命令中的 python 为上述绝对路径，其余文字不动。若用户重装了系统级 python 可回退。
+- 当前生效任务 id：观测 automation-1078d57a-5cbe-4557-8d7a-8e8d274c0986、
+  消费 automation-bd1fc8f2-bf6f-4dae-84e8-e6721d5fc297（均绑 G:\test 工作区）。
+  改调度或改 prompt 直接让 agent 用 CronUpdate 改对应 id，**不要按本文件重新注册**，否则会双跑。
+- 观测日志命名 `discover_<日期>_<时分>_obs.log`，与消费任务的 `discover_<日期>.log` 区分开。
+- 2026-09-18：由 `20 */2 * * *` 改为奇数点并加 tee 留档（当时 16:20 观测与 16:30 消费撞车实测确认）。

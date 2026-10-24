@@ -1,0 +1,32 @@
+== openai/openai-agents-python [open]
+    [C   2] #5176 SQLiteSession serves edited, replayed and re-owned rows as genuine his  ←['feature_label']
+    [C   2] #4889 [Sandbox] apply_patch update_file with a case-only move_to deletes the  ←['cross_ref_pr', 'claim_signal', 'feature_label']
+    原始池 8，新入库 0
+== OpenHands/software-agent-sdk [open]
+    [C   6] #5310 [Bug]: Docker conversation runtime cannot resolve configured title LLM  ←['cross_ref_pr']
+    [C   6] #5307 [Bug]: Docker conversation runtime creates linked worktree across inco  ←['cross_ref_pr']
+    原始池 59，新入库 0
+== browser-use/browser-use [open]
+    原始池 55，新入库 0
+== OpenHands/OpenHands [open]
+Traceback (most recent call last):
+  File "G:\project\oss-scout\discover.py", line 365, in <module>
+    main()
+  File "G:\project\oss-scout\discover.py", line 322, in main
+    sig = enrich(repo, it["number"])
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "G:\project\oss-scout\discover.py", line 129, in enrich
+    issue = gh([f"repos/{repo}/issues/{number}"])
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "G:\project\oss-scout\discover.py", line 77, in gh
+    p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\dev\anaconda\Lib\subprocess.py", line 548, in run
+    with Popen(*popenargs, **kwargs) as process:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\dev\anaconda\Lib\subprocess.py", line 1026, in __init__
+    self._execute_child(args, executable, preexec_fn, close_fds,
+  File "D:\dev\anaconda\Lib\subprocess.py", line 1538, in _execute_child
+    hp, ht, pid, tid = _winapi.CreateProcess(executable, args,
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+OSError: [WinError 1455] 页面文件太小，无法完成操作。

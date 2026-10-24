@@ -1,0 +1,39 @@
+    [gh] gh: You have exceeded a secondary rate limit. Please wait a few minutes before you try again. For more on scraping GitHub and how it may affect your r
+== openai/openai-agents-python [open]
+    [C   2] #5068 Realtime: close() keeps the previous connection's item and audio state  ←['cross_ref_pr', 'claim_signal', 'feature_label']
+    原始池 14，新入库 0
+== OpenHands/OpenHands [open]
+    [C   6] #17559 [Bug]: History pagination can show both an action and its observation   ←['cross_ref_pr']
+    [B  5] #17546 [Bug]: detect ports automatically instead of always using 3001
+    [C   6] #17533 [Bug]: Create Automation modal leaves chat input empty (ready-for-dev   ←['cross_ref_pr']
+    原始池 63，新入库 1
+== deepset-ai/haystack [open]
+    [C   1] #12543 4 of 5 Document*Evaluators crash with ZeroDivisionError on empty input  ←['cross_ref_pr', 'claim_signal']
+    原始池 30，新入库 0
+== langfuse/langfuse [open]
+    原始池 9，新入库 0
+== Arize-ai/phoenix [open]
+    原始池 59，新入库 0
+== anomalyco/opencode [open]
+    [C   6] #50093 Free usage exceeded and there's long retry timers keep escalating acro  ←['claim_signal']
+    原始池 50，新入库 0
+== langchain-ai/langsmith-sdk [open]
+    原始池 37，新入库 0
+== e2b-dev/e2b [open]
+    原始池 23，新入库 0
+== openai/openai-python [open]
+    原始池 45，新入库 0
+== pydantic/pydantic-ai [gated]
+    原始池 60，新入库 0
+== microsoft/playwright [gated]
+    原始池 30，新入库 0
+== microsoft/agent-framework [gated]
+    原始池 30，新入库 0
+== BerriAI/litellm [restricted]
+    [C   6] #41913 [Bug]: tool and instruction fields dropped in translation (const, stri  ←['cross_ref_pr', 'claim_signal', 'restricted_requires_confirm']
+    [C   6] #41912 [Bug]: attached files and audio are dropped before the provider sees t  ←['cross_ref_pr', 'claim_signal', 'restricted_requires_confirm']
+    原始池 65，新入库 0
+
+[oss-scout 2026-09-21T17:20:33] 新候选 1（A: 0, B: 1）
+[B/open] OpenHands/OpenHands#17546 [Bug]: detect ports automatically instead of always using 30
+https://github.com/OpenHands/OpenHands/issues/17546

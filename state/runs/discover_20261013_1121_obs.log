@@ -1,0 +1,56 @@
+    [gh] Get "https://api.github.com/search/issues?order=desc&per_page=30&q=repo%3AOpenHands%2Fsoftware-agent-sdk+is%3Aissue+is%3Aopen+no%3Aassignee+label%3Abu
+    [gh] Get "https://api.github.com/repos/OpenHands/OpenHands/issues/18287/comments?per_page=30": EOF
+    [gh] Get "https://api.github.com/search/issues?order=desc&per_page=30&q=repo%3Adeepset-ai%2Fhaystack+is%3Aissue+is%3Aopen+no%3Aassignee+label%3Abug+-label%
+    [gh] Get "https://api.github.com/search/issues?order=desc&per_page=30&q=repo%3Alangfuse%2Flangfuse+is%3Aissue+is%3Aopen+no%3Aassignee+label%3Abug+-label%3A
+    [gh] Get "https://api.github.com/repos/langfuse/langfuse/issues/18607": EOF
+    [gh] Get "https://api.github.com/search/issues?order=desc&per_page=30&q=repo%3AArize-ai%2Fphoenix+is%3Aissue+is%3Aopen+no%3Aassignee+-label%3A%22invalid%22
+    [gh] Get "https://api.github.com/search/issues?order=desc&per_page=30&q=repo%3Aanomalyco%2Fopencode+is%3Aissue+is%3Aopen+no%3Aassignee+label%3Abug+-label%3
+    [gh] Get "https://api.github.com/search/issues?order=desc&per_page=30&q=repo%3Alangchain-ai%2Flangsmith-sdk+is%3Aissue+is%3Aopen+no%3Aassignee+label%3Abug+
+    [gh] Get "https://api.github.com/search/issues?order=desc&per_page=30&q=repo%3Ae2b-dev%2Fe2b+is%3Aissue+is%3Aopen+no%3Aassignee+label%3Abug+-label%3A%22inv
+    [gh] Get "https://api.github.com/search/issues?order=desc&per_page=30&q=repo%3Ainfiniflow%2Fragflow+is%3Aissue+is%3Aopen+no%3Aassignee+-label%3A%22invalid%
+    [gh] Get "https://api.github.com/search/issues?order=desc&per_page=30&q=repo%3Ainfiniflow%2Fragflow+is%3Aissue+is%3Aopen+no%3Aassignee+label%3Abug+-label%3
+    [gh] Get "https://api.github.com/search/issues?order=desc&per_page=30&q=repo%3Ainfiniflow%2Fragflow+is%3Aissue+is%3Aopen+no%3Aassignee+label%3Abug+-label%3
+    [gh] Get "https://api.github.com/search/issues?order=desc&per_page=30&q=repo%3Aopenai%2Fopenai-python+is%3Aissue+is%3Aopen+no%3Aassignee+label%3Abug+-label
+    [gh] gh: You have exceeded a secondary rate limit. Please wait a few minutes before you try again. For more on scraping GitHub and how it may affect your r
+    [gh] Get "https://api.github.com/search/issues?order=desc&per_page=30&q=repo%3ABerriAI%2Flitellm+is%3Aissue+is%3Aopen+no%3Aassignee+-label%3A%22invalid%22+
+== openai/openai-agents-python [open]
+    [C   2] #5353 Support the OpenAI Decisions API  ←['cross_ref_pr', 'question_or_feature_title']
+    原始池 17，新入库 0
+== OpenHands/software-agent-sdk [open]
+    [C   6] #5711 [Bug]: TypeScript RemoteState can retain stale snapshots and overwrite  ←['cross_ref_pr']
+    原始池 60，新入库 0
+== browser-use/browser-use [open]
+    原始池 54，新入库 0
+== OpenHands/OpenHands [open]
+    原始池 67，新入库 0
+== deepset-ai/haystack [open]
+    原始池 30，新入库 0
+== langfuse/langfuse [open]
+    原始池 21，新入库 0
+== Arize-ai/phoenix [open]
+    原始池 30，新入库 0
+== anomalyco/opencode [open]
+    [A  6] #54833 all models "Error: Upstream request failed: Invalid credential"
+    原始池 30，新入库 1
+== langchain-ai/langsmith-sdk [open]
+    原始池 30，新入库 0
+== e2b-dev/e2b [open]
+    原始池 29，新入库 0
+== infiniflow/ragflow [open]
+    无原始候选
+== openai/openai-python [open]
+    原始池 43，新入库 0
+== pydantic/pydantic-ai [gated]
+    原始池 60，新入库 0
+== microsoft/playwright [gated]
+    原始池 30，新入库 0
+== microsoft/agent-framework [gated]
+    原始池 32，新入库 0
+== BerriAI/litellm [restricted]
+    [C   6] #45949 [Bug]: RouterRateLimitError in litellm/router.py  ←['restricted_requires_confirm']
+    [C   6] #45948 [Bug]: Per-request `fallbacks` in a multipart /v1/images/edits request  ←['cross_ref_pr', 'restricted_requires_confirm']
+    原始池 41，新入库 0
+
+[oss-scout 2026-10-13T11:21:07] 新候选 1（A: 1, B: 0）
+[A/open] anomalyco/opencode#54833 all models "Error: Upstream request failed: Invalid credenti
+https://github.com/anomalyco/opencode/issues/54833

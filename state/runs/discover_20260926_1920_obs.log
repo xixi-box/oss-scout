@@ -1,0 +1,47 @@
+    [gh] Get "https://api.github.com/search/issues?order=desc&per_page=30&q=repo%3Abrowser-use%2Fbrowser-use+is%3Aissue+is%3Aopen+no%3Aassignee+label%3Abug+-la
+    [gh] Get "https://api.github.com/search/issues?order=desc&per_page=30&q=repo%3Ae2b-dev%2Fe2b+is%3Aissue+is%3Aopen+no%3Aassignee+-label%3A%22invalid%22+-lab
+== openai/openai-agents-python [open]
+    [C   2] #5182 A tool timeout that arrives after the task finished loses is_sdk_gener
+    [C   2] #5181 Responses streaming: the `error` event is not treated as terminal, so   ←['claim_signal']
+    原始池 11，新入库 0
+== OpenHands/software-agent-sdk [open]
+    原始池 60，新入库 0
+== browser-use/browser-use [open]
+    [C   5] #4208 Bug: window.open() causes the previous page to freeze and prevents nor  ←['cross_ref_pr', 'claim_signal']
+    [C   2] #5731 Docs: add short async setup snippet to README quickstart  ←['docs_only']
+    [C   2] #5524 Security: update exact Click, MCP, and pypdf pins to fixed releases  ←['cross_ref_pr']
+    原始池 54，新入库 0
+== OpenHands/OpenHands [open]
+    原始池 63，新入库 0
+== deepset-ai/haystack [open]
+    原始池 30，新入库 0
+== langfuse/langfuse [open]
+    原始池 12，新入库 0
+== Arize-ai/phoenix [open]
+    原始池 59，新入库 0
+== anomalyco/opencode [open]
+    [A  7] #50885 NO API KEY
+    原始池 50，新入库 1
+== langchain-ai/langsmith-sdk [open]
+    原始池 36，新入库 0
+== e2b-dev/e2b [open]
+    [C   4] #1902 [Bug]: Template copy() includes files that .dockerignore / fileIgnoreP  ←['cross_ref_pr', 'claim_signal']
+    [C   4] #1900 MCP gateway drops params._meta on tools/call; servers behind it never   ←['cross_ref_pr']
+    [C   3] #1899 Python SDK/docs spell custom MCP server keys install_cmd/run_cmd but t  ←['cross_ref_pr', 'claim_signal', 'docs_only']
+    原始池 16，新入库 0
+== infiniflow/ragflow [open]
+    原始池 31，新入库 0
+== openai/openai-python [open]
+    原始池 42，新入库 0
+== pydantic/pydantic-ai [gated]
+    原始池 60，新入库 0
+== microsoft/playwright [gated]
+    原始池 30，新入库 0
+== microsoft/agent-framework [gated]
+    原始池 32，新入库 0
+== BerriAI/litellm [restricted]
+    原始池 62，新入库 0
+
+[oss-scout 2026-09-26T19:20:46] 新候选 1（A: 1, B: 0）
+[A/open] anomalyco/opencode#50885 NO API KEY
+https://github.com/anomalyco/opencode/issues/50885

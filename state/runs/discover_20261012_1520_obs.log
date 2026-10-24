@@ -1,0 +1,48 @@
+    [gh] Get "https://api.github.com/search/issues?order=desc&per_page=30&q=repo%3Alangchain-ai%2Flangsmith-sdk+is%3Aissue+is%3Aopen+no%3Aassignee+-label%3A%22
+== openai/openai-agents-python [open]
+    [B  4] #5352 RunState round trip drops alias-only fields: `"async": null` on a func
+    原始池 18，新入库 1
+== OpenHands/software-agent-sdk [open]
+    原始池 61，新入库 0
+== browser-use/browser-use [open]
+    原始池 55，新入库 0
+== OpenHands/OpenHands [open]
+    原始池 65，新入库 0
+== deepset-ai/haystack [open]
+    原始池 30，新入库 0
+== langfuse/langfuse [open]
+    原始池 20，新入库 0
+== Arize-ai/phoenix [open]
+    原始池 60，新入库 0
+== anomalyco/opencode [open]
+    原始池 45，新入库 0
+== langchain-ai/langsmith-sdk [open]
+    [A  6] #1578 Extremely slow performance with large datasets (client.list_examples &
+    [C   5] #2122 Issue: bug on output with async clients when combined with opentelemet  ←['cross_ref_pr']
+    [B  3] #2019 Issue: After uploading the dataset through the SDK, the data order cha
+    [B  3] #1716 Issue: Cassette not being written to disk with ChatVertexAI and langsm
+    原始池 8，新入库 3
+== e2b-dev/e2b [open]
+    原始池 29，新入库 0
+== infiniflow/ragflow [open]
+    原始池 32，新入库 0
+== openai/openai-python [open]
+    原始池 43，新入库 0
+== pydantic/pydantic-ai [gated]
+    原始池 60，新入库 0
+== microsoft/playwright [gated]
+    原始池 30，新入库 0
+== microsoft/agent-framework [gated]
+    原始池 32，新入库 0
+== BerriAI/litellm [restricted]
+    原始池 63，新入库 0
+
+[oss-scout 2026-10-12T15:20:52] 新候选 4（A: 1, B: 3）
+[B/open] openai/openai-agents-python#5352 RunState round trip drops alias-only fields: `"async": null`
+https://github.com/openai/openai-agents-python/issues/5352
+[A/open] langchain-ai/langsmith-sdk#1578 Extremely slow performance with large datasets (client.list_
+https://github.com/langchain-ai/langsmith-sdk/issues/1578
+[B/open] langchain-ai/langsmith-sdk#2019 Issue: After uploading the dataset through the SDK, the data
+https://github.com/langchain-ai/langsmith-sdk/issues/2019
+[B/open] langchain-ai/langsmith-sdk#1716 Issue: Cassette not being written to disk with ChatVertexAI 
+https://github.com/langchain-ai/langsmith-sdk/issues/1716

@@ -1,0 +1,104 @@
+    [gh] Get "https://api.github.com/search/issues?order=desc&per_page=30&q=repo%3Abrowser-use%2Fbrowser-use+is%3Aissue+is%3Aopen+no%3Aassignee+-label%3A%22inv
+    [gh] Get "https://api.github.com/search/issues?order=desc&per_page=30&q=repo%3Abrowser-use%2Fbrowser-use+is%3Aissue+is%3Aopen+no%3Aassignee+label%3Abug+-la
+    [gh] Get "https://api.github.com/search/issues?order=desc&per_page=30&q=repo%3Abrowser-use%2Fbrowser-use+is%3Aissue+is%3Aopen+no%3Aassignee+label%3Abug+-la
+    [gh] Get "https://api.github.com/search/issues?order=desc&per_page=30&q=repo%3AOpenHands%2FOpenHands+is%3Aissue+is%3Aopen+no%3Aassignee+-label%3A%22invalid
+    [gh] Get "https://api.github.com/search/issues?order=desc&per_page=30&q=repo%3AOpenHands%2FOpenHands+is%3Aissue+is%3Aopen+no%3Aassignee+label%3Abug+-label%
+    [gh] Get "https://api.github.com/search/issues?order=desc&per_page=30&q=repo%3Aanomalyco%2Fopencode+is%3Aissue+is%3Aopen+no%3Aassignee+label%3Abug+-label%3
+    [gh] Get "https://api.github.com/search/issues?order=desc&per_page=30&q=repo%3Ae2b-dev%2Fe2b+is%3Aissue+is%3Aopen+no%3Aassignee+-label%3A%22invalid%22+-lab
+    [gh] Get "https://api.github.com/search/issues?order=desc&per_page=30&q=repo%3Ae2b-dev%2Fe2b+is%3Aissue+is%3Aopen+no%3Aassignee+label%3Abug+-label%3A%22inv
+    [gh] Get "https://api.github.com/search/issues?order=desc&per_page=30&q=repo%3Ae2b-dev%2Fe2b+is%3Aissue+is%3Aopen+no%3Aassignee+label%3Abug+-label%3A%22inv
+    [gh] Get "https://api.github.com/search/issues?order=desc&per_page=30&q=repo%3Ainfiniflow%2Fragflow+is%3Aissue+is%3Aopen+no%3Aassignee+-label%3A%22invalid%
+    [gh] gh: You have exceeded a secondary rate limit. Please wait a few minutes before you try again. For more on scraping GitHub and how it may affect your r
+    [gh] gh: You have exceeded a secondary rate limit. Please wait a few minutes before you try again. For more on scraping GitHub and how it may affect your r
+    [gh] Get "https://api.github.com/search/issues?order=desc&per_page=30&q=repo%3Amicrosoft%2Fplaywright+is%3Aissue+is%3Aopen+no%3Aassignee+label%3Abug+-label
+    [gh] gh: You have exceeded a secondary rate limit. Please wait a few minutes before you try again. For more on scraping GitHub and how it may affect your r
+    [gh] gh: You have exceeded a secondary rate limit. Please wait a few minutes before you try again. For more on scraping GitHub and how it may affect your r
+== aaif-goose/goose [open]
+    [C   3] #11043 Adopt the Agent Plugins standard (agent-plugins.org)  ←['claim_signal']
+    [B  4] #12513 ACP: shell is always delegated to the client terminal (bypassing sandb
+    [C   2] #11451 Migrate certain backend features into berd  ←['cross_ref_pr']
+    [B  4] #13067 FYI: 1 public goose tool-call failure case packaged as a free regressi
+    [B  4] #13065 [Bug] Tooltip for context usage stays visible
+    [C   2] #13045 Transient SQLITE_BUSY permanently aborts turns: no retry on any sessio
+    [B  3] #12791 Can't configure ChatGPT Codex provider on a headless machine
+    [C   1] #12551 null error  ←['thin_body']
+    原始池 30，新入库 4
+== openai/openai-agents-python [open]
+    [C   2] #5413 Approval decision transfers across runs when call ID is reused
+    [C   2] #5412 Feature request: support arbitrary JSON values within strict structure  ←['cross_ref_pr', 'feature_label', 'question_or_feature_title']
+    原始池 17，新入库 0
+== OpenHands/software-agent-sdk [open]
+    [C   6] #6156 [Bug]: Agent-server MCP test sends ${NAME} secret references literally  ←['cross_ref_pr']
+    [C   6] #6152 [Bug]: ACP agents drop client-supplied launch skills under native sour  ←['cross_ref_pr']
+    原始池 61，新入库 0
+== browser-use/browser-use [open]
+    无原始候选
+== OpenHands/OpenHands [open]
+    [A  6] #18847 [Bug]: Agent sandbox fails to authenticate with GitHub using PAT/GitHu
+    [C   6] #18810 [Bug]: Agent profile editor sometimes reopens with global condenser/ve  ←['cross_ref_pr']
+    [C   6] #18809 [Bug]: Git control bar and Overview show a percent-encoded repository   ←['cross_ref_pr']
+    [C   6] #18808 [Bug]: Escape does not close the Home composer's agent profile and mod  ←['cross_ref_pr']
+    [C   9] #18799 [Bug]: Mock model-switch journey creates a conversation but remains on  ←['cross_ref_pr']
+    [C   6] #18796 Mock-LLM home warning color regression depends on prior LLM profile st  ←['cross_ref_pr']
+    [C   4] #18795 Mock-LLM auth error regression still expects a raw red palette class  ←['cross_ref_pr']
+    原始池 24，新入库 1
+== deepset-ai/haystack [open]
+    原始池 30，新入库 0
+== langfuse/langfuse [open]
+    [C   7] #19326 bug: Cmd+K evaluator search disappears after 500ms when typing "evalua  ←['cross_ref_pr']
+    [C   7] #19324 bug(playground, prompts): "Save as prompt" in Playground and "Create p  ←['cross_ref_pr']
+    原始池 23，新入库 0
+== Arize-ai/phoenix [open]
+    [B  5] #17161 [decision-models] Saving a decision from the playground requires a tem
+    [B  5] #17160 [decision-models] Playground decision columns show prompt evaluators; 
+    [B  5] #17159 [decision-models] Over a dataset, decision state problems should be pe
+    [C   5] #17158 [decision-models] Playground: switching a task from a decision model t  ←['cross_ref_pr']
+    [C   5] #17130 [server-evals] Preserve decision evaluator and version provenance on e  ←['cross_ref_pr']
+    原始池 59，新入库 3
+== anomalyco/opencode [open]
+    原始池 42，新入库 0
+== langchain-ai/langsmith-sdk [open]
+    原始池 36，新入库 0
+== e2b-dev/e2b [open]
+    无原始候选
+== infiniflow/ragflow [open]
+    原始池 1，新入库 0
+== openai/openai-python [open]
+    [C   3] #3561 Aborting a streaming Responses API request drops the function_call ite  ←['cross_ref_pr', 'claim_signal']
+    原始池 23，新入库 0
+== crewAIInc/crewAI [open]
+    [C   6] #8370 [BUG] Corrupt settings.json is silently ignored and can never be overw  ←['cross_ref_pr']
+    [C   6] #8338 [BUG] Blocked result_as_answer tool becomes the agent's final answer o  ←['cross_ref_pr']
+    [C   6] #8320 [BUG] Crew.akickoff silently loses Chroma knowledge because KnowledgeS  ←['cross_ref_pr']
+    [C   6] #8319 [BUG] Knowledge-enabled checkpoint restore attempts to instantiate abs  ←['cross_ref_pr', 'claim_signal']
+    [C   6] #8318 [BUG] Memory-enabled checkpoints fail because RecallFlow redeclares in  ←['cross_ref_pr']
+    原始池 60，新入库 0
+== pydantic/pydantic-ai [gated]
+    [C   3] #11044 Hosted MCP capabilities lose their toolset id under read_only=True  ←['cross_ref_pr', 'claim_signal']
+    原始池 16，新入库 0
+== microsoft/playwright [gated]
+    原始池 30，新入库 0
+== microsoft/agent-framework [gated]
+    原始池 32，新入库 0
+== BerriAI/litellm [restricted]
+    [C   4] #47826 [SECURITY] litellm 1.107.0 compromised (PyPI removed; Docker latest/ma  ←['cross_ref_pr', 'claim_signal', 'restricted_requires_confirm']
+    [C   3] #26071 [Feature]: Support adding skills to private repos with authentication   ←['claim_signal', 'feature_label', 'restricted_requires_confirm']
+    原始池 30，新入库 0
+
+[oss-scout 2026-10-24T19:21:11] 新候选 8（A: 1, B: 7）
+[B/open] aaif-goose/goose#12513 ACP: shell is always delegated to the client terminal (bypas
+https://github.com/aaif-goose/goose/issues/12513
+[B/open] aaif-goose/goose#13067 FYI: 1 public goose tool-call failure case packaged as a fre
+https://github.com/aaif-goose/goose/issues/13067
+[B/open] aaif-goose/goose#13065 [Bug] Tooltip for context usage stays visible
+https://github.com/aaif-goose/goose/issues/13065
+[B/open] aaif-goose/goose#12791 Can't configure ChatGPT Codex provider on a headless machine
+https://github.com/aaif-goose/goose/issues/12791
+[A/open] OpenHands/OpenHands#18847 [Bug]: Agent sandbox fails to authenticate with GitHub using
+https://github.com/OpenHands/OpenHands/issues/18847
+[B/open] Arize-ai/phoenix#17161 [decision-models] Saving a decision from the playground requ
+https://github.com/Arize-ai/phoenix/issues/17161
+[B/open] Arize-ai/phoenix#17160 [decision-models] Playground decision columns show prompt ev
+https://github.com/Arize-ai/phoenix/issues/17160
+[B/open] Arize-ai/phoenix#17159 [decision-models] Over a dataset, decision state problems sh
+https://github.com/Arize-ai/phoenix/issues/17159

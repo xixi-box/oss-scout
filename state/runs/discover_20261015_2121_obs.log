@@ -1,0 +1,37 @@
+== openai/openai-agents-python [open]
+    原始池 5，新入库 0
+== OpenHands/software-agent-sdk [open]
+    原始池 90，新入库 0
+== browser-use/browser-use [open]
+    原始池 56，新入库 0
+== OpenHands/OpenHands [open]
+    原始池 67，新入库 0
+== deepset-ai/haystack [open]
+    原始池 30，新入库 0
+== langfuse/langfuse [open]
+    [C   7] #18849 bug: trace and observation "Add to" button no longer shows annotation   ←['cross_ref_pr']
+    原始池 23，新入库 0
+== Arize-ai/phoenix [open]
+    原始池 59，新入库 0
+== anomalyco/opencode [open]
+    原始池 45，新入库 0
+== langchain-ai/langsmith-sdk [open]
+    原始池 36，新入库 0
+== e2b-dev/e2b [open]
+    原始池 31，新入库 0
+== infiniflow/ragflow [open]
+    原始池 32，新入库 0
+== openai/openai-python [open]
+    原始池 42，新入库 0
+== pydantic/pydantic-ai [gated]
+    [C   2] #10311 Support image input on `TypeSafeModel` (Jev)  ←['question_or_feature_title']
+    原始池 9，新入库 0
+== microsoft/playwright [gated]
+    原始池 30，新入库 0
+== microsoft/agent-framework [gated]
+    原始池 32，新入库 0
+== BerriAI/litellm [restricted]
+    原始池 78，新入库 0
+
+[oss-scout 2026-10-15T21:21:02] 新候选 0（A: 0, B: 0）
+

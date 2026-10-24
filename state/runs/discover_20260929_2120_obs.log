@@ -1,0 +1,37 @@
+== openai/openai-agents-python [open]
+    原始池 2，新入库 0
+== OpenHands/software-agent-sdk [open]
+    原始池 57，新入库 0
+== browser-use/browser-use [open]
+    原始池 55，新入库 0
+== OpenHands/OpenHands [open]
+    原始池 66，新入库 0
+== deepset-ai/haystack [open]
+    原始池 30，新入库 0
+== langfuse/langfuse [open]
+    [A  7] #18040 Regional migration to us.cloud.langfuse.com silently created a duplica
+    原始池 16，新入库 1
+== Arize-ai/phoenix [open]
+    原始池 59，新入库 0
+== anomalyco/opencode [open]
+    原始池 50，新入库 0
+== langchain-ai/langsmith-sdk [open]
+    原始池 36，新入库 0
+== e2b-dev/e2b [open]
+    原始池 28，新入库 0
+== infiniflow/ragflow [open]
+    原始池 31，新入库 0
+== openai/openai-python [open]
+    原始池 42，新入库 0
+== pydantic/pydantic-ai [gated]
+    原始池 60，新入库 0
+== microsoft/playwright [gated]
+    原始池 30，新入库 0
+== microsoft/agent-framework [gated]
+    原始池 32，新入库 0
+== BerriAI/litellm [restricted]
+    原始池 65，新入库 0
+
+[oss-scout 2026-09-29T21:20:55] 新候选 1（A: 1, B: 0）
+[A/open] langfuse/langfuse#18040 Regional migration to us.cloud.langfuse.com silently created
+https://github.com/langfuse/langfuse/issues/18040

@@ -1,0 +1,66 @@
+{
+ "computed": "2026-10-24T18:28:30",
+ "method": "REST all-state issues 60d, first external cross-ref-PR or assignment",
+ "repos": {
+  "aaif-goose/goose": {
+   "issues": 0,
+   "claimed": 0,
+   "unclaimed": 0,
+   "median_h": null
+  },
+  "pydantic/pydantic-ai": {
+   "issues": 0,
+   "claimed": 0,
+   "unclaimed": 0,
+   "median_h": null
+  },
+  "langfuse/langfuse": {
+   "issues": 0,
+   "claimed": 0,
+   "unclaimed": 0,
+   "median_h": null
+  },
+  "Arize-ai/phoenix": {
+   "issues": 0,
+   "claimed": 0,
+   "unclaimed": 0,
+   "median_h": null
+  },
+  "OpenHands/OpenHands": {
+   "issues": 0,
+   "claimed": 0,
+   "unclaimed": 0,
+   "median_h": null
+  },
+  "deepset-ai/haystack": {
+   "issues": 0,
+   "claimed": 0,
+   "unclaimed": 0,
+   "median_h": null
+  },
+  "anomalyco/opencode": {
+   "issues": 0,
+   "claimed": 0,
+   "unclaimed": 0,
+   "median_h": null
+  },
+  "openai/openai-agents-python": {
+   "issues": 0,
+   "claimed": 0,
+   "unclaimed": 0,
+   "median_h": null
+  },
+  "langchain-ai/langsmith-sdk": {
+   "issues": 0,
+   "claimed": 0,
+   "unclaimed": 0,
+   "median_h": null
+  },
+  "crewAIInc/crewAI": {
+   "issues": 0,
+   "claimed": 0,
+   "unclaimed": 0,
+   "median_h": null
+  }
+ }
+}

@@ -1,0 +1,38 @@
+== openai/openai-agents-python [open]
+    原始池 27，新入库 0
+== OpenHands/OpenHands [open]
+    [C   6] #17528 Agent profile menu says Set as active instead of Set as default  ←['cross_ref_pr']
+    [C   6] #17520 [Bug]: Deleting the title LLM profile leaves a stale row when settings  ←['cross_ref_pr']
+    原始池 59，新入库 0
+== deepset-ai/haystack [open]
+    原始池 30，新入库 0
+== langfuse/langfuse [open]
+    原始池 9，新入库 0
+== Arize-ai/phoenix [open]
+    原始池 59，新入库 0
+== anomalyco/opencode [open]
+    原始池 50，新入库 0
+== langchain-ai/langsmith-sdk [open]
+    原始池 37，新入库 0
+== e2b-dev/e2b [open]
+    原始池 23，新入库 0
+== openai/openai-python [open]
+    原始池 45，新入库 0
+== pydantic/pydantic-ai [gated]
+    [C   4] #8477 Server-initiated sampling and elicitation are unreachable on FastMCP 4  ←['cross_ref_pr', 'claim_signal']
+    [C   4] #8476 Usage a capability adds to `ctx.usage` inside a durable operation is c  ←['cross_ref_pr', 'claim_signal']
+    原始池 60，新入库 0
+== microsoft/playwright [gated]
+    原始池 30，新入库 0
+== microsoft/agent-framework [gated]
+    原始池 32，新入库 0
+== BerriAI/litellm [restricted]
+    [C   4] #41848 [Bug]: Support custom request body transformation for directEndpoint /  ←['restricted_requires_confirm']
+    [C   6] #41835 [Bug]: Vertex Grok (`vertex_ai/xai/grok-*`) is rejected on `/v1beta/mo  ←['cross_ref_pr', 'restricted_requires_confirm']
+    [C   4] #41805 [Bug]: Support for SAP Multiple Orchestration Deployment URLs  ←['restricted_requires_confirm']
+    [C   6] #41803 [Bug]: OpenAI Batches and Files API drop `project` / `OpenAI-Project`   ←['cross_ref_pr', 'restricted_requires_confirm']
+    [C   4] #41782 [Bug]: Wrong calculation of cost for Nebius provider  ←['restricted_requires_confirm']
+    原始池 62，新入库 0
+
+[oss-scout 2026-09-20T09:20:22] 新候选 0（A: 0, B: 0）
+

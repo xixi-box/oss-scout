@@ -1,0 +1,6 @@
+    [gh] gh: You have exceeded a secondary rate limit. Please wait a few minutes before you try again. For more on scraping GitHub and how it may affect your r
+    [gh] Get "https://api.github.com/search/issues?order=desc&per_page=30&q=repo%3Aaaif-goose%2Fgoose+is%3Aissue+is%3Aopen+no%3Aassignee+label%3Abug+-label%3A%
+    [gh] Get "https://api.github.com/search/issues?order=desc&per_page=30&q=repo%3Aopenai%2Fopenai-agents-python+is%3Aissue+is%3Aopen+no%3Aassignee+label%3Abug
+    [gh] Get "https://api.github.com/repos/openai/openai-agents-python/issues/5413": EOF
+    [gh] Get "https://api.github.com/search/issues?order=desc&per_page=30&q=repo%3AOpenHands%2FOpenHands+is%3Aissue+is%3Aopen+no%3Aassignee+-label%3A%22invalid
+    [gh] Get "https://api.github.com/search/issues?order=desc&per_page=30&q=repo%3Adeepset-ai%2Fhaystack+is%3Aissue+is%3Aopen+no%3Aassignee+label%3Abug+-label%

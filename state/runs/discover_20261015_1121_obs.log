@@ -1,0 +1,67 @@
+== openai/openai-agents-python [open]
+    [C   5] #5336 GPT-6 models get no default reasoning settings leading to 400 on /v1/c  ←['feature_label']
+    原始池 5，新入库 0
+== OpenHands/software-agent-sdk [open]
+    [C   6] #5825 [Bug]: A credential binding sent while a regular (non-ACP) conversatio  ←['cross_ref_pr']
+    [C   6] #5824 [Bug]: A goal resumed after a failed judge audit ends "capped" at iter  ←['cross_ref_pr']
+    [C   6] #5823 [Bug]: live switch_acp_model to a model the ACP provider does not offe  ←['cross_ref_pr']
+    [C   6] #5822 [Bug]: agent_final_response still returns the abandoned branch's answe  ←['cross_ref_pr']
+    [C   6] #5820 [Bug]: POST /condense on an agent with no request-handling condenser r  ←['cross_ref_pr']
+    原始池 90，新入库 0
+== browser-use/browser-use [open]
+    原始池 56，新入库 0
+== OpenHands/OpenHands [open]
+    [C   5] #18418 [Bug]: Creating a conversation always fails: the sandbox agent cannot   ←['cross_ref_pr']
+    [C   6] #18390 [Bug]: Activating a newly added backend from a conversation page somet  ←['cross_ref_pr']
+    [C   6] #18362 [Bug]: Fail Canvas startup when the automation backend exits before re  ←['cross_ref_pr']
+    [C   6] #18341 Automation Edit shows starter Python instead of the saved custom autom  ←['cross_ref_pr']
+    [C   6] #18324 Use readable theme focus and valid legacy scrim opacity  ←['cross_ref_pr']
+    [C   6] #18302 [Bug]: Onboarding's LLM step overwrites an existing LLM profile that h  ←['cross_ref_pr', 'feature_label']
+    [C   6] #18301 [Bug]: Preserve Automation KV encryption across session-key rotation  ←['cross_ref_pr', 'org_bot_claimed', 'feature_label']
+    [C   5] #18299 [Bug]: migration 029 errors with `duplicate column name: consecutive_a  ←['cross_ref_pr', 'feature_label']
+    原始池 65，新入库 0
+== deepset-ai/haystack [open]
+    [C   3] #13257 Support multi-vector retrieval  ←['cross_ref_pr', 'question_or_feature_title']
+    原始池 30，新入库 0
+== langfuse/langfuse [open]
+    [A  7] #18836 bug: Experiments started from the UI lose their traces when OTEL_TRACE
+    原始池 22，新入库 1
+== Arize-ai/phoenix [open]
+    原始池 59，新入库 0
+== anomalyco/opencode [open]
+    原始池 45，新入库 0
+== langchain-ai/langsmith-sdk [open]
+    原始池 36，新入库 0
+== e2b-dev/e2b [open]
+    原始池 29，新入库 0
+== infiniflow/ragflow [open]
+    原始池 32，新入库 0
+== openai/openai-python [open]
+    原始池 42，新入库 0
+== pydantic/pydantic-ai [gated]
+    [C   2] #10283 Python 3.11 coverage files lines under the wrong file, failing `strict  ←['cross_ref_pr']
+    [C   2] #10279 Expose `code`, `type` and `param` of Responses API in-stream errors on  ←['cross_ref_pr']
+    [C   2] #10270 Bedrock: native structured output wrongly denied for Claude 5.5 models
+    [C   2] #10248 Let a `PlaywrightBrowser` attached over `cdp_url` drive the browser's   ←['feature_label']
+    [B  4] #10243 GLM-5.3: object parameters using $ref come back as JSON-encoded string
+    [C   2] #10229 `ModelResponse.usage` docstring still references `result.usage()` inst  ←['cross_ref_pr']
+    [C   2] #10226 Recheck Gemini media-processing replay when Google publishes updated g  ←['cross_ref_pr']
+    [C   1] #9545 Tested OpenAI-compatible endpoint example for the docs (DemonRoute)?  ←['feature_label', 'docs_only']
+    原始池 8，新入库 1
+== microsoft/playwright [gated]
+    原始池 30，新入库 0
+== microsoft/agent-framework [gated]
+    原始池 32，新入库 0
+== BerriAI/litellm [restricted]
+    [C   6] #46303 [Bug]: Intermittent Codex V2 agent-message decryption errors on GitHub  ←['cross_ref_pr', 'restricted_requires_confirm']
+    [C   5] #46212 [Bug]: test_cold_concurrent_schema_validation_accepts_valid_arguments   ←['cross_ref_pr', 'claim_signal', 'restricted_requires_confirm']
+    [C   7] #46198 [Bug]: Dashboard calls admin-only license endpoint for non-admin users  ←['cross_ref_pr', 'claim_signal', 'restricted_requires_confirm']
+    [C   6] #46189 [Bug]: Usage "Last 7 days" preset selects eight inclusive calendar day  ←['cross_ref_pr', 'restricted_requires_confirm']
+    [C   6] #46173 [Bug]: Error 500 using Claude Code  ←['restricted_requires_confirm']
+    原始池 75，新入库 0
+
+[oss-scout 2026-10-15T11:21:05] 新候选 2（A: 1, B: 1）
+[A/open] langfuse/langfuse#18836 bug: Experiments started from the UI lose their traces when 
+https://github.com/langfuse/langfuse/issues/18836
+[B/gated] pydantic/pydantic-ai#10243 GLM-5.3: object parameters using $ref come back as JSON-enco
+https://github.com/pydantic/pydantic-ai/issues/10243

@@ -1,0 +1,38 @@
+== openai/openai-agents-python [open]
+    [C   2] #5088 Modal sandbox: evaluate native filesystem APIs and clarify overwrite c  ←['feature_label']
+    [C   2] #5085 Agent.as_tool() nested subagent runs never hit prompt cache, even with  ←['cross_ref_pr', 'claim_signal', 'feature_label']
+    [C   2] #5074 Voice: on Python 3.10 a streamed STT session-setup timeout escapes as   ←['cross_ref_pr', 'feature_label']
+    [C   2] #5072 Realtime: agent_end names the post-handoff agent instead of the agent   ←['cross_ref_pr', 'feature_label']
+    [C   2] #5070 Realtime: a failing model.close() leaves every waiting event iterator   ←['cross_ref_pr', 'feature_label']
+    原始池 15，新入库 0
+== OpenHands/OpenHands [open]
+    原始池 59，新入库 0
+== deepset-ai/haystack [open]
+    [C   1] #12643 File-level and inline comments in breakpoint.py say snapshot saving is  ←['cross_ref_pr', 'claim_signal']
+    原始池 30，新入库 0
+== langfuse/langfuse [open]
+    [A  7] #17691 bug: Langfuse UI highlights prompt variables with numbers as errors
+    原始池 9，新入库 1
+== Arize-ai/phoenix [open]
+    原始池 59，新入库 0
+== anomalyco/opencode [open]
+    原始池 50，新入库 0
+== langchain-ai/langsmith-sdk [open]
+    原始池 37，新入库 0
+== e2b-dev/e2b [open]
+    原始池 23，新入库 0
+== openai/openai-python [open]
+    原始池 45，新入库 0
+== pydantic/pydantic-ai [gated]
+    原始池 60，新入库 0
+== microsoft/playwright [gated]
+    原始池 30，新入库 0
+== microsoft/agent-framework [gated]
+    [C   2] #5560 [Feature]: AzureAISearchContextProvider lacks a way to set KnowledgeSo  ←['cross_ref_pr']
+    原始池 30，新入库 0
+== BerriAI/litellm [restricted]
+    原始池 65，新入库 0
+
+[oss-scout 2026-09-20T17:20:46] 新候选 1（A: 1, B: 0）
+[A/open] langfuse/langfuse#17691 bug: Langfuse UI highlights prompt variables with numbers as
+https://github.com/langfuse/langfuse/issues/17691

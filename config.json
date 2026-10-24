@@ -1,0 +1,112 @@
+{
+  "open_pool": [
+    {
+      "repo": "aaif-goose/goose",
+      "max_enrich": 8,
+      "notes": "Rust agent CLI（原 block/goose，已迁移 aaif-goose）；外部 169 合并/75d、僵尸 0.006、中位 5 天——当前最佳猎场；Rust 测试环境可执行性待首次入场评估"
+    },
+    {
+      "repo": "openai/openai-agents-python"
+    },
+    {
+      "repo": "OpenHands/software-agent-sdk",
+      "notes": "无 CONTRIBUTING（09-16 扫描），首次动手前必须人工读最近合并的外部 PR；注意：OpenHands 系 tracker 有官方 bot 收割 issue（见 OpenHands/OpenHands 的 openhands-ai[bot] 模式），新鲜泳道命中默认降权"
+    },
+    {
+      "repo": "browser-use/browser-use"
+    },
+    {
+      "repo": "OpenHands/OpenHands",
+      "max_enrich": 8,
+      "notes": "无 CONTRIBUTING；OpenHands 系 tracker 被 openhands-ai[bot] 系统性收割（1 小时内 29 次 I'm on it 实录），新鲜泳道命中默认降权"
+    },
+    {
+      "repo": "deepset-ai/haystack",
+      "pr_rules": [
+        "ai_disclaimer",
+        "conventional_commits"
+      ]
+    },
+    {
+      "repo": "langfuse/langfuse",
+      "max_enrich": 8,
+      "notes": "本地测试环境重（TS+ClickHouse），跑不动就 Draft+如实说明"
+    },
+    {
+      "repo": "Arize-ai/phoenix",
+      "notes": "上游自己用 Claude Code review，AI 友好"
+    },
+    {
+      "repo": "anomalyco/opencode",
+      "pr_rules": [
+        "no_ai_walls"
+      ],
+      "default_branch": "dev"
+    },
+    {
+      "repo": "langchain-ai/langsmith-sdk"
+    },
+    {
+      "repo": "e2b-dev/e2b"
+    },
+    {
+      "repo": "infiniflow/ragflow",
+      "notes": "无 CONTRIBUTING（09-16 扫描），首次动手前必须人工读最近合并的外部 PR"
+    },
+    {
+      "repo": "openai/openai-python"
+    },
+    {
+      "repo": "crewAIInc/crewAI",
+      "notes": "僵尸比自愈 3.36→0.18 回归（349 外部合并/75d）；健康周检连续两轮过线才转正"
+    }
+  ],
+  "gated_pool": [
+    {
+      "repo": "pydantic/pydantic-ai",
+      "gate": "assignment",
+      "max_enrich": 8,
+      "notes": "未指派 PR 会被自动关；评论对齐方案→等指派→指派后才实现；外部快杀活跃（48h 多单）"
+    },
+    {
+      "repo": "microsoft/playwright",
+      "gate": "assignment",
+      "notes": "triage+approved 后才能提 PR；注意 CLA bot"
+    },
+    {
+      "repo": "microsoft/agent-framework",
+      "gate": "assignment_request",
+      "max_enrich": 8,
+      "notes": "可请求指派；外部快杀极活跃（48h 8 连杀全外部），预期产出高"
+    }
+  ],
+  "restricted_pool": [
+    {
+      "repo": "BerriAI/litellm",
+      "only": "maintainer_confirmed",
+      "pr_rules": [
+        "tests_required"
+      ],
+      "notes": "僵尸比 1.07，只做 maintainer 确认过的；CONTRIBUTING 要求 PR 带测试"
+    }
+  ],
+  "observe_only": [
+    "google-gemini/gemini-cli"
+  ],
+  "search": {
+    "excluded_labels": [
+      "invalid",
+      "wontfix",
+      "duplicate",
+      "question",
+      "stale",
+      "awaiting more info",
+      "awaiting-more-info",
+      "needs more info",
+      "needs-repro",
+      "documentation"
+    ],
+    "fresh_days": 45,
+    "max_enrich_per_repo": 5
+  }
+}

@@ -1,0 +1,1 @@
+    [gh] Get "https://api.github.com/search/issues?order=desc&per_page=30&q=repo%3Adeepset-ai%2Fhaystack+is%3Aissue+is%3Aopen+no%3Aassignee+-label%3A%22invalid

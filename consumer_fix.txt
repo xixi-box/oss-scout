@@ -1,0 +1,16 @@
+# 消费任务②段修正（修复观测/消费并发扫描冲突）
+
+问题：观测任务（automation-1078d57a，每 2h 偶数点 :20）与消费任务（automation-bd1fc8f2，
+每日 10:30/16:30/22:30）的②段都会运行 discover.py，在消费窗前 10 分钟并发执行同一
+~220 调用的全量扫描，同 token 互相触发二级限流（实测 16:30 窗扫描被拖到 40+ 分钟）。
+
+修复：把消费任务 automation-bd1fc8f2-bf6f-4dae-84e8-e6721d5fc297 的 prompt 中②段替换为：
+
+    ② 队列确认段：绝不运行 discover.py——观测任务每 2 小时已覆盖发现，
+    并发运行会互相触发 GitHub 限流。仅当 state/health.json 距 computed_at
+    超过 7 天时运行 python health_check.py；然后直接读 queue/candidates.json
+    与最近一份 state/runs/discover_*.log 的统计进入③。
+
+其余段落不变。可用任一新会话对 agent 说："按 G:\project\oss-scout\consumer_fix.txt
+修正 oss-scout 消费任务的②段"（agent 用 CronUpdate 更新 automation-bd1fc8f2 的 prompt，
+标题与 cron 表达式保持不变）。

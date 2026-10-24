@@ -1,0 +1,44 @@
+== openai/openai-agents-python [open]
+    原始池 14，新入库 0
+== OpenHands/OpenHands [open]
+    [C   6] #17577 [Bug]: Basic LLM form cannot use a model the provider catalog does not  ←['cross_ref_pr']
+    [C   6] #17567 [Bug]: Switching from expanded Git diff to Planner raises a Monaco dis  ←['cross_ref_pr']
+    [C   6] #17566 [Bug]: Terminal tab loses command history after page reload while chat  ←['cross_ref_pr']
+    [C   6] #17565 [Bug]: Mobile plugin category tabs squeeze the search field to about 4  ←['cross_ref_pr']
+    [C   6] #17564 [Bug]: Mobile automation dashboard actions squeeze the heading to abou  ←['cross_ref_pr']
+    [C   6] #17563 [Bug]: Mobile automation edit dialog clips its header and footer  ←['cross_ref_pr']
+    [C   5] #17562 [Bug]: Mobile conversation Skills/Hooks/Tools dialogs overflow the vie  ←['cross_ref_pr']
+    原始池 64，新入库 0
+== deepset-ai/haystack [open]
+    原始池 30，新入库 0
+== langfuse/langfuse [open]
+    原始池 9，新入库 0
+== Arize-ai/phoenix [open]
+    原始池 60，新入库 0
+== anomalyco/opencode [open]
+    [B  5] #49953 [FEATURE]: General Bedrock retouch
+    [B  5] #49938 web: workspace default2 missing after opencode.ai redesign
+    原始池 50，新入库 2
+== langchain-ai/langsmith-sdk [open]
+    原始池 37，新入库 0
+== e2b-dev/e2b [open]
+    原始池 23，新入库 0
+== openai/openai-python [open]
+    原始池 44，新入库 0
+== pydantic/pydantic-ai [gated]
+    原始池 60，新入库 0
+== microsoft/playwright [gated]
+    原始池 30，新入库 0
+== microsoft/agent-framework [gated]
+    原始池 32，新入库 0
+== BerriAI/litellm [restricted]
+    [C   6] #42111 [Bug]: `/v1/audio/speech` fails for OpenRouter: "Unable to map the cus  ←['cross_ref_pr', 'claim_signal', 'restricted_requires_confirm']
+    [C   5] #42104 [Bug]: Mid-conversation `system` messages break Gemini/Vertex prompt c  ←['cross_ref_pr', 'claim_signal', 'restricted_requires_confirm']
+    [C   6] #42073 [Bug]: Proxy /v1/messages/count_tokens sends third-party api_key to ap  ←['cross_ref_pr', 'restricted_requires_confirm']
+    原始池 66，新入库 0
+
+[oss-scout 2026-09-22T19:21:03] 新候选 2（A: 0, B: 2）
+[B/open] anomalyco/opencode#49953 [FEATURE]: General Bedrock retouch
+https://github.com/anomalyco/opencode/issues/49953
+[B/open] anomalyco/opencode#49938 web: workspace default2 missing after opencode.ai redesign
+https://github.com/anomalyco/opencode/issues/49938

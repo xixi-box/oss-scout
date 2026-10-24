@@ -1,0 +1,69 @@
+== openai/openai-agents-python [open]
+    [C   2] #5392 Invalid handoff arguments end the run, while invalid function tool arg
+    [C   2] #5387 fix(typing): explicitly specialize ToolContext[Any] in ToolFunctionWit
+    [C   1] #5386 Streamed run keeps calling the model and tools after its only stream_e  ←['claim_signal']
+    [C   2] #5383 Add Databricks as a sandbox provider  ←['cross_ref_pr', 'feature_label']
+    原始池 10，新入库 0
+== OpenHands/software-agent-sdk [open]
+    [C   6] #6059 [Bug]: TypeScript GET-with-body requests remain pending after a trunca  ←['cross_ref_pr']
+    [C   4] #6053 [Bug]: Sockets stay attached to a discarded conversation after a sandb  ←['cross_ref_pr']
+    [C   6] #6028 [Bug]: OAuth2 MCP credentials are never forwarded to ACP agents (Codex  ←['cross_ref_pr']
+    [C   6] #6026 [Bug]: Profile validate and save answer 500 for a context window below  ←['cross_ref_pr']
+    [A  6] #6024 [Bug]: A bash command running when the agent server stops never gets a
+    原始池 64，新入库 1
+== browser-use/browser-use [open]
+    原始池 56，新入库 0
+== OpenHands/OpenHands [open]
+    [C   6] #18602 [Bug]: Rich PNG preview treats an absolute evidence-file path as works  ←['cross_ref_pr']
+    [C   6] #18598 [Bug]: Attaching a healthy DigitalOcean session opens the local API-ke  ←['cross_ref_pr']
+    [C   9] #18557 [Bug]: Canvas app browser tabs show only OpenHands instead of the app   ←['cross_ref_pr']
+    [C   6] #18547 [Bug]: Windows desktop title bar and menu bar remain dark with Light+   ←['cross_ref_pr']
+    [C   6] #18546 [Bug]: Solarized Light Usage panel text is below 4.5:1 (3.68:1 and 2.6  ←['cross_ref_pr']
+    [C   6] #18539 [Bug]: Confirmation dialog descriptions are unreadable in Light+ and S  ←['cross_ref_pr']
+    [C   6] #18517 Managed-agent focus outlines still use fixed blue  ←['cross_ref_pr']
+    原始池 65，新入库 0
+== deepset-ai/haystack [open]
+    原始池 30，新入库 0
+== langfuse/langfuse [open]
+    [A  7] #18995 bug: Codex tracing plugin Stop hook crashes with V8 heap OOM on long s
+    原始池 24，新入库 1
+== Arize-ai/phoenix [open]
+    原始池 59，新入库 0
+== anomalyco/opencode [open]
+    [C   6] #56324 Free models fail inside official OpenCode TUI with "free tier can only  ←['cross_ref_pr']
+    原始池 44，新入库 0
+== langchain-ai/langsmith-sdk [open]
+    原始池 36，新入库 0
+== e2b-dev/e2b [open]
+    [C   4] #1990 [Bug]: code-interpreter-js readLines is O(n²) on long output lines and  ←['cross_ref_pr', 'claim_signal']
+    [C   4] #1986 [Bug]: JS SDK: passing `logger` makes every API call fail on Node with  ←['cross_ref_pr']
+    [C   4] #1984 [Bug]: Python Code Interpreter Result drops non-standard MIME types in  ←['cross_ref_pr']
+    原始池 32，新入库 0
+== infiniflow/ragflow [open]
+    原始池 31，新入库 0
+== openai/openai-python [open]
+    原始池 42，新入库 0
+== pydantic/pydantic-ai [gated]
+    [C   4] #10538 AG-UI `load_messages` raises on deeply nested `ReasoningMessage.encryp  ←['cross_ref_pr']
+    [C   4] #10493 Harness sub-agents return `DeferredToolRequests` as if it were output  ←['cross_ref_pr']
+    [C   4] #10611 `SetToolMetadata(background=...)` has no effect on `BackgroundTools`  ←['cross_ref_pr']
+    [C   2] #10554 [aw] Failed jobs: CI Review
+    [C   2] #10531 Harness media externalization doesn't offload large `StructuredContent  ←['claim_signal']
+    原始池 31，新入库 0
+== microsoft/playwright [gated]
+    原始池 30，新入库 0
+== microsoft/agent-framework [gated]
+    原始池 32，新入库 0
+== BerriAI/litellm [restricted]
+    [C   6] #47082 [Bug]: DefaultCredentialsError in litellm/llms/vertex_ai/vertex_llm_ba  ←['cross_ref_pr', 'restricted_requires_confirm']
+    [C   6] #47012 [Bug]: /access_group/new and /access_group/{name}/update silently drop  ←['cross_ref_pr', 'restricted_requires_confirm']
+    [C   5] #47011 [Bug]: /key/generate and /user/new answer a bare 500 "Internal Server   ←['cross_ref_pr', 'claim_signal', 'restricted_requires_confirm']
+    [C   6] #47010 [Bug]: provider - litellm_tag Read never reads `model_max_budget` back  ←['cross_ref_pr', 'restricted_requires_confirm']
+    [C   6] #47007 [Bug]: provider: litellm_unified_access_group can't clear `description  ←['cross_ref_pr', 'restricted_requires_confirm']
+    原始池 64，新入库 0
+
+[oss-scout 2026-10-19T21:20:55] 新候选 2（A: 2, B: 0）
+[A/open] OpenHands/software-agent-sdk#6024 [Bug]: A bash command running when the agent server stops ne
+https://github.com/OpenHands/software-agent-sdk/issues/6024
+[A/open] langfuse/langfuse#18995 bug: Codex tracing plugin Stop hook crashes with V8 heap OOM
+https://github.com/langfuse/langfuse/issues/18995

@@ -1,0 +1,69 @@
+== openai/openai-agents-python [open]
+    [C   2] #5348 ShellTool: empty ShellResult(output=[]) fabricates stdout "(no output)
+    [C   2] #5346 Add a Smol Machines local and cloud SandboxAgent example
+    [C   2] #5344 Accept a JSON Schema document as `output_type`
+    [C   2] #5343 Resumed streamed run emits `tool_output` for the approved call without
+    [C   2] #5342 Chat Completions replay emits an invalid sequence for two messages in 
+    原始池 14，新入库 0
+== OpenHands/software-agent-sdk [open]
+    [C   6] #5652 [Bug]: RemoteState confirmation_policy/security_analyzer/agent fail or  ←['cross_ref_pr']
+    [C   6] #5651 [Bug]: ConversationEventStream on Node 22 WebSocket stops after one re  ←['cross_ref_pr']
+    [C   6] #5650 [Bug]: TS RemoteWorkspace.downloadAsBlob/fileDownload return 11 mangle  ←['cross_ref_pr']
+    [A  6] #5649 [Bug]: TS ConversationManager.createConversation ignores maxIterations
+    [A  6] #5648 [Bug]: /app-backends WebSocket bridge negotiates no subprotocol (expec
+    原始池 60，新入库 2
+== browser-use/browser-use [open]
+    原始池 55，新入库 0
+== OpenHands/OpenHands [open]
+    [C   6] #18234 [Bug]: Pinned automation card on Home hides the run's task summary whe  ←['cross_ref_pr']
+    [C   6] #18233 [Bug]: Escape on the closed backend selector clears it: the backend na  ←['cross_ref_pr']
+    [C   4] #18210 [Bug]: Home shows dead automation link and manifest errors when automa  ←['cross_ref_pr']
+    [C   6] #18160 [Bug]: Recovery gate (stored backend answers 503) shows two generic "A  ←['cross_ref_pr']
+    [C   6] #18161 [Bug]: Slack MCP credential probe reports any failed tool call (e.g. "  ←['cross_ref_pr']
+    [C   6] #18155 [Bug]: Missing-runtime conversations shown as Archived but never hidde  ←['cross_ref_pr']
+    [C   6] #18136 [Bug]: Connect Repo on a cloud conversation does not save the reposito  ←['cross_ref_pr']
+    [C   6] #18117 [Bug]: Inline thinking leaks into the agent chat bubble  ←['cross_ref_pr']
+    原始池 61，新入库 0
+== deepset-ai/haystack [open]
+    原始池 30，新入库 0
+== langfuse/langfuse [open]
+    原始池 21，新入库 0
+== Arize-ai/phoenix [open]
+    [B  5] #16891 [BUG]: experiments page times out on large datasets - compareExperimen
+    原始池 60，新入库 1
+== anomalyco/opencode [open]
+    原始池 45，新入库 0
+== langchain-ai/langsmith-sdk [open]
+    原始池 36，新入库 0
+== e2b-dev/e2b [open]
+    原始池 29，新入库 0
+== infiniflow/ragflow [open]
+    原始池 32，新入库 0
+== openai/openai-python [open]
+    [C   4] #4040 Streaming responses never return their connection to the pool (closed   ←['cross_ref_pr', 'claim_signal']
+    [C   4] #4036 Concurrent first use of streaming decode caches an incomplete discrimi  ←['claim_signal']
+    原始池 43，新入库 0
+== pydantic/pydantic-ai [gated]
+    [C   4] #10034 Tool parameter descriptions under `Keyword Args:` or `Other Parameters  ←['cross_ref_pr']
+    [C   4] #10032 `OllamaModel` doesn't detect Ollama Cloud models tagged `:cloud`  ←['cross_ref_pr']
+    [C   3] #9987 Tool_choice error when switching from Claude Sonnet 5.0 to 5.5  ←['cross_ref_pr', 'claim_signal']
+    原始池 60，新入库 0
+== microsoft/playwright [gated]
+    原始池 30，新入库 0
+== microsoft/agent-framework [gated]
+    原始池 32，新入库 0
+== BerriAI/litellm [restricted]
+    [C   6] #45676 [Bug]: Counting tokens for a base64 PDF has no cost bound, so a few up  ←['cross_ref_pr', 'restricted_requires_confirm']
+    [C   6] #45586 [Bug]: Missing usage in a provider response is reported as 0 tokens, w  ←['cross_ref_pr', 'claim_signal', 'restricted_requires_confirm']
+    [C   6] #45573 [Bug]: Old agents/models/mcps not deregistered from Access Group  ←['claim_signal', 'restricted_requires_confirm']
+    [C   6] #45564 [Bug]: Guardrail creation wizard clips content horizontally  ←['cross_ref_pr', 'restricted_requires_confirm']
+    [C   6] #45563 [Bug]: Responses API bridge returns `response.reasoning` without the `  ←['cross_ref_pr', 'claim_signal', 'restricted_requires_confirm']
+    原始池 63，新入库 0
+
+[oss-scout 2026-10-11T15:21:11] 新候选 3（A: 2, B: 1）
+[A/open] OpenHands/software-agent-sdk#5649 [Bug]: TS ConversationManager.createConversation ignores max
+https://github.com/OpenHands/software-agent-sdk/issues/5649
+[A/open] OpenHands/software-agent-sdk#5648 [Bug]: /app-backends WebSocket bridge negotiates no subproto
+https://github.com/OpenHands/software-agent-sdk/issues/5648
+[B/open] Arize-ai/phoenix#16891 [BUG]: experiments page times out on large datasets - compar
+https://github.com/Arize-ai/phoenix/issues/16891
