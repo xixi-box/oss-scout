@@ -50,6 +50,15 @@ class TestModalCliBilling:
         b = self._billing(out="not json at all")
         assert b.metered_usage_usd() is None
 
+    def test_decimal_string_form_accepted(self):
+        # 实测 2026-10-25：modal 返回 Decimal 字符串（"0E-8"）
+        b = self._billing(out=json.dumps({"metered_cost": "0E-8"}))
+        assert b.metered_usage_usd() == 0.0
+
+    def test_dollar_prefixed_string_accepted(self):
+        b = self._billing(out=json.dumps({"total_cost": "$12.34"}))
+        assert b.metered_usage_usd() == pytest.approx(12.34)
+
     def test_bool_not_treated_as_cost(self):
         b = self._billing(out=json.dumps({"cost": True}))
         assert b.metered_usage_usd() is None
@@ -203,3 +212,11 @@ class TestEnvelope:
     def test_parse_garbage_returns_none(self):
         assert mb_mod.parse_envelope("normal output\nno marker") is None
         assert mb_mod.parse_envelope(mb_mod.RESULT_MARKER + "{broken") is None
+
+    def test_parse_actions_log_with_prefix(self):
+        # Actions 日志每行带 `step \ttimestamp\t` 前缀
+        line = ("smoke\tfake worker run\t2026-10-24T15:41:45Z "
+                + mb_mod.RESULT_MARKER
+                + '{"result": {"job_id": "j1", "outcome": "succeeded"}}')
+        env = mb_mod.parse_envelope(line)
+        assert env is not None and env["result"]["job_id"] == "j1"

@@ -1,42 +1,184 @@
-"""GitHub Actions 后端（P3 接入，P1 默认 dry-run）。
+"""GitHub Actions 后端（P3）：项目关联工作的 workflow_dispatch 执行通道。
 
-eligibility 规则（计划 §9）：
-- execution_scope=broad_scan 一律 ineligible（Actions 不是免费扫描云）。
-- 项目关联工作必须存在已启用的 workflow_dispatch 工作流；无 → ineligible。
-- feature flag actions.enabled=false → ineligible。
+范围约束（计划 §1/§9）：
+- 只用于**项目关联**的 repair/review/ci 与本系统自身测试仓库的验证；
+  execution_scope=broad_scan 一律 ineligible（Actions 不是免费扫描云）。
+- 提交 = 在指定仓库 dispatch 指定 workflow（inputs 携带 job JSON 的 base64）；
+  收集 = 下载 run 的 artifact 并做 job_id/SHA 一致性校验（复用 quality_gate）。
+- 所有 gh 调用可注入 runner 便于测试；真实调用尊重 TLS 抖动下的重试。
 """
 
 from __future__ import annotations
 
+import base64
+import io
+import json
+import subprocess
+import time
+import zipfile
+from pathlib import Path
+from typing import Callable
 
-class BackendDisabledError(RuntimeError):
-    pass
+from ..schemas import Job, Result
+
+GH = Callable[[list[str]], tuple[int, str]]     # gh api runner：runner(args) -> (rc, stdout)
+DL = Callable[[list[str]], tuple[int, str]]     # gh run runner：runner(args) -> (rc, output)
+
+
+def _default_gh(args: list[str], retries: int = 4) -> tuple[int, str]:
+    last = ""
+    for attempt in range(retries + 1):
+        p = subprocess.run(["gh", "api"] + args, capture_output=True, text=True,
+                           encoding="utf-8", errors="replace")
+        if p.returncode == 0:
+            return 0, p.stdout
+        last = p.stderr
+        time.sleep(min(30, (attempt + 1) * 5))
+    return 1, last
+
+
+def _default_download(args: list[str], retries: int = 3) -> tuple[int, str]:
+    for attempt in range(retries + 1):
+        p = subprocess.run(["gh"] + args, capture_output=True, text=True,
+                           encoding="utf-8", errors="replace")
+        if p.returncode == 0:
+            return 0, ""
+        last = p.stderr
+        time.sleep(min(20, (attempt + 1) * 5))
+    return 1, last
 
 
 class ActionsBackend:
-    def __init__(self, enabled: bool = False, workflow_exists: bool = False):
+    def __init__(self, *, enabled: bool = False, repo: str = "",
+                 workflow: str = "worker-smoke.yml", ref: str = "main",
+                 workflow_exists: bool = False, gh_runner: GH | None = None,
+                 download_runner: DL | None = None,
+                 artifact_dir: Path | None = None):
         self.enabled = enabled
+        self.repo = repo
+        self.workflow = workflow
+        self.ref = ref
         self.workflow_exists = workflow_exists
+        self.gh = gh_runner or _default_gh
+        self.download = download_runner or _default_download
+        self.artifact_dir = artifact_dir or Path("artifacts")
+
+    # ---- eligibility（计划 §16：broad_scan 一律拒绝）----
 
     def eligible(self, job: dict) -> bool:
-        if not self.enabled:
+        if not self.enabled or not self.repo or not self.workflow_exists:
             return False
         if job.get("execution_scope") == "broad_scan":
             return False
         if job.get("mode") not in {"repair", "review", "ci"}:
             return False
-        return self.workflow_exists
+        return True
+
+    # ---- 协议 ----
 
     def submit(self, job: dict) -> str:
+        if not self.enabled:
+            raise RuntimeError("actions backend disabled by feature flag")
         if not self.eligible(job):
-            raise BackendDisabledError("actions backend ineligible/disabled (P3 implements)")
-        raise BackendDisabledError("Actions adapter not implemented until P3; dry-run only")
+            raise RuntimeError("actions backend ineligible for this job (scope/mode/workflow)")
+        payload = base64.b64encode(json.dumps(job, ensure_ascii=False).encode("utf-8")).decode()
+        rc, out = self.gh(["-X", "POST",
+                           f"repos/{self.repo}/actions/workflows/{self.workflow}/dispatches",
+                           "-f", f"ref={self.ref}",
+                           "-f", f"inputs[oss_job_b64]={payload}",
+                           "-f", f"inputs[job_id]={job['job_id']}"])
+        if rc != 0:
+            raise RuntimeError(f"workflow_dispatch failed: {out[:200]}")
+        run_id = self._find_run(job["job_id"])
+        if run_id is None:
+            raise RuntimeError("dispatch accepted but run not found in time")
+        return str(run_id)
 
     def poll(self, remote_job_id: str) -> dict:
-        raise BackendDisabledError("Actions adapter not implemented until P3")
+        rc, out = self.gh([f"repos/{self.repo}/actions/runs/{remote_job_id}"])
+        if rc != 0:
+            return {"job_id": remote_job_id, "state": "unknown", "error": out[:200]}
+        run = json.loads(out)
+        if run.get("status") != "completed":
+            return {"job_id": remote_job_id, "state": "running"}
+        conclusion = run.get("conclusion") or "unknown"
+        return {"job_id": remote_job_id,
+                "state": "succeeded" if conclusion == "success" else "failed",
+                "conclusion": conclusion}
 
     def cancel(self, remote_job_id: str) -> None:
-        raise BackendDisabledError("Actions adapter not implemented until P3")
+        self.gh(["-X", "DELETE", f"repos/{self.repo}/actions/runs/{remote_job_id}"])
 
     def collect(self, remote_job_id: str) -> dict:
-        raise BackendDisabledError("Actions adapter not implemented until P3")
+        rc, out = self.gh([f"repos/{self.repo}/actions/runs/{remote_job_id}/artifacts"])
+        if rc != 0:
+            return {"outcome": "inconclusive", "unverified_items": [f"artifact list failed: {out[:200]}"]}
+        artifacts = json.loads(out).get("artifacts", [])
+        if artifacts:
+            dest = self.artifact_dir / f"run-{remote_job_id}"
+            rc, err = self.download(["run", "download", remote_job_id,
+                                     "--repo", self.repo, "--dir", str(dest)])
+            if rc == 0:
+                results = sorted(dest.rglob("result.json"))
+                if results:
+                    return json.loads(results[0].read_text(encoding="utf-8"))
+            return {"outcome": "inconclusive",
+                    "unverified_items": [f"artifact download failed: {err[:200]}"]}
+        # 无 artifact（如存储配额满）：降级走 stdout 信封（与 Modal 同协议）
+        return self._collect_from_log(remote_job_id)
+
+    def _collect_from_log(self, remote_job_id: str) -> dict:
+        from ..adapters.modal_backend import parse_envelope
+        text = self._logs_text(remote_job_id)
+        if text is None:
+            return {"outcome": "inconclusive",
+                    "unverified_items": ["no artifacts and logs unavailable"]}
+        env = parse_envelope(text)
+        if env is None:
+            return {"outcome": "inconclusive",
+                    "unverified_items": ["no result envelope in run logs"]}
+        result = dict(env["result"])
+        if "test_report" in env:
+            result["test_report"] = env["test_report"]
+        return result
+
+    def _logs_text(self, remote_job_id: str) -> str | None:
+        """拉取 run 日志全文。gh api logs 端点返回 zip；`gh run view --log` 在管道下
+        会 rc=0 但输出恒空（实测 2026-10-25），因此直接抓 zip 字节流本地解包。"""
+        p = subprocess.run(["gh", "api", f"repos/{self.repo}/actions/runs/{remote_job_id}/logs"],
+                           capture_output=True)
+        if p.returncode != 0 or p.stdout[:2] != b"PK":
+            return None
+        try:
+            zf = zipfile.ZipFile(io.BytesIO(p.stdout))
+            return "\n".join(zf.read(n).decode("utf-8", "replace")
+                             for n in zf.namelist() if n.endswith(".txt"))
+        except (zipfile.BadZipFile, OSError):
+            return None
+
+    # ---- 内部 ----
+
+    def _find_run(self, job_id: str, attempts: int = 8) -> int | None:
+        for _ in range(attempts):
+            rc, out = self.gh([f"repos/{self.repo}/actions/workflows/{self.workflow}/runs",
+                               "-X", "GET", "-f", "per_page=10"])
+            if rc == 0:
+                for run in json.loads(out).get("workflow_runs", []):
+                    if run.get("event") == "workflow_dispatch":
+                        return run["id"]
+            time.sleep(5)
+        return None
+
+
+def verify_collected(collected: dict, job: Job) -> list[str]:
+    """控制器导入前的最小校验：job_id/base_sha 必须一致（计划 §16）。"""
+    errs = []
+    if collected.get("job_id") != job.job_id:
+        errs.append(f"job_id mismatch: {collected.get('job_id')!r}")
+    if job.base_sha and collected.get("base_sha") and collected["base_sha"] != job.base_sha:
+        errs.append("base_sha mismatch")
+    return errs
+
+
+def result_from(collected: dict) -> Result:
+    return Result.from_dict(collected)

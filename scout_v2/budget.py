@@ -65,15 +65,33 @@ class ModalCliBilling:
 
     @staticmethod
     def _extract_usd(data) -> float | None:
-        """在（可能嵌套的）账单 JSON 里找明确的成本字段；找不到 = None（fail-closed）。"""
+        """在（可能嵌套的）账单 JSON 里找明确的成本字段；找不到 = None（fail-closed）。
+
+        实测（2026-10-25）modal billing summary --json 返回 Decimal 的字符串形式，
+        如 "metered_cost": "0E-8"，因此数值字符串也要接受。
+        """
         import numbers
         COST_HINTS = ("metered_cost", "total_cost", "cost", "charges", "spend", "usage_usd")
+
+        def _as_float(v) -> float | None:
+            if isinstance(v, bool):
+                return None
+            if isinstance(v, numbers.Number):
+                return float(v)
+            if isinstance(v, str):
+                try:
+                    return float(v.strip().lstrip("$"))
+                except ValueError:
+                    return None
+            return None
+
         if isinstance(data, dict):
             for k, v in data.items():
                 kl = str(k).lower()
-                if isinstance(v, numbers.Number) and not isinstance(v, bool) \
-                        and any(h in kl for h in COST_HINTS):
-                    return float(v)
+                if any(h in kl for h in COST_HINTS):
+                    num = _as_float(v)
+                    if num is not None:
+                        return num
             for v in data.values():
                 found = ModalCliBilling._extract_usd(v)
                 if found is not None:
