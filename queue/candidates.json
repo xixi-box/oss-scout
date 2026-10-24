@@ -950,5 +950,35 @@
   "discovered_at": "2026-10-24T21:21:09",
   "status": "new",
   "lease": null
+ },
+ "anomalyco/opencode#56297": {
+  "id": "anomalyco/opencode#56297",
+  "repo": "anomalyco/opencode",
+  "number": 56297,
+  "title": "Unable to install OpenCode on windows with winget command",
+  "url": "https://github.com/anomalyco/opencode/issues/56297",
+  "lane": "open",
+  "score": 7,
+  "class": "A",
+  "blockers": [],
+  "signals": {
+   "body_len": 591,
+   "reactions": 6,
+   "labels": [
+    "reproduced"
+   ],
+   "comments": 2,
+   "claim_signal": false,
+   "maintainer_confirm": false,
+   "duplicate_flag": false,
+   "billing_flag": false,
+   "bot_claim": false,
+   "cross_ref_pr": false,
+   "repro_signal": true
+  },
+  "created_at": "2026-10-17T03:28:42Z",
+  "discovered_at": "2026-10-25T01:10:09",
+  "status": "new",
+  "lease": null
  }
 }

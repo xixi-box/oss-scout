@@ -1,8 +1,18 @@
 {
- "job_id": "job-05868d83-7203-4f7e-a59a-8ba5101e7d52",
+ "schema_version": 1,
+ "job_id": "job-df9d72d1-52be-455c-abae-435c05597cf4",
+ "backend": "local",
  "outcome": "inconclusive",
+ "reproduced_on_base": false,
+ "fixed_on_patch": false,
+ "regression_tests_passed": false,
+ "patch_path": null,
+ "test_report_path": "artifacts/job-df9d72d1-52be-455c-abae-435c05597cf4/findings.json",
+ "logs_path": "artifacts/job-df9d72d1-52be-455c-abae-435c05597cf4/worker.log",
+ "base_sha": "0dc4cf152bff1f50bdc0e41f28808563406545b2",
+ "model_used": null,
+ "measured_cost_usd": null,
  "unverified_items": [
-  "no result envelope in sandbox stdout"
- ],
- "stdout_tail": ""
+  "5 static-analysis clue(s); not bug evidence until reproduced on base (plan §8.2.5)"
+ ]
 }

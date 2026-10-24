@@ -1,0 +1,105 @@
+{
+ "schema_version": 1,
+ "job_id": "job-19366a90-efb7-44b3-812f-4f4cf3b2a3b6",
+ "repo": "langchain-ai/langsmith-sdk",
+ "base_sha": "290f06a628dffb2ca690e389dc48b629f5623312",
+ "ruleset": "p/python",
+ "findings": [
+  {
+   "path": "/workspace/repo/python/conftest.py",
+   "line": 36,
+   "rule_id": "python.lang.security.insecure-hash-algorithms-md5.insecure-hash-algorithm-md5",
+   "message": "Detected MD5 hash algorithm which is considered insecure. MD5 is not collision resistant and is therefore not suitable as a cryptographic signature. Use SHA256 or SHA3 instead.",
+   "fingerprint": "8ecb8ba81fff",
+   "candidate_id": "github:langchain-ai/langsmith-sdk:bug:290f06a628dffb2ca690e389dc48b629f5623312:8ecb8ba81fff",
+   "upstream": {
+    "query": "\"conftest.py\"",
+    "hits": [
+     {
+      "number": 3589,
+      "title": "test(py): agent addressing integration tests on the Address stack (POC)",
+      "is_pr": true,
+      "state": "open",
+      "url": "https://github.com/langchain-ai/langsmith-sdk/pull/3589"
+     },
+     {
+      "number": 3482,
+      "title": "fix(py): finish closed streams and retain async errors",
+      "is_pr": true,
+      "state": "open",
+      "url": "https://github.com/langchain-ai/langsmith-sdk/pull/3482"
+     },
+     {
+      "number": 2798,
+      "title": "refactor(python): move run-compression init into Client.__init__",
+      "is_pr": true,
+      "state": "open",
+      "url": "https://github.com/langchain-ai/langsmith-sdk/pull/2798"
+     },
+     {
+      "number": 3552,
+      "title": "test(py): cover agent addressing end to end",
+      "is_pr": true,
+      "state": "open",
+      "url": "https://github.com/langchain-ai/langsmith-sdk/pull/3552"
+     },
+     {
+      "number": 3414,
+      "title": "ci: add CodSpeed continuous benchmarking for Python and JS SDKs",
+      "is_pr": true,
+      "state": "closed",
+      "url": "https://github.com/langchain-ai/langsmith-sdk/pull/3414"
+     }
+    ]
+   }
+  },
+  {
+   "path": "/workspace/repo/python/conftest.py",
+   "line": 119,
+   "rule_id": "python.lang.security.insecure-hash-algorithms-md5.insecure-hash-algorithm-md5",
+   "message": "Detected MD5 hash algorithm which is considered insecure. MD5 is not collision resistant and is therefore not suitable as a cryptographic signature. Use SHA256 or SHA3 instead.",
+   "fingerprint": "9a2724cf8bf8",
+   "candidate_id": "github:langchain-ai/langsmith-sdk:bug:290f06a628dffb2ca690e389dc48b629f5623312:9a2724cf8bf8",
+   "upstream": {
+    "query": "\"conftest.py\"",
+    "hits": [
+     {
+      "number": 3589,
+      "title": "test(py): agent addressing integration tests on the Address stack (POC)",
+      "is_pr": true,
+      "state": "open",
+      "url": "https://github.com/langchain-ai/langsmith-sdk/pull/3589"
+     },
+     {
+      "number": 3482,
+      "title": "fix(py): finish closed streams and retain async errors",
+      "is_pr": true,
+      "state": "open",
+      "url": "https://github.com/langchain-ai/langsmith-sdk/pull/3482"
+     },
+     {
+      "number": 2798,
+      "title": "refactor(python): move run-compression init into Client.__init__",
+      "is_pr": true,
+      "state": "open",
+      "url": "https://github.com/langchain-ai/langsmith-sdk/pull/2798"
+     },
+     {
+      "number": 3552,
+      "title": "test(py): cover agent addressing end to end",
+      "is_pr": true,
+      "state": "open",
+      "url": "https://github.com/langchain-ai/langsmith-sdk/pull/3552"
+     },
+     {
+      "number": 3414,
+      "title": "ci: add CodSpeed continuous benchmarking for Python and JS SDKs",
+      "is_pr": true,
+      "state": "closed",
+      "url": "https://github.com/langchain-ai/langsmith-sdk/pull/3414"
+     }
+    ]
+   }
+  }
+ ]
+}

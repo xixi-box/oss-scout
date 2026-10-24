@@ -1,0 +1,345 @@
+{
+ "schema_version": 1,
+ "job_id": "job-44adc6e3-ed95-4fec-9098-815482d5cfa6",
+ "repo": "browser-use/browser-use",
+ "base_sha": "3df5806a0d097a1546d92c49bcf1b28c9972c3bd",
+ "ruleset": "p/python",
+ "findings": [
+  {
+   "path": "/workspace/repo/browser_use/agent/service.py",
+   "line": 1825,
+   "rule_id": "python.lang.security.insecure-hash-algorithms-md5.insecure-hash-algorithm-md5",
+   "message": "Detected MD5 hash algorithm which is considered insecure. MD5 is not collision resistant and is therefore not suitable as a cryptographic signature. Use SHA256 or SHA3 instead.",
+   "fingerprint": "410346dd5f14",
+   "candidate_id": "github:browser-use/browser-use:bug:3df5806a0d097a1546d92c49bcf1b28c9972c3bd:410346dd5f14",
+   "upstream": {
+    "query": "\"service.py\"",
+    "hits": [
+     {
+      "number": 5509,
+      "title": "bubus library EventBus capacity error — Cross-Loop Bug (service.py)",
+      "is_pr": false,
+      "state": "open",
+      "url": "https://github.com/browser-use/browser-use/issues/5509"
+     },
+     {
+      "number": 5845,
+      "title": "fix(agent): load history entries that predate interacted_element",
+      "is_pr": true,
+      "state": "open",
+      "url": "https://github.com/browser-use/browser-use/pull/5845"
+     },
+     {
+      "number": 6071,
+      "title": "fix(security): JavaScript injection in the scroll-to-text fallback via unescaped LLM-suppl",
+      "is_pr": true,
+      "state": "open",
+      "url": "https://github.com/browser-use/browser-use/pull/6071"
+     },
+     {
+      "number": 6104,
+      "title": "fix(agent): freeze step timeout while paused",
+      "is_pr": true,
+      "state": "open",
+      "url": "https://github.com/browser-use/browser-use/pull/6104"
+     },
+     {
+      "number": 5277,
+      "title": "fix: pass evaluate JavaScript to CDP unchanged",
+      "is_pr": true,
+      "state": "open",
+      "url": "https://github.com/browser-use/browser-use/pull/5277"
+     }
+    ]
+   }
+  },
+  {
+   "path": "/workspace/repo/browser_use/beta/service.py",
+   "line": 5304,
+   "rule_id": "python.lang.security.audit.logging.logger-credential-leak.python-logger-credential-disclosure",
+   "message": "Detected a python logger call with a potential hardcoded secret 'Rust SDK reconstructed history: response_events=%s notification_events=%s usage_events=%s final_from=%s usage_tokens=%s' being logged. This may lead to secret credentials being exposed. Make sure that the logger is not logging  sensiti",
+   "fingerprint": "40bb75a0497b",
+   "candidate_id": "github:browser-use/browser-use:bug:3df5806a0d097a1546d92c49bcf1b28c9972c3bd:40bb75a0497b",
+   "upstream": {
+    "query": "\"service.py\"",
+    "hits": [
+     {
+      "number": 5509,
+      "title": "bubus library EventBus capacity error — Cross-Loop Bug (service.py)",
+      "is_pr": false,
+      "state": "open",
+      "url": "https://github.com/browser-use/browser-use/issues/5509"
+     },
+     {
+      "number": 5845,
+      "title": "fix(agent): load history entries that predate interacted_element",
+      "is_pr": true,
+      "state": "open",
+      "url": "https://github.com/browser-use/browser-use/pull/5845"
+     },
+     {
+      "number": 6071,
+      "title": "fix(security): JavaScript injection in the scroll-to-text fallback via unescaped LLM-suppl",
+      "is_pr": true,
+      "state": "open",
+      "url": "https://github.com/browser-use/browser-use/pull/6071"
+     },
+     {
+      "number": 6104,
+      "title": "fix(agent): freeze step timeout while paused",
+      "is_pr": true,
+      "state": "open",
+      "url": "https://github.com/browser-use/browser-use/pull/6104"
+     },
+     {
+      "number": 5277,
+      "title": "fix: pass evaluate JavaScript to CDP unchanged",
+      "is_pr": true,
+      "state": "open",
+      "url": "https://github.com/browser-use/browser-use/pull/5277"
+     }
+    ]
+   }
+  },
+  {
+   "path": "/workspace/repo/browser_use/beta/service.py",
+   "line": 5479,
+   "rule_id": "python.lang.security.insecure-hash-algorithms-md5.insecure-hash-algorithm-md5",
+   "message": "Detected MD5 hash algorithm which is considered insecure. MD5 is not collision resistant and is therefore not suitable as a cryptographic signature. Use SHA256 or SHA3 instead.",
+   "fingerprint": "aa545a1684af",
+   "candidate_id": "github:browser-use/browser-use:bug:3df5806a0d097a1546d92c49bcf1b28c9972c3bd:aa545a1684af",
+   "upstream": {
+    "query": "\"service.py\"",
+    "hits": [
+     {
+      "number": 5509,
+      "title": "bubus library EventBus capacity error — Cross-Loop Bug (service.py)",
+      "is_pr": false,
+      "state": "open",
+      "url": "https://github.com/browser-use/browser-use/issues/5509"
+     },
+     {
+      "number": 5845,
+      "title": "fix(agent): load history entries that predate interacted_element",
+      "is_pr": true,
+      "state": "open",
+      "url": "https://github.com/browser-use/browser-use/pull/5845"
+     },
+     {
+      "number": 6071,
+      "title": "fix(security): JavaScript injection in the scroll-to-text fallback via unescaped LLM-suppl",
+      "is_pr": true,
+      "state": "open",
+      "url": "https://github.com/browser-use/browser-use/pull/6071"
+     },
+     {
+      "number": 6104,
+      "title": "fix(agent): freeze step timeout while paused",
+      "is_pr": true,
+      "state": "open",
+      "url": "https://github.com/browser-use/browser-use/pull/6104"
+     },
+     {
+      "number": 5277,
+      "title": "fix: pass evaluate JavaScript to CDP unchanged",
+      "is_pr": true,
+      "state": "open",
+      "url": "https://github.com/browser-use/browser-use/pull/5277"
+     }
+    ]
+   }
+  },
+  {
+   "path": "/workspace/repo/browser_use/browser/watchdogs/har_recording_watchdog.py",
+   "line": 139,
+   "rule_id": "python.lang.security.insecure-hash-algorithms.insecure-hash-algorithm-sha1",
+   "message": "Detected SHA1 hash algorithm which is considered insecure. SHA1 is not collision resistant and is therefore not suitable as a cryptographic signature. Use SHA256 or SHA3 instead.",
+   "fingerprint": "8f7bc6724fa6",
+   "candidate_id": "github:browser-use/browser-use:bug:3df5806a0d097a1546d92c49bcf1b28c9972c3bd:8f7bc6724fa6",
+   "upstream": {
+    "query": "\"har_recording_watchdog.py\"",
+    "hits": [
+     {
+      "number": 5654,
+      "title": "fix(watchdogs): hold a reference to the HAR body fetch task",
+      "is_pr": true,
+      "state": "open",
+      "url": "https://github.com/browser-use/browser-use/pull/5654"
+     },
+     {
+      "number": 5191,
+      "title": "fix(browser): fan out lifecycle events and release HAR listeners on reset",
+      "is_pr": true,
+      "state": "open",
+      "url": "https://github.com/browser-use/browser-use/pull/5191"
+     },
+     {
+      "number": 5495,
+      "title": "fix(browser): track and drain HAR response body fetches before writing HAR",
+      "is_pr": true,
+      "state": "closed",
+      "url": "https://github.com/browser-use/browser-use/pull/5495"
+     },
+     {
+      "number": 5653,
+      "title": "fix(watchdogs): hold a reference to the HAR body fetch task",
+      "is_pr": true,
+      "state": "closed",
+      "url": "https://github.com/browser-use/browser-use/pull/5653"
+     },
+     {
+      "number": 3543,
+      "title": "Add HarRecordingWatchdog for HTTPS HAR capture",
+      "is_pr": true,
+      "state": "closed",
+      "url": "https://github.com/browser-use/browser-use/pull/3543"
+     }
+    ]
+   }
+  },
+  {
+   "path": "/workspace/repo/examples/apps/news-use/news_monitor.py",
+   "line": 191,
+   "rule_id": "python.lang.security.insecure-hash-algorithms-md5.insecure-hash-algorithm-md5",
+   "message": "Detected MD5 hash algorithm which is considered insecure. MD5 is not collision resistant and is therefore not suitable as a cryptographic signature. Use SHA256 or SHA3 instead.",
+   "fingerprint": "ed88e43cb22e",
+   "candidate_id": "github:browser-use/browser-use:bug:3df5806a0d097a1546d92c49bcf1b28c9972c3bd:ed88e43cb22e",
+   "upstream": {
+    "query": "\"news_monitor.py\"",
+    "hits": [
+     {
+      "number": 4919,
+      "title": "fix: make news monitor text IO deterministic",
+      "is_pr": true,
+      "state": "open",
+      "url": "https://github.com/browser-use/browser-use/pull/4919"
+     },
+     {
+      "number": 5311,
+      "title": "Use timezone-aware UTC timestamps",
+      "is_pr": true,
+      "state": "open",
+      "url": "https://github.com/browser-use/browser-use/pull/5311"
+     },
+     {
+      "number": 5155,
+      "title": "fix(example): make news monitor file handling explicit",
+      "is_pr": true,
+      "state": "closed",
+      "url": "https://github.com/browser-use/browser-use/pull/5155"
+     },
+     {
+      "number": 3065,
+      "title": "feat: added news-use demo",
+      "is_pr": true,
+      "state": "closed",
+      "url": "https://github.com/browser-use/browser-use/pull/3065"
+     },
+     {
+      "number": 3066,
+      "title": "Add news-use demo: News monitoring agent with sentiment analysis",
+      "is_pr": true,
+      "state": "closed",
+      "url": "https://github.com/browser-use/browser-use/pull/3066"
+     }
+    ]
+   }
+  },
+  {
+   "path": "/workspace/repo/examples/apps/news-use/news_monitor.py",
+   "line": 232,
+   "rule_id": "python.lang.security.insecure-hash-algorithms-md5.insecure-hash-algorithm-md5",
+   "message": "Detected MD5 hash algorithm which is considered insecure. MD5 is not collision resistant and is therefore not suitable as a cryptographic signature. Use SHA256 or SHA3 instead.",
+   "fingerprint": "20f403761b73",
+   "candidate_id": "github:browser-use/browser-use:bug:3df5806a0d097a1546d92c49bcf1b28c9972c3bd:20f403761b73",
+   "upstream": {
+    "query": "\"news_monitor.py\"",
+    "hits": [
+     {
+      "number": 4919,
+      "title": "fix: make news monitor text IO deterministic",
+      "is_pr": true,
+      "state": "open",
+      "url": "https://github.com/browser-use/browser-use/pull/4919"
+     },
+     {
+      "number": 5311,
+      "title": "Use timezone-aware UTC timestamps",
+      "is_pr": true,
+      "state": "open",
+      "url": "https://github.com/browser-use/browser-use/pull/5311"
+     },
+     {
+      "number": 5155,
+      "title": "fix(example): make news monitor file handling explicit",
+      "is_pr": true,
+      "state": "closed",
+      "url": "https://github.com/browser-use/browser-use/pull/5155"
+     },
+     {
+      "number": 3065,
+      "title": "feat: added news-use demo",
+      "is_pr": true,
+      "state": "closed",
+      "url": "https://github.com/browser-use/browser-use/pull/3065"
+     },
+     {
+      "number": 3066,
+      "title": "Add news-use demo: News monitoring agent with sentiment analysis",
+      "is_pr": true,
+      "state": "closed",
+      "url": "https://github.com/browser-use/browser-use/pull/3066"
+     }
+    ]
+   }
+  },
+  {
+   "path": "/workspace/repo/examples/apps/news-use/news_monitor.py",
+   "line": 264,
+   "rule_id": "python.lang.security.insecure-hash-algorithms-md5.insecure-hash-algorithm-md5",
+   "message": "Detected MD5 hash algorithm which is considered insecure. MD5 is not collision resistant and is therefore not suitable as a cryptographic signature. Use SHA256 or SHA3 instead.",
+   "fingerprint": "901e22b3bfe1",
+   "candidate_id": "github:browser-use/browser-use:bug:3df5806a0d097a1546d92c49bcf1b28c9972c3bd:901e22b3bfe1",
+   "upstream": {
+    "query": "\"news_monitor.py\"",
+    "hits": [
+     {
+      "number": 4919,
+      "title": "fix: make news monitor text IO deterministic",
+      "is_pr": true,
+      "state": "open",
+      "url": "https://github.com/browser-use/browser-use/pull/4919"
+     },
+     {
+      "number": 5311,
+      "title": "Use timezone-aware UTC timestamps",
+      "is_pr": true,
+      "state": "open",
+      "url": "https://github.com/browser-use/browser-use/pull/5311"
+     },
+     {
+      "number": 5155,
+      "title": "fix(example): make news monitor file handling explicit",
+      "is_pr": true,
+      "state": "closed",
+      "url": "https://github.com/browser-use/browser-use/pull/5155"
+     },
+     {
+      "number": 3065,
+      "title": "feat: added news-use demo",
+      "is_pr": true,
+      "state": "closed",
+      "url": "https://github.com/browser-use/browser-use/pull/3065"
+     },
+     {
+      "number": 3066,
+      "title": "Add news-use demo: News monitoring agent with sentiment analysis",
+      "is_pr": true,
+      "state": "closed",
+      "url": "https://github.com/browser-use/browser-use/pull/3066"
+     }
+    ]
+   }
+  }
+ ]
+}

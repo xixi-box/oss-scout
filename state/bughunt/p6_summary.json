@@ -1,26 +1,40 @@
 {
- "started": "2026-10-25T01:13:07",
+ "started": "2026-10-25T01:30:12",
  "repos": [
   {
    "repo": "openai/openai-agents-python",
    "sha": "0dc4cf152bff1f50bdc0e41f28808563406545b2",
-   "sandbox_state": "failed",
-   "findings": 0,
-   "metered_after": 1.977e-05
+   "sandbox_state": "succeeded",
+   "findings": 5,
+   "opencode_analysis": {
+    "ok": true,
+    "analysis": "False positive in practice: `result_path` is a pytest-generated JUnit report from the same CI job (`.github/scripts/run_integration_tests.py:400`), not untrusted external input; stdlib `ElementTree` doesn't resolve external entities, and attacker-controlled code in that job already has execution.\n\nSettle it with a test that runs `_sanitize_and_load_junit` on a handcrafted `.xml` containing `<!DOCTYPE ... [<!ENTITY xxe SYSTEM \"file:///etc/passwd\">]>` and a billion-laughs payload, asserting no file contents appear and it fails fast (`ValueError`/`ParseError` path).\n\nIf you want defense-in-depth, swapping to `defusedxml.ElementTree` is a one-line change."
+   },
+   "metered_after": 0.02013063
   },
   {
    "repo": "browser-use/browser-use",
    "sha": "3df5806a0d097a1546d92c49bcf1b28c9972c3bd",
-   "error": "submit refused/failed: G:\\project\\oss-scout\\scout_v2\\workers\\opencode_client.py was modified during build process."
+   "sandbox_state": "succeeded",
+   "findings": 7,
+   "opencode_analysis": {
+    "ok": true,
+    "analysis": "False positive for the security rule: MD5 is used at service.py:1825 only as a 7-char non-cryptographic fingerprint to shorten long URLs in LLM prompts, not for authentication or signatures, so collision resistance is irrelevant here. The only theoretical concern is a 28-bit hash collision mapping a shortened URL to the wrong original, but that is a robustness nit, not an exploitable vulnerability. A unit test calling `_replace_urls_in_text` with two long URLs sharing the truncated prefix but differing tails, then asserting each shortened form resolves to its own original, settles it. Verdict: false positive (not worth maintainer time)."
+   },
+   "metered_after": 0.02013556
   },
   {
    "repo": "langchain-ai/langsmith-sdk",
    "sha": "290f06a628dffb2ca690e389dc48b629f5623312",
-   "sandbox_state": "failed",
-   "findings": 0,
-   "metered_after": 2.139e-05
+   "sandbox_state": "succeeded",
+   "findings": 2,
+   "opencode_analysis": {
+    "ok": true,
+    "analysis": "**False positive.** `python/conftest.py:36` hashes OpenAI request bodies (`model`/`messages`/`tools`) solely for VCR cassette matching; the other MD5 at line 119 hashes pytest node IDs for temp paths. Neither is a signature, secret, or security boundary — an MD5 collision would at worst match the wrong test cassette. No fix needed beyond, optionally, swapping in SHA-256 to silence scanners. Settling test: a unit test calling `custom_request_matcher` on two equivalent request bodies (and one differing body) to prove the hash is only a lookup key; run via `TEST=tests/integration_tests/wrappers/test_gemini.py make tests` for cassette replay."
+   },
+   "metered_after": 0.03014061
   }
  ],
  "errors": [],
- "finished": "2026-10-25T01:18:00"
+ "finished": "2026-10-25T01:41:25"
 }

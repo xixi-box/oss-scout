@@ -1,0 +1,44 @@
+    [gh] Get "https://api.github.com/search/issues?order=desc&per_page=30&q=repo%3Ainfiniflow%2Fragflow+is%3Aissue+is%3Aopen+no%3Aassignee+label%3Abug+-label%3
+    [gh] Get "https://api.github.com/search/issues?order=desc&per_page=30&q=repo%3ABerriAI%2Flitellm+is%3Aissue+is%3Aopen+no%3Aassignee+label%3Abug+-label%3A%2
+== aaif-goose/goose [open]
+    原始池 30，新入库 0
+== openai/openai-agents-python [open]
+    原始池 17，新入库 0
+== OpenHands/software-agent-sdk [open]
+    原始池 61，新入库 0
+== browser-use/browser-use [open]
+    原始池 57，新入库 0
+== OpenHands/OpenHands [open]
+    原始池 64，新入库 0
+== deepset-ai/haystack [open]
+    原始池 30，新入库 0
+== langfuse/langfuse [open]
+    原始池 23，新入库 0
+== Arize-ai/phoenix [open]
+    原始池 59，新入库 0
+== anomalyco/opencode [open]
+    [C   5] #51071 v2: subagent model overrides are accepted without user authorization  ←['cross_ref_pr']
+    [A  7] #56297 Unable to install OpenCode on windows with winget command
+    原始池 42，新入库 1
+== langchain-ai/langsmith-sdk [open]
+    原始池 36，新入库 0
+== e2b-dev/e2b [open]
+    原始池 34，新入库 0
+== infiniflow/ragflow [open]
+    原始池 31，新入库 0
+== openai/openai-python [open]
+    原始池 38，新入库 0
+== crewAIInc/crewAI [open]
+    原始池 59，新入库 0
+== pydantic/pydantic-ai [gated]
+    原始池 40，新入库 0
+== microsoft/playwright [gated]
+    原始池 30，新入库 0
+== microsoft/agent-framework [gated]
+    原始池 32，新入库 0
+== BerriAI/litellm [restricted]
+    原始池 60，新入库 0
+
+[oss-scout 2026-10-25T01:10:09] 新候选 1（A: 1, B: 0）
+[A/open] anomalyco/opencode#56297 Unable to install OpenCode on windows with winget command
+https://github.com/anomalyco/opencode/issues/56297

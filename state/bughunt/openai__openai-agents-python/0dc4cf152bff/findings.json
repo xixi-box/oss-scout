@@ -1,0 +1,179 @@
+{
+ "schema_version": 1,
+ "job_id": "job-df9d72d1-52be-455c-abae-435c05597cf4",
+ "repo": "openai/openai-agents-python",
+ "base_sha": "0dc4cf152bff1f50bdc0e41f28808563406545b2",
+ "ruleset": "p/python",
+ "findings": [
+  {
+   "path": "/workspace/repo/.github/scripts/run_integration_tests.py",
+   "line": 400,
+   "rule_id": "python.lang.security.use-defused-xml-parse.use-defused-xml-parse",
+   "message": "The native Python `xml` library is vulnerable to XML External Entity (XXE) attacks.  These attacks can leak confidential data and \"XML bombs\" can cause denial of service. Do not use this library to parse untrusted input. Instead  the Python documentation recommends using `defusedxml`.",
+   "fingerprint": "517ecf921a1c",
+   "candidate_id": "github:openai/openai-agents-python:bug:0dc4cf152bff1f50bdc0e41f28808563406545b2:517ecf921a1c",
+   "upstream": {
+    "query": "\"run_integration_tests.py\"",
+    "hits": [
+     {
+      "number": 4771,
+      "title": "fix: propagate the serial test runner's exit code on Windows",
+      "is_pr": true,
+      "state": "closed",
+      "url": "https://github.com/openai/openai-agents-python/pull/4771"
+     },
+     {
+      "number": 5279,
+      "title": "release: 0.23.1",
+      "is_pr": true,
+      "state": "closed",
+      "url": "https://github.com/openai/openai-agents-python/pull/5279"
+     },
+     {
+      "number": 3874,
+      "title": "Release 0.19.0",
+      "is_pr": true,
+      "state": "closed",
+      "url": "https://github.com/openai/openai-agents-python/pull/3874"
+     }
+    ]
+   }
+  },
+  {
+   "path": "/workspace/repo/examples/run_examples.py",
+   "line": 216,
+   "rule_id": "python.lang.security.audit.dangerous-subprocess-use-tainted-env-args.dangerous-subprocess-use-tainted-env-args",
+   "message": "Detected subprocess function 'run' with user controlled data. A malicious actor could leverage this to perform command injection. You may consider using 'shlex.quote()'.",
+   "fingerprint": "9a3875363000",
+   "candidate_id": "github:openai/openai-agents-python:bug:0dc4cf152bff1f50bdc0e41f28808563406545b2:9a3875363000",
+   "upstream": {
+    "query": "\"run_examples.py\"",
+    "hits": [
+     {
+      "number": 5205,
+      "title": "fix(examples): keep Redis connection details out of diagnostics",
+      "is_pr": true,
+      "state": "closed",
+      "url": "https://github.com/openai/openai-agents-python/pull/5205"
+     },
+     {
+      "number": 3758,
+      "title": "docs: add TokenLab model provider example",
+      "is_pr": true,
+      "state": "closed",
+      "url": "https://github.com/openai/openai-agents-python/pull/3758"
+     },
+     {
+      "number": 5279,
+      "title": "release: 0.23.1",
+      "is_pr": true,
+      "state": "closed",
+      "url": "https://github.com/openai/openai-agents-python/pull/5279"
+     },
+     {
+      "number": 5107,
+      "title": "fix(examples): require interactive approval for host shell commands",
+      "is_pr": true,
+      "state": "closed",
+      "url": "https://github.com/openai/openai-agents-python/pull/5107"
+     },
+     {
+      "number": 4836,
+      "title": "examples: add Cracked tool router example (third-party function tools)",
+      "is_pr": true,
+      "state": "closed",
+      "url": "https://github.com/openai/openai-agents-python/pull/4836"
+     }
+    ]
+   }
+  },
+  {
+   "path": "/workspace/repo/integration_tests/containers/test_dapr_redis.py",
+   "line": 179,
+   "rule_id": "python.lang.security.audit.insecure-file-permissions.insecure-file-permissions",
+   "message": "These permissions `0o755` are widely permissive and grant access to more people than may be necessary. A good default is `0o644` which gives read and write access to yourself and read access to everyone else.",
+   "fingerprint": "6d4557ad447c",
+   "candidate_id": "github:openai/openai-agents-python:bug:0dc4cf152bff1f50bdc0e41f28808563406545b2:6d4557ad447c",
+   "upstream": {
+    "query": "\"test_dapr_redis.py\"",
+    "hits": [
+     {
+      "number": 4667,
+      "title": "fix(ci): consolidate Docker-backed integration tests",
+      "is_pr": true,
+      "state": "closed",
+      "url": "https://github.com/openai/openai-agents-python/pull/4667"
+     }
+    ]
+   }
+  },
+  {
+   "path": "/workspace/repo/integration_tests/containers/test_dapr_redis.py",
+   "line": 182,
+   "rule_id": "python.lang.security.audit.insecure-file-permissions.insecure-file-permissions",
+   "message": "These permissions `0o755` are widely permissive and grant access to more people than may be necessary. A good default is `0o644` which gives read and write access to yourself and read access to everyone else.",
+   "fingerprint": "4d644514bd94",
+   "candidate_id": "github:openai/openai-agents-python:bug:0dc4cf152bff1f50bdc0e41f28808563406545b2:4d644514bd94",
+   "upstream": {
+    "query": "\"test_dapr_redis.py\"",
+    "hits": [
+     {
+      "number": 4667,
+      "title": "fix(ci): consolidate Docker-backed integration tests",
+      "is_pr": true,
+      "state": "closed",
+      "url": "https://github.com/openai/openai-agents-python/pull/4667"
+     }
+    ]
+   }
+  },
+  {
+   "path": "/workspace/repo/src/agents/mcp/util.py",
+   "line": 439,
+   "rule_id": "python.lang.security.insecure-hash-algorithms.insecure-hash-algorithm-sha1",
+   "message": "Detected SHA1 hash algorithm which is considered insecure. SHA1 is not collision resistant and is therefore not suitable as a cryptographic signature. Use SHA256 or SHA3 instead.",
+   "fingerprint": "034cd67fc838",
+   "candidate_id": "github:openai/openai-agents-python:bug:0dc4cf152bff1f50bdc0e41f28808563406545b2:034cd67fc838",
+   "upstream": {
+    "query": "\"util.py\"",
+    "hits": [
+     {
+      "number": 4779,
+      "title": "Add a Gandr TTS example under examples/voice",
+      "is_pr": true,
+      "state": "closed",
+      "url": "https://github.com/openai/openai-agents-python/pull/4779"
+     },
+     {
+      "number": 4631,
+      "title": "feat(mcp): support tool guardrails on local servers",
+      "is_pr": true,
+      "state": "closed",
+      "url": "https://github.com/openai/openai-agents-python/pull/4631"
+     },
+     {
+      "number": 4648,
+      "title": "docs(mcp): document tool guardrails for local MCP servers",
+      "is_pr": true,
+      "state": "closed",
+      "url": "https://github.com/openai/openai-agents-python/pull/4648"
+     },
+     {
+      "number": 4354,
+      "title": "fix(strict-schema): reject $ref constraining siblings and non-convertible shapes",
+      "is_pr": true,
+      "state": "closed",
+      "url": "https://github.com/openai/openai-agents-python/pull/4354"
+     },
+     {
+      "number": 4018,
+      "title": "fix(mcp): sanitize URL credentials in error messages and tracing metadata",
+      "is_pr": true,
+      "state": "closed",
+      "url": "https://github.com/openai/openai-agents-python/pull/4018"
+     }
+    ]
+   }
+  }
+ ]
+}

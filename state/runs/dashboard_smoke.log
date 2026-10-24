@@ -1,0 +1,16 @@
+INFO:     Started server process [18116]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8787 (Press CTRL+C to quit)
+INFO:     127.0.0.1:60788 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60005 - "GET /candidates HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60006 - "GET /jobs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60007 - "GET /prs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63485 - "GET /policies HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63486 - "GET /quota HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61518 - "GET /logs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61519 - "GET /?name=../../AGENTS.md HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61520 - "GET /candidates?q=pydantic HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62303 - "GET /logs/view?name=../../AGENTS.md HTTP/1.1" 400 Bad Request
+INFO:     127.0.0.1:62304 - "GET /candidates?q=pydantic HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62305 - "GET /quota HTTP/1.1" 200 OK
