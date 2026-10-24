@@ -1,16 +1,21 @@
 # OpenCode 模型策略（计划 §11）。
-# 免费模型会随时下线：执行时通过 `opencode models --refresh` 动态解析真实模型 ID，
-# 本文件只存偏好顺序，不把模型名写死进执行器代码。
+# 2026-10-25 用户决定：不用免费模型（当日目录里的 6 个 -free 模型不用），
+# 改用 OpenCode Go 订阅内的 deepseek-v4-flash（订阅计费，非按 token 计费）。
+# 计划 §11 默认"免费优先 + 付费关闭"，此处为用户显式批准的覆盖；回退链机制保持不变。
 
-mode: free_first
-allow_paid_api: false          # 付费默认禁用；启用需明确批准 + 可验证预付额度
+mode: fixed                    # fixed：只用 primary_models，不再自动尝试免费列表
+allow_paid_api: true           # 用户批准：OpenCode Go 订阅（订阅额度内，无额外按 token 计费）
+billing_basis: opencode_go_subscription
 max_retries_per_model: 1
 
-free_preferences:              # 按序尝试；名称须在运行时与 provider 目录比对后解析
-  - "DeepSeek V4.1 Flash Free"
-  - "GLM-5.3 Flash Free"
+primary_models:
+  - "opencode-go/deepseek-v4-flash"
+
+# 免费偏好仅作记录（2026-10-25 目录快照，随时会变；需要时可切回 mode: free_first）
+free_preferences:
+  - "opencode/ling-3.0-flash-fin-free"
+  - "opencode/mimo-v2.5-free"
+  - "opencode/nemotron-3.5-lightning-free"
 
 paid_fallback:
-  provider: "deepseek"
-  model: "resolve_from_provider_catalog"
-  enabled: false               # fail-closed：无授权/无预算验证 = 暂停任务而非切付费
+  enabled: false               # 已在订阅模型上；无第二付费兜底，失败即暂停任务

@@ -48,8 +48,8 @@ budget:
 features:
   bug_hunter_light: false             # P2 启用
   bug_hunter_deep_modal: false        # P2 且 modal.enabled 后启用
-  actions_backend: false              # P3 启用
-  opencode_models: false              # P4 启用（本地 opencode 1.18.27 已在位）
+  actions_backend: false              # P3 冒烟已通过；真实 repair 接入时置 true
+  opencode_models: true               # P4：opencode-go/deepseek-v4-flash（用户 Go 订阅，2026-10-25）
 
 bug_hunter:
   # MVP 3~5 个中小型 Python 仓库，从 config.json 现有监控名单里选（用户 2026-10-25 确认来源）

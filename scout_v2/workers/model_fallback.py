@@ -25,7 +25,12 @@ class ModelPolicy:
     allow_paid_api: bool = False
     max_retries_per_model: int = 1
     free_preferences: list[str] = field(default_factory=list)
+    primary_models: list[str] = field(default_factory=list)   # 用户指定的固定首选（如订阅模型）
     paid_fallback_enabled: bool = False
+
+    def models(self) -> list[str]:
+        """按序尝试的模型列表：primary 优先，其次免费偏好。"""
+        return self.primary_models + self.free_preferences
 
     @classmethod
     def from_yaml(cls, cfg: dict | None) -> "ModelPolicy":
@@ -35,6 +40,7 @@ class ModelPolicy:
             allow_paid_api=bool(cfg.get("allow_paid_api", False)),
             max_retries_per_model=int(cfg.get("max_retries_per_model", 1)),
             free_preferences=list((cfg.get("free_preferences") or [])),
+            primary_models=list((cfg.get("primary_models") or [])),
             paid_fallback_enabled=bool((cfg.get("paid_fallback") or {}).get("enabled", False)),
         )
 
@@ -53,7 +59,7 @@ def run_with_fallback(policy: ModelPolicy, client: ModelClient, prompt: str,
     - 全部免费失败：付费未启用 → PaidDisabledError（暂停任务）；已启用仍需外部授权额。
     """
     tried: list[str] = []
-    for model in policy.free_preferences:
+    for model in policy.models():
         for _ in range(policy.max_retries_per_model + 1):
             ok, detail = client.run(model, prompt)
             if ok:
