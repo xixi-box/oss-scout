@@ -36,8 +36,19 @@ def ensure_repo(repo_dir: Path, repo: str, base_sha: str) -> Path:
     url = f"https://github.com/{repo}.git"
     subprocess.run(["git", "clone", "--filter=blob:none", url, str(repo_dir)],
                    check=True, capture_output=True, text=True, timeout=900)
-    subprocess.run(["git", "-C", str(repo_dir), "checkout", "--detach", base_sha],
-                   check=True, capture_output=True, text=True, timeout=120)
+    co = subprocess.run(["git", "-C", str(repo_dir), "checkout", "--detach", base_sha],
+                        capture_output=True, text=True, timeout=120)
+    if co.returncode != 0:
+        # 部分 clone 可能没取到目标 commit：显式 fetch 该 SHA 再试
+        fe = subprocess.run(["git", "-C", str(repo_dir), "fetch", "origin", base_sha],
+                            capture_output=True, text=True, timeout=300)
+        co2 = subprocess.run(["git", "-C", str(repo_dir), "checkout", "--detach",
+                              base_sha if fe.returncode == 0 else "FETCH_HEAD"],
+                             capture_output=True, text=True, timeout=120)
+        if co2.returncode != 0:
+            raise RuntimeError(
+                f"checkout {base_sha[:12]} failed: "
+                f"{(co.stderr or co2.stderr or fe.stderr).strip()[-300:]}")
     return repo_dir
 
 

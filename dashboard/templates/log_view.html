@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}{{ name }} · oss-scout{% endblock %}
+{% block content %}
+<h1 class="display">文件查看</h1>
+<div class="card">
+  <h2>{{ name }}</h2>
+  <p><a href="/logs">← 返回日志列表</a></p>
+  <pre class="code">{{ text }}</pre>
+</div>
+{% endblock %}

@@ -42,8 +42,9 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None) -> F
     # ---------------- 1. 总览 ----------------
     @app.get("/", response_class=HTMLResponse)
     def overview(request: Request):
+        o = ds.overview()
         return render(request, "overview.html",
-                      {"o": ds.overview(), "active": "/"})
+                      {"o": o, "recent": o["recent_worklog"], "active": "/"})
 
     @app.get("/fragment/overview-cards", response_class=HTMLResponse)
     def overview_cards(request: Request):
@@ -60,15 +61,15 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None) -> F
     @app.get("/candidates", response_class=HTMLResponse)
     def candidates(request: Request, q: str = "", lane: str = "", class_: str = Query("", alias="class"),
                    status: str = "", repo: str = ""):
-        items = D.filter_candidates(ds.candidates(), q=q, lane=lane, cls=class_,
-                                    status=status, repo=repo)
+        items = ds.filter_candidates(ds.candidates(), q=q, lane=lane, cls=class_,
+                                     status=status, repo=repo)
         return render(request, "candidates.html", {
             "items": items, "total": len(ds.candidates()),
             "q": q, "lane": lane, "class_": class_, "status": status, "repo": repo,
             "statuses": sorted({str(c.get("status", "")) for c in ds.candidates().values()}),
             "repos": sorted({c.get("repo", "") for c in ds.candidates().values()}),
             "bug_jobs": D.bug_lane_jobs(ds),
-            "quote_key": D.quote_key, "active": "/candidates",
+            "quote_key": ds.quote_key, "active": "/candidates",
         })
 
     @app.get("/candidates/{key:path}/detail", response_class=HTMLResponse)
@@ -213,6 +214,10 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None) -> F
                                                  "text": D.mask(hit[1]), "active": "/logs"})
 
     # ---------------- 无 POST 写路由 ----------------
+    @app.get("/{rest:path}")
+    def get_fallback(rest: str):
+        return JSONResponse({"detail": "not found"}, status_code=404)
+
     @app.post("/{rest:path}")
     @app.put("/{rest:path}")
     @app.delete("/{rest:path}")

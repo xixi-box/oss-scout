@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}日志 · oss-scout{% endblock %}
+{% block content %}
+<h1 class="display">运行日志与审计</h1>
+<div class="card">
+  <form method="get" class="filters">
+    <input type="text" name="action" value="{{ action }}" placeholder="action 子串筛选">
+    <label class="small"><input type="checkbox" name="error" value="1" {{ 'checked' if error == '1' }}> 仅失败/错误/blocker</label>
+    <button class="btn pill" type="submit">筛选</button>
+    <a class="btn pill ghost" href="/logs">清空</a>
+    <span class="muted small">共 {{ total }} 条 · 第 {{ page }}/{{ pages }} 页</span>
+  </form>
+  <table>
+    <thead><tr><th>时间</th><th>动作</th><th>对象</th><th>结果/详情</th></tr></thead>
+    <tbody>
+      {% for r in records %}
+      <tr>
+        <td class="nowrap muted small">{{ r.get("ts", "") }}</td>
+        <td class="nowrap"><span class="chip">{{ r.get("action", "") }}</span></td>
+        <td class="nowrap small">{{ r.get("target", "") }}</td>
+        <td class="wrap small">
+          {% set blob = (r.get("result") or "") ~ " " ~ (r.get("detail") or "") ~ " " ~ (r.get("reason") or "") %}
+          {{ blob.strip()|mask|truncate(220) }}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4" class="muted">无匹配记录</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <div class="pager">
+    {% if page > 1 %}<a class="btn pill ghost" href="/logs?page={{ page - 1 }}&action={{ action }}&error={{ error }}">← 上一页</a>{% endif %}
+    {% if page < pages %}<a class="btn pill ghost" href="/logs?page={{ page + 1 }}&action={{ action }}&error={{ error }}">下一页 →</a>{% endif %}
+  </div>
+</div>
+
+<div class="card mt">
+  <h2>state/runs/ 文件</h2>
+  <ul class="runs-list">
+    {% for f in runs_files %}
+    <li><a href="/logs/view?name={{ f.name|urlencode }}">{{ f.name }}</a>
+        <span class="muted small">{{ f.size }} B</span></li>
+    {% else %}
+    <li class="muted">state/runs/ 不存在或为空</li>
+    {% endfor %}
+  </ul>
+</div>
+{% endblock %}

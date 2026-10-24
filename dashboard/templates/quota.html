@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}额度 · oss-scout{% endblock %}
+{% block content %}
+<h1 class="display">额度与资源</h1>
+<div class="grid two-col">
+  <div class="card">
+    <h2>Modal</h2>
+    {% if modal.metered is none %}
+    <div class="stat-value">未知</div>
+    <div class="muted small">modal billing summary 不可用（不显示为 0）</div>
+    {% else %}
+    <div class="stat-value big">${{ '%.4f'|format(modal.metered) }}</div>
+    {% endif %}
+    {% if modal.softcap %}
+    <div class="bar"><div class="bar-fill" style="width: {{ [ (modal.metered or 0) / modal.softcap * 100, 100 ] | min }}%"></div></div>
+    <div class="muted small">soft cap ${{ modal.softcap }} / 月</div>
+    {% endif %}
+    <h3 class="mt">平台硬限制</h3>
+    <table class="mini">
+      <tbody>
+        <tr><th>usage_limit</th><td>${{ modal.hard_limits.get("usage_limit_usd", "未知") }}</td></tr>
+        <tr><th>spend_limit</th><td>${{ modal.hard_limits.get("spend_limit_usd", "未知") }}</td></tr>
+        <tr><th>included_credits</th><td>${{ modal.hard_limits.get("included_credits_usd", "未知") }}</td></tr>
+      </tbody>
+    </table>
+    <h3 class="mt">任务实测成本</h3>
+    {% if measured_cost is none %}<p class="muted">暂无 measured_cost_usd 记录</p>
+    {% else %}<div class="stat-value">${{ '%.4f'|format(measured_cost) }}<span class="muted small">（jobs result 求和）</span></div>{% endif %}
+  </div>
+
+  <div class="card">
+    <h2>OpenCode</h2>
+    <h3>主模型（{{ opencode.mode or "?" }} 模式）</h3>
+    <ul>{% for m in opencode.primary_models %}<li><code>{{ m }}</code></li>{% endfor %}</ul>
+    <p class="small muted">免费偏好记录：{% for m in opencode.free_preferences %}<code>{{ m }}</code> {% endfor %}</p>
+    <p>allow_paid_api: <span class="chip {{ 'chip-green' if opencode.allow_paid_api }}">{{ opencode.allow_paid_api }}</span></p>
+    <h3 class="mt">401/402/429 错误统计（worklog model/auth）</h3>
+    {% if opencode.errors %}
+    <div class="chips">
+      {% for code, n in opencode.errors.items() %}<span class="chip {{ 'chip-warn' if n }}">{{ code }} · {{ n }}</span>{% endfor %}
+    </div>
+    {% else %}<p class="muted">暂无记录</p>{% endif %}
+  </div>
+</div>
+
+<div class="card mt">
+  <h2>GitHub Actions（{{ actions_repo or "无自有仓库" }}）</h2>
+  {% if actions is none %}
+  <p class="muted">未知（gh run list 查询失败）</p>
+  {% elif not actions %}
+  <p class="muted">无 run 记录</p>
+  {% else %}
+  <table>
+    <thead><tr><th>时间</th><th>workflow</th><th>结论</th></tr></thead>
+    <tbody>
+      {% for r in actions %}
+      <tr>
+        <td class="nowrap muted small">{{ r.createdAt or "未知" }}</td>
+        <td>{{ r.workflowName or "未知" }}</td>
+        <td><span class="chip {{ 'chip-green' if r.conclusion == 'success' else ('chip-warn' if r.conclusion != '—') }}">{{ r.conclusion or "进行中" }}</span></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</div>
+{% endblock %}
