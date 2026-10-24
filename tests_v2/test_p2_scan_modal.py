@@ -76,10 +76,12 @@ class TestModalBackendGates:
             b.submit(job(max_estimated_compute_usd=1.0).to_dict())
 
     def test_missing_sdk_refuses_after_budget_ok(self, monkeypatch):
-        # 预算通过但 SDK 未装 → 干净拒绝（本机未装 modal，天然覆盖该路径）
+        # 预算通过但 SDK 不可用 → 干净拒绝（显式模拟 modal 缺失，不依赖本机是否安装）
+        import sys
+        monkeypatch.setitem(sys.modules, "modal", None)  # import modal → ImportError
         b = mb_mod.ModalSandboxBackend(guard(metered=0.0))
         with pytest.raises(mb_mod.BackendDisabledError) as ei:
-            b.submit(job().to_dict())
+            b.submit(job(max_estimated_compute_usd=0.5).to_dict())
         assert "SDK" in str(ei.value)
 
     def test_eligible_mirrors_budget(self):
