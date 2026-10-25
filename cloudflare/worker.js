@@ -45,12 +45,16 @@ async function pollOnce(env) {
 
   const issues = [];
   let ok_repos = 0;
+  const errors = [];
   for (const repo of repos) {
     try {
       const r = await fetch(
         `https://api.github.com/repos/${repo}/issues?since=${since}&state=open&per_page=50`,
         { headers: ghHeaders(env.GH_TOKEN) });
-      if (!r.ok) continue;
+      if (!r.ok) {
+        errors.push(`${repo}: HTTP ${r.status}`);
+        continue;
+      }
       ok_repos++;
       const list = await r.json();
       for (const it of list) {
@@ -66,9 +70,16 @@ async function pollOnce(env) {
         });
       }
     } catch (e) {
-      continue;   // 单仓库失败不影响其余
+      errors.push(`${repo}: ${String(e).slice(0, 80)}`);
     }
   }
+
+  // 诊断键：每轮必写，本地/控制台可见最近一轮状态（KV 写额度：1/分钟 = 1440/天）
+  await env.SEEN.put("diag", JSON.stringify({
+    at: now.toISOString(), ok_repos, errors: errors.slice(0, 5),
+    found: issues.length, repos: repos.length,
+    has_token: Boolean(env.GH_TOKEN),
+  }));
 
   // 水位每 5 分钟推进一次（分钟数 % 5 === 0），否则下轮同窗口重叠重查（本地去重兜底）
   if (ok_repos > 0 && now.getUTCMinutes() % 5 === 0) {

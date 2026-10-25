@@ -1,0 +1,2654 @@
+{
+ "openai/openai-agents-python#5026": {
+  "first_seen": "2026-09-16T20:35:44",
+  "status": "queued"
+ },
+ "openai/openai-agents-python#5041": {
+  "first_seen": "2026-09-16T20:35:44",
+  "status": "queued"
+ },
+ "openai/openai-agents-python#2049": {
+  "first_seen": "2026-09-16T20:35:44",
+  "status": "queued"
+ },
+ "pydantic/pydantic-ai#7713": {
+  "first_seen": "2026-09-16T20:35:44",
+  "status": "queued"
+ },
+ "pydantic/pydantic-ai#4927": {
+  "first_seen": "2026-09-16T20:35:44",
+  "status": "queued"
+ },
+ "pydantic/pydantic-ai#5649": {
+  "first_seen": "2026-09-16T20:35:44",
+  "status": "queued"
+ },
+ "openai/openai-agents-python#2393": {
+  "first_seen": "2026-09-16T21:34:04",
+  "status": "blocked"
+ },
+ "openai/openai-agents-python#2477": {
+  "first_seen": "2026-09-16T21:34:04",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#7752": {
+  "first_seen": "2026-09-16T21:34:04",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#16774": {
+  "first_seen": "2026-09-16T21:34:04",
+  "status": "queued"
+ },
+ "OpenHands/OpenHands#15758": {
+  "first_seen": "2026-09-16T21:34:04",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#15973": {
+  "first_seen": "2026-09-16T21:34:04",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#14525": {
+  "first_seen": "2026-09-16T21:34:04",
+  "status": "blocked"
+ },
+ "deepset-ai/haystack#7522": {
+  "first_seen": "2026-09-16T21:34:04",
+  "status": "blocked"
+ },
+ "deepset-ai/haystack#10810": {
+  "first_seen": "2026-09-16T21:34:04",
+  "status": "queued"
+ },
+ "deepset-ai/haystack#10941": {
+  "first_seen": "2026-09-16T21:34:04",
+  "status": "lowscore"
+ },
+ "deepset-ai/haystack#9314": {
+  "first_seen": "2026-09-16T21:34:04",
+  "status": "blocked"
+ },
+ "deepset-ai/haystack#7973": {
+  "first_seen": "2026-09-16T21:34:04",
+  "status": "lowscore"
+ },
+ "langfuse/langfuse#597": {
+  "first_seen": "2026-09-16T21:34:04",
+  "status": "blocked"
+ },
+ "langfuse/langfuse#449": {
+  "first_seen": "2026-09-16T21:34:04",
+  "status": "blocked"
+ },
+ "langfuse/langfuse#15372": {
+  "first_seen": "2026-09-16T21:34:04",
+  "status": "blocked"
+ },
+ "langfuse/langfuse#15732": {
+  "first_seen": "2026-09-16T21:34:04",
+  "status": "blocked"
+ },
+ "langfuse/langfuse#15751": {
+  "first_seen": "2026-09-16T21:34:04",
+  "status": "blocked"
+ },
+ "Arize-ai/phoenix#10622": {
+  "first_seen": "2026-09-16T21:34:04",
+  "status": "blocked"
+ },
+ "Arize-ai/phoenix#6290": {
+  "first_seen": "2026-09-16T21:34:04",
+  "status": "blocked"
+ },
+ "Arize-ai/phoenix#6435": {
+  "first_seen": "2026-09-16T21:34:04",
+  "status": "blocked"
+ },
+ "Arize-ai/phoenix#6633": {
+  "first_seen": "2026-09-16T21:34:04",
+  "status": "blocked"
+ },
+ "Arize-ai/phoenix#7031": {
+  "first_seen": "2026-09-16T21:34:04",
+  "status": "blocked"
+ },
+ "anomalyco/opencode#4714": {
+  "first_seen": "2026-09-16T21:34:04",
+  "status": "blocked"
+ },
+ "anomalyco/opencode#42143": {
+  "first_seen": "2026-09-16T21:34:04",
+  "status": "blocked"
+ },
+ "anomalyco/opencode#37704": {
+  "first_seen": "2026-09-16T21:34:04",
+  "status": "blocked"
+ },
+ "anomalyco/opencode#42985": {
+  "first_seen": "2026-09-16T21:34:04",
+  "status": "queued"
+ },
+ "anomalyco/opencode#48973": {
+  "first_seen": "2026-09-16T21:34:04",
+  "status": "queued"
+ },
+ "langchain-ai/langsmith-sdk#1127": {
+  "first_seen": "2026-09-16T21:34:04",
+  "status": "queued"
+ },
+ "langchain-ai/langsmith-sdk#840": {
+  "first_seen": "2026-09-16T21:34:04",
+  "status": "blocked"
+ },
+ "langchain-ai/langsmith-sdk#1866": {
+  "first_seen": "2026-09-16T21:34:04",
+  "status": "blocked"
+ },
+ "langchain-ai/langsmith-sdk#2150": {
+  "first_seen": "2026-09-16T21:34:04",
+  "status": "lowscore"
+ },
+ "langchain-ai/langsmith-sdk#2593": {
+  "first_seen": "2026-09-16T21:34:04",
+  "status": "blocked"
+ },
+ "e2b-dev/e2b#985": {
+  "first_seen": "2026-09-16T21:34:04",
+  "status": "blocked"
+ },
+ "e2b-dev/e2b#1069": {
+  "first_seen": "2026-09-16T21:34:04",
+  "status": "blocked"
+ },
+ "e2b-dev/e2b#1034": {
+  "first_seen": "2026-09-16T21:34:04",
+  "status": "blocked"
+ },
+ "e2b-dev/e2b#1061": {
+  "first_seen": "2026-09-16T21:34:04",
+  "status": "blocked"
+ },
+ "e2b-dev/e2b#886": {
+  "first_seen": "2026-09-16T21:34:04",
+  "status": "blocked"
+ },
+ "openai/openai-python#1763": {
+  "first_seen": "2026-09-16T21:34:04",
+  "status": "blocked"
+ },
+ "openai/openai-python#2672": {
+  "first_seen": "2026-09-16T21:34:04",
+  "status": "blocked"
+ },
+ "openai/openai-python#2643": {
+  "first_seen": "2026-09-16T21:34:04",
+  "status": "blocked"
+ },
+ "openai/openai-python#1786": {
+  "first_seen": "2026-09-16T21:34:04",
+  "status": "blocked"
+ },
+ "openai/openai-python#2819": {
+  "first_seen": "2026-09-16T21:34:04",
+  "status": "blocked"
+ },
+ "pydantic/pydantic-ai#1771": {
+  "first_seen": "2026-09-16T21:34:04",
+  "status": "blocked"
+ },
+ "pydantic/pydantic-ai#3365": {
+  "first_seen": "2026-09-16T21:34:04",
+  "status": "blocked"
+ },
+ "pydantic/pydantic-ai#2202": {
+  "first_seen": "2026-09-16T21:34:04",
+  "status": "blocked"
+ },
+ "pydantic/pydantic-ai#708": {
+  "first_seen": "2026-09-16T21:34:04",
+  "status": "queued"
+ },
+ "pydantic/pydantic-ai#850": {
+  "first_seen": "2026-09-16T21:34:04",
+  "status": "blocked"
+ },
+ "microsoft/playwright#1122": {
+  "first_seen": "2026-09-16T21:34:04",
+  "status": "blocked"
+ },
+ "microsoft/playwright#2497": {
+  "first_seen": "2026-09-16T21:34:04",
+  "status": "blocked"
+ },
+ "microsoft/playwright#1086": {
+  "first_seen": "2026-09-16T21:34:04",
+  "status": "blocked"
+ },
+ "microsoft/playwright#15860": {
+  "first_seen": "2026-09-16T21:34:04",
+  "status": "blocked"
+ },
+ "microsoft/playwright#22865": {
+  "first_seen": "2026-09-16T21:34:04",
+  "status": "blocked"
+ },
+ "microsoft/agent-framework#728": {
+  "first_seen": "2026-09-16T21:34:04",
+  "status": "blocked"
+ },
+ "microsoft/agent-framework#3521": {
+  "first_seen": "2026-09-16T21:34:04",
+  "status": "blocked"
+ },
+ "microsoft/agent-framework#2691": {
+  "first_seen": "2026-09-16T21:34:04",
+  "status": "queued"
+ },
+ "microsoft/agent-framework#39": {
+  "first_seen": "2026-09-16T21:34:04",
+  "status": "blocked"
+ },
+ "microsoft/agent-framework#121": {
+  "first_seen": "2026-09-16T21:34:04",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#24518": {
+  "first_seen": "2026-09-16T21:34:04",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#39503": {
+  "first_seen": "2026-09-16T21:34:04",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#23777": {
+  "first_seen": "2026-09-16T21:34:04",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#31263": {
+  "first_seen": "2026-09-16T21:34:04",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#25762": {
+  "first_seen": "2026-09-16T21:34:04",
+  "status": "blocked"
+ },
+ "pydantic/pydantic-ai#6071": {
+  "first_seen": "2026-09-17T10:31:24",
+  "status": "queued"
+ },
+ "pydantic/pydantic-ai#6703": {
+  "first_seen": "2026-09-17T10:31:24",
+  "status": "blocked"
+ },
+ "pydantic/pydantic-ai#6781": {
+  "first_seen": "2026-09-17T10:31:24",
+  "status": "blocked"
+ },
+ "pydantic/pydantic-ai#6834": {
+  "first_seen": "2026-09-17T10:31:24",
+  "status": "blocked"
+ },
+ "openai/openai-agents-python#4705": {
+  "first_seen": "2026-09-18T10:35:04",
+  "status": "blocked"
+ },
+ "langfuse/langfuse#17157": {
+  "first_seen": "2026-09-18T10:35:04",
+  "status": "blocked"
+ },
+ "anomalyco/opencode#40485": {
+  "first_seen": "2026-09-18T10:35:04",
+  "status": "queued"
+ },
+ "pydantic/pydantic-ai#8416": {
+  "first_seen": "2026-09-18T11:25:28",
+  "status": "blocked"
+ },
+ "pydantic/pydantic-ai#8415": {
+  "first_seen": "2026-09-18T11:25:28",
+  "status": "queued"
+ },
+ "pydantic/pydantic-ai#8414": {
+  "first_seen": "2026-09-18T11:25:28",
+  "status": "blocked"
+ },
+ "pydantic/pydantic-ai#8413": {
+  "first_seen": "2026-09-18T11:25:28",
+  "status": "blocked"
+ },
+ "pydantic/pydantic-ai#8353": {
+  "first_seen": "2026-09-18T11:25:28",
+  "status": "blocked"
+ },
+ "pydantic/pydantic-ai#8350": {
+  "first_seen": "2026-09-18T11:25:28",
+  "status": "blocked"
+ },
+ "pydantic/pydantic-ai#8296": {
+  "first_seen": "2026-09-18T11:25:28",
+  "status": "blocked"
+ },
+ "pydantic/pydantic-ai#8240": {
+  "first_seen": "2026-09-18T11:25:28",
+  "status": "blocked"
+ },
+ "microsoft/agent-framework#1433": {
+  "first_seen": "2026-09-18T11:25:28",
+  "status": "lowscore"
+ },
+ "microsoft/agent-framework#1792": {
+  "first_seen": "2026-09-18T11:25:28",
+  "status": "blocked"
+ },
+ "microsoft/agent-framework#4265": {
+  "first_seen": "2026-09-18T11:25:28",
+  "status": "lowscore"
+ },
+ "OpenHands/OpenHands#17492": {
+  "first_seen": "2026-09-18T16:31:26",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#17490": {
+  "first_seen": "2026-09-18T16:31:26",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#17485": {
+  "first_seen": "2026-09-18T16:31:26",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#17476": {
+  "first_seen": "2026-09-18T16:31:26",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#17473": {
+  "first_seen": "2026-09-18T16:31:26",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#17471": {
+  "first_seen": "2026-09-18T16:31:26",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#17470": {
+  "first_seen": "2026-09-18T16:31:26",
+  "status": "queued"
+ },
+ "OpenHands/OpenHands#17468": {
+  "first_seen": "2026-09-18T16:31:26",
+  "status": "blocked"
+ },
+ "langfuse/langfuse#190": {
+  "first_seen": "2026-09-18T16:31:26",
+  "status": "blocked"
+ },
+ "langfuse/langfuse#502": {
+  "first_seen": "2026-09-18T16:31:26",
+  "status": "lowscore"
+ },
+ "langfuse/langfuse#630": {
+  "first_seen": "2026-09-18T16:31:26",
+  "status": "lowscore"
+ },
+ "Arize-ai/phoenix#16219": {
+  "first_seen": "2026-09-18T16:31:26",
+  "status": "blocked"
+ },
+ "Arize-ai/phoenix#16189": {
+  "first_seen": "2026-09-18T16:31:26",
+  "status": "blocked"
+ },
+ "Arize-ai/phoenix#16113": {
+  "first_seen": "2026-09-18T16:31:26",
+  "status": "queued"
+ },
+ "anomalyco/opencode#47514": {
+  "first_seen": "2026-09-18T16:31:26",
+  "status": "blocked"
+ },
+ "langchain-ai/langsmith-sdk#3529": {
+  "first_seen": "2026-09-18T16:31:26",
+  "status": "queued"
+ },
+ "e2b-dev/e2b#1839": {
+  "first_seen": "2026-09-18T16:31:26",
+  "status": "blocked"
+ },
+ "e2b-dev/e2b#1834": {
+  "first_seen": "2026-09-18T16:31:26",
+  "status": "blocked"
+ },
+ "e2b-dev/e2b#1823": {
+  "first_seen": "2026-09-18T16:31:26",
+  "status": "blocked"
+ },
+ "e2b-dev/e2b#1821": {
+  "first_seen": "2026-09-18T16:31:26",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#41435": {
+  "first_seen": "2026-09-18T16:31:26",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#41420": {
+  "first_seen": "2026-09-18T16:31:26",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#41417": {
+  "first_seen": "2026-09-18T16:31:26",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#41411": {
+  "first_seen": "2026-09-18T16:31:26",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#41392": {
+  "first_seen": "2026-09-18T16:31:26",
+  "status": "blocked"
+ },
+ "openai/openai-python#2561": {
+  "first_seen": "2026-09-18T19:13:54",
+  "status": "blocked"
+ },
+ "openai/openai-python#2537": {
+  "first_seen": "2026-09-18T19:13:54",
+  "status": "blocked"
+ },
+ "openai/openai-python#2872": {
+  "first_seen": "2026-09-18T19:13:54",
+  "status": "blocked"
+ },
+ "pydantic/pydantic-ai#2553": {
+  "first_seen": "2026-09-18T23:20:58",
+  "status": "blocked"
+ },
+ "pydantic/pydantic-ai#3073": {
+  "first_seen": "2026-09-18T23:20:58",
+  "status": "blocked"
+ },
+ "pydantic/pydantic-ai#2947": {
+  "first_seen": "2026-09-18T23:20:58",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#17517": {
+  "first_seen": "2026-09-19T09:40:04",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#17510": {
+  "first_seen": "2026-09-19T09:40:04",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#17508": {
+  "first_seen": "2026-09-19T09:40:04",
+  "status": "queued"
+ },
+ "OpenHands/OpenHands#17497": {
+  "first_seen": "2026-09-19T09:40:04",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#17494": {
+  "first_seen": "2026-09-19T09:40:04",
+  "status": "blocked"
+ },
+ "e2b-dev/e2b#1881": {
+  "first_seen": "2026-09-19T09:40:04",
+  "status": "blocked"
+ },
+ "openai/openai-python#2323": {
+  "first_seen": "2026-09-19T09:40:04",
+  "status": "blocked"
+ },
+ "pydantic/pydantic-ai#8452": {
+  "first_seen": "2026-09-19T09:40:04",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#41639": {
+  "first_seen": "2026-09-19T09:40:04",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#41611": {
+  "first_seen": "2026-09-19T09:40:04",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#41610": {
+  "first_seen": "2026-09-19T09:40:04",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#41591": {
+  "first_seen": "2026-09-19T09:40:04",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#41589": {
+  "first_seen": "2026-09-19T09:40:04",
+  "status": "blocked"
+ },
+ "microsoft/agent-framework#5779": {
+  "first_seen": "2026-09-19T13:20:55",
+  "status": "blocked"
+ },
+ "microsoft/agent-framework#5781": {
+  "first_seen": "2026-09-19T13:20:55",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#17528": {
+  "first_seen": "2026-09-20T09:20:22",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#17520": {
+  "first_seen": "2026-09-20T09:20:22",
+  "status": "blocked"
+ },
+ "pydantic/pydantic-ai#8477": {
+  "first_seen": "2026-09-20T09:20:22",
+  "status": "blocked"
+ },
+ "pydantic/pydantic-ai#8476": {
+  "first_seen": "2026-09-20T09:20:22",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#41848": {
+  "first_seen": "2026-09-20T09:20:22",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#41835": {
+  "first_seen": "2026-09-20T09:20:22",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#41805": {
+  "first_seen": "2026-09-20T09:20:22",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#41803": {
+  "first_seen": "2026-09-20T09:20:22",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#41782": {
+  "first_seen": "2026-09-20T09:20:22",
+  "status": "blocked"
+ },
+ "langfuse/langfuse#664": {
+  "first_seen": "2026-09-20T11:20:22",
+  "status": "lowscore"
+ },
+ "openai/openai-agents-python#4740": {
+  "first_seen": "2026-09-20T13:20:24",
+  "status": "blocked"
+ },
+ "openai/openai-agents-python#4827": {
+  "first_seen": "2026-09-20T13:20:24",
+  "status": "blocked"
+ },
+ "langchain-ai/langsmith-sdk#433": {
+  "first_seen": "2026-09-20T13:20:24",
+  "status": "queued"
+ },
+ "langchain-ai/langsmith-sdk#963": {
+  "first_seen": "2026-09-20T13:20:24",
+  "status": "blocked"
+ },
+ "langchain-ai/langsmith-sdk#1620": {
+  "first_seen": "2026-09-20T13:20:24",
+  "status": "queued"
+ },
+ "langchain-ai/langsmith-sdk#1695": {
+  "first_seen": "2026-09-20T13:20:24",
+  "status": "queued"
+ },
+ "openai/openai-agents-python#4864": {
+  "first_seen": "2026-09-20T15:20:30",
+  "status": "blocked"
+ },
+ "openai/openai-agents-python#5088": {
+  "first_seen": "2026-09-20T17:20:46",
+  "status": "blocked"
+ },
+ "openai/openai-agents-python#5085": {
+  "first_seen": "2026-09-20T17:20:46",
+  "status": "blocked"
+ },
+ "openai/openai-agents-python#5074": {
+  "first_seen": "2026-09-20T17:20:46",
+  "status": "blocked"
+ },
+ "openai/openai-agents-python#5072": {
+  "first_seen": "2026-09-20T17:20:46",
+  "status": "blocked"
+ },
+ "openai/openai-agents-python#5070": {
+  "first_seen": "2026-09-20T17:20:46",
+  "status": "blocked"
+ },
+ "deepset-ai/haystack#12643": {
+  "first_seen": "2026-09-20T17:20:46",
+  "status": "blocked"
+ },
+ "langfuse/langfuse#17691": {
+  "first_seen": "2026-09-20T17:20:46",
+  "status": "queued"
+ },
+ "microsoft/agent-framework#5560": {
+  "first_seen": "2026-09-20T17:20:46",
+  "status": "blocked"
+ },
+ "openai/openai-agents-python#5068": {
+  "first_seen": "2026-09-21T17:20:33",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#17559": {
+  "first_seen": "2026-09-21T17:20:33",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#17546": {
+  "first_seen": "2026-09-21T17:20:33",
+  "status": "queued"
+ },
+ "OpenHands/OpenHands#17533": {
+  "first_seen": "2026-09-21T17:20:33",
+  "status": "blocked"
+ },
+ "deepset-ai/haystack#12543": {
+  "first_seen": "2026-09-21T17:20:33",
+  "status": "blocked"
+ },
+ "anomalyco/opencode#50093": {
+  "first_seen": "2026-09-21T17:20:33",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#41913": {
+  "first_seen": "2026-09-21T17:20:33",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#41912": {
+  "first_seen": "2026-09-21T17:20:33",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#17577": {
+  "first_seen": "2026-09-22T19:21:03",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#17567": {
+  "first_seen": "2026-09-22T19:21:03",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#17566": {
+  "first_seen": "2026-09-22T19:21:03",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#17565": {
+  "first_seen": "2026-09-22T19:21:03",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#17564": {
+  "first_seen": "2026-09-22T19:21:03",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#17563": {
+  "first_seen": "2026-09-22T19:21:03",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#17562": {
+  "first_seen": "2026-09-22T19:21:03",
+  "status": "blocked"
+ },
+ "anomalyco/opencode#49953": {
+  "first_seen": "2026-09-22T19:21:03",
+  "status": "queued"
+ },
+ "anomalyco/opencode#49938": {
+  "first_seen": "2026-09-22T19:21:03",
+  "status": "queued"
+ },
+ "BerriAI/litellm#42111": {
+  "first_seen": "2026-09-22T19:21:03",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#42104": {
+  "first_seen": "2026-09-22T19:21:03",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#42073": {
+  "first_seen": "2026-09-22T19:21:03",
+  "status": "blocked"
+ },
+ "deepset-ai/haystack#11521": {
+  "first_seen": "2026-09-22T21:20:45",
+  "status": "blocked"
+ },
+ "langfuse/langfuse#17775": {
+  "first_seen": "2026-09-22T21:20:45",
+  "status": "blocked"
+ },
+ "microsoft/agent-framework#8586": {
+  "first_seen": "2026-09-22T21:20:45",
+  "status": "queued"
+ },
+ "openai/openai-agents-python#5157": {
+  "first_seen": "2026-09-23T13:21:20",
+  "status": "lowscore"
+ },
+ "OpenHands/OpenHands#17599": {
+  "first_seen": "2026-09-23T13:21:20",
+  "status": "blocked"
+ },
+ "pydantic/pydantic-ai#8574": {
+  "first_seen": "2026-09-23T13:21:20",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#42201": {
+  "first_seen": "2026-09-23T13:21:20",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#42186": {
+  "first_seen": "2026-09-23T13:21:20",
+  "status": "blocked"
+ },
+ "langfuse/langfuse#17824": {
+  "first_seen": "2026-09-23T19:20:44",
+  "status": "queued"
+ },
+ "Arize-ai/phoenix#14472": {
+  "first_seen": "2026-09-24T03:20:54",
+  "status": "blocked"
+ },
+ "Arize-ai/phoenix#14399": {
+  "first_seen": "2026-09-24T03:20:54",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#17623": {
+  "first_seen": "2026-09-24T09:21:00",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#17622": {
+  "first_seen": "2026-09-24T09:21:00",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#17621": {
+  "first_seen": "2026-09-24T09:21:00",
+  "status": "queued"
+ },
+ "OpenHands/OpenHands#17620": {
+  "first_seen": "2026-09-24T09:21:00",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#17619": {
+  "first_seen": "2026-09-24T09:21:00",
+  "status": "queued"
+ },
+ "OpenHands/OpenHands#17615": {
+  "first_seen": "2026-09-24T09:21:00",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#17602": {
+  "first_seen": "2026-09-24T09:21:00",
+  "status": "blocked"
+ },
+ "deepset-ai/haystack#11476": {
+  "first_seen": "2026-09-24T09:21:00",
+  "status": "lowscore"
+ },
+ "pydantic/pydantic-ai#8643": {
+  "first_seen": "2026-09-24T09:21:00",
+  "status": "blocked"
+ },
+ "pydantic/pydantic-ai#8621": {
+  "first_seen": "2026-09-24T09:21:00",
+  "status": "blocked"
+ },
+ "pydantic/pydantic-ai#8603": {
+  "first_seen": "2026-09-24T09:21:00",
+  "status": "queued"
+ },
+ "BerriAI/litellm#42566": {
+  "first_seen": "2026-09-24T09:21:00",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#42477": {
+  "first_seen": "2026-09-24T09:21:00",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#42476": {
+  "first_seen": "2026-09-24T09:21:00",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#42460": {
+  "first_seen": "2026-09-24T09:21:00",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#42432": {
+  "first_seen": "2026-09-24T09:21:00",
+  "status": "blocked"
+ },
+ "OpenHands/software-agent-sdk#5225": {
+  "first_seen": "2026-09-24T10:19:50",
+  "status": "blocked"
+ },
+ "OpenHands/software-agent-sdk#5213": {
+  "first_seen": "2026-09-24T10:19:50",
+  "status": "blocked"
+ },
+ "OpenHands/software-agent-sdk#5207": {
+  "first_seen": "2026-09-24T10:19:50",
+  "status": "blocked"
+ },
+ "OpenHands/software-agent-sdk#5181": {
+  "first_seen": "2026-09-24T10:19:50",
+  "status": "blocked"
+ },
+ "OpenHands/software-agent-sdk#5168": {
+  "first_seen": "2026-09-24T10:19:50",
+  "status": "blocked"
+ },
+ "browser-use/browser-use#5831": {
+  "first_seen": "2026-09-24T10:19:50",
+  "status": "blocked"
+ },
+ "browser-use/browser-use#5829": {
+  "first_seen": "2026-09-24T10:19:50",
+  "status": "blocked"
+ },
+ "browser-use/browser-use#5817": {
+  "first_seen": "2026-09-24T10:19:50",
+  "status": "blocked"
+ },
+ "browser-use/browser-use#4824": {
+  "first_seen": "2026-09-24T10:19:50",
+  "status": "blocked"
+ },
+ "browser-use/browser-use#4285": {
+  "first_seen": "2026-09-24T10:19:50",
+  "status": "blocked"
+ },
+ "infiniflow/ragflow#4214": {
+  "first_seen": "2026-09-24T10:19:50",
+  "status": "blocked"
+ },
+ "infiniflow/ragflow#4406": {
+  "first_seen": "2026-09-24T10:19:50",
+  "status": "blocked"
+ },
+ "infiniflow/ragflow#3443": {
+  "first_seen": "2026-09-24T10:19:50",
+  "status": "queued"
+ },
+ "infiniflow/ragflow#3862": {
+  "first_seen": "2026-09-24T10:19:50",
+  "status": "queued"
+ },
+ "infiniflow/ragflow#12241": {
+  "first_seen": "2026-09-24T10:19:50",
+  "status": "blocked"
+ },
+ "langfuse/langfuse#17874": {
+  "first_seen": "2026-09-24T19:20:44",
+  "status": "blocked"
+ },
+ "openai/openai-agents-python#5162": {
+  "first_seen": "2026-09-25T15:21:06",
+  "status": "blocked"
+ },
+ "OpenHands/software-agent-sdk#5279": {
+  "first_seen": "2026-09-25T15:21:06",
+  "status": "blocked"
+ },
+ "OpenHands/software-agent-sdk#5268": {
+  "first_seen": "2026-09-25T15:21:06",
+  "status": "queued"
+ },
+ "OpenHands/software-agent-sdk#5252": {
+  "first_seen": "2026-09-25T15:21:06",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#17657": {
+  "first_seen": "2026-09-25T15:21:06",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#17653": {
+  "first_seen": "2026-09-25T15:21:06",
+  "status": "blocked"
+ },
+ "langfuse/langfuse#17906": {
+  "first_seen": "2026-09-25T15:21:06",
+  "status": "blocked"
+ },
+ "Arize-ai/phoenix#16405": {
+  "first_seen": "2026-09-25T15:21:06",
+  "status": "blocked"
+ },
+ "Arize-ai/phoenix#16402": {
+  "first_seen": "2026-09-25T15:21:06",
+  "status": "blocked"
+ },
+ "pydantic/pydantic-ai#8679": {
+  "first_seen": "2026-09-25T15:21:06",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#42765": {
+  "first_seen": "2026-09-25T15:21:06",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#42742": {
+  "first_seen": "2026-09-25T15:21:06",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#42739": {
+  "first_seen": "2026-09-25T15:21:06",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#42730": {
+  "first_seen": "2026-09-25T15:21:06",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#42681": {
+  "first_seen": "2026-09-25T15:21:06",
+  "status": "blocked"
+ },
+ "langfuse/langfuse#17949": {
+  "first_seen": "2026-09-26T01:21:08",
+  "status": "blocked"
+ },
+ "openai/openai-agents-python#5180": {
+  "first_seen": "2026-09-26T11:21:18",
+  "status": "queued"
+ },
+ "openai/openai-agents-python#5176": {
+  "first_seen": "2026-09-26T11:21:18",
+  "status": "blocked"
+ },
+ "OpenHands/software-agent-sdk#5310": {
+  "first_seen": "2026-09-26T11:21:18",
+  "status": "blocked"
+ },
+ "OpenHands/software-agent-sdk#5307": {
+  "first_seen": "2026-09-26T11:21:18",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#17687": {
+  "first_seen": "2026-09-26T11:21:18",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#17664": {
+  "first_seen": "2026-09-26T11:21:18",
+  "status": "blocked"
+ },
+ "Arize-ai/phoenix#16452": {
+  "first_seen": "2026-09-26T11:21:18",
+  "status": "queued"
+ },
+ "Arize-ai/phoenix#16437": {
+  "first_seen": "2026-09-26T11:21:18",
+  "status": "queued"
+ },
+ "Arize-ai/phoenix#16436": {
+  "first_seen": "2026-09-26T11:21:18",
+  "status": "queued"
+ },
+ "anomalyco/opencode#50144": {
+  "first_seen": "2026-09-26T11:21:18",
+  "status": "queued"
+ },
+ "BerriAI/litellm#43059": {
+  "first_seen": "2026-09-26T11:21:18",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#43019": {
+  "first_seen": "2026-09-26T11:21:18",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#42959": {
+  "first_seen": "2026-09-26T11:21:18",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#42886": {
+  "first_seen": "2026-09-26T11:21:18",
+  "status": "blocked"
+ },
+ "infiniflow/ragflow#19229": {
+  "first_seen": "2026-09-26T13:21:04",
+  "status": "blocked"
+ },
+ "openai/openai-agents-python#5182": {
+  "first_seen": "2026-09-26T19:20:46",
+  "status": "lowscore"
+ },
+ "openai/openai-agents-python#5181": {
+  "first_seen": "2026-09-26T19:20:46",
+  "status": "blocked"
+ },
+ "browser-use/browser-use#4208": {
+  "first_seen": "2026-09-26T19:20:46",
+  "status": "blocked"
+ },
+ "browser-use/browser-use#5731": {
+  "first_seen": "2026-09-26T19:20:46",
+  "status": "blocked"
+ },
+ "browser-use/browser-use#5524": {
+  "first_seen": "2026-09-26T19:20:46",
+  "status": "blocked"
+ },
+ "anomalyco/opencode#50885": {
+  "first_seen": "2026-09-26T19:20:46",
+  "status": "queued"
+ },
+ "e2b-dev/e2b#1902": {
+  "first_seen": "2026-09-26T19:20:46",
+  "status": "blocked"
+ },
+ "e2b-dev/e2b#1900": {
+  "first_seen": "2026-09-26T19:20:46",
+  "status": "blocked"
+ },
+ "e2b-dev/e2b#1899": {
+  "first_seen": "2026-09-26T19:20:46",
+  "status": "blocked"
+ },
+ "openai/openai-agents-python#5183": {
+  "first_seen": "2026-09-26T23:21:05",
+  "status": "blocked"
+ },
+ "pydantic/pydantic-ai#3898": {
+  "first_seen": "2026-09-26T23:21:05",
+  "status": "blocked"
+ },
+ "openai/openai-agents-python#5185": {
+  "first_seen": "2026-09-27T19:21:10",
+  "status": "blocked"
+ },
+ "openai/openai-agents-python#5184": {
+  "first_seen": "2026-09-27T19:21:10",
+  "status": "queued"
+ },
+ "OpenHands/software-agent-sdk#5330": {
+  "first_seen": "2026-09-27T19:21:10",
+  "status": "blocked"
+ },
+ "OpenHands/software-agent-sdk#5322": {
+  "first_seen": "2026-09-27T19:21:10",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#17710": {
+  "first_seen": "2026-09-27T19:21:10",
+  "status": "queued"
+ },
+ "OpenHands/OpenHands#17706": {
+  "first_seen": "2026-09-27T19:21:10",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#17704": {
+  "first_seen": "2026-09-27T19:21:10",
+  "status": "blocked"
+ },
+ "langfuse/langfuse#17969": {
+  "first_seen": "2026-09-27T19:21:10",
+  "status": "blocked"
+ },
+ "Arize-ai/phoenix#16534": {
+  "first_seen": "2026-09-27T19:21:10",
+  "status": "blocked"
+ },
+ "anomalyco/opencode#50155": {
+  "first_seen": "2026-09-27T19:21:10",
+  "status": "queued"
+ },
+ "e2b-dev/e2b#1895": {
+  "first_seen": "2026-09-27T19:21:10",
+  "status": "blocked"
+ },
+ "pydantic/pydantic-ai#8767": {
+  "first_seen": "2026-09-27T19:21:10",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#43146": {
+  "first_seen": "2026-09-27T19:21:10",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#43098": {
+  "first_seen": "2026-09-27T19:21:10",
+  "status": "blocked"
+ },
+ "openai/openai-agents-python#4889": {
+  "first_seen": "2026-09-28T11:21:12",
+  "status": "blocked"
+ },
+ "OpenHands/software-agent-sdk#5333": {
+  "first_seen": "2026-09-28T11:21:12",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#17728": {
+  "first_seen": "2026-09-28T11:21:12",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#43336": {
+  "first_seen": "2026-09-28T11:21:12",
+  "status": "blocked"
+ },
+ "pydantic/pydantic-ai#5966": {
+  "first_seen": "2026-09-28T13:20:50",
+  "status": "blocked"
+ },
+ "openai/openai-agents-python#5213": {
+  "first_seen": "2026-09-28T15:23:28",
+  "status": "lowscore"
+ },
+ "deepset-ai/haystack#12060": {
+  "first_seen": "2026-09-29T09:20:56",
+  "status": "blocked"
+ },
+ "langfuse/langfuse#18014": {
+  "first_seen": "2026-09-29T09:20:56",
+  "status": "blocked"
+ },
+ "langfuse/langfuse#18002": {
+  "first_seen": "2026-09-29T09:20:56",
+  "status": "queued"
+ },
+ "microsoft/agent-framework#8718": {
+  "first_seen": "2026-09-29T09:20:56",
+  "status": "queued"
+ },
+ "BerriAI/litellm#43450": {
+  "first_seen": "2026-09-29T09:20:56",
+  "status": "blocked"
+ },
+ "openai/openai-agents-python#5229": {
+  "first_seen": "2026-09-29T17:21:17",
+  "status": "blocked"
+ },
+ "anomalyco/opencode#45278": {
+  "first_seen": "2026-09-29T17:21:17",
+  "status": "queued"
+ },
+ "langfuse/langfuse#18040": {
+  "first_seen": "2026-09-29T21:20:55",
+  "status": "queued"
+ },
+ "langfuse/langfuse#18050": {
+  "first_seen": "2026-09-29T23:20:34",
+  "status": "blocked"
+ },
+ "openai/openai-agents-python#5239": {
+  "first_seen": "2026-09-30T01:20:52",
+  "status": "lowscore"
+ },
+ "OpenHands/software-agent-sdk#5354": {
+  "first_seen": "2026-09-30T09:20:48",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#17774": {
+  "first_seen": "2026-09-30T09:20:48",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#17773": {
+  "first_seen": "2026-09-30T09:20:48",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#17763": {
+  "first_seen": "2026-09-30T09:20:48",
+  "status": "blocked"
+ },
+ "langfuse/langfuse#18053": {
+  "first_seen": "2026-09-30T09:20:48",
+  "status": "queued"
+ },
+ "pydantic/pydantic-ai#8937": {
+  "first_seen": "2026-09-30T09:20:48",
+  "status": "queued"
+ },
+ "pydantic/pydantic-ai#8936": {
+  "first_seen": "2026-09-30T09:20:48",
+  "status": "queued"
+ },
+ "pydantic/pydantic-ai#8933": {
+  "first_seen": "2026-09-30T09:20:48",
+  "status": "queued"
+ },
+ "pydantic/pydantic-ai#8932": {
+  "first_seen": "2026-09-30T09:20:48",
+  "status": "queued"
+ },
+ "pydantic/pydantic-ai#8930": {
+  "first_seen": "2026-09-30T09:20:48",
+  "status": "blocked"
+ },
+ "pydantic/pydantic-ai#8927": {
+  "first_seen": "2026-09-30T09:20:48",
+  "status": "queued"
+ },
+ "pydantic/pydantic-ai#8923": {
+  "first_seen": "2026-09-30T09:20:48",
+  "status": "blocked"
+ },
+ "pydantic/pydantic-ai#8921": {
+  "first_seen": "2026-09-30T09:20:48",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#43620": {
+  "first_seen": "2026-09-30T09:20:48",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#43518": {
+  "first_seen": "2026-09-30T09:20:48",
+  "status": "blocked"
+ },
+ "deepset-ai/haystack#11867": {
+  "first_seen": "2026-09-30T13:21:01",
+  "status": "lowscore"
+ },
+ "openai/openai-agents-python#5254": {
+  "first_seen": "2026-09-30T15:21:00",
+  "status": "lowscore"
+ },
+ "OpenHands/software-agent-sdk#5375": {
+  "first_seen": "2026-10-01T19:20:48",
+  "status": "queued"
+ },
+ "OpenHands/software-agent-sdk#5373": {
+  "first_seen": "2026-10-01T19:20:48",
+  "status": "blocked"
+ },
+ "OpenHands/software-agent-sdk#5360": {
+  "first_seen": "2026-10-01T19:20:48",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#17806": {
+  "first_seen": "2026-10-01T19:20:48",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#17803": {
+  "first_seen": "2026-10-01T19:20:48",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#17801": {
+  "first_seen": "2026-10-01T19:20:48",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#17788": {
+  "first_seen": "2026-10-01T19:20:48",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#17785": {
+  "first_seen": "2026-10-01T19:20:48",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#17783": {
+  "first_seen": "2026-10-01T19:20:48",
+  "status": "blocked"
+ },
+ "pydantic/pydantic-ai#9404": {
+  "first_seen": "2026-10-01T19:20:48",
+  "status": "blocked"
+ },
+ "pydantic/pydantic-ai#9340": {
+  "first_seen": "2026-10-01T19:20:48",
+  "status": "blocked"
+ },
+ "pydantic/pydantic-ai#9088": {
+  "first_seen": "2026-10-01T19:20:48",
+  "status": "blocked"
+ },
+ "pydantic/pydantic-ai#9087": {
+  "first_seen": "2026-10-01T19:20:48",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#43715": {
+  "first_seen": "2026-10-01T19:20:48",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#43708": {
+  "first_seen": "2026-10-01T19:20:48",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#43685": {
+  "first_seen": "2026-10-01T19:20:48",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#17836": {
+  "first_seen": "2026-10-02T11:20:50",
+  "status": "blocked"
+ },
+ "pydantic/pydantic-ai#9517": {
+  "first_seen": "2026-10-02T11:20:50",
+  "status": "queued"
+ },
+ "pydantic/pydantic-ai#9487": {
+  "first_seen": "2026-10-02T11:20:50",
+  "status": "blocked"
+ },
+ "pydantic/pydantic-ai#9444": {
+  "first_seen": "2026-10-02T11:20:50",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#43867": {
+  "first_seen": "2026-10-02T11:20:50",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#43850": {
+  "first_seen": "2026-10-02T11:20:50",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#43845": {
+  "first_seen": "2026-10-02T11:20:50",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#43828": {
+  "first_seen": "2026-10-02T11:20:50",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#43817": {
+  "first_seen": "2026-10-02T11:20:50",
+  "status": "blocked"
+ },
+ "openai/openai-agents-python#5281": {
+  "first_seen": "2026-10-02T15:20:54",
+  "status": "lowscore"
+ },
+ "openai/openai-agents-python#5282": {
+  "first_seen": "2026-10-02T19:20:56",
+  "status": "lowscore"
+ },
+ "openai/openai-agents-python#5288": {
+  "first_seen": "2026-10-03T17:21:07",
+  "status": "blocked"
+ },
+ "openai/openai-agents-python#5286": {
+  "first_seen": "2026-10-03T17:21:07",
+  "status": "lowscore"
+ },
+ "browser-use/browser-use#5947": {
+  "first_seen": "2026-10-03T17:21:07",
+  "status": "blocked"
+ },
+ "langfuse/langfuse#18127": {
+  "first_seen": "2026-10-03T17:21:07",
+  "status": "blocked"
+ },
+ "langfuse/langfuse#18125": {
+  "first_seen": "2026-10-03T17:21:07",
+  "status": "blocked"
+ },
+ "Arize-ai/phoenix#16687": {
+  "first_seen": "2026-10-03T17:21:07",
+  "status": "queued"
+ },
+ "Arize-ai/phoenix#16685": {
+  "first_seen": "2026-10-03T17:21:07",
+  "status": "blocked"
+ },
+ "pydantic/pydantic-ai#9579": {
+  "first_seen": "2026-10-03T17:21:07",
+  "status": "blocked"
+ },
+ "pydantic/pydantic-ai#9519": {
+  "first_seen": "2026-10-03T17:21:07",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#44032": {
+  "first_seen": "2026-10-03T17:21:07",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#44030": {
+  "first_seen": "2026-10-03T17:21:07",
+  "status": "blocked"
+ },
+ "openai/openai-agents-python#5290": {
+  "first_seen": "2026-10-04T11:20:59",
+  "status": "blocked"
+ },
+ "openai/openai-agents-python#5289": {
+  "first_seen": "2026-10-04T11:20:59",
+  "status": "blocked"
+ },
+ "openai/openai-agents-python#3902": {
+  "first_seen": "2026-10-04T11:20:59",
+  "status": "blocked"
+ },
+ "OpenHands/software-agent-sdk#5466": {
+  "first_seen": "2026-10-04T11:20:59",
+  "status": "blocked"
+ },
+ "OpenHands/software-agent-sdk#5465": {
+  "first_seen": "2026-10-04T11:20:59",
+  "status": "blocked"
+ },
+ "OpenHands/software-agent-sdk#5447": {
+  "first_seen": "2026-10-04T11:20:59",
+  "status": "queued"
+ },
+ "OpenHands/OpenHands#17872": {
+  "first_seen": "2026-10-04T11:20:59",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#17871": {
+  "first_seen": "2026-10-04T11:20:59",
+  "status": "blocked"
+ },
+ "Arize-ai/phoenix#16688": {
+  "first_seen": "2026-10-04T11:20:59",
+  "status": "queued"
+ },
+ "e2b-dev/e2b#1933": {
+  "first_seen": "2026-10-04T11:20:59",
+  "status": "blocked"
+ },
+ "openai/openai-python#4021": {
+  "first_seen": "2026-10-04T11:20:59",
+  "status": "queued"
+ },
+ "pydantic/pydantic-ai#9628": {
+  "first_seen": "2026-10-04T11:20:59",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#44217": {
+  "first_seen": "2026-10-04T11:20:59",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#44197": {
+  "first_seen": "2026-10-04T11:20:59",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#44182": {
+  "first_seen": "2026-10-04T11:20:59",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#44154": {
+  "first_seen": "2026-10-04T11:20:59",
+  "status": "blocked"
+ },
+ "openai/openai-agents-python#5304": {
+  "first_seen": "2026-10-06T13:21:13",
+  "status": "blocked"
+ },
+ "OpenHands/software-agent-sdk#5481": {
+  "first_seen": "2026-10-06T13:21:13",
+  "status": "queued"
+ },
+ "OpenHands/software-agent-sdk#5475": {
+  "first_seen": "2026-10-06T13:21:13",
+  "status": "queued"
+ },
+ "browser-use/browser-use#5988": {
+  "first_seen": "2026-10-06T13:21:13",
+  "status": "blocked"
+ },
+ "browser-use/browser-use#5987": {
+  "first_seen": "2026-10-06T13:21:13",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#17900": {
+  "first_seen": "2026-10-06T13:21:13",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#17899": {
+  "first_seen": "2026-10-06T13:21:13",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#17898": {
+  "first_seen": "2026-10-06T13:21:13",
+  "status": "blocked"
+ },
+ "deepset-ai/haystack#13109": {
+  "first_seen": "2026-10-06T13:21:13",
+  "status": "blocked"
+ },
+ "deepset-ai/haystack#13107": {
+  "first_seen": "2026-10-06T13:21:13",
+  "status": "lowscore"
+ },
+ "Arize-ai/phoenix#16768": {
+  "first_seen": "2026-10-06T13:21:13",
+  "status": "queued"
+ },
+ "Arize-ai/phoenix#16743": {
+  "first_seen": "2026-10-06T13:21:13",
+  "status": "blocked"
+ },
+ "Arize-ai/phoenix#16742": {
+  "first_seen": "2026-10-06T13:21:13",
+  "status": "blocked"
+ },
+ "e2b-dev/e2b#1938": {
+  "first_seen": "2026-10-06T13:21:13",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#44496": {
+  "first_seen": "2026-10-06T13:21:13",
+  "status": "blocked"
+ },
+ "openai/openai-agents-python#5315": {
+  "first_seen": "2026-10-06T19:21:01",
+  "status": "lowscore"
+ },
+ "openai/openai-agents-python#5082": {
+  "first_seen": "2026-10-06T19:21:01",
+  "status": "queued"
+ },
+ "openai/openai-agents-python#5325": {
+  "first_seen": "2026-10-07T11:20:50",
+  "status": "lowscore"
+ },
+ "openai/openai-agents-python#5324": {
+  "first_seen": "2026-10-07T11:20:50",
+  "status": "lowscore"
+ },
+ "openai/openai-agents-python#5322": {
+  "first_seen": "2026-10-07T11:20:50",
+  "status": "blocked"
+ },
+ "OpenHands/software-agent-sdk#5523": {
+  "first_seen": "2026-10-07T11:20:50",
+  "status": "blocked"
+ },
+ "OpenHands/software-agent-sdk#5519": {
+  "first_seen": "2026-10-07T11:20:50",
+  "status": "blocked"
+ },
+ "OpenHands/software-agent-sdk#5514": {
+  "first_seen": "2026-10-07T11:20:50",
+  "status": "blocked"
+ },
+ "OpenHands/software-agent-sdk#5501": {
+  "first_seen": "2026-10-07T11:20:50",
+  "status": "blocked"
+ },
+ "OpenHands/software-agent-sdk#5498": {
+  "first_seen": "2026-10-07T11:20:50",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#17959": {
+  "first_seen": "2026-10-07T11:20:50",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#17958": {
+  "first_seen": "2026-10-07T11:20:50",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#17957": {
+  "first_seen": "2026-10-07T11:20:50",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#17955": {
+  "first_seen": "2026-10-07T11:20:50",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#17953": {
+  "first_seen": "2026-10-07T11:20:50",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#17949": {
+  "first_seen": "2026-10-07T11:20:50",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#17948": {
+  "first_seen": "2026-10-07T11:20:50",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#17946": {
+  "first_seen": "2026-10-07T11:20:50",
+  "status": "blocked"
+ },
+ "e2b-dev/e2b#1947": {
+  "first_seen": "2026-10-07T11:20:50",
+  "status": "queued"
+ },
+ "e2b-dev/e2b#1944": {
+  "first_seen": "2026-10-07T11:20:50",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#44694": {
+  "first_seen": "2026-10-07T11:20:50",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#44657": {
+  "first_seen": "2026-10-07T11:20:50",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#44575": {
+  "first_seen": "2026-10-07T11:20:50",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#44560": {
+  "first_seen": "2026-10-07T11:20:50",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#44535": {
+  "first_seen": "2026-10-07T11:20:50",
+  "status": "blocked"
+ },
+ "openai/openai-agents-python#5327": {
+  "first_seen": "2026-10-07T13:20:53",
+  "status": "lowscore"
+ },
+ "openai/openai-agents-python#5328": {
+  "first_seen": "2026-10-07T17:20:59",
+  "status": "blocked"
+ },
+ "openai/openai-agents-python#5330": {
+  "first_seen": "2026-10-08T11:21:14",
+  "status": "queued"
+ },
+ "openai/openai-agents-python#5329": {
+  "first_seen": "2026-10-08T11:21:14",
+  "status": "lowscore"
+ },
+ "OpenHands/software-agent-sdk#5558": {
+  "first_seen": "2026-10-08T11:21:14",
+  "status": "blocked"
+ },
+ "OpenHands/software-agent-sdk#5553": {
+  "first_seen": "2026-10-08T11:21:14",
+  "status": "blocked"
+ },
+ "OpenHands/software-agent-sdk#5539": {
+  "first_seen": "2026-10-08T11:21:14",
+  "status": "blocked"
+ },
+ "OpenHands/software-agent-sdk#5533": {
+  "first_seen": "2026-10-08T11:21:14",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#18090": {
+  "first_seen": "2026-10-08T11:21:14",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#18089": {
+  "first_seen": "2026-10-08T11:21:14",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#18088": {
+  "first_seen": "2026-10-08T11:21:14",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#18063": {
+  "first_seen": "2026-10-08T11:21:14",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#18062": {
+  "first_seen": "2026-10-08T11:21:14",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#18060": {
+  "first_seen": "2026-10-08T11:21:14",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#18061": {
+  "first_seen": "2026-10-08T11:21:14",
+  "status": "blocked"
+ },
+ "langfuse/langfuse#18359": {
+  "first_seen": "2026-10-08T11:21:14",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#44888": {
+  "first_seen": "2026-10-08T11:21:14",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#44852": {
+  "first_seen": "2026-10-08T11:21:14",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#44851": {
+  "first_seen": "2026-10-08T11:21:14",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#44831": {
+  "first_seen": "2026-10-08T11:21:14",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#44830": {
+  "first_seen": "2026-10-08T11:21:14",
+  "status": "blocked"
+ },
+ "openai/openai-agents-python#5348": {
+  "first_seen": "2026-10-11T15:21:11",
+  "status": "lowscore"
+ },
+ "openai/openai-agents-python#5346": {
+  "first_seen": "2026-10-11T15:21:11",
+  "status": "lowscore"
+ },
+ "openai/openai-agents-python#5344": {
+  "first_seen": "2026-10-11T15:21:11",
+  "status": "lowscore"
+ },
+ "openai/openai-agents-python#5343": {
+  "first_seen": "2026-10-11T15:21:11",
+  "status": "lowscore"
+ },
+ "openai/openai-agents-python#5342": {
+  "first_seen": "2026-10-11T15:21:11",
+  "status": "lowscore"
+ },
+ "OpenHands/software-agent-sdk#5652": {
+  "first_seen": "2026-10-11T15:21:11",
+  "status": "blocked"
+ },
+ "OpenHands/software-agent-sdk#5651": {
+  "first_seen": "2026-10-11T15:21:11",
+  "status": "blocked"
+ },
+ "OpenHands/software-agent-sdk#5650": {
+  "first_seen": "2026-10-11T15:21:11",
+  "status": "blocked"
+ },
+ "OpenHands/software-agent-sdk#5649": {
+  "first_seen": "2026-10-11T15:21:11",
+  "status": "queued"
+ },
+ "OpenHands/software-agent-sdk#5648": {
+  "first_seen": "2026-10-11T15:21:11",
+  "status": "queued"
+ },
+ "OpenHands/OpenHands#18234": {
+  "first_seen": "2026-10-11T15:21:11",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#18233": {
+  "first_seen": "2026-10-11T15:21:11",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#18210": {
+  "first_seen": "2026-10-11T15:21:11",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#18160": {
+  "first_seen": "2026-10-11T15:21:11",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#18161": {
+  "first_seen": "2026-10-11T15:21:11",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#18155": {
+  "first_seen": "2026-10-11T15:21:11",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#18136": {
+  "first_seen": "2026-10-11T15:21:11",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#18117": {
+  "first_seen": "2026-10-11T15:21:11",
+  "status": "blocked"
+ },
+ "Arize-ai/phoenix#16891": {
+  "first_seen": "2026-10-11T15:21:11",
+  "status": "queued"
+ },
+ "openai/openai-python#4040": {
+  "first_seen": "2026-10-11T15:21:11",
+  "status": "blocked"
+ },
+ "openai/openai-python#4036": {
+  "first_seen": "2026-10-11T15:21:11",
+  "status": "blocked"
+ },
+ "pydantic/pydantic-ai#10034": {
+  "first_seen": "2026-10-11T15:21:11",
+  "status": "blocked"
+ },
+ "pydantic/pydantic-ai#10032": {
+  "first_seen": "2026-10-11T15:21:11",
+  "status": "blocked"
+ },
+ "pydantic/pydantic-ai#9987": {
+  "first_seen": "2026-10-11T15:21:11",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#45676": {
+  "first_seen": "2026-10-11T15:21:11",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#45586": {
+  "first_seen": "2026-10-11T15:21:11",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#45573": {
+  "first_seen": "2026-10-11T15:21:11",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#45564": {
+  "first_seen": "2026-10-11T15:21:11",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#45563": {
+  "first_seen": "2026-10-11T15:21:11",
+  "status": "blocked"
+ },
+ "openai/openai-agents-python#5351": {
+  "first_seen": "2026-10-12T11:21:01",
+  "status": "lowscore"
+ },
+ "openai/openai-agents-python#5350": {
+  "first_seen": "2026-10-12T11:21:01",
+  "status": "blocked"
+ },
+ "openai/openai-agents-python#5349": {
+  "first_seen": "2026-10-12T11:21:01",
+  "status": "blocked"
+ },
+ "anomalyco/opencode#50916": {
+  "first_seen": "2026-10-12T11:21:01",
+  "status": "blocked"
+ },
+ "infiniflow/ragflow#20716": {
+  "first_seen": "2026-10-12T11:21:01",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#45825": {
+  "first_seen": "2026-10-12T11:21:01",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#45796": {
+  "first_seen": "2026-10-12T11:21:01",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#45736": {
+  "first_seen": "2026-10-12T11:21:01",
+  "status": "blocked"
+ },
+ "openai/openai-agents-python#5352": {
+  "first_seen": "2026-10-12T15:20:52",
+  "status": "queued"
+ },
+ "langchain-ai/langsmith-sdk#1578": {
+  "first_seen": "2026-10-12T15:20:52",
+  "status": "queued"
+ },
+ "langchain-ai/langsmith-sdk#2122": {
+  "first_seen": "2026-10-12T15:20:52",
+  "status": "blocked"
+ },
+ "langchain-ai/langsmith-sdk#2019": {
+  "first_seen": "2026-10-12T15:20:52",
+  "status": "queued"
+ },
+ "langchain-ai/langsmith-sdk#1716": {
+  "first_seen": "2026-10-12T15:20:52",
+  "status": "queued"
+ },
+ "openai/openai-agents-python#5353": {
+  "first_seen": "2026-10-13T11:21:07",
+  "status": "blocked"
+ },
+ "OpenHands/software-agent-sdk#5711": {
+  "first_seen": "2026-10-13T11:21:07",
+  "status": "blocked"
+ },
+ "anomalyco/opencode#54833": {
+  "first_seen": "2026-10-13T11:21:07",
+  "status": "queued"
+ },
+ "BerriAI/litellm#45949": {
+  "first_seen": "2026-10-13T11:21:07",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#45948": {
+  "first_seen": "2026-10-13T11:21:07",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#18287": {
+  "first_seen": "2026-10-13T19:21:05",
+  "status": "blocked"
+ },
+ "langfuse/langfuse#18607": {
+  "first_seen": "2026-10-13T19:21:05",
+  "status": "blocked"
+ },
+ "openai/openai-agents-python#5336": {
+  "first_seen": "2026-10-15T11:21:05",
+  "status": "blocked"
+ },
+ "OpenHands/software-agent-sdk#5825": {
+  "first_seen": "2026-10-15T11:21:05",
+  "status": "blocked"
+ },
+ "OpenHands/software-agent-sdk#5824": {
+  "first_seen": "2026-10-15T11:21:05",
+  "status": "blocked"
+ },
+ "OpenHands/software-agent-sdk#5823": {
+  "first_seen": "2026-10-15T11:21:05",
+  "status": "blocked"
+ },
+ "OpenHands/software-agent-sdk#5822": {
+  "first_seen": "2026-10-15T11:21:05",
+  "status": "blocked"
+ },
+ "OpenHands/software-agent-sdk#5820": {
+  "first_seen": "2026-10-15T11:21:05",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#18418": {
+  "first_seen": "2026-10-15T11:21:05",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#18390": {
+  "first_seen": "2026-10-15T11:21:05",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#18362": {
+  "first_seen": "2026-10-15T11:21:05",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#18341": {
+  "first_seen": "2026-10-15T11:21:05",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#18324": {
+  "first_seen": "2026-10-15T11:21:05",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#18302": {
+  "first_seen": "2026-10-15T11:21:05",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#18301": {
+  "first_seen": "2026-10-15T11:21:05",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#18299": {
+  "first_seen": "2026-10-15T11:21:05",
+  "status": "blocked"
+ },
+ "deepset-ai/haystack#13257": {
+  "first_seen": "2026-10-15T11:21:05",
+  "status": "blocked"
+ },
+ "langfuse/langfuse#18836": {
+  "first_seen": "2026-10-15T11:21:05",
+  "status": "queued"
+ },
+ "pydantic/pydantic-ai#10283": {
+  "first_seen": "2026-10-15T11:21:05",
+  "status": "blocked"
+ },
+ "pydantic/pydantic-ai#10279": {
+  "first_seen": "2026-10-15T11:21:05",
+  "status": "blocked"
+ },
+ "pydantic/pydantic-ai#10270": {
+  "first_seen": "2026-10-15T11:21:05",
+  "status": "lowscore"
+ },
+ "pydantic/pydantic-ai#10248": {
+  "first_seen": "2026-10-15T11:21:05",
+  "status": "blocked"
+ },
+ "pydantic/pydantic-ai#10243": {
+  "first_seen": "2026-10-15T11:21:05",
+  "status": "queued"
+ },
+ "pydantic/pydantic-ai#10229": {
+  "first_seen": "2026-10-15T11:21:05",
+  "status": "blocked"
+ },
+ "pydantic/pydantic-ai#10226": {
+  "first_seen": "2026-10-15T11:21:05",
+  "status": "blocked"
+ },
+ "pydantic/pydantic-ai#9545": {
+  "first_seen": "2026-10-15T11:21:05",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#46303": {
+  "first_seen": "2026-10-15T11:21:05",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#46212": {
+  "first_seen": "2026-10-15T11:21:05",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#46198": {
+  "first_seen": "2026-10-15T11:21:05",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#46189": {
+  "first_seen": "2026-10-15T11:21:05",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#46173": {
+  "first_seen": "2026-10-15T11:21:05",
+  "status": "blocked"
+ },
+ "OpenHands/software-agent-sdk#4240": {
+  "first_seen": "2026-10-15T17:22:32",
+  "status": "blocked"
+ },
+ "OpenHands/software-agent-sdk#5292": {
+  "first_seen": "2026-10-15T17:22:32",
+  "status": "blocked"
+ },
+ "pydantic/pydantic-ai#10300": {
+  "first_seen": "2026-10-15T17:22:32",
+  "status": "lowscore"
+ },
+ "pydantic/pydantic-ai#10296": {
+  "first_seen": "2026-10-15T17:22:32",
+  "status": "blocked"
+ },
+ "langfuse/langfuse#18849": {
+  "first_seen": "2026-10-15T21:21:02",
+  "status": "blocked"
+ },
+ "pydantic/pydantic-ai#10311": {
+  "first_seen": "2026-10-15T21:21:02",
+  "status": "blocked"
+ },
+ "OpenHands/software-agent-sdk#5985": {
+  "first_seen": "2026-10-16T11:23:00",
+  "status": "blocked"
+ },
+ "OpenHands/software-agent-sdk#5974": {
+  "first_seen": "2026-10-16T11:23:00",
+  "status": "blocked"
+ },
+ "OpenHands/software-agent-sdk#5969": {
+  "first_seen": "2026-10-16T11:23:00",
+  "status": "blocked"
+ },
+ "OpenHands/software-agent-sdk#5963": {
+  "first_seen": "2026-10-16T11:23:00",
+  "status": "blocked"
+ },
+ "OpenHands/software-agent-sdk#5962": {
+  "first_seen": "2026-10-16T11:23:00",
+  "status": "blocked"
+ },
+ "browser-use/browser-use#6068": {
+  "first_seen": "2026-10-16T11:23:00",
+  "status": "queued"
+ },
+ "browser-use/browser-use#6065": {
+  "first_seen": "2026-10-16T11:23:00",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#18445": {
+  "first_seen": "2026-10-16T11:23:00",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#18434": {
+  "first_seen": "2026-10-16T11:23:00",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#18432": {
+  "first_seen": "2026-10-16T11:23:00",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#18421": {
+  "first_seen": "2026-10-16T11:23:00",
+  "status": "blocked"
+ },
+ "e2b-dev/e2b#1981": {
+  "first_seen": "2026-10-16T11:23:00",
+  "status": "blocked"
+ },
+ "pydantic/pydantic-ai#10397": {
+  "first_seen": "2026-10-16T11:23:00",
+  "status": "blocked"
+ },
+ "pydantic/pydantic-ai#10385": {
+  "first_seen": "2026-10-16T11:23:00",
+  "status": "blocked"
+ },
+ "pydantic/pydantic-ai#10382": {
+  "first_seen": "2026-10-16T11:23:00",
+  "status": "blocked"
+ },
+ "pydantic/pydantic-ai#10381": {
+  "first_seen": "2026-10-16T11:23:00",
+  "status": "blocked"
+ },
+ "pydantic/pydantic-ai#10371": {
+  "first_seen": "2026-10-16T11:23:00",
+  "status": "blocked"
+ },
+ "pydantic/pydantic-ai#10348": {
+  "first_seen": "2026-10-16T11:23:00",
+  "status": "blocked"
+ },
+ "pydantic/pydantic-ai#10317": {
+  "first_seen": "2026-10-16T11:23:00",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#46499": {
+  "first_seen": "2026-10-16T11:23:00",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#46473": {
+  "first_seen": "2026-10-16T11:23:00",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#46435": {
+  "first_seen": "2026-10-16T11:23:00",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#46422": {
+  "first_seen": "2026-10-16T11:23:00",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#46407": {
+  "first_seen": "2026-10-16T11:23:00",
+  "status": "blocked"
+ },
+ "deepset-ai/haystack#8482": {
+  "first_seen": "2026-10-16T17:20:46",
+  "status": "blocked"
+ },
+ "pydantic/pydantic-ai#10427": {
+  "first_seen": "2026-10-16T17:20:46",
+  "status": "lowscore"
+ },
+ "langchain-ai/langsmith-sdk#1722": {
+  "first_seen": "2026-10-16T19:20:53",
+  "status": "blocked"
+ },
+ "pydantic/pydantic-ai#10432": {
+  "first_seen": "2026-10-16T21:20:55",
+  "status": "blocked"
+ },
+ "pydantic/pydantic-ai#10441": {
+  "first_seen": "2026-10-16T23:21:09",
+  "status": "blocked"
+ },
+ "pydantic/pydantic-ai#10435": {
+  "first_seen": "2026-10-16T23:21:09",
+  "status": "blocked"
+ },
+ "openai/openai-agents-python#5392": {
+  "first_seen": "2026-10-19T21:20:55",
+  "status": "lowscore"
+ },
+ "openai/openai-agents-python#5387": {
+  "first_seen": "2026-10-19T21:20:55",
+  "status": "lowscore"
+ },
+ "openai/openai-agents-python#5386": {
+  "first_seen": "2026-10-19T21:20:55",
+  "status": "blocked"
+ },
+ "openai/openai-agents-python#5383": {
+  "first_seen": "2026-10-19T21:20:55",
+  "status": "blocked"
+ },
+ "OpenHands/software-agent-sdk#6059": {
+  "first_seen": "2026-10-19T21:20:55",
+  "status": "blocked"
+ },
+ "OpenHands/software-agent-sdk#6053": {
+  "first_seen": "2026-10-19T21:20:55",
+  "status": "blocked"
+ },
+ "OpenHands/software-agent-sdk#6028": {
+  "first_seen": "2026-10-19T21:20:55",
+  "status": "blocked"
+ },
+ "OpenHands/software-agent-sdk#6026": {
+  "first_seen": "2026-10-19T21:20:55",
+  "status": "blocked"
+ },
+ "OpenHands/software-agent-sdk#6024": {
+  "first_seen": "2026-10-19T21:20:55",
+  "status": "queued"
+ },
+ "OpenHands/OpenHands#18602": {
+  "first_seen": "2026-10-19T21:20:55",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#18598": {
+  "first_seen": "2026-10-19T21:20:55",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#18557": {
+  "first_seen": "2026-10-19T21:20:55",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#18547": {
+  "first_seen": "2026-10-19T21:20:55",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#18546": {
+  "first_seen": "2026-10-19T21:20:55",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#18539": {
+  "first_seen": "2026-10-19T21:20:55",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#18517": {
+  "first_seen": "2026-10-19T21:20:55",
+  "status": "blocked"
+ },
+ "langfuse/langfuse#18995": {
+  "first_seen": "2026-10-19T21:20:55",
+  "status": "queued"
+ },
+ "anomalyco/opencode#56324": {
+  "first_seen": "2026-10-19T21:20:55",
+  "status": "blocked"
+ },
+ "e2b-dev/e2b#1990": {
+  "first_seen": "2026-10-19T21:20:55",
+  "status": "blocked"
+ },
+ "e2b-dev/e2b#1986": {
+  "first_seen": "2026-10-19T21:20:55",
+  "status": "blocked"
+ },
+ "e2b-dev/e2b#1984": {
+  "first_seen": "2026-10-19T21:20:55",
+  "status": "blocked"
+ },
+ "pydantic/pydantic-ai#10538": {
+  "first_seen": "2026-10-19T21:20:55",
+  "status": "blocked"
+ },
+ "pydantic/pydantic-ai#10493": {
+  "first_seen": "2026-10-19T21:20:55",
+  "status": "blocked"
+ },
+ "pydantic/pydantic-ai#10611": {
+  "first_seen": "2026-10-19T21:20:55",
+  "status": "blocked"
+ },
+ "pydantic/pydantic-ai#10554": {
+  "first_seen": "2026-10-19T21:20:55",
+  "status": "lowscore"
+ },
+ "pydantic/pydantic-ai#10531": {
+  "first_seen": "2026-10-19T21:20:55",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#47082": {
+  "first_seen": "2026-10-19T21:20:55",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#47012": {
+  "first_seen": "2026-10-19T21:20:55",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#47011": {
+  "first_seen": "2026-10-19T21:20:55",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#47010": {
+  "first_seen": "2026-10-19T21:20:55",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#47007": {
+  "first_seen": "2026-10-19T21:20:55",
+  "status": "blocked"
+ },
+ "OpenHands/software-agent-sdk#6075": {
+  "first_seen": "2026-10-20T21:22:05",
+  "status": "blocked"
+ },
+ "OpenHands/software-agent-sdk#6074": {
+  "first_seen": "2026-10-20T21:22:05",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#18569": {
+  "first_seen": "2026-10-20T21:22:05",
+  "status": "blocked"
+ },
+ "anomalyco/opencode#54524": {
+  "first_seen": "2026-10-20T21:22:05",
+  "status": "blocked"
+ },
+ "pydantic/pydantic-ai#10705": {
+  "first_seen": "2026-10-20T21:22:05",
+  "status": "lowscore"
+ },
+ "pydantic/pydantic-ai#10702": {
+  "first_seen": "2026-10-20T21:22:05",
+  "status": "blocked"
+ },
+ "pydantic/pydantic-ai#10685": {
+  "first_seen": "2026-10-20T21:22:05",
+  "status": "blocked"
+ },
+ "pydantic/pydantic-ai#10671": {
+  "first_seen": "2026-10-20T21:22:05",
+  "status": "blocked"
+ },
+ "pydantic/pydantic-ai#10647": {
+  "first_seen": "2026-10-20T21:22:05",
+  "status": "queued"
+ },
+ "BerriAI/litellm#47248": {
+  "first_seen": "2026-10-20T21:22:05",
+  "status": "blocked"
+ },
+ "openai/openai-agents-python#5405": {
+  "first_seen": "2026-10-21T21:20:59",
+  "status": "blocked"
+ },
+ "OpenHands/software-agent-sdk#6088": {
+  "first_seen": "2026-10-21T21:20:59",
+  "status": "blocked"
+ },
+ "OpenHands/software-agent-sdk#6086": {
+  "first_seen": "2026-10-21T21:20:59",
+  "status": "blocked"
+ },
+ "OpenHands/software-agent-sdk#6085": {
+  "first_seen": "2026-10-21T21:20:59",
+  "status": "blocked"
+ },
+ "browser-use/browser-use#6135": {
+  "first_seen": "2026-10-21T21:20:59",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#18673": {
+  "first_seen": "2026-10-21T21:20:59",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#18637": {
+  "first_seen": "2026-10-21T21:20:59",
+  "status": "blocked"
+ },
+ "langfuse/langfuse#19118": {
+  "first_seen": "2026-10-21T21:20:59",
+  "status": "blocked"
+ },
+ "anomalyco/opencode#42670": {
+  "first_seen": "2026-10-21T21:20:59",
+  "status": "blocked"
+ },
+ "anomalyco/opencode#55211": {
+  "first_seen": "2026-10-21T21:20:59",
+  "status": "queued"
+ },
+ "anomalyco/opencode#49986": {
+  "first_seen": "2026-10-21T21:20:59",
+  "status": "blocked"
+ },
+ "e2b-dev/e2b#1996": {
+  "first_seen": "2026-10-21T21:20:59",
+  "status": "blocked"
+ },
+ "pydantic/pydantic-ai#10854": {
+  "first_seen": "2026-10-21T21:20:59",
+  "status": "blocked"
+ },
+ "pydantic/pydantic-ai#10853": {
+  "first_seen": "2026-10-21T21:20:59",
+  "status": "blocked"
+ },
+ "pydantic/pydantic-ai#10842": {
+  "first_seen": "2026-10-21T21:20:59",
+  "status": "blocked"
+ },
+ "pydantic/pydantic-ai#10826": {
+  "first_seen": "2026-10-21T21:20:59",
+  "status": "blocked"
+ },
+ "pydantic/pydantic-ai#10808": {
+  "first_seen": "2026-10-21T21:20:59",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#47320": {
+  "first_seen": "2026-10-21T21:20:59",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#47308": {
+  "first_seen": "2026-10-21T21:20:59",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#47297": {
+  "first_seen": "2026-10-21T21:20:59",
+  "status": "blocked"
+ },
+ "openai/openai-agents-python#5411": {
+  "first_seen": "2026-10-23T15:22:13",
+  "status": "blocked"
+ },
+ "openai/openai-agents-python#5409": {
+  "first_seen": "2026-10-23T15:22:13",
+  "status": "lowscore"
+ },
+ "openai/openai-agents-python#5408": {
+  "first_seen": "2026-10-23T15:22:13",
+  "status": "blocked"
+ },
+ "openai/openai-agents-python#5407": {
+  "first_seen": "2026-10-23T15:22:13",
+  "status": "lowscore"
+ },
+ "OpenHands/software-agent-sdk#6139": {
+  "first_seen": "2026-10-23T15:22:13",
+  "status": "blocked"
+ },
+ "OpenHands/software-agent-sdk#6133": {
+  "first_seen": "2026-10-23T15:22:13",
+  "status": "blocked"
+ },
+ "OpenHands/software-agent-sdk#6131": {
+  "first_seen": "2026-10-23T15:22:13",
+  "status": "blocked"
+ },
+ "OpenHands/software-agent-sdk#6120": {
+  "first_seen": "2026-10-23T15:22:13",
+  "status": "blocked"
+ },
+ "OpenHands/software-agent-sdk#6116": {
+  "first_seen": "2026-10-23T15:22:13",
+  "status": "blocked"
+ },
+ "browser-use/browser-use#6173": {
+  "first_seen": "2026-10-23T15:22:13",
+  "status": "blocked"
+ },
+ "browser-use/browser-use#6153": {
+  "first_seen": "2026-10-23T15:22:13",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#18744": {
+  "first_seen": "2026-10-23T15:22:13",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#18728": {
+  "first_seen": "2026-10-23T15:22:13",
+  "status": "queued"
+ },
+ "OpenHands/OpenHands#18716": {
+  "first_seen": "2026-10-23T15:22:13",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#18715": {
+  "first_seen": "2026-10-23T15:22:13",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#18701": {
+  "first_seen": "2026-10-23T15:22:13",
+  "status": "blocked"
+ },
+ "langfuse/langfuse#19181": {
+  "first_seen": "2026-10-23T15:22:13",
+  "status": "blocked"
+ },
+ "anomalyco/opencode#43088": {
+  "first_seen": "2026-10-23T15:22:13",
+  "status": "blocked"
+ },
+ "pydantic/pydantic-ai#10769": {
+  "first_seen": "2026-10-23T15:22:13",
+  "status": "blocked"
+ },
+ "pydantic/pydantic-ai#10748": {
+  "first_seen": "2026-10-23T15:22:13",
+  "status": "blocked"
+ },
+ "pydantic/pydantic-ai#10744": {
+  "first_seen": "2026-10-23T15:22:13",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#47862": {
+  "first_seen": "2026-10-23T15:22:13",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#47856": {
+  "first_seen": "2026-10-23T15:22:13",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#47831": {
+  "first_seen": "2026-10-23T15:22:13",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#47825": {
+  "first_seen": "2026-10-23T15:22:13",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#47822": {
+  "first_seen": "2026-10-23T15:22:13",
+  "status": "blocked"
+ },
+ "aaif-goose/goose#11043": {
+  "first_seen": "2026-10-24T19:21:11",
+  "status": "blocked"
+ },
+ "aaif-goose/goose#12513": {
+  "first_seen": "2026-10-24T19:21:11",
+  "status": "queued"
+ },
+ "aaif-goose/goose#11451": {
+  "first_seen": "2026-10-24T19:21:11",
+  "status": "blocked"
+ },
+ "aaif-goose/goose#13067": {
+  "first_seen": "2026-10-24T19:21:11",
+  "status": "queued"
+ },
+ "aaif-goose/goose#13065": {
+  "first_seen": "2026-10-24T19:21:11",
+  "status": "queued"
+ },
+ "aaif-goose/goose#13045": {
+  "first_seen": "2026-10-24T19:21:11",
+  "status": "lowscore"
+ },
+ "aaif-goose/goose#12791": {
+  "first_seen": "2026-10-24T19:21:11",
+  "status": "queued"
+ },
+ "aaif-goose/goose#12551": {
+  "first_seen": "2026-10-24T19:21:11",
+  "status": "blocked"
+ },
+ "openai/openai-agents-python#5413": {
+  "first_seen": "2026-10-24T19:21:11",
+  "status": "lowscore"
+ },
+ "openai/openai-agents-python#5412": {
+  "first_seen": "2026-10-24T19:21:11",
+  "status": "blocked"
+ },
+ "OpenHands/software-agent-sdk#6156": {
+  "first_seen": "2026-10-24T19:21:11",
+  "status": "blocked"
+ },
+ "OpenHands/software-agent-sdk#6152": {
+  "first_seen": "2026-10-24T19:21:11",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#18847": {
+  "first_seen": "2026-10-24T19:21:11",
+  "status": "queued"
+ },
+ "OpenHands/OpenHands#18810": {
+  "first_seen": "2026-10-24T19:21:11",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#18809": {
+  "first_seen": "2026-10-24T19:21:11",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#18808": {
+  "first_seen": "2026-10-24T19:21:11",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#18799": {
+  "first_seen": "2026-10-24T19:21:11",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#18796": {
+  "first_seen": "2026-10-24T19:21:11",
+  "status": "blocked"
+ },
+ "OpenHands/OpenHands#18795": {
+  "first_seen": "2026-10-24T19:21:11",
+  "status": "blocked"
+ },
+ "langfuse/langfuse#19326": {
+  "first_seen": "2026-10-24T19:21:11",
+  "status": "blocked"
+ },
+ "langfuse/langfuse#19324": {
+  "first_seen": "2026-10-24T19:21:11",
+  "status": "blocked"
+ },
+ "Arize-ai/phoenix#17161": {
+  "first_seen": "2026-10-24T19:21:11",
+  "status": "queued"
+ },
+ "Arize-ai/phoenix#17160": {
+  "first_seen": "2026-10-24T19:21:11",
+  "status": "queued"
+ },
+ "Arize-ai/phoenix#17159": {
+  "first_seen": "2026-10-24T19:21:11",
+  "status": "queued"
+ },
+ "Arize-ai/phoenix#17158": {
+  "first_seen": "2026-10-24T19:21:11",
+  "status": "blocked"
+ },
+ "Arize-ai/phoenix#17130": {
+  "first_seen": "2026-10-24T19:21:11",
+  "status": "blocked"
+ },
+ "openai/openai-python#3561": {
+  "first_seen": "2026-10-24T19:21:11",
+  "status": "blocked"
+ },
+ "crewAIInc/crewAI#8370": {
+  "first_seen": "2026-10-24T19:21:11",
+  "status": "blocked"
+ },
+ "crewAIInc/crewAI#8338": {
+  "first_seen": "2026-10-24T19:21:11",
+  "status": "blocked"
+ },
+ "crewAIInc/crewAI#8320": {
+  "first_seen": "2026-10-24T19:21:11",
+  "status": "blocked"
+ },
+ "crewAIInc/crewAI#8319": {
+  "first_seen": "2026-10-24T19:21:11",
+  "status": "blocked"
+ },
+ "crewAIInc/crewAI#8318": {
+  "first_seen": "2026-10-24T19:21:11",
+  "status": "blocked"
+ },
+ "pydantic/pydantic-ai#11044": {
+  "first_seen": "2026-10-24T19:21:11",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#47826": {
+  "first_seen": "2026-10-24T19:21:11",
+  "status": "blocked"
+ },
+ "BerriAI/litellm#26071": {
+  "first_seen": "2026-10-24T19:21:11",
+  "status": "blocked"
+ },
+ "e2b-dev/e2b#2017": {
+  "first_seen": "2026-10-24T21:21:09",
+  "status": "queued"
+ },
+ "anomalyco/opencode#51071": {
+  "first_seen": "2026-10-25T01:10:09",
+  "status": "blocked"
+ },
+ "anomalyco/opencode#56297": {
+  "first_seen": "2026-10-25T01:10:09",
+  "status": "queued"
+ }
+}

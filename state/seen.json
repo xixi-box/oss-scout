@@ -2650,5 +2650,25 @@
  "anomalyco/opencode#56297": {
   "first_seen": "2026-10-25T01:10:09",
   "status": "queued"
+ },
+ "anomalyco/opencode#58874": {
+  "first_seen": "2026-10-25T12:41:25",
+  "status": "queued"
+ },
+ "anomalyco/opencode#58873": {
+  "first_seen": "2026-10-25T12:41:25",
+  "status": "blocked"
+ },
+ "anomalyco/opencode#58859": {
+  "first_seen": "2026-10-25T12:41:25",
+  "status": "queued"
+ },
+ "anomalyco/opencode#55504": {
+  "first_seen": "2026-10-25T12:41:25",
+  "status": "lowscore"
+ },
+ "anomalyco/opencode#54784": {
+  "first_seen": "2026-10-25T12:41:25",
+  "status": "lowscore"
  }
 }

@@ -10,7 +10,7 @@ crons = ["* * * * *"]   # 每分钟一次
 
 [[kv_namespaces]]
 binding = "SEEN"
-id = "<KV namespace id>"
+id = "06f5c54ef44a4e3ab31f7cf0e45646cc"
 
 [vars]
 REPOS = "aaif-goose/goose,openai/openai-agents-python,browser-use/browser-use,OpenHands/software-agent-sdk,OpenHands/OpenHands,deepset-ai/haystack,langfuse/langfuse,Arize-ai/phoenix,anomalyco/opencode,langchain-ai/langsmith-sdk,e2b-dev/e2b,infiniflow/ragflow,openai/openai-python,crewAIInc/crewAI"
