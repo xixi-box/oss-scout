@@ -6,8 +6,9 @@ version: 1
 business_timezone: "Asia/Shanghai"   # 每日认领上限按此时区切"当日"（用户已确认 2026-10-25）
 
 scheduler:
-  # 当前生效（= Playbook 节奏）
-  observe_interval_minutes: 120        # 观测任务：每 2h，仅 discover.py
+  # 用户裁定（2026-10-25）：issue 发现只依靠 Cloudflare Worker（每分钟），
+  # discover.py 兜底扫描已停用。
+  observe_interval_minutes: 0          # 0 = 停用（发现走 Cloudflare Worker）
   consume_windows_local: ["10:30", "16:30", "22:30"]
   pr_monitor_per_consume: true         # 消费窗口开头先跑 PR 监控段
   health_refresh_after_days: 7

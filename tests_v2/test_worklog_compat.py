@@ -50,11 +50,13 @@ class TestRealStateFiles:
 class TestSchedulerGuard:
     def test_playbook_pace_passes(self):
         from scout_v2.scheduler import scheduled_plan
-        import yaml
-        cfg = yaml.safe_load((ROOT / "configs" / "v2.yaml").read_text(encoding="utf-8"))
-        plan = scheduled_plan(cfg)
-        names = [t.name for t in plan]
-        assert "observe_discover" in names and "consume_window" in names
+        # 用户裁定 2026-10-25：observe=0（发现走 Cloudflare Worker），守门必须放行
+        plan = scheduled_plan({"scheduler": {"observe_interval_minutes": 0,
+                                             "consume_windows_local": ["10:30"]}})
+        assert plan[0].name == "issue_hunter_cloudflare"
+        assert any(t.name == "consume_window" for t in plan)
+        plan2 = scheduled_plan({"scheduler": {"observe_interval_minutes": 120}})
+        assert any(t.name == "observe_discover" for t in plan2)
 
     def test_aggressive_pace_rejected_until_playbook_revised(self):
         from scout_v2.scheduler import ScheduleConflictError, scheduled_plan

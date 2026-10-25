@@ -25,21 +25,25 @@ def scheduled_plan(v2_cfg: dict) -> list[ScheduledTask]:
     observe = int(sched.get("observe_interval_minutes", 120))
     continuous = bool(v2_cfg.get("continuous_consume", False))
 
-    # Playbook §1.5：观测任务每 2 小时，禁止消费/评论/开 PR；消费仅三窗
-    if observe < 120:
-        raise ScheduleConflictError(
-            f"observe_interval_minutes={observe} < Playbook's 120min — revise AGENTS.md first")
     if continuous:
         raise ScheduleConflictError(
             "continuous_consume=true requires Playbook migration (P6 + human review)")
 
+    # observe=0 = 停用（发现走 Cloudflare Worker，用户裁定 2026-10-25）
+    if observe == 0:
+        plan = [ScheduledTask("issue_hunter_cloudflare", 1,
+                              "Cloudflare Worker (1/min) — sole discovery channel")]
+    else:
+        if observe < 120:
+            raise ScheduleConflictError(
+                f"observe_interval_minutes={observe} < Playbook's 120min — revise AGENTS.md first")
+        plan = [ScheduledTask("observe_discover", observe, "VPS API (discover.py only)")]
+
     windows = sched.get("consume_windows_local") or ["10:30", "16:30", "22:30"]
-    plan = [
-        ScheduledTask("observe_discover", observe, "VPS API (discover.py only)"),
-        ScheduledTask("consume_window", 0, f"windows {windows} (pr_monitor → discover → consume)"),
-    ]
+    plan.append(ScheduledTask("consume_window", 0,
+                              f"windows {windows} (pr_monitor → discover → consume)"))
     if int(sched.get("health_refresh_after_days", 7)) > 0:
         plan.append(ScheduledTask("health_refresh",
-                                  int(sched["health_refresh_after_days"]) * 24 * 60,
+                                  int(sched.get("health_refresh_after_days", 7)) * 24 * 60,
                                   "health_check.py"))
     return plan
