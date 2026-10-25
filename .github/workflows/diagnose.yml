@@ -1,0 +1,14 @@
+name: Diagnose oss-scout container
+on:
+  workflow_dispatch:
+jobs:
+  diag:
+    runs-on: [self-hosted, aliyun]
+    steps:
+      - name: Container state and logs
+        run: |
+          docker ps -a --filter name=oss-scout --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'
+          echo "=== logs (last 50) ==="
+          docker logs --tail 50 oss-scout 2>&1 || echo "no logs"
+          echo "=== curl from host ==="
+          curl -sv --max-time 5 http://127.0.0.1:18787/login 2>&1 | tail -8 || true
