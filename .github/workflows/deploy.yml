@@ -35,19 +35,11 @@ permissions:
   packages: read
 
 jobs:
-  build-deploy:
-    name: Atomic build + deploy to ${{ github.event.inputs.target_env }}
+  build:
+    # 构建在 GitHub 托管 runner（Actions 构建）；产物只有镜像 → ACR，
+    # 无 artifact 中转（存储配额免疫）。deploy job 经 SHA 标签从 ACR 拉取。
+    name: Build and push to ACR
     runs-on: ubuntu-latest
-    concurrency:
-      group: atomic-${{ github.repository }}-${{ github.event.inputs.target_env }}
-      cancel-in-progress: false
-    env:
-      ALIYUN_ACR_PASSWORD: ${{ secrets.ALIYUN_ACR_PASSWORD }}
-      DASHBOARD_PASSWORD: ${{ secrets.DASHBOARD_PASSWORD }}
-      GH_TOKEN: ${{ secrets.GH_TOKEN }}
-      OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
-      MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
-      MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
     steps:
       - name: Checkout source code
         uses: actions/checkout@v7
@@ -90,6 +82,26 @@ jobs:
             --label "org.opencontainers.image.revision=${{ github.sha }}" \
             --push \
             .
+
+  deploy:
+    name: Deploy to ${{ github.event.inputs.target_env }} (self-hosted)
+    needs: build
+    runs-on: [self-hosted, "${{ github.event.inputs.target_env }}"]
+    concurrency:
+      group: atomic-${{ github.repository }}-${{ github.event.inputs.target_env }}
+      cancel-in-progress: false
+    env:
+      ALIYUN_ACR_PASSWORD: ${{ secrets.ALIYUN_ACR_PASSWORD }}
+      DASHBOARD_PASSWORD: ${{ secrets.DASHBOARD_PASSWORD }}
+      GH_TOKEN: ${{ secrets.GH_TOKEN }}
+      OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+      MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+      MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.inputs.deploy_ref || 'main' }}
 
       - name: Deploy to self-hosted runner
         shell: bash

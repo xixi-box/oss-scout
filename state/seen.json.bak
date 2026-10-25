@@ -2942,5 +2942,101 @@
  "deepset-ai/haystack#13428": {
   "first_seen": "2026-10-25T20:11:58",
   "status": "lowscore"
+ },
+ "anomalyco/opencode#58972": {
+  "first_seen": "2026-10-25T20:29:09",
+  "status": "blocked"
+ },
+ "crewAIInc/crewAI#7753": {
+  "first_seen": "2026-10-25T20:29:09",
+  "status": "queued"
+ },
+ "crewAIInc/crewAI#7751": {
+  "first_seen": "2026-10-25T20:29:09",
+  "status": "blocked"
+ },
+ "crewAIInc/crewAI#7740": {
+  "first_seen": "2026-10-25T20:29:09",
+  "status": "queued"
+ },
+ "crewAIInc/crewAI#7691": {
+  "first_seen": "2026-10-25T20:29:09",
+  "status": "queued"
+ },
+ "langfuse/langfuse#19350": {
+  "first_seen": "2026-10-25T20:30:31",
+  "status": "queued"
+ },
+ "crewAIInc/crewAI#7668": {
+  "first_seen": "2026-10-25T20:30:31",
+  "status": "queued"
+ },
+ "crewAIInc/crewAI#7636": {
+  "first_seen": "2026-10-25T20:30:31",
+  "status": "queued"
+ },
+ "crewAIInc/crewAI#7616": {
+  "first_seen": "2026-10-25T20:30:31",
+  "status": "queued"
+ },
+ "crewAIInc/crewAI#7605": {
+  "first_seen": "2026-10-25T20:30:31",
+  "status": "queued"
+ },
+ "crewAIInc/crewAI#7569": {
+  "first_seen": "2026-10-25T20:30:31",
+  "status": "lowscore"
+ },
+ "crewAIInc/crewAI#7532": {
+  "first_seen": "2026-10-25T20:30:31",
+  "status": "queued"
+ },
+ "crewAIInc/crewAI#7512": {
+  "first_seen": "2026-10-25T20:30:31",
+  "status": "lowscore"
+ },
+ "crewAIInc/crewAI#7495": {
+  "first_seen": "2026-10-25T20:30:31",
+  "status": "blocked"
+ },
+ "crewAIInc/crewAI#7470": {
+  "first_seen": "2026-10-25T20:30:31",
+  "status": "lowscore"
+ },
+ "crewAIInc/crewAI#7438": {
+  "first_seen": "2026-10-25T20:30:31",
+  "status": "queued"
+ },
+ "crewAIInc/crewAI#7415": {
+  "first_seen": "2026-10-25T20:30:31",
+  "status": "queued"
+ },
+ "crewAIInc/crewAI#7398": {
+  "first_seen": "2026-10-25T20:30:31",
+  "status": "queued"
+ },
+ "crewAIInc/crewAI#7389": {
+  "first_seen": "2026-10-25T20:30:31",
+  "status": "queued"
+ },
+ "crewAIInc/crewAI#7352": {
+  "first_seen": "2026-10-25T20:30:31",
+  "status": "lowscore"
+ },
+ "crewAIInc/crewAI#7332": {
+  "first_seen": "2026-10-25T20:33:17",
+  "status": "queued"
+ },
+ "crewAIInc/crewAI#7290": {
+  "first_seen": "2026-10-25T20:33:17",
+  "status": "queued"
+ },
+ "crewAIInc/crewAI#6735": {
+  "first_seen": "2026-10-25T20:33:17",
+  "status": "lowscore"
+ },
+ "crewAIInc/crewAI#5578": {
+  "first_seen": "2026-10-25T20:33:17",
+  "status": "blocked"
  }
 }
