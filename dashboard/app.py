@@ -270,7 +270,26 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
         except Exception as e:  # noqa: BLE001
             ok, detail = False, str(e)[:200]
         _audit(root, "opencode_check", model, ("ok" if ok else "fail: " + detail[:120]))
+        (root / "state" / "dashboard_opencode_state.json").write_text(
+            json.dumps({"ok": ok, "model": model,
+                        "checked_at": time.strftime("%Y-%m-%dT%H:%M:%S")},
+                       ensure_ascii=False), encoding="utf-8")
         return JSONResponse({"ok": ok, "model": model, "detail": detail[:200]})
+
+    @app.post("/api/opencode/logout")
+    def api_opencode_logout():
+        """登录态正常时显示：退出 OpenCode CLI 登录（opencode providers logout）。"""
+        import subprocess as sp
+        p = sp.run(["opencode", "providers", "logout"], capture_output=True,
+                   text=True, encoding="utf-8", errors="replace", timeout=60)
+        ok = p.returncode == 0
+        detail = (p.stdout or p.stderr or "").strip()[:200]
+        _audit(root, "opencode_logout", "opencode-go", ("ok" if ok else "fail: " + detail))
+        (root / "state" / "dashboard_opencode_state.json").write_text(
+            json.dumps({"ok": False, "model": "",
+                        "checked_at": time.strftime("%Y-%m-%dT%H:%M:%S")},
+                       ensure_ascii=False), encoding="utf-8")
+        return JSONResponse({"ok": ok, "detail": detail})
 
     # ---------------- 1. 总览 ----------------
     @app.get("/", response_class=HTMLResponse)
@@ -409,6 +428,8 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
             "opencode": ds.opencode_stats(),
             "routing": (v2.get("routing") or {}),
             "features": (v2.get("features") or {}),
+            "oc_state": D.opencode_state(ds),
+            "cf": D.cloudflare_cfg(ds),
             "active": "/quota",
         })
 
@@ -451,6 +472,38 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
             return HTMLResponse("<p class='muted'>文件不存在或路径非法</p>", status_code=404)
         return render(request, "log_view.html", {"name": f"artifacts/{name}/{hit[0]}",
                                                  "text": D.mask(hit[1]), "active": "/logs"})
+
+    @app.post("/api/cloudflare/config")
+    def api_cloudflare_config(request: Request, ingest_token: str = Form(""),
+                              repos: str = Form("")):
+        cfg = {"ingest_token": ingest_token.strip(),
+               "repos": [r.strip() for r in repos.replace(",", "\n").split() if r.strip()],
+               "updated_at": time.strftime("%Y-%m-%dT%H:%M:%S")}
+        _atomic_write_text(root / "configs" / "cloudflare.yaml",
+                           yaml.safe_dump(cfg, allow_unicode=True, sort_keys=True))
+        shown = (cfg["ingest_token"][:4] + "***") if cfg["ingest_token"] else "(empty)"
+        _audit(root, "cloudflare_config", "configs/cloudflare.yaml",
+               f"repos={len(cfg['repos'])} token={shown}")
+        return RedirectResponse("/quota", status_code=303)
+
+    @app.post("/api/cloudflare/ingest")
+    async def api_cloudflare_ingest(request: Request):
+        """Cloudflare Worker 每分钟回传的候选入口。安全：X-Ingest-Token 对比
+        configs/cloudflare.yaml；来源不可信 → 403。数据经 discover 层同款评分后入队。"""
+        cfg = D.cloudflare_cfg(ds)
+        tok = request.headers.get("X-Ingest-Token", "")
+        expect = cfg.get("ingest_token") or ""
+        if not expect or not hmac.compare_digest(tok, expect):
+            return JSONResponse({"detail": "forbidden"}, status_code=403)
+        try:
+            payload = json.loads((await request.body()) or b"{}")
+        except Exception:  # noqa: BLE001
+            return JSONResponse({"detail": "bad json"}, status_code=400)
+        items = payload.get("issues") or []
+        queued = D.ingest_cloudflare_issues(ds, items)
+        _audit(root, "cloudflare_ingest", f"{len(items)} items",
+               f"queued={queued} repos={payload.get('repos_scanned', '?')}")
+        return JSONResponse({"queued": queued})
 
     # ---------------- 未注册路径兜底 ----------------
     @app.get("/{rest:path}")

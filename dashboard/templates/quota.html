@@ -33,10 +33,37 @@
     <h3>主模型（{{ opencode.mode or "?" }} 模式）</h3>
     <ul>{% for m in opencode.primary_models %}<li><code>{{ m }}</code></li>{% endfor %}</ul>
     <div class="chips mt">
+      {% if oc_state.ok %}
+      <button class="btn btn-logout" id="oc-logout" type="button">退出 OpenCode 登录</button>
+      <span class="small muted">上次检测：{{ oc_state.checked_at or "—" }} ✓ 正常</span>
+      {% else %}
       <a class="btn btn-primary" style="text-decoration:none" href="https://opencode.ai/auth" target="_blank" rel="noopener">打开 OpenCode 控制台登录</a>
-      <button class="btn btn-ghost" id="oc-check" type="button">检测登录态（跑一次最小调用 ≈$0.002）</button>
-      <span id="oc-check-result" class="small muted"></span>
+      {% endif %}
+      <button class="btn btn-ghost" id="oc-check" type="button">检测登录态（≈$0.002）</button>
+      <span id="oc-check-result" class="small muted">{% if oc_state.ok is none %}尚未检测{% endif %}</span>
     </div>
+    <script>
+    document.getElementById("oc-logout")?.addEventListener("click", async function () {
+      this.disabled = true;
+      const r = await fetch("/api/opencode/logout", {method: "POST"});
+      const j = await r.json();
+      location.reload();
+    });
+    document.getElementById("oc-check").addEventListener("click", async function () {
+      const out = document.getElementById("oc-check-result");
+      out.textContent = "检测中…（最长 2 分钟）";
+      this.disabled = true;
+      try {
+        const r = await fetch("/api/opencode/check", {method: "POST"});
+        const j = await r.json();
+        out.textContent = j.ok ? "✓ 登录态正常（" + j.model + "）" : "✗ 异常：" + (j.detail || "").slice(0, 120);
+        out.className = j.ok ? "small chip-green" : "small chip-warn";
+        if (j.ok) setTimeout(() => location.reload(), 1500);
+      } catch (e) {
+        out.textContent = "✗ 请求失败：" + e;
+      } finally { this.disabled = false; }
+    });
+    </script>
     <script>
     document.getElementById("oc-check").addEventListener("click", async function () {
       const out = document.getElementById("oc-check-result");
@@ -123,5 +150,19 @@
     </form>
     {% endfor %}
   </div>
+</div>
+
+<div class="card mt">
+  <h2>Cloudflare（Issue Hunter 快速泳道）</h2>
+  <p class="muted small">Worker 每分钟轮询 GitHub issues（REST 增量，回传 /api/cloudflare/ingest）。
+  部署步骤见 cloudflare/README.md；回传凭证与本页 token 必须一致。</p>
+  <form method="post" action="/api/cloudflare/config">
+    <label class="small muted">Ingest Token（Worker 侧 secret 需一致）</label><br>
+    <input type="text" name="ingest_token" value="{{ cf.get('ingest_token', '') }}" style="min-width:320px"><br>
+    <label class="small muted">监控仓库（逗号或换行分隔）</label><br>
+    <textarea name="repos" rows="3" style="min-width:320px;width:60%">{{ cf.get('repos', []) | join(', ') }}</textarea><br>
+    <button class="btn btn-primary" type="submit">保存配置</button>
+  </form>
+  {% if cf.get('updated_at') %}<p class="small muted">配置更新于 {{ cf['updated_at'] }}</p>{% endif %}
 </div>
 {% endblock %}

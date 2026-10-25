@@ -41,18 +41,18 @@ class GhError(Exception):
 def default_gh_runner(args: list[str]) -> str:
     # 本机 TLS 抖动是常态：带退避重试 3 次（PR 页显示"未知"的根因就是单发即败）
     last = ""
-    for attempt in range(3):
+    for attempt in range(2):
         try:
             p = subprocess.run(["gh", *args], capture_output=True, text=True,
-                               encoding="utf-8", errors="replace", timeout=45)
+                               encoding="utf-8", errors="replace", timeout=20)
         except subprocess.TimeoutExpired:
             last = "timeout"
-            time.sleep(min(20, (attempt + 1) * 6))
+            time.sleep(min(8, (attempt + 1) * 4))
             continue
         if p.returncode == 0:
             return p.stdout
         last = (p.stderr or p.stdout or "").strip()[:300]
-        time.sleep(min(20, (attempt + 1) * 6))
+        time.sleep(min(8, (attempt + 1) * 4))
     raise GhError(last)
 
 
@@ -82,13 +82,30 @@ class DataSource:
         self.gh_runner = gh_runner or default_gh_runner
         self.modal_runner = modal_runner or (lambda r: default_modal_runner(r))
         self._cache: dict[str, tuple[float, object]] = {}
+        self._refreshing: set[str] = set()
 
     # ---------- 缓存 ----------
 
     def _cached(self, key: str, ttl: float, fn):
+        """stale-while-revalidate：未过期回缓存；过期先回旧值 + 后台线程刷新；
+        无旧值才同步计算。外部命令（gh/modal）永不阻塞页面渲染超过一次冷查询。"""
         now = time.monotonic()
         hit = self._cache.get(key)
         if hit and now - hit[0] < ttl:
+            return hit[1]
+        if hit is not None:
+            # 过期但有旧值：立即返回旧值，后台刷新
+            if key not in self._refreshing:
+                self._refreshing.add(key)
+                import threading
+                def _bg():
+                    try:
+                        v = fn()
+                        if v is not None:
+                            self._cache[key] = (time.monotonic(), v)
+                    finally:
+                        self._refreshing.discard(key)
+                threading.Thread(target=_bg, daemon=True).start()
             return hit[1]
         value = fn()
         if value is None:
@@ -499,3 +516,97 @@ def bug_lane_jobs(ds: DataSource) -> list[dict]:
         if "bug" in blob or "hunt" in blob:
             out.append(j)
     return out
+
+
+# ---------- Cloudflare Worker 回传通道（2026-10-25） ----------
+
+def opencode_state(ds):
+    p = ds.root / "state" / "dashboard_opencode_state.json"
+    try:
+        return json.loads(p.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        return {"ok": None, "model": "", "checked_at": ""}
+
+
+def cloudflare_cfg(ds) -> dict:
+    p = ds.root / "configs" / "cloudflare.yaml"
+    try:
+        return yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+def ingest_cloudflare_issues(ds, items: list[dict]) -> int:
+    """Cloudflare Worker 回传的原始 issue → discover 层同款评分 → 入队。
+
+    规则对齐 Playbook：只入队已知监控仓库；C 级/未知仓库记 seen 不入队；
+    去重与 discover.py 共用 state/seen.json。写路径走 atomic_json_write。
+    """
+    import importlib
+    import sys as _sys
+    from scout_v2.state_store import atomic_json_write
+    if str(ds.root) not in _sys.path:
+        _sys.path.insert(0, str(ds.root))
+    discover = importlib.import_module("discover")
+
+    q = ds._cached("candidates", 5.0, _read_json(ds.root / "queue" / "candidates.json", {}))
+    seen_path = ds.root / "state" / "seen.json"
+    seen = _read_json(seen_path, {})()
+    cfg = ds.config_json()
+    lane_of: dict[str, str] = {}
+    for pool_key, lane in (("open_pool", "open"), ("gated_pool", "gated"),
+                           ("restricted_pool", "restricted"), ("observe_only", "observe")):
+        for it in cfg.get(pool_key) or []:
+            lane_of[it if isinstance(it, str) else it.get("repo", "")] = lane
+
+    now_iso = dt.datetime.now().isoformat(timespec="seconds")
+    queued = 0
+    for it in items:
+        repo = str(it.get("repo", ""))
+        number = int(it.get("number") or 0)
+        key = f"{repo}#{number}"
+        if not repo or not number or key in seen or key in q:
+            continue
+        lane = lane_of.get(repo)
+        if lane is None:
+            seen[key] = {"first_seen": now_iso, "status": "unknown_repo"}
+            continue
+        title = str(it.get("title", ""))
+        body = str(it.get("body_excerpt", ""))
+        labels = [str(l) for l in (it.get("labels") or [])]
+        sig = {"body_len": len(body), "reactions": int(it.get("reactions") or 0),
+               "labels": labels, "comments": int(it.get("comments") or 0),
+               "claim_signal": False, "maintainer_confirm": False,
+               "duplicate_flag": False, "billing_flag": False, "bot_claim": False,
+               "cross_ref_pr": False,
+               "repro_signal": bool(discover.RE_REPRO.search(body))}
+        try:
+            score, sclass, blockers = discover.score(title, sig, it.get("created_at", ""), lane)
+        except Exception:  # noqa: BLE001
+            continue
+        if sclass == "C":
+            seen[key] = {"first_seen": now_iso,
+                         "status": "blocked" if blockers else "lowscore"}
+            continue
+        entry = {"id": key, "repo": repo, "number": number, "title": title,
+                 "url": it.get("url") or f"https://github.com/{repo}/issues/{number}",
+                 "lane": lane, "score": score, "class": sclass, "blockers": blockers,
+                 "signals": {**sig, "labels": labels}, "created_at": it.get("created_at", ""),
+                 "discovered_at": now_iso, "status": "new", "lease": None,
+                 "source": "cloudflare-worker"}
+        q[key] = entry
+        seen[key] = {"first_seen": now_iso, "status": "queued"}
+        queued += 1
+    if queued:
+        atomic_json_write(ds.root / "queue" / "candidates.json", q)
+        atomic_json_write(seen_path, seen)
+    return queued
+
+
+def _read_json(path: Path, default):
+    def _fn():
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except Exception:  # noqa: BLE001
+            return default
+    return _fn

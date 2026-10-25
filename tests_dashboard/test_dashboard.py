@@ -542,3 +542,42 @@ class TestAuditedWrites:
         _login(auth_client)
         r = auth_client.post("/api/features", data={"key": "nuke_everything", "value": "true"})
         assert r.status_code == 400
+
+
+# ---------------- Cloudflare ingest 通道（2026-10-25） ----------------
+
+def test_cloudflare_ingest_requires_token(client, fixture_root):
+    r = client.post("/api/cloudflare/ingest", json={"issues": []})
+    assert r.status_code == 403   # 未配置 token / 错 token 一律 403
+
+
+def test_cloudflare_config_roundtrip(client, fixture_root):
+    r = client.post("/api/cloudflare/config",
+                    data={"ingest_token": "tok-123",
+                          "repos": "a/b, c/d"}, follow_redirects=False)
+    assert r.status_code == 303
+    cfg = yaml.safe_load((fixture_root / "configs" / "cloudflare.yaml")
+                         .read_text(encoding="utf-8"))
+    assert cfg["ingest_token"] == "tok-123"
+    assert cfg["repos"] == ["a/b", "c/d"]
+    # 带对 token 的回传：已知仓库走 discover 评分入队；C 级只记 seen
+    (fixture_root / "state" / "seen.json").write_text("{}", encoding="utf-8")
+    r = client.post("/api/cloudflare/ingest",
+                    headers={"X-Ingest-Token": "tok-123"},
+                    json={"repos_scanned": 2, "issues": [
+                        {"repo": "aaif-goose/goose", "number": 1,
+                         "title": "Crash when processing empty input",
+                         "url": "https://github.com/aaif-goose/goose/issues/1",
+                         "created_at": "2026-10-25T00:00:00Z", "labels": ["bug"],
+                         "reactions": 5, "comments": 0,
+                         "body_excerpt": "Steps to reproduce: run on empty input. "
+                                         "Expected 0, actual crash. " * 10},
+                        {"repo": "unknown/repo", "number": 2, "title": "x",
+                         "created_at": "2026-10-25T00:00:00Z", "labels": [],
+                         "reactions": 0, "comments": 0, "body_excerpt": "y"}]})
+    assert r.status_code == 200
+    q = json.loads((fixture_root / "queue" / "candidates.json")
+                   .read_text(encoding="utf-8"))
+    assert "aaif-goose/goose#1" in q          # 高分候选入队
+    seen = json.loads((fixture_root / "state" / "seen.json").read_text(encoding="utf-8"))
+    assert seen.get("unknown/repo#2", {}).get("status") == "unknown_repo"
