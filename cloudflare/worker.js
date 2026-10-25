@@ -1,14 +1,15 @@
 /**
- * oss-scout Issue Hunter — Cloudflare Worker 版（用户裁定 2026-10-25：从 VPS 剥离）。
+ * oss-scout Issue Hunter — Cloudflare Worker（KV 拉取模式，无需隧道/回传端点）。
  *
- * 每 1 分钟（cron trigger）用 GitHub REST（非 search API，避开 30 次/分钟搜索限额）
- * 轮询监控仓库的 issue 更新，轻量预筛后回传本地 ingest 端点入队。
+ * 每 1 分钟：GitHub REST 增量轮询 → 预筛 → 发现写入 KV（pending:* 键，TTL 1h）
+ * 本地 dashboard 每分钟用 CLOUDFLARE_API_TOKEN 拉取 KV → 入队 → 删除已处理键。
  *
- * 额度账（免费档）：Workers 10 万次请求/天 >> 1440 次/天（1 次/分钟）；
- * GitHub core API 5000 次/小时 >> 每分钟 ~20 仓库各 1 次列表调用。
+ * KV 免费档 1000 写/天：since 水位每 5 分钟才落一次（288/天）+ 发现批次（偶发），
+ * 重复窗口由本地 seen.json 去重，不会产生重复候选。
  *
- * 部署：见 cloudflare/README.md。Secrets：GH_TOKEN / INGEST_URL / INGEST_TOKEN。
- * 绑定 KV namespace（变量名 SEEN）做 `since` 水位与去重。
+ * Secrets（npx wrangler secret put）：GH_TOKEN
+ * vars（wrangler.toml）：REPOS
+ * 绑定：KV namespace SEEN（wrangler.toml 里填 id）
  */
 
 const EXCLUDED_LABELS = ["invalid", "wontfix", "duplicate", "question", "stale",
@@ -25,32 +26,34 @@ function ghHeaders(token) {
 
 export default {
   async scheduled(event, env, ctx) {
-    await pollOnce(env);
+    ctx.waitUntil(pollOnce(env));
   },
 };
 
 async function pollOnce(env) {
   const repos = (env.REPOS || "").split(",").map(s => s.trim()).filter(Boolean);
   if (!repos.length) return;
-  const issues = [];
+  const now = new Date();
 
+  // 水位：优先 KV；每 5 分钟落盘一次（省 KV 写额度），60s 重叠 + 本地去重防漏防重
+  let since = await env.SEEN.get("since");
+  if (!since) {
+    since = new Date(now.getTime() - 15 * 60 * 1000).toISOString();
+  } else {
+    since = new Date(new Date(since).getTime() - 60 * 1000).toISOString();
+  }
+
+  const issues = [];
+  let ok_repos = 0;
   for (const repo of repos) {
-    const sinceKey = `since:${repo}`;
-    // 冷启动回看 15 分钟；之后增量（上次轮询时间 - 60s 重叠防漏）
-    let since = await env.SEEN.get(sinceKey);
-    if (!since) {
-      since = new Date(Date.now() - 15 * 60 * 1000).toISOString();
-    } else {
-      since = new Date(new Date(since).getTime() - 60 * 1000).toISOString();
-    }
     try {
       const r = await fetch(
         `https://api.github.com/repos/${repo}/issues?since=${since}&state=open&per_page=50`,
         { headers: ghHeaders(env.GH_TOKEN) });
-      if (!r.ok) continue;   // 限流/网络失败：跳过该仓库，下轮重试（水位不推进）
+      if (!r.ok) continue;
+      ok_repos++;
       const list = await r.json();
       for (const it of list) {
-        // REST 的 issues 列表里 PR 会带 pull_request 字段 → 排除；排除有 assignee 的
         if (it.pull_request || (it.assignees && it.assignees.length)) continue;
         const labels = (it.labels || []).map(l => (typeof l === "string" ? l : l.name));
         if (labels.some(l => EXCLUDED_LABELS.includes(l.toLowerCase()))) continue;
@@ -62,22 +65,19 @@ async function pollOnce(env) {
           body_excerpt: (it.body || "").slice(0, 4000),
         });
       }
-      await env.SEEN.put(sinceKey, new Date().toISOString());
     } catch (e) {
-      continue;   // 网络异常：水位不推进
+      continue;   // 单仓库失败不影响其余
     }
   }
 
-  if (!issues.length) return;
-  try {
-    await fetch(env.INGEST_URL, {
-      method: "POST",
-      headers: {"Content-Type": "application/json",
-                "X-Ingest-Token": env.INGEST_TOKEN},
-      body: JSON.stringify({repos_scanned: repos.length, issues}),
-    });
-  } catch (e) {
-    // 回传失败：issue 会因 since 水位已推进而漏掉一次——可接受（下轮 updated 不变不会重发，
-    // 但本地 seen 未记录，后续 issue 更新会再触发）
+  // 水位每 5 分钟推进一次（分钟数 % 5 === 0），否则下轮同窗口重叠重查（本地去重兜底）
+  if (ok_repos > 0 && now.getUTCMinutes() % 5 === 0) {
+    await env.SEEN.put("since", now.toISOString());
   }
+
+  if (!issues.length) return;
+  const key = `pending:${now.toISOString().replace(/[:.]/g, "-")}`;
+  await env.SEEN.put(key, JSON.stringify({
+    repos_scanned: repos.length, scanned_at: now.toISOString(), issues,
+  }), {expirationTtl: 3600});   // 1 小时未被拉取自动过期
 }

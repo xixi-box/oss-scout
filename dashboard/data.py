@@ -614,3 +614,51 @@ def _read_json(path: Path, default):
         except Exception:  # noqa: BLE001
             return default
     return _fn
+
+
+def cloudflare_pull(ds) -> dict:
+    """从 CF KV 拉取 pending 批次 → ingest → 删除已处理键。返回摘要。
+
+    用 configs/cloudflare.yaml 的 api_token/account_id/kv_namespace_id；
+    任一缺失 → {"error": "not configured"}。网络失败 → {"error": ...}。
+    """
+    cfg = cloudflare_cfg(ds)
+    token, account = cfg.get("api_token") or "", cfg.get("account_id") or ""
+    ns = cfg.get("kv_namespace_id") or ""
+    if not (token and account and ns):
+        return {"error": "not configured"}
+    base = f"https://api.cloudflare.com/client/v4/accounts/{account}/storage/kv/namespaces/{ns}"
+    headers = {"Authorization": f"Bearer {token}"}
+    import urllib.request
+    try:
+        req = urllib.request.Request(f"{base}/keys?prefix=pending:&limit=100",
+                                     headers=headers)
+        with urllib.request.urlopen(req, timeout=20) as r:
+            keys = [k["name"] for k in json.loads(r.read().decode())["result"] or []]
+    except Exception as e:  # noqa: BLE001
+        return {"error": str(e)[:200]}
+    pulled, ingested = 0, 0
+    for key in keys:
+        try:
+            req = urllib.request.Request(f"{base}/values/{key}", headers=headers)
+            with urllib.request.urlopen(req, timeout=20) as r:
+                payload = json.loads(r.read().decode())
+        except Exception as e:  # noqa: BLE001
+            return {"pulled": pulled, "ingested": ingested, "error": str(e)[:200]}
+        pulled += 1
+        ingested += ingest_cloudflare_issues(ds, payload.get("issues") or [])
+        try:
+            req = urllib.request.Request(f"{base}/values/{key}", headers=headers,
+                                         method="DELETE")
+            urllib.request.urlopen(req, timeout=20)
+        except Exception:  # noqa: BLE001
+            pass   # 删除失败：下轮 seen 去重兜底
+    return {"pulled": pulled, "ingested": ingested}
+
+
+def cloudflare_last_pull(ds) -> str:
+    p = ds.root / "state" / "cloudflare_last_pull.json"
+    try:
+        return json.loads(p.read_text(encoding="utf-8")).get("at", "")
+    except Exception:  # noqa: BLE001
+        return ""

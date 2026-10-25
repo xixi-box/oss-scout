@@ -152,16 +152,33 @@
 </div>
 
 <div class="card mt">
-  <h2>Cloudflare（Issue Hunter 快速泳道）</h2>
-  <p class="muted small">Worker 每分钟轮询 GitHub issues（REST 增量，回传 /api/cloudflare/ingest）。
-  部署步骤见 cloudflare/README.md；回传凭证与本页 token 必须一致。</p>
+  <h2>Cloudflare（Issue Hunter）</h2>
+  <p class="muted small">Worker 每分钟写 KV，本机每 60s 拉取入队。Token 创建：
+  <a href="https://dash.cloudflare.com/profile/api-tokens" target="_blank" rel="noopener">API Tokens</a>（Edit Cloudflare Workers 模板）；
+  Account ID 在 <a href="https://dash.cloudflare.com" target="_blank" rel="noopener">控制台首页</a>右侧。</p>
   <form method="post" action="/api/cloudflare/config">
-    <label class="small muted">Ingest Token（Worker 侧 secret 需一致）</label><br>
-    <input type="text" name="ingest_token" value="{{ cf.get('ingest_token', '') }}" style="min-width:320px"><br>
-    <label class="small muted">监控仓库（逗号或换行分隔）</label><br>
-    <textarea name="repos" rows="3" style="min-width:320px;width:60%">{{ cf.get('repos', []) | join(', ') }}</textarea><br>
+    <label class="small muted">API Token</label><br>
+    <input type="password" name="api_token" value="{{ cf.get('api_token', '') }}" style="min-width:340px"><br>
+    <label class="small muted">Account ID</label><br>
+    <input type="text" name="account_id" value="{{ cf.get('account_id', '') }}" style="min-width:340px"><br>
+    <label class="small muted">KV Namespace ID（SEEN）</label><br>
+    <input type="text" name="kv_namespace_id" value="{{ cf.get('kv_namespace_id', '') }}" style="min-width:340px"><br>
+    <label class="small muted">监控仓库（逗号分隔）</label><br>
+    <textarea name="repos" rows="2" style="min-width:340px;width:60%">{{ cf.get('repos', []) | join(', ') }}</textarea><br>
     <button class="btn btn-primary" type="submit">保存配置</button>
+    <button class="btn btn-ghost" type="button" id="cf-pull">立即拉取</button>
+    <span id="cf-pull-result" class="small muted">最近拉取：{{ last_pull or "尚未" }}</span>
   </form>
-  {% if cf.get('updated_at') %}<p class="small muted">配置更新于 {{ cf['updated_at'] }}</p>{% endif %}
+  <script>
+  document.getElementById("cf-pull").addEventListener("click", async function () {
+    const out = document.getElementById("cf-pull-result");
+    out.textContent = "拉取中…";
+    try {
+      const r = await fetch("/api/cloudflare/pull", {method: "POST"});
+      const j = await r.json();
+      out.textContent = j.error ? ("失败：" + j.error) : ("拉取 " + (j.pulled||0) + " 批，入队 " + (j.ingested||0));
+    } catch (e) { out.textContent = "失败：" + e; }
+  });
+  </script>
 </div>
 {% endblock %}

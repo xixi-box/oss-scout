@@ -157,6 +157,25 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
     root = Path(root) if root else Path(
         os.environ.get("OSSCOUT_DASHBOARD_ROOT", PROJECT_ROOT))
     app = FastAPI(title="oss-scout Dashboard", docs_url=None, redoc_url=None)
+
+    def _cf_poll_loop():
+        """每 60s 从 CF KV 拉取 Worker 发现（失败静默，下轮重试）。"""
+        import threading as _th
+        import time as _t
+        def _loop():
+            while True:
+                try:
+                    out = D.cloudflare_pull(ds)
+                    if "error" not in out:
+                        (root / "state" / "cloudflare_last_pull.json").write_text(
+                            json.dumps({"at": _t.strftime("%Y-%m-%dT%H:%M:%S"),
+                                        "out": out}, ensure_ascii=False),
+                            encoding="utf-8")
+                except Exception:  # noqa: BLE001
+                    pass
+                _t.sleep(60)
+        _th.Thread(target=_loop, daemon=True).start()
+    _cf_poll_loop()
     ds = D.DataSource(root, gh_runner=gh_runner, modal_runner=modal_runner)
     app.state.ds = ds
     app.state.root = root
@@ -430,6 +449,7 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
             "features": (v2.get("features") or {}),
             "oc_state": D.opencode_state(ds),
             "cf": D.cloudflare_cfg(ds),
+            "last_pull": D.cloudflare_last_pull(ds),
             "active": "/quota",
         })
 
@@ -474,36 +494,29 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
                                                  "text": D.mask(hit[1]), "active": "/logs"})
 
     @app.post("/api/cloudflare/config")
-    def api_cloudflare_config(request: Request, ingest_token: str = Form(""),
+    def api_cloudflare_config(request: Request, api_token: str = Form(""),
+                              account_id: str = Form(""),
+                              kv_namespace_id: str = Form(""),
                               repos: str = Form("")):
-        cfg = {"ingest_token": ingest_token.strip(),
+        cfg = {"api_token": api_token.strip(),
+               "account_id": account_id.strip(),
+               "kv_namespace_id": kv_namespace_id.strip(),
                "repos": [r.strip() for r in repos.replace(",", "\n").split() if r.strip()],
                "updated_at": time.strftime("%Y-%m-%dT%H:%M:%S")}
         _atomic_write_text(root / "configs" / "cloudflare.yaml",
                            yaml.safe_dump(cfg, allow_unicode=True, sort_keys=True))
-        shown = (cfg["ingest_token"][:4] + "***") if cfg["ingest_token"] else "(empty)"
         _audit(root, "cloudflare_config", "configs/cloudflare.yaml",
-               f"repos={len(cfg['repos'])} token={shown}")
+               f"repos={len(cfg['repos'])} token_set={bool(cfg['api_token'])}")
         return RedirectResponse("/quota", status_code=303)
 
-    @app.post("/api/cloudflare/ingest")
-    async def api_cloudflare_ingest(request: Request):
-        """Cloudflare Worker 每分钟回传的候选入口。安全：X-Ingest-Token 对比
-        configs/cloudflare.yaml；来源不可信 → 403。数据经 discover 层同款评分后入队。"""
-        cfg = D.cloudflare_cfg(ds)
-        tok = request.headers.get("X-Ingest-Token", "")
-        expect = cfg.get("ingest_token") or ""
-        if not expect or not hmac.compare_digest(tok, expect):
-            return JSONResponse({"detail": "forbidden"}, status_code=403)
-        try:
-            payload = json.loads((await request.body()) or b"{}")
-        except Exception:  # noqa: BLE001
-            return JSONResponse({"detail": "bad json"}, status_code=400)
-        items = payload.get("issues") or []
-        queued = D.ingest_cloudflare_issues(ds, items)
-        _audit(root, "cloudflare_ingest", f"{len(items)} items",
-               f"queued={queued} repos={payload.get('repos_scanned', '?')}")
-        return JSONResponse({"queued": queued})
+    @app.post("/api/cloudflare/pull")
+    def api_cloudflare_pull():
+        out = D.cloudflare_pull(ds)
+        (root / "state" / "cloudflare_last_pull.json").write_text(
+            json.dumps({"at": time.strftime("%Y-%m-%dT%H:%M:%S"), "out": out},
+                       ensure_ascii=False), encoding="utf-8")
+        _audit(root, "cloudflare_pull", "kv", json.dumps(out, ensure_ascii=False)[:150])
+        return JSONResponse(out)
 
     # ---------------- 未注册路径兜底 ----------------
     @app.get("/{rest:path}")

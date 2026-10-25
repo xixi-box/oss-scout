@@ -288,3 +288,4 @@
 {"ts": "2026-10-25T11:44:44", "action": "dashboard_login", "target": "web-ui", "result": "login ok", "source": "web-ui"}
 {"ts": "2026-10-25T11:49:31", "action": "dashboard_opencode_check", "target": "opencode-go/deepseek-v4.1-flash", "result": "ok", "source": "web-ui"}
 {"ts": "2026-10-25T11:49:31", "action": "dashboard_opencode_check", "target": "opencode-go/deepseek-v4.1-flash", "result": "ok", "source": "web-ui"}
+{"ts": "2026-10-25T11:55:40", "action": "dashboard_login", "target": "web-ui", "result": "login ok", "source": "web-ui"}
