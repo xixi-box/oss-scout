@@ -2714,25 +2714,5 @@
  "anomalyco/opencode#58909": {
   "first_seen": "2026-10-25T14:26:56",
   "status": "queued"
- },
- "anomalyco/opencode#58911": {
-  "first_seen": "2026-10-25T14:54:30",
-  "status": "queued"
- },
- "anomalyco/opencode#58914": {
-  "first_seen": "2026-10-25T14:56:23",
-  "status": "lowscore"
- },
- "anomalyco/opencode#58912": {
-  "first_seen": "2026-10-25T14:56:23",
-  "status": "lowscore"
- },
- "crewAIInc/crewAI#8552": {
-  "first_seen": "2026-10-25T14:56:23",
-  "status": "queued"
- },
- "infiniflow/ragflow#21435": {
-  "first_seen": "2026-10-25T15:00:44",
-  "status": "queued"
  }
 }

@@ -172,11 +172,8 @@ jobs:
 
   build-and-push:
     name: Build ${{ matrix.image.name }}
-    needs: [setup]
-    # 用户环境裁定（2026-10-25）：GitHub 免费 artifact 配额已满且重算滞后——
-    # 构建改在部署机（aliyun runner）上直接执行（git 检出 → 本机构建 → 推 ACR），
-    # 跳过 build-context artifact 中转。模板文档"部署机构建"演进路线。
-    runs-on: [self-hosted, "aliyun"]
+    needs: [setup, pre-build]
+    runs-on: ubuntu-latest
     permissions:
       contents: read
     # Serialize builds of the same repo+env+ref+image so the <name>latest tag
@@ -189,10 +186,15 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJSON(needs.setup.outputs.matrix) }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v7
+      - name: Download build context
+        uses: actions/download-artifact@v8
         with:
-          ref: ${{ github.event.inputs.deploy_ref || 'main' }}
+          name: build-artifacts
+
+      - name: Extract build context
+        shell: bash
+        run: tar xzf build-artifacts.tgz && rm -f build-artifacts.tgz
+
       - name: Log in to Aliyun ACR
         uses: docker/login-action@v4
         with:
