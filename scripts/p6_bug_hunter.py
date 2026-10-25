@@ -118,7 +118,8 @@ def main() -> int:
         print(f"[bh] dry-run: would scan {repos} via Modal (cap {mb['max_task_minutes']}min)")
         return 0
 
-    guard = BudgetGuard(soft_cap_usd=min(mb["monthly_soft_cap_usd"], stop_threshold - metered),
+    usage_limit = (mb.get("platform_hard_limits") or {}).get("usage_limit_usd", 30.0)
+    guard = BudgetGuard(soft_cap_usd=min(usage_limit, stop_threshold - metered),
                         enabled=True, billing=billing,
                         max_concurrent=mb["max_concurrent_sandboxes"])
     backend = ModalSandboxBackend(guard, dockerfile=ROOT / "docker" / "Dockerfile.worker",

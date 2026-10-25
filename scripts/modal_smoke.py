@@ -47,7 +47,7 @@ def main() -> int:
         print("[smoke] DRY RUN — all preconditions look present. Re-run with --yes "
               "to create a real Sandbox (billed against included credits).")
         print(f"[smoke] would scan: {args.repo} ruleset={mb.get('semgrep_ruleset')} "
-              f"cap={mb['max_task_minutes']}min soft_cap=${mb['monthly_soft_cap_usd']}")
+              f"cap={mb['max_task_minutes']}min usage_limit=${(mb.get('platform_hard_limits') or {}).get('usage_limit_usd')}")
         return 0
 
     billing = ModalCliBilling()
@@ -58,7 +58,8 @@ def main() -> int:
     metered = billing.metered_usage_usd()
     print(f"[smoke] metered usage this period: ${metered}")
 
-    guard = BudgetGuard(soft_cap_usd=mb["monthly_soft_cap_usd"], enabled=True,
+    usage_limit = (mb.get("platform_hard_limits") or {}).get("usage_limit_usd", 30.0)
+    guard = BudgetGuard(soft_cap_usd=usage_limit, enabled=True,
                         billing=billing, max_concurrent=mb["max_concurrent_sandboxes"])
     backend = ModalSandboxBackend(guard, dockerfile=ROOT / "docker" / "Dockerfile.worker",
                                   max_task_minutes=min(mb["max_task_minutes"], 15))

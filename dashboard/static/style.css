@@ -198,3 +198,12 @@ code { background: var(--light-surface); border-radius: 6px; padding: 1px 6px; f
   word-break: break-word; overflow-wrap: anywhere; white-space: normal;
   vertical-align: top;
 }
+
+/* ---- 退出按钮（顶栏深色底上必须可见）---- */
+.logout-form { display: inline-flex; margin-left: 12px; }
+.btn-logout {
+  background: var(--wise-green, #9fe870); color: var(--dark-green, #163300);
+  border: none; border-radius: 9999px; padding: 6px 16px;
+  font-weight: 700; font-size: 13px; cursor: pointer; font-family: inherit;
+}
+.btn-logout:hover { transform: scale(1.05); }

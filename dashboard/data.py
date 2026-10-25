@@ -91,6 +91,8 @@ class DataSource:
         if hit and now - hit[0] < ttl:
             return hit[1]
         value = fn()
+        if value is None:
+            return value   # 失败结果不缓存：gh 恢复后下一次请求立即重试
         self._cache[key] = (now, value)
         return value
 
@@ -377,10 +379,12 @@ class DataSource:
 
         metered = self._cached("modal", GH_CACHE_TTL, _call)
         budget = (self.v2_yaml().get("budget") or {}).get("modal") or {}
+        hard = budget.get("platform_hard_limits") or {}
         return {
             "metered": metered,
-            "softcap": budget.get("monthly_soft_cap_usd"),
-            "hard_limits": budget.get("platform_hard_limits") or {},
+            # 本地 25 软阈值已按用户要求删除；上限直接用控制台 usage limit
+            "softcap": hard.get("usage_limit_usd"),
+            "hard_limits": hard,
             "enabled": bool(budget.get("enabled")),
         }
 

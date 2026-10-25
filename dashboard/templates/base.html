@@ -6,7 +6,7 @@
 <title>{% block title %}oss-scout Dashboard{% endblock %}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/static/style.css">
+<link rel="stylesheet" href="/static/style.css?v=3">
 <script src="/static/htmx.min.js" defer></script>
 </head>
 <body>
@@ -17,7 +17,7 @@
                           ("/prs", "PR 管理"), ("/policies", "策略"), ("/quota", "额度"), ("/logs", "日志")] %}
     <a href="{{ href }}" class="{{ 'nav-active' if active == href }}">{{ label }}</a>
     {% endfor %}
-    <form method="post" action="/logout" class="inline-form"><button class="btn btn-ghost" type="submit">退出</button></form>
+    <form method="post" action="/logout" class="logout-form"><button class="btn btn-logout" type="submit">退出登录</button></form>
   </nav>
 </header>
 <main class="container">

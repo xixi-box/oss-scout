@@ -278,3 +278,6 @@
 {"ts": "2026-10-25T11:02:40", "action": "dashboard_login", "target": "web-ui", "result": "login ok", "source": "web-ui"}
 {"ts": "2026-10-25T11:05:24", "action": "dashboard_login", "target": "web-ui", "result": "login ok", "source": "web-ui"}
 {"ts": "2026-10-25T11:15:32", "action": "dashboard_login", "target": "web-ui", "result": "login ok", "source": "web-ui"}
+{"ts": "2026-10-25T11:16:53", "action": "dashboard_login", "target": "web-ui", "result": "login ok", "source": "web-ui"}
+{"ts": "2026-10-25T11:19:57", "action": "dashboard_opencode_check", "target": "opencode-go/deepseek-v4.1-flash", "result": "ok", "source": "web-ui"}
+{"ts": "2026-10-25T11:24:28", "action": "dashboard_login", "target": "web-ui", "result": "login ok", "source": "web-ui"}

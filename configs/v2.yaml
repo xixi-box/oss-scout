@@ -26,7 +26,6 @@ queue:
 budget:
   modal:
     enabled: true                     # 2026-10-25：硬限制确认 + 用户 smoke 通过 + token 就绪
-    monthly_soft_cap_usd: 25.0
     max_concurrent_sandboxes: 1
     max_task_minutes: 30
     fail_closed_on_billing_error: true

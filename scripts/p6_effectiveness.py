@@ -139,7 +139,9 @@ def main() -> int:
         print(f"[eff] dry-run: would benchmark {repos} ({args.per_repo} PRs each)")
         return 0
 
-    guard = BudgetGuard(soft_cap_usd=min(25.0, STOP_THRESHOLD - metered), enabled=True,
+    usage_limit = ((yaml.safe_load((ROOT / "configs" / "v2.yaml").read_text(encoding="utf-8"))
+                   ["budget"]["modal"].get("platform_hard_limits") or {}).get("usage_limit_usd", 30.0))
+    guard = BudgetGuard(soft_cap_usd=min(usage_limit, STOP_THRESHOLD - metered), enabled=True,
                         billing=billing, max_concurrent=1)
     backend = ModalSandboxBackend(guard, dockerfile=ROOT / "docker" / "Dockerfile.worker",
                                   max_task_minutes=15)

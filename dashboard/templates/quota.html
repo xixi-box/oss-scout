@@ -13,7 +13,7 @@
     {% endif %}
     {% if modal.softcap %}
     <div class="bar"><div class="bar-fill" style="width: {{ [ (modal.metered or 0) / modal.softcap * 100, 100 ] | min }}%"></div></div>
-    <div class="muted small">本地软阈值 ${{ modal.softcap }} / 月 —— 这是实施计划里的建议值（configs/v2.yaml），<strong>不是</strong>从 Modal API 读的；Modal 侧的真实限制是你控制台里的 usage limit $30 / spend limit $0</div>
+    <div class="muted small">上限取你控制台设置的 usage limit（${{ modal.softcap }}）；spend limit ${{ modal.hard_limits.get("spend_limit_usd", "0") }}（额度耗尽即停，零自付）</div>
     {% endif %}
     <h3 class="mt">平台硬限制</h3>
     <table class="mini">
