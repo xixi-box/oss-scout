@@ -5,7 +5,7 @@ services:
     container_name: oss-scout
     restart: unless-stopped
     ports:
-      - "127.0.0.1:8787:8787"    # 只绑本机；公网访问走 FRP/Tailscale + 登录层
+      - "127.0.0.1:18787:8787"   # 宿主 18787（8787 被 ops-agent 占用）；容器内仍 8787
     volumes:
       - /home/scoutdeploy/oss-scout-data:/data   # state/queue/artifacts/configs 持久化
     environment:
