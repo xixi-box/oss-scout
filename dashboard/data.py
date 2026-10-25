@@ -86,31 +86,35 @@ class DataSource:
 
     # ---------- 缓存 ----------
 
+    FAILURE_TTL = 30.0   # 失败短缓存：gh 抖动时页面秒开，30 秒内自动重试恢复
+
     def _cached(self, key: str, ttl: float, fn):
         """stale-while-revalidate：未过期回缓存；过期先回旧值 + 后台线程刷新；
-        无旧值才同步计算。外部命令（gh/modal）永不阻塞页面渲染超过一次冷查询。"""
+        无旧值才同步计算。失败（None）短缓存 30s——gh 抖动不再阻塞每个请求。"""
         now = time.monotonic()
         hit = self._cache.get(key)
-        if hit and now - hit[0] < ttl:
-            return hit[1]
-        if hit is not None:
-            # 过期但有旧值：立即返回旧值，后台刷新
+        if hit:
+            age = now - hit[0]
+            if hit[1] is None:
+                if age < self.FAILURE_TTL:
+                    return None
+            elif age < ttl:
+                return hit[1]
+            # 过期：立即回旧值（含旧失败），后台刷新
             if key not in self._refreshing:
                 self._refreshing.add(key)
                 import threading
                 def _bg():
                     try:
                         v = fn()
-                        if v is not None:
-                            self._cache[key] = (time.monotonic(), v)
+                        self._cache[key] = (time.monotonic(), v)
                     finally:
                         self._refreshing.discard(key)
                 threading.Thread(target=_bg, daemon=True).start()
             return hit[1]
         value = fn()
-        if value is None:
-            return value   # 失败结果不缓存：gh 恢复后下一次请求立即重试
-        self._cache[key] = (now, value)
+        self._cache[key] = (now, value)   # None 也记（30s 失败缓存）
+        return value
         return value
 
     # ---------- 候选池 ----------
