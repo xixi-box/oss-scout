@@ -2766,5 +2766,157 @@
  "xixi-box/oss-scout-v2-test#8": {
   "first_seen": "2026-10-25T16:47:26",
   "status": "queued"
+ },
+ "OpenHands/OpenHands#18924": {
+  "first_seen": "2026-10-25T16:48:34",
+  "status": "queued"
+ },
+ "anomalyco/opencode#58924": {
+  "first_seen": "2026-10-25T16:48:34",
+  "status": "lowscore"
+ },
+ "anomalyco/opencode#58826": {
+  "first_seen": "2026-10-25T17:15:21",
+  "status": "lowscore"
+ },
+ "crewAIInc/crewAI#7695": {
+  "first_seen": "2026-10-25T17:15:21",
+  "status": "queued"
+ },
+ "anomalyco/opencode#58932": {
+  "first_seen": "2026-10-25T17:29:57",
+  "status": "queued"
+ },
+ "anomalyco/opencode#58933": {
+  "first_seen": "2026-10-25T17:32:14",
+  "status": "queued"
+ },
+ "langfuse/langfuse#19345": {
+  "first_seen": "2026-10-25T17:34:07",
+  "status": "queued"
+ },
+ "OpenHands/OpenHands#18928": {
+  "first_seen": "2026-10-25T17:34:37",
+  "status": "queued"
+ },
+ "anomalyco/opencode#58935": {
+  "first_seen": "2026-10-25T17:35:56",
+  "status": "queued"
+ },
+ "anomalyco/opencode#58934": {
+  "first_seen": "2026-10-25T17:35:56",
+  "status": "lowscore"
+ },
+ "anomalyco/opencode#58936": {
+  "first_seen": "2026-10-25T17:36:14",
+  "status": "queued"
+ },
+ "crewAIInc/crewAI#8563": {
+  "first_seen": "2026-10-25T17:37:47",
+  "status": "queued"
+ },
+ "anomalyco/opencode#58677": {
+  "first_seen": "2026-10-25T17:37:57",
+  "status": "queued"
+ },
+ "crewAIInc/crewAI#8565": {
+  "first_seen": "2026-10-25T17:40:56",
+  "status": "queued"
+ },
+ "anomalyco/opencode#58937": {
+  "first_seen": "2026-10-25T17:43:26",
+  "status": "queued"
+ },
+ "crewAIInc/crewAI#8567": {
+  "first_seen": "2026-10-25T17:47:34",
+  "status": "queued"
+ },
+ "anomalyco/opencode#58940": {
+  "first_seen": "2026-10-25T18:00:05",
+  "status": "queued"
+ },
+ "anomalyco/opencode#58941": {
+  "first_seen": "2026-10-25T18:01:37",
+  "status": "lowscore"
+ },
+ "anomalyco/opencode#58928": {
+  "first_seen": "2026-10-25T18:01:37",
+  "status": "queued"
+ },
+ "anomalyco/opencode#58926": {
+  "first_seen": "2026-10-25T18:01:37",
+  "status": "queued"
+ },
+ "anomalyco/opencode#58912": {
+  "first_seen": "2026-10-25T18:01:37",
+  "status": "queued"
+ },
+ "crewAIInc/crewAI#8569": {
+  "first_seen": "2026-10-25T18:04:06",
+  "status": "queued"
+ },
+ "anomalyco/opencode#58942": {
+  "first_seen": "2026-10-25T18:07:55",
+  "status": "queued"
+ },
+ "crewAIInc/crewAI#8571": {
+  "first_seen": "2026-10-25T18:09:35",
+  "status": "queued"
+ },
+ "Arize-ai/phoenix#17245": {
+  "first_seen": "2026-10-25T18:26:40",
+  "status": "queued"
+ },
+ "Arize-ai/phoenix#17244": {
+  "first_seen": "2026-10-25T18:26:40",
+  "status": "queued"
+ },
+ "anomalyco/opencode#58948": {
+  "first_seen": "2026-10-25T18:40:32",
+  "status": "queued"
+ },
+ "anomalyco/opencode#58946": {
+  "first_seen": "2026-10-25T18:40:32",
+  "status": "lowscore"
+ },
+ "anomalyco/opencode#58952": {
+  "first_seen": "2026-10-25T19:06:13",
+  "status": "lowscore"
+ },
+ "anomalyco/opencode#57828": {
+  "first_seen": "2026-10-25T19:06:13",
+  "status": "queued"
+ },
+ "anomalyco/opencode#58954": {
+  "first_seen": "2026-10-25T19:07:49",
+  "status": "queued"
+ },
+ "anomalyco/opencode#58955": {
+  "first_seen": "2026-10-25T19:09:16",
+  "status": "queued"
+ },
+ "anomalyco/opencode#58956": {
+  "first_seen": "2026-10-25T19:19:41",
+  "status": "queued"
+ },
+ "anomalyco/opencode#58957": {
+  "first_seen": "2026-10-25T19:20:53",
+  "status": "queued"
+ },
+ "OpenHands/OpenHands#18935": {
+  "first_seen": "2026-10-25T19:34:28",
+  "status": "queued"
+ },
+ "anomalyco/opencode#58960": {
+  "first_seen": "2026-10-25T19:34:28",
+  "status": "lowscore"
+ },
+ "anomalyco/opencode#58814": {
+  "first_seen": "2026-10-25T19:34:28",
+  "status": "queued"
+ },
+ "OpenHands/OpenHands#18898": {
+  "first_seen": "2026-10-25T19:40:29",
+  "status": "queued"
  }
 }
