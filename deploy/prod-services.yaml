@@ -1,0 +1,22 @@
+# oss-scout v2 应用服务（template 约定：服务定义归项目，镜像引用模板导出变量）
+services:
+  oss-scout:
+    image: ${OSS_SCOUT_IMAGE}
+    container_name: oss-scout
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8787:8787"    # 只绑本机；公网访问走 FRP/Tailscale + 登录层
+    volumes:
+      - /home/scoutdeploy/oss-scout-data:/data   # state/queue/artifacts/configs 持久化
+    environment:
+      - OSSCOUT_DASHBOARD_ROOT=/data
+      - DASHBOARD_PASSWORD=${DASHBOARD_PASSWORD}
+      - GH_TOKEN=${GH_TOKEN}
+      - OPENCODE_API_KEY=${OPENCODE_API_KEY}
+      - MODAL_TOKEN_ID=${MODAL_TOKEN_ID}
+      - MODAL_TOKEN_SECRET=${MODAL_TOKEN_SECRET}
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:8787/login"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
