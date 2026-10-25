@@ -2670,5 +2670,9 @@
  "anomalyco/opencode#54784": {
   "first_seen": "2026-10-25T12:41:25",
   "status": "lowscore"
+ },
+ "anomalyco/opencode#58876": {
+  "first_seen": "2026-10-25T12:43:48",
+  "status": "queued"
  }
 }

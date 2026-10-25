@@ -630,27 +630,34 @@ def cloudflare_pull(ds) -> dict:
     base = f"https://api.cloudflare.com/client/v4/accounts/{account}/storage/kv/namespaces/{ns}"
     headers = {"Authorization": f"Bearer {token}"}
     import urllib.request
+
+    def _req(path: str, **kw):
+        last = None
+        for attempt in range(3):
+            try:
+                req = urllib.request.Request(path, headers=headers, **kw)
+                with urllib.request.urlopen(req, timeout=20) as r:
+                    return json.loads(r.read().decode())
+            except Exception as e:  # noqa: BLE001 — 本机 TLS 抖动常态
+                last = e
+                time.sleep(min(10, (attempt + 1) * 4))
+        raise last
+
     try:
-        req = urllib.request.Request(f"{base}/keys?prefix=pending:&limit=100",
-                                     headers=headers)
-        with urllib.request.urlopen(req, timeout=20) as r:
-            keys = [k["name"] for k in json.loads(r.read().decode())["result"] or []]
+        keys = [k["name"] for k in
+                (_req(f"{base}/keys?prefix=pending:&limit=100").get("result") or [])]
     except Exception as e:  # noqa: BLE001
         return {"error": str(e)[:200]}
     pulled, ingested = 0, 0
     for key in keys:
         try:
-            req = urllib.request.Request(f"{base}/values/{key}", headers=headers)
-            with urllib.request.urlopen(req, timeout=20) as r:
-                payload = json.loads(r.read().decode())
+            payload = _req(f"{base}/values/{key}")
         except Exception as e:  # noqa: BLE001
             return {"pulled": pulled, "ingested": ingested, "error": str(e)[:200]}
         pulled += 1
         ingested += ingest_cloudflare_issues(ds, payload.get("issues") or [])
         try:
-            req = urllib.request.Request(f"{base}/values/{key}", headers=headers,
-                                         method="DELETE")
-            urllib.request.urlopen(req, timeout=20)
+            _req(f"{base}/values/{key}", method="DELETE")
         except Exception:  # noqa: BLE001
             pass   # 删除失败：下轮 seen 去重兜底
     return {"pulled": pulled, "ingested": ingested}
