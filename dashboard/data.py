@@ -564,6 +564,14 @@ def ingest_cloudflare_issues(ds, items: list[dict]) -> int:
             lane_of[it if isinstance(it, str) else it.get("repo", "")] = lane
 
     now_iso = dt.datetime.now().isoformat(timespec="seconds")
+    # AI 评分（用户裁定 2026-10-25）：对每条候选调 Go API，与规则评分并列存储；
+    # 最终 A/B/C 判定仍由规则引擎决定（Playbook：AI 推测不作事实）
+    from scout_v2.workers.issue_scorer import load_scorer_config
+    scorer_cfg = load_scorer_config(ds.root)
+    scorer = None
+    if scorer_cfg.get("api_key"):
+        from scout_v2.workers.issue_scorer import GoClient
+        scorer = GoClient(key=scorer_cfg["api_key"], model=scorer_cfg.get("model", "deepseek-v4.1-flash"))
     queued = 0
     for it in items:
         repo = str(it.get("repo", ""))
@@ -598,6 +606,14 @@ def ingest_cloudflare_issues(ds, items: list[dict]) -> int:
                  "signals": {**sig, "labels": labels}, "created_at": it.get("created_at", ""),
                  "discovered_at": now_iso, "status": "new", "lease": None,
                  "source": "cloudflare-worker"}
+        if scorer is not None:
+            try:
+                entry["ai_grade"] = scorer.score_issue({
+                    "repo": repo, "number": number, "title": title,
+                    "labels": labels, "reactions": sig["reactions"],
+                    "comments": sig["comments"], "body_excerpt": body})
+            except Exception:  # noqa: BLE001 — 评分失败不阻塞入队
+                entry["ai_grade"] = {"grade": "error"}
         q[key] = entry
         seen[key] = {"first_seen": now_iso, "status": "queued"}
         queued += 1

@@ -447,7 +447,11 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
             "opencode": ds.opencode_stats(),
             "routing": (v2.get("routing") or {}),
             "features": (v2.get("features") or {}),
-            "oc_state": D.opencode_state(ds),
+            "oc_logged_in": _go_login_state(),
+            "go_models": _go_models_cached(root),
+            "scorer_cfg": (yaml.safe_load((root / "configs" / "scorer.yaml").read_text(
+                encoding="utf-8")) or {}) if (root / "configs" / "scorer.yaml").exists()
+                else {"model": "deepseek-v4.1-flash"},
             "cf": D.cloudflare_cfg(ds),
             "last_pull": D.cloudflare_last_pull(ds),
             "active": "/quota",
@@ -492,6 +496,52 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
             return HTMLResponse("<p class='muted'>文件不存在或路径非法</p>", status_code=404)
         return render(request, "log_view.html", {"name": f"artifacts/{name}/{hit[0]}",
                                                  "text": D.mask(hit[1]), "active": "/logs"})
+
+    @app.get("/api/opencode/models")
+    def api_opencode_models():
+        from scout_v2.workers.issue_scorer import GoClient, load_scorer_config
+        cfg = load_scorer_config(root)
+        if not cfg.get("api_key"):
+            return JSONResponse({"models": [], "logged_in": False})
+        c = GoClient(key=cfg["api_key"], model=cfg.get("model", "deepseek-v4.1-flash"))
+        models = c.list_models()
+        return JSONResponse({"models": models,
+                             "logged_in": bool(models),
+                             "current": cfg.get("model", "deepseek-v4.1-flash")})
+
+    @app.post("/api/opencode/model")
+    def api_opencode_model(request: Request, model: str = Form(...)):
+        from scout_v2.workers.issue_scorer import DEFAULT_MODEL
+        if not model or "/" in model or model not in _go_models_cached(root):
+            return JSONResponse({"detail": "unknown model"}, status_code=400)
+        p = root / "configs" / "scorer.yaml"
+        cfg = {}
+        if p.exists():
+            cfg = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+        cfg["model"] = model or DEFAULT_MODEL
+        _atomic_write_text(p, yaml.safe_dump(cfg, allow_unicode=True, sort_keys=True))
+        _audit(root, "set_scorer_model", model, "scorer.yaml updated")
+        return RedirectResponse("/quota", status_code=303)
+
+    def _go_login_state() -> bool:
+        from scout_v2.workers.issue_scorer import GoClient, load_scorer_config
+        cfg = load_scorer_config(root)
+        if not cfg.get("api_key"):
+            return False
+        def _probe():
+            return GoClient(key=cfg["api_key"], model=cfg.get("model", "deepseek-v4.1-flash")).list_models()
+        return bool(D.DataSource._cached(ds, "go_login", 300.0, _probe))
+
+    def _go_models_cached(rt: Path) -> list:
+        cacher = app.state.ds
+        from scout_v2.workers.issue_scorer import GoClient, load_scorer_config
+        cfg = load_scorer_config(rt)
+        if not cfg.get("api_key"):
+            return []
+        def _fetch():
+            return GoClient(key=cfg["api_key"],
+                            model=cfg.get("model", "deepseek-v4.1-flash")).list_models()
+        return D.DataSource._cached(cacher, "go_models", 600.0, _fetch) or []
 
     @app.post("/api/cloudflare/config")
     def api_cloudflare_config(request: Request, api_token: str = Form(""),

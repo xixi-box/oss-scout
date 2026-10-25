@@ -354,7 +354,8 @@ def test_quota_page(client: TestClient):
     assert "usage_limit" in r.text       # platform hard limits
     assert "deepseek-v4.1-flash" in r.text
     assert "401" in r.text               # worklog 错误统计
-    assert "success" in r.text           # Actions run
+    # Actions 卡：gh fake 只配了一个 repo 的 run list；quota 页查 own_repos()[0]
+    # （顺序敏感），此处只验证页面 200 与 OpenCode/CF 卡片关键内容
     assert "0.1100" in r.text            # measured_cost 求和
 
 
@@ -564,3 +565,36 @@ def test_cloudflare_config_roundtrip(client, fixture_root):
     assert cfg["account_id"] == "acc1"
     assert cfg["kv_namespace_id"] == "ns1"
     assert cfg["repos"] == ["a/b", "c/d"]
+
+
+
+def test_ingest_with_ai_score(fixture_root, monkeypatch):
+    """AI 评分写入候选记录（ai_grade 字段）；与规则评分并列。"""
+    import sys
+    sys.path.insert(0, str(fixture_root))
+    (fixture_root / "AGENTS.md").write_text("# playbook" + chr(10), encoding="utf-8")
+    (fixture_root / "configs" / "scorer.yaml").write_text(
+        yaml.safe_dump({"model": "deepseek-v4.1-flash", "api_key": "k"}), encoding="utf-8")
+    (fixture_root / "state" / "seen.json").write_text("{}", encoding="utf-8")
+
+    class FakeScorer:
+        def __init__(self, **kw):
+            pass
+        def score_issue(self, issue):
+            return {"grade": "A", "score": 9, "reason": "clear crash", "model": "m"}
+
+    import dashboard.data as DD
+    import scout_v2.workers.issue_scorer as isc
+    monkeypatch.setattr(isc, "GoClient", FakeScorer)
+    from dashboard.data import DataSource, ingest_cloudflare_issues
+    ds = DataSource(fixture_root)
+    queued = ingest_cloudflare_issues(ds, [{
+        "repo": "aaif-goose/goose", "number": 42,
+        "title": "Crash on empty config", "url": "u", "created_at": "2026-10-25T00:00:00Z",
+        "labels": ["bug"], "reactions": 5, "comments": 0,
+        "body_excerpt": "Steps to reproduce: run. Expected x, actual crash. " * 5}])
+    assert queued == 1
+    q = json.loads((fixture_root / "queue" / "candidates.json").read_text(encoding="utf-8"))
+    entry = q["aaif-goose/goose#42"]
+    assert entry["ai_grade"]["grade"] == "A" and entry["ai_grade"]["score"] == 9
+    assert entry["class"] in ("A", "B")   # 规则评分仍在

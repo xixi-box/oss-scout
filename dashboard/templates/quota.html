@@ -29,56 +29,23 @@
 
   <div class="card">
     <h2>OpenCode</h2>
-    <h3>主模型（{{ opencode.mode or "?" }} 模式）</h3>
-    <ul>{% for m in opencode.primary_models %}<li><code>{{ m }}</code></li>{% endfor %}</ul>
-    <div class="chips mt">
-      {% if oc_state.ok %}
-      <button class="btn btn-logout" id="oc-logout" type="button">退出 OpenCode 登录</button>
-      <span class="small muted">上次检测：{{ oc_state.checked_at or "—" }} ✓ 正常</span>
-      {% else %}
-      <a class="btn btn-primary" style="text-decoration:none" href="https://opencode.ai/auth" target="_blank" rel="noopener">打开 OpenCode 控制台登录</a>
-      {% endif %}
-      <button class="btn btn-ghost" id="oc-check" type="button">检测登录态（≈$0.002）</button>
-      <span id="oc-check-result" class="small muted">{% if oc_state.ok is none %}尚未检测{% endif %}</span>
+    {% if oc_logged_in %}
+    <div class="chips">
+      <form method="post" action="/api/opencode/model" class="inline-form">
+        <select name="model" class="lane-select" style="min-width:260px">
+          {% for m in go_models %}<option value="{{ m }}" {{ 'selected' if m == scorer_cfg.get('model') }}>{{ m }}</option>{% endfor %}
+        </select>
+        <button class="btn btn-ghost" type="submit">设为评分模型</button>
+      </form>
+      <form method="post" action="/api/opencode/logout" class="inline-form">
+        <button class="btn btn-logout" type="submit">退出 OpenCode 登录</button>
+      </form>
     </div>
-    <script>
-    document.getElementById("oc-logout")?.addEventListener("click", async function () {
-      this.disabled = true;
-      const r = await fetch("/api/opencode/logout", {method: "POST"});
-      const j = await r.json();
-      location.reload();
-    });
-    document.getElementById("oc-check").addEventListener("click", async function () {
-      const out = document.getElementById("oc-check-result");
-      out.textContent = "检测中…（最长 2 分钟）";
-      this.disabled = true;
-      try {
-        const r = await fetch("/api/opencode/check", {method: "POST"});
-        const j = await r.json();
-        out.textContent = j.ok ? "✓ 登录态正常（" + j.model + "）" : "✗ 异常：" + (j.detail || "").slice(0, 120);
-        out.className = j.ok ? "small chip-green" : "small chip-warn";
-        if (j.ok) setTimeout(() => location.reload(), 1500);
-      } catch (e) {
-        out.textContent = "✗ 请求失败：" + e;
-      } finally { this.disabled = false; }
-    });
-    </script>
-    <script>
-    document.getElementById("oc-check").addEventListener("click", async function () {
-      const out = document.getElementById("oc-check-result");
-      out.textContent = "检测中…（最长 2 分钟）";
-      this.disabled = true;
-      try {
-        const r = await fetch("/api/opencode/check", {method: "POST"});
-        const j = await r.json();
-        out.textContent = j.ok ? "✓ 登录态正常（" + j.model + "）" : "✗ 异常：" + (j.detail || "").slice(0, 120);
-        out.className = j.ok ? "small chip-green" : "small chip-warn";
-      } catch (e) {
-        out.textContent = "✗ 请求失败：" + e;
-      } finally { this.disabled = false; }
-    });
-    </script>
-    {% if opencode.free_preferences %}<p class="small muted">免费偏好记录：{% for m in opencode.free_preferences %}<code>{{ m }}</code> {% endfor %}</p>{% endif %}
+    {% else %}
+    <a class="btn btn-primary" style="text-decoration:none" href="https://opencode.ai/auth" target="_blank" rel="noopener">登录 OpenCode</a>
+    <p class="small muted mt">未检测到登录态（模型列表拉取失败或未登录）。登录后此页会自动显示模型选择。</p>
+    {% endif %}
+    <p class="small mt">评分模型：<code>{{ scorer_cfg.get('model', 'deepseek-v4.1-flash') }}</code>（默认 deepseek-v4.1-flash；用于 issue AI 评分，记订阅额度）</p>
     <p>allow_paid_api: <span class="chip {{ 'chip-green' if opencode.allow_paid_api }}">{{ opencode.allow_paid_api }}</span></p>
     <h3 class="mt">401/402/429 错误统计（worklog model/auth）</h3>
     {% if opencode.errors %}
@@ -87,98 +54,34 @@
     </div>
     {% else %}<p class="muted">暂无记录</p>{% endif %}
   </div>
-</div>
 
-<div class="card mt">
-  <h2>GitHub Actions（{{ actions_repo or "无自有仓库" }}）</h2>
-  {% if actions is none %}
-  <p class="muted">未知（gh run list 查询失败）</p>
-  {% elif not actions %}
-  <p class="muted">无 run 记录</p>
-  {% else %}
-  <table>
-    <thead><tr><th>时间</th><th>workflow</th><th>结论</th></tr></thead>
-    <tbody>
-      {% for r in actions %}
-      <tr>
-        <td class="nowrap muted small">{{ r.createdAt or "未知" }}</td>
-        <td>{{ r.workflowName or "未知" }}</td>
-        <td><span class="chip {{ 'chip-green' if r.conclusion == 'success' else ('chip-warn' if r.conclusion != '—') }}">{{ r.conclusion or "进行中" }}</span></td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  {% endif %}
-</div>
-
-<div class="card mt">
-  <h2>路由策略（每模式 主选/备选，可互换）</h2>
-  <p class="muted small">写入 configs/v2.yaml 的 routing 块；broad_scan 恒不上 Actions（GitHub ToS）。每次修改过 worklog 审计。</p>
-  <table class="mini table-scroll">
-    <thead><tr><th>mode</th><th>主选</th><th>备选</th><th>调整</th></tr></thead>
-    <tbody>
-      {% for mode, rt in routing.items() %}
-      <tr>
-        <td class="nowrap">{{ mode }}</td>
-        <td><span class="chip">{{ rt.primary }}</span></td>
-        <td><span class="chip">{{ rt.fallback }}</span></td>
-        <td>
-          <form method="post" action="/api/routing" class="inline-form">
-            <input type="hidden" name="mode" value="{{ mode }}">
-            <select name="primary" class="lane-select">
-              {% for b in ['modal', 'actions'] %}<option value="{{ b }}" {{ 'selected' if b == rt.primary }}>{{ b }}</option>{% endfor %}
-            </select>
-            <select name="fallback" class="lane-select">
-              {% for b in ['modal', 'actions'] %}<option value="{{ b }}" {{ 'selected' if b == rt.fallback }}>{{ b }}</option>{% endfor %}
-            </select>
-            <button class="btn btn-ghost" type="submit">改</button>
-          </form>
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  <h3 class="mt">Feature 开关</h3>
-  <div class="chips">
-    {% for key, val in features.items() %}
-    <form method="post" action="/api/features" class="inline-form chip-form">
-      <input type="hidden" name="key" value="{{ key }}">
-      <input type="hidden" name="value" value="{{ 'false' if val else 'true' }}">
-      <code>{{ key }}</code> = <span class="chip {{ 'chip-green' if val }}">{{ val }}</span>
-      <button class="btn btn-ghost" type="submit">{{ '关闭' if val else '开启' }}</button>
+  <div class="card">
+    <h2>Cloudflare（Issue Hunter）</h2>
+    <p class="muted small">Worker 每分钟轮询 GitHub → KV；本机每 60s 拉取入队（后台自动）。Token：
+    <a href="https://dash.cloudflare.com/profile/api-tokens" target="_blank" rel="noopener">API Tokens</a></p>
+    <form method="post" action="/api/cloudflare/config">
+      <label class="small muted">API Token</label><br>
+      <input type="password" name="api_token" value="{{ cf.get('api_token', '') }}" style="min-width:320px"><br>
+      <label class="small muted">Account ID</label><br>
+      <input type="text" name="account_id" value="{{ cf.get('account_id', '') }}" style="min-width:320px"><br>
+      <label class="small muted">KV Namespace ID</label><br>
+      <input type="text" name="kv_namespace_id" value="{{ cf.get('kv_namespace_id', '') }}" style="min-width:320px"><br>
+      <label class="small muted">监控仓库（逗号分隔）</label><br>
+      <textarea name="repos" rows="2" style="min-width:320px;width:60%">{{ cf.get('repos', []) | join(', ') }}</textarea><br>
+      <button class="btn btn-primary" type="submit">保存配置</button>
+      <button class="btn btn-ghost" type="button" id="cf-pull">立即拉取</button>
+      <span id="cf-pull-result" class="small muted">最近拉取：{{ last_pull or "尚未" }}</span>
     </form>
-    {% endfor %}
+    <script>
+    document.getElementById("cf-pull").addEventListener("click", async function () {
+      const out = document.getElementById("cf-pull-result");
+      out.textContent = "拉取中…";
+      try {
+        const r = await fetch("/api/cloudflare/pull", {method: "POST"});
+        const j = await r.json();
+        out.textContent = j.error ? ("失败：" + j.error) : ("拉取 " + (j.pulled||0) + " 批，入队 " + (j.ingested||0));
+      } catch (e) { out.textContent = "失败：" + e; }
+    });
+    </script>
   </div>
-</div>
-
-<div class="card mt">
-  <h2>Cloudflare（Issue Hunter）</h2>
-  <p class="muted small">Worker 每分钟写 KV，本机每 60s 拉取入队。Token 创建：
-  <a href="https://dash.cloudflare.com/profile/api-tokens" target="_blank" rel="noopener">API Tokens</a>（Edit Cloudflare Workers 模板）；
-  Account ID 在 <a href="https://dash.cloudflare.com" target="_blank" rel="noopener">控制台首页</a>右侧。</p>
-  <form method="post" action="/api/cloudflare/config">
-    <label class="small muted">API Token</label><br>
-    <input type="password" name="api_token" value="{{ cf.get('api_token', '') }}" style="min-width:340px"><br>
-    <label class="small muted">Account ID</label><br>
-    <input type="text" name="account_id" value="{{ cf.get('account_id', '') }}" style="min-width:340px"><br>
-    <label class="small muted">KV Namespace ID（SEEN）</label><br>
-    <input type="text" name="kv_namespace_id" value="{{ cf.get('kv_namespace_id', '') }}" style="min-width:340px"><br>
-    <label class="small muted">监控仓库（逗号分隔）</label><br>
-    <textarea name="repos" rows="2" style="min-width:340px;width:60%">{{ cf.get('repos', []) | join(', ') }}</textarea><br>
-    <button class="btn btn-primary" type="submit">保存配置</button>
-    <button class="btn btn-ghost" type="button" id="cf-pull">立即拉取</button>
-    <span id="cf-pull-result" class="small muted">最近拉取：{{ last_pull or "尚未" }}</span>
-  </form>
-  <script>
-  document.getElementById("cf-pull").addEventListener("click", async function () {
-    const out = document.getElementById("cf-pull-result");
-    out.textContent = "拉取中…";
-    try {
-      const r = await fetch("/api/cloudflare/pull", {method: "POST"});
-      const j = await r.json();
-      out.textContent = j.error ? ("失败：" + j.error) : ("拉取 " + (j.pulled||0) + " 批，入队 " + (j.ingested||0));
-    } catch (e) { out.textContent = "失败：" + e; }
-  });
-  </script>
-</div>
 {% endblock %}
