@@ -64,3 +64,13 @@ bug_hunter:
 security:
   worker_github_write_token: false    # worker 固定无 GitHub 写令牌（计划 §4.2/§10）
   sanitize_logs: true
+
+routing:
+  # 用户裁定（2026-10-25）：两条后端能力全对称——每模式主选+备选可互换。
+  # 唯一保留的不对称：broad_scan 恒不上 Actions（计划 §1/§9 的 GitHub ToS 硬约束，
+  # 公共 runner 不得批量计算与所在仓库无关的第三方项目），属合规线而非能力线。
+  scan:      {primary: modal,   fallback: actions}
+  reproduce: {primary: modal,   fallback: actions}
+  repair:    {primary: actions, fallback: modal}
+  review:    {primary: actions, fallback: modal}
+  ci:        {primary: actions, fallback: modal}

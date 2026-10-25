@@ -30,11 +30,13 @@ class TestBroadScan:
         assert d.backend != "github_actions"
 
     def test_broad_scan_pauses_when_modal_blocked(self):
-        d = JobRouter(cfg(modal_enabled=True, modal_budget_ok=False)).route(job("scan"))
+        d = JobRouter(cfg(modal_enabled=True, modal_budget_ok=False)).route(
+            job("scan", "broad_scan"))
         assert d.backend == "pause" and "budget" in d.reason
 
     def test_broad_scan_modal_ok(self):
-        d = JobRouter(cfg(modal_enabled=True, modal_budget_ok=True)).route(job("scan"))
+        d = JobRouter(cfg(modal_enabled=True, modal_budget_ok=True)).route(
+            job("scan", "broad_scan"))
         assert d.backend == "modal"
 
     def test_broad_scan_only_mode_scan(self):
@@ -44,29 +46,27 @@ class TestBroadScan:
 
 
 class TestReproduce:
-    def test_reproduce_modal_not_actions(self):
+    def test_reproduce_modal_primary(self):
         r = JobRouter(cfg(actions_enabled=True, actions_eligible=True,
                           modal_enabled=True, modal_budget_ok=True))
         d = r.route(job("reproduce"))
-        assert d.backend == "modal"
+        assert d.backend == "modal" and not d.fallback_used
 
-    def test_reproduce_pauses_not_mass_fork(self):
-        d = JobRouter(cfg()).route(job("reproduce"))
-        assert d.backend == "pause"
+    def test_reproduce_falls_back_to_actions(self):
+        """能力对称裁定：reproduce 主选 Modal 不可用时回退 Actions（project_contribution）。"""
+        r = JobRouter(cfg(actions_enabled=True, actions_eligible=True,
+                          modal_enabled=True, modal_budget_ok=False))
+        d = r.route(job("reproduce"))
+        assert d.backend == "github_actions" and d.fallback_used
 
-
-class TestContribution:
-    def test_repair_actions_first(self):
-        r = JobRouter(cfg(actions_enabled=True, actions_eligible=True))
-        assert r.route(job("repair")).backend == "github_actions"
-
-    def test_repair_fallback_modal_when_actions_ineligible(self):
+    def test_repair_falls_back_to_modal(self):
+        """对称：repair 主选 Actions 不可用回退 Modal（原方向的反向）。"""
         r = JobRouter(cfg(actions_enabled=True, actions_eligible=False,
                           modal_enabled=True, modal_budget_ok=True))
         d = r.route(job("repair"))
         assert d.backend == "modal" and d.fallback_used and d.ineligible
 
-    def test_repair_pauses_when_both_blocked(self):
+    def test_pauses_when_both_blocked(self):
         r = JobRouter(cfg(actions_enabled=True, actions_eligible=False,
                           modal_enabled=True, modal_budget_ok=False))
         d = r.route(job("ci"))
@@ -80,3 +80,10 @@ class TestContribution:
     def test_invalid_mode_rejected(self):
         d = JobRouter(cfg()).route({"mode": "yolo"})
         assert d.backend == "pause" and "invalid mode" in d.reason
+
+    def test_scan_on_actions_when_modal_blocked(self):
+        """对称：scan（project_contribution）可走 Actions；broad_scan 恒拒。"""
+        r = JobRouter(cfg(actions_enabled=True, actions_eligible=True,
+                          modal_enabled=True, modal_budget_ok=False))
+        d = r.route(job("scan", "project_contribution"))
+        assert d.backend == "github_actions" and d.fallback_used

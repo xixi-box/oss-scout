@@ -35,9 +35,12 @@ class TestEligibility:
         j = job("repair"); j2 = j.to_dict(); j2["execution_scope"] = "broad_scan"
         assert not b.eligible(j2)
 
-    def test_scan_mode_ineligible(self):
+    def test_scan_reproduce_eligible_on_contribution(self):
+        """能力对称裁定 2026-10-25：scan/reproduce 在 project_contribution 范围内
+        与 repair/review/ci 同权；broad_scan 仍恒拒。"""
         b = ab.ActionsBackend(enabled=True, repo="me/t", workflow_exists=True)
-        assert not b.eligible(job("scan").to_dict())
+        assert b.eligible(job("scan").to_dict())
+        assert b.eligible(job("reproduce").to_dict())
 
     def test_disabled_or_no_workflow_ineligible(self):
         j = job().to_dict()

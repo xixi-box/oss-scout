@@ -63,14 +63,15 @@ class ActionsBackend:
         self.download = download_runner or _default_download
         self.artifact_dir = artifact_dir or Path("artifacts")
 
-    # ---- eligibility（计划 §16：broad_scan 一律拒绝）----
+    # ---- eligibility（能力全对称裁定 2026-10-25：五模式皆可承载；唯一硬线是
+    #      broad_scan 恒拒——ToS 禁止公共 runner 批量计算无关第三方项目）----
 
     def eligible(self, job: dict) -> bool:
         if not self.enabled or not self.repo or not self.workflow_exists:
             return False
         if job.get("execution_scope") == "broad_scan":
             return False
-        if job.get("mode") not in {"repair", "review", "ci"}:
+        if job.get("mode") not in {"repair", "review", "ci", "scan", "reproduce"}:
             return False
         return True
 

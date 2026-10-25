@@ -35,10 +35,14 @@ class ModalSandboxBackend:
 
     def __init__(self, budget: BudgetGuard,
                  dockerfile: Path | None = None,
-                 max_task_minutes: int = 30):
+                 max_task_minutes: int = 30,
+                 extra_env: dict[str, str] | None = None):
         self.budget = budget
         self.dockerfile = dockerfile or Path("docker/Dockerfile.worker")
         self.max_task_minutes = max_task_minutes
+        # 额外环境变量（如 OPENCODE_API_KEY）由**控制器**在创建时显式传入——
+        # 只进 Sandbox 进程环境，不落盘、不进 job payload、不进日志。
+        self.extra_env = dict(extra_env or {})
         self._sandboxes: dict[str, Any] = {}
         self._reserved: dict[str, float] = {}
 
@@ -105,7 +109,7 @@ class ModalSandboxBackend:
         # 走 entrypoint 支持的 OSSCOUT_JOB_B64 环境变量通道，命令参数用无害占位。
         sb = modal.Sandbox.create(
             "/bin/true", app=app, image=image,
-            env={"OSSCOUT_JOB_B64": job_b64},
+            env={"OSSCOUT_JOB_B64": job_b64, **self.extra_env},
             timeout=min(int(job.get("timeout_seconds", 1800)),
                         self.max_task_minutes * 60),
             cpu=job.get("cpu", 2),

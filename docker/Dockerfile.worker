@@ -17,9 +17,12 @@ COPY configs /workspace/configs
 # worker 用户需要写 artifacts；/workspace 默认归 root（P6-A 实测修复）
 RUN mkdir -p /workspace/artifacts /workspace/repo && chown -R worker:worker /workspace
 
-# OpenCode CLI 版本锁定（P4 启用；构建时复核当前版本号）
-# ARG OPENCODE_VERSION=<pinned>
-# RUN curl -fsSL https://opencode.ai/install | bash
+# OpenCode CLI（能力对称裁定 2026-10-25：Modal 也承载 repair）。版本锁定；
+# 安装脚本的 --version 支持未经实测，首次 Modal repair 冒烟时核对落点与版本。
+ARG OPENCODE_VERSION=1.18.27
+RUN curl -fsSL https://opencode.ai/install | bash || true \
+    && (find /root /usr/local /opt -name "opencode" -type f 2>/dev/null | head -1 | \
+        xargs -r ln -sf /usr/local/bin/opencode 2>/dev/null || true)
 
 USER worker
 # --chmod：Windows 工作树不带 +x；sed 去掉 CRLF（git autocrlf 可能转换过）

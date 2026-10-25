@@ -1,11 +1,13 @@
-"""确定性 Backend Router（计划 §5）：规则表驱动，不给 Agent 自主决策。
+"""确定性 Backend Router（计划 §5；用户裁定 2026-10-25：两后端能力全对称）。
 
-路由矩阵（mode × execution_scope → 首选/备用）：
-- scan / 跨仓库 broad_scan → 只走 Modal；Actions 永远拒绝。
-- reproduce（未进入贡献流程）→ Modal；不能为了绕过 Actions 限制批量 Fork。
-- repair / review / ci（project_contribution）→ Actions 优先；Actions 不可用回退 Modal
-  （仅预算内），再不行暂停。
-回退仅限平台故障/配额/资源问题，绝不因测试断言失败换平台重跑。
+路由策略表（configs/v2.yaml routing）：每模式 {primary, fallback}，两条后端都可承载
+全部五种模式（同一份 worker 代码）。回退仅限平台故障/配额/资格问题，绝不因测试
+断言失败换平台重跑。
+
+唯一保留的不对称是合规线：execution_scope=broad_scan 恒不上 Actions——
+GitHub ToS 禁止公共 runner 批量计算与所在仓库无关的第三方项目（计划 §1/§9），
+这是策略拒绝而非能力缺失（scan/reproduce 在 project_contribution 范围内
+可走 Actions，与 Modal 同权）。
 """
 from __future__ import annotations
 
@@ -13,6 +15,14 @@ from dataclasses import dataclass
 from typing import Any
 
 from .schemas import MODES
+
+DEFAULT_ROUTING = {
+    "scan": {"primary": "modal", "fallback": "actions"},
+    "reproduce": {"primary": "modal", "fallback": "actions"},
+    "repair": {"primary": "actions", "fallback": "modal"},
+    "review": {"primary": "actions", "fallback": "modal"},
+    "ci": {"primary": "actions", "fallback": "modal"},
+}
 
 
 @dataclass
@@ -28,8 +38,15 @@ class RouterConfig:
     modal_enabled: bool = False
     actions_enabled: bool = False
     modal_budget_ok: bool = False     # BudgetGuard.can_start() 的结论
-    actions_eligible: bool = False    # Actions Adapter.eligible(job) 的结论（有合规 workflow 等）
-    modal_platform_ok: bool = True    # 平台可用性（区别于预算）
+    actions_eligible: bool = False    # Actions Adapter.eligible(job) 的结论
+    modal_platform_ok: bool = True
+    routing: dict[str, dict[str, str]] | None = None
+
+    def route_for(self, mode: str) -> tuple[str, str]:
+        table = self.routing or DEFAULT_ROUTING
+        entry = table.get(mode) or DEFAULT_ROUTING.get(mode) or \
+            {"primary": "modal", "fallback": "actions"}
+        return entry.get("primary", "modal"), entry.get("fallback", "actions")
 
 
 class JobRouter:
@@ -43,31 +60,51 @@ class JobRouter:
             return RouteDecision("pause", f"invalid mode {mode!r}")
         if scope == "broad_scan" and mode != "scan":
             return RouteDecision("pause",
-                                 "broad_scan only applies to mode=scan (policy: no mass fork/repro on Actions)")
+                                 "broad_scan only applies to mode=scan")
 
-        if scope == "broad_scan" or mode == "scan":
+        # 合规硬线：broad_scan 恒不上 Actions（ToS），仅 Modal 可承载；Modal 不可用即暂停
+        if scope == "broad_scan":
             return self._route_modal_only(
-                "broad/scan workloads never run on GitHub Actions (§5)")
+                "broad_scan never runs on GitHub Actions (ToS §1/§9)")
 
-        if mode == "reproduce":
-            return self._route_modal_only(
-                "pre-contribution reproduce runs on Modal; no mass-fork to reach Actions")
+        primary, fallback = self.cfg.route_for(mode)
+        chain = [b for b in (primary, fallback) if b]
+        last_reason = ""
+        used_fallback = False
+        for i, backend in enumerate(chain):
+            ok, reason = self._try(backend, job)
+            if ok:
+                return RouteDecision(
+                    "github_actions" if backend in ("github_actions", "actions") else backend,
+                    reason,
+                    fallback_used=(i > 0),
+                    ineligible=(i > 0))   # 首选被跳过 ⇒ 标记，控制器可审计回退原因
+            used_fallback = used_fallback or i > 0
+            last_reason = reason
+        # P1 默认：仅当主选与备选都被 feature flag 关闭时，退到本地骨架执行
+        if "disabled by feature flag" in last_reason and \
+                all("disabled by feature flag" in self._try(b, job)[1] for b in chain):
+            return RouteDecision("local", "all backends disabled by feature flag (P1 default)")
+        return RouteDecision("pause", last_reason or "no eligible backend")
 
-        # repair / review / ci：project_contribution，Actions 优先
-        if scope != "project_contribution":
-            return RouteDecision("pause", f"unknown scope {scope!r}")
-        if self.cfg.actions_enabled and self.cfg.actions_eligible:
-            return RouteDecision("github_actions", "contribution work: Actions first")
-        if self.cfg.actions_enabled and not self.cfg.actions_eligible:
-            if self._modal_available():
-                return RouteDecision("modal", "Actions ineligible → Modal fallback (budget-checked)",
-                                     fallback_used=True, ineligible=True)
-            return RouteDecision("pause",
-                                 "Actions ineligible and Modal unavailable/budget-blocked → pause")
-        if self.cfg.actions_enabled is False:
-            # feature flag 关闭时（P1 默认）：本地浅跑或暂停由调用方决定，路由给 local
-            return RouteDecision("local", "actions backend disabled by feature flag (P1 default)")
-        return RouteDecision("pause", "no eligible backend")
+    def _try(self, backend: str, job: dict[str, Any]) -> tuple[bool, str]:
+        if backend == "modal":
+            if not self.cfg.modal_enabled:
+                return False, "Modal disabled by feature flag"
+            if not self.cfg.modal_platform_ok:
+                return False, "Modal platform unavailable"
+            if not self.cfg.modal_budget_ok:
+                return False, "Modal budget blocked (fail-closed)"
+            return True, "Modal ok"
+        if backend in ("github_actions", "actions"):
+            if not self.cfg.actions_enabled:
+                return False, "Actions disabled by feature flag"
+            if not self.cfg.actions_eligible:
+                return False, "Actions ineligible (no compliant workflow / quota risk)"
+            return True, "Actions ok"
+        if backend == "local":
+            return True, "local ok"
+        return False, f"unknown backend {backend!r}"
 
     def _route_modal_only(self, why: str) -> RouteDecision:
         if self.cfg.modal_enabled and self.cfg.modal_budget_ok and self.cfg.modal_platform_ok:
@@ -75,6 +112,3 @@ class JobRouter:
         if self.cfg.modal_enabled and not self.cfg.modal_budget_ok:
             return RouteDecision("pause", f"{why}; but Modal budget blocked → pause (never Actions)")
         return RouteDecision("pause", f"{why}; but Modal disabled → pause")
-
-    def _modal_available(self) -> bool:
-        return (self.cfg.modal_enabled and self.cfg.modal_budget_ok and self.cfg.modal_platform_ok)
