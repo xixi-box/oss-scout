@@ -125,7 +125,10 @@ jobs:
               container_name: oss-scout
               restart: unless-stopped
               ports:
+                # 127.0.0.1 = 宿主机本机访问；172.17.0.1 = docker0 网桥，
+                # 供同机 nginx gateway 容器经 host.docker.internal 反代（不暴露公网）
                 - "127.0.0.1:18787:8787"
+                - "172.17.0.1:18787:8787"
               volumes:
                 - /opt/oss-scout-data:/data
               environment:
