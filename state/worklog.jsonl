@@ -289,3 +289,5 @@
 {"ts": "2026-10-25T11:49:31", "action": "dashboard_opencode_check", "target": "opencode-go/deepseek-v4.1-flash", "result": "ok", "source": "web-ui"}
 {"ts": "2026-10-25T11:49:31", "action": "dashboard_opencode_check", "target": "opencode-go/deepseek-v4.1-flash", "result": "ok", "source": "web-ui"}
 {"ts": "2026-10-25T11:55:40", "action": "dashboard_login", "target": "web-ui", "result": "login ok", "source": "web-ui"}
+{"ts": "2026-10-25T12:11:19", "action": "dashboard_login", "target": "web-ui", "result": "login ok", "source": "web-ui"}
+{"ts": "2026-10-25T12:11:29", "action": "cloudflare_kv_pull_mode", "result": "per user: wrangler OAuth blocked (dash auth timeout) but api.cloudflare.com direct OK -> deploy via CLOUDFLARE_API_TOKEN (no login). Ingest redesigned to KV pull: worker writes pending:<ts> batches (TTL 1h) + since watermark every 5min (KV free 1000 writes/day budget); dashboard background thread pulls KV every 60s via CF API, ingests via discover.score, deletes processed keys. No tunnel/server needed. GH token received (stored for wrangler secret). Awaiting user: CF API token + account id. 192 tests green."}
