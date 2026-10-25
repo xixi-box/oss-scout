@@ -2726,5 +2726,53 @@
  "infiniflow/ragflow#21435": {
   "first_seen": "2026-10-25T15:18:03",
   "status": "queued"
+ },
+ "crewAIInc/crewAI#8556": {
+  "first_seen": "2026-10-25T15:22:50",
+  "status": "queued"
+ },
+ "anomalyco/opencode#58918": {
+  "first_seen": "2026-10-25T15:28:01",
+  "status": "lowscore"
+ },
+ "anomalyco/opencode#58917": {
+  "first_seen": "2026-10-25T15:28:01",
+  "status": "queued"
+ },
+ "anomalyco/opencode#58919": {
+  "first_seen": "2026-10-25T15:35:09",
+  "status": "queued"
+ },
+ "crewAIInc/crewAI#8558": {
+  "first_seen": "2026-10-25T15:38:07",
+  "status": "queued"
+ },
+ "anomalyco/opencode#58725": {
+  "first_seen": "2026-10-25T15:45:39",
+  "status": "lowscore"
+ },
+ "crewAIInc/crewAI#8560": {
+  "first_seen": "2026-10-25T15:45:39",
+  "status": "queued"
+ },
+ "anomalyco/opencode#58661": {
+  "first_seen": "2026-10-25T16:11:50",
+  "status": "queued"
+ },
+ "anomalyco/opencode#58922": {
+  "first_seen": "2026-10-25T16:29:04",
+  "status": "queued"
+ },
+ "xixi-box/oss-scout-v2-test#8": {
+  "first_seen": "2026-10-25T16:47:26",
+  "status": "queued"
+ },
+ "OpenHands/OpenHands#18924": {
+  "first_seen": "2026-10-25T16:48:34",
+  "status": "queued"
+ },
+ "anomalyco/opencode#58924": {
+  "first_seen": "2026-10-25T16:48:34",
+  "status": "lowscore"
  }
 }

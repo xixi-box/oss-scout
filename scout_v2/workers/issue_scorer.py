@@ -9,10 +9,11 @@
 from __future__ import annotations
 
 import json
-import time
 import urllib.error
 import urllib.request
 import uuid
+
+import tenacity
 from pathlib import Path
 
 BASE = "https://opencode.ai/zen/go/v1"
@@ -47,32 +48,49 @@ class GoClient:
                 "User-Agent": "opencode/1.18.27",
                 "x-opencode-session": str(uuid.uuid4())}
 
+    class _Retryable(Exception):
+        """TLS/5xx 类瞬时错误，tenacity 捕获重试。"""
+
+    @tenacity.retry(
+        stop=tenacity.stop_after_attempt(3),
+        wait=tenacity.wait_fixed(4),
+        retry=tenacity.retry_if_exception_type(_Retryable),
+        reraise=True,
+    )
+    def _chat_once(self, body: bytes) -> dict:
+        if not BASE.startswith("https://"):
+            raise ValueError("blocked non-https base url")
+        try:
+            req = urllib.request.Request(f"{BASE}/chat/completions", data=body,
+                                         headers=self._headers())
+            with urllib.request.urlopen(req, timeout=self.timeout) as r:
+                return json.loads(r.read().decode())
+        except urllib.error.HTTPError as e:
+            detail = e.read().decode(errors="replace")[:200]
+            if e.code >= 500:
+                raise GoClient._Retryable(f"HTTP {e.code}: {detail}")
+            return {"__http_error__": f"HTTP {e.code}: {detail}"}
+        except Exception as e:  # noqa: BLE001 — TLS 抖动
+            raise GoClient._Retryable(str(e)[:150])
+
     def chat(self, prompt: str, max_tokens: int = 200) -> tuple[bool, str]:
-        """单轮补全。返回 (ok, text|error_detail)。TLS 抖动重试 2 次；4xx 不重试。"""
+        """单轮补全。返回 (ok, text|error_detail)。瞬时错误 tenacity 重试；4xx 不重试。"""
         body = json.dumps({"model": self.model,
                            "messages": [{"role": "user", "content": prompt}]}).encode()
-        last = ""
-        for attempt in range(3):
-            try:
-                req = urllib.request.Request(f"{BASE}/chat/completions", data=body,
-                                             headers=self._headers())
-                with urllib.request.urlopen(req, timeout=self.timeout) as r:
-                    d = json.loads(r.read().decode())
-                text = (d.get("choices") or [{}])[0].get("message", {}).get("content", "")
-                return True, text.strip()
-            except urllib.error.HTTPError as e:
-                detail = e.read().decode(errors="replace")[:200]
-                if e.code < 500:
-                    return False, f"HTTP {e.code}: {detail}"   # 认证/参数错误不重试
-                last = f"HTTP {e.code}"
-            except Exception as e:  # noqa: BLE001 — TLS 抖动
-                last = str(e)[:150]
-            time.sleep(min(8, (attempt + 1) * 4))
-        return False, last
+        try:
+            d = self._chat_once(body)
+        except GoClient._Retryable as e:
+            return False, str(e)[:200]
+        if "__http_error__" in d:
+            return False, d["__http_error__"]
+        text = (d.get("choices") or [{}])[0].get("message", {}).get("content", "")
+        return True, text.strip()
 
     def list_models(self) -> list[str]:
         """Go 套餐可用模型 ID 列表，每次实时从 OpenCode 拉取（绝不写死）。
         失败返回空列表——界面显示"拉取失败"，不用本地兜底表。"""
+        if not BASE.startswith("https://"):
+            return []
         try:
             req = urllib.request.Request(f"{BASE}/models", headers=self._headers())
             with urllib.request.urlopen(req, timeout=self.timeout) as r:

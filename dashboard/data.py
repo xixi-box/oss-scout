@@ -16,6 +16,8 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+
+import tenacity
 from urllib.parse import quote
 
 import yaml
@@ -38,22 +40,26 @@ class GhError(Exception):
     """gh 命令失败（TLS 抖动/未登录/仓库不存在等）。页面显示"未知"。"""
 
 
+@tenacity.retry(
+    stop=tenacity.stop_after_attempt(2),
+    wait=tenacity.wait_fixed(4),
+    retry=tenacity.retry_if_exception_type((subprocess.TimeoutExpired, GhError)),
+    reraise=True,
+)
+def _gh_once(args: list[str]) -> str:
+    try:
+        p = subprocess.run(["gh", *args], capture_output=True, text=True,
+                           encoding="utf-8", errors="replace", timeout=20)
+    except subprocess.TimeoutExpired:
+        raise
+    if p.returncode != 0:
+        raise GhError((p.stderr or p.stdout or "").strip()[:300])
+    return p.stdout
+
+
 def default_gh_runner(args: list[str]) -> str:
-    # 本机 TLS 抖动是常态：带退避重试 3 次（PR 页显示"未知"的根因就是单发即败）
-    last = ""
-    for attempt in range(2):
-        try:
-            p = subprocess.run(["gh", *args], capture_output=True, text=True,
-                               encoding="utf-8", errors="replace", timeout=20)
-        except subprocess.TimeoutExpired:
-            last = "timeout"
-            time.sleep(min(8, (attempt + 1) * 4))
-            continue
-        if p.returncode == 0:
-            return p.stdout
-        last = (p.stderr or p.stdout or "").strip()[:300]
-        time.sleep(min(8, (attempt + 1) * 4))
-    raise GhError(last)
+    """gh 调用，tenacity 带退避重试（本机 TLS 抖动常态）。"""
+    return _gh_once(args)
 
 
 def default_modal_runner(root: Path) -> str:
@@ -656,17 +662,17 @@ def cloudflare_pull(ds) -> dict:
     headers = {"Authorization": f"Bearer {token}"}
     import urllib.request
 
+    @tenacity.retry(
+        stop=tenacity.stop_after_attempt(3),
+        wait=tenacity.wait_fixed(4),
+        reraise=True,
+    )
     def _req(path: str, **kw):
-        last = None
-        for attempt in range(3):
-            try:
-                req = urllib.request.Request(path, headers=headers, **kw)
-                with urllib.request.urlopen(req, timeout=20) as r:
-                    return json.loads(r.read().decode())
-            except Exception as e:  # noqa: BLE001 — 本机 TLS 抖动常态
-                last = e
-                time.sleep(min(10, (attempt + 1) * 4))
-        raise last
+        if not path.startswith("https://"):
+            raise ValueError(f"blocked non-https url: {path[:60]}")
+        req = urllib.request.Request(path, headers=headers, **kw)
+        with urllib.request.urlopen(req, timeout=20) as r:
+            return json.loads(r.read().decode())
 
     try:
         keys = [k["name"] for k in

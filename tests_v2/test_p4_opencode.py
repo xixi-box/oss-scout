@@ -134,6 +134,10 @@ class TestOpenCodeClient:
 class TestResolveBinary:
     def test_shim_exe_extracted(self, tmp_path):
         """npm .cmd shim → 取旁边原生 .exe（绕过 cmd.exe 的换行截断）。"""
+        import os
+        import pytest
+        if os.name != "nt":
+            pytest.skip("Windows .cmd shim concept")
         from scout_v2.workers.opencode_client import _native_exe_from_shim
         exe = tmp_path / "node_modules" / "opencode-ai" / "bin" / "opencode.exe"
         exe.parent.mkdir(parents=True)

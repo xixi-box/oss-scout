@@ -114,7 +114,7 @@ class TestCoreCLI:
         jf = tmp_path / "job.json"
         jf.write_text(json.dumps(Job(mode="reproduce", repo="a/b",
                                      base_sha="deadbeef",
-                                     test_cmd=["python", "-c", "pass"],
+                                     test_cmd=[sys.executable, "-c", "pass"],
                                      idempotency_key="verify:a:b:deadbeef:fp").to_dict()),
                       encoding="utf-8")
         rc = main(["--job", str(jf), "--out", str(tmp_path / "out")])

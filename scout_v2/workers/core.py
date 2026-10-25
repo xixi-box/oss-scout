@@ -22,7 +22,7 @@ from pathlib import Path
 
 sys.stdout.reconfigure(encoding="utf-8")
 
-from ..schemas import SCHEMA_VERSION, Job, Result
+from ..schemas import Job, Result
 from .quality_gate import check_patch_path
 
 RESULT_MARKER = "##OSSCOUT_RESULT##"   # 与 adapters.modal_backend 一致

@@ -20,7 +20,8 @@ COPY scripts ./scripts
 COPY cloudflare ./cloudflare
 COPY discover.py health_check.py AGENTS.md ./
 COPY tests_v2 ./tests_v2
-RUN pip install --no-cache-dir fastapi uvicorn jinja2 pyyaml python-multipart pytest
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
 
 COPY docker/entrypoint-dashboard.sh /entrypoint.sh
 RUN useradd -m scout && mkdir -p /data && chown -R scout:scout /app /data

@@ -14,7 +14,6 @@
 from __future__ import annotations
 
 import json
-import re
 import subprocess
 import sys
 import tempfile
@@ -23,9 +22,8 @@ from pathlib import Path
 
 from ..repo_policy import PolicyEngine
 from ..schemas import Job
-from ..state_store import BlockerRegistry, ClaimLedger, Worklog
+from ..state_store import ClaimLedger, Worklog
 from ..git_host import recheck_candidate
-from .issue_scorer import GoClient, load_scorer_config
 from .repair import run_repair
 from .quality_gate import verify_result
 
@@ -108,8 +106,6 @@ def candidate_pipeline(root: Path, entry: dict, *,
     wl.append({"ts": time.strftime("%Y-%m-%dT%H:%M:%S"), "action": "claim",
                "target": key, "source": "auto-pipeline"})
     summary["steps"].append("claimed (daily budget)")
-
-    claimed_day = time.strftime("%Y-%m-%d")
 
     def _abort_release(msg: str) -> dict:
         """失败路径统一：释放当日认领、close ledger、记审计。"""

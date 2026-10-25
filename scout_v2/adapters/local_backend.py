@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ..schemas import Job, Result
+from ..schemas import Job
 from ..workers.core import execute
 
 
