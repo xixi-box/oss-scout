@@ -13,7 +13,7 @@
     {% endif %}
     {% if modal.softcap %}
     <div class="bar"><div class="bar-fill" style="width: {{ [ (modal.metered or 0) / modal.softcap * 100, 100 ] | min }}%"></div></div>
-    <div class="muted small">soft cap ${{ modal.softcap }} / 月</div>
+    <div class="muted small">本地软阈值 ${{ modal.softcap }} / 月 —— 这是实施计划里的建议值（configs/v2.yaml），<strong>不是</strong>从 Modal API 读的；Modal 侧的真实限制是你控制台里的 usage limit $30 / spend limit $0</div>
     {% endif %}
     <h3 class="mt">平台硬限制</h3>
     <table class="mini">
@@ -32,6 +32,26 @@
     <h2>OpenCode</h2>
     <h3>主模型（{{ opencode.mode or "?" }} 模式）</h3>
     <ul>{% for m in opencode.primary_models %}<li><code>{{ m }}</code></li>{% endfor %}</ul>
+    <div class="chips mt">
+      <a class="btn btn-primary" style="text-decoration:none" href="https://opencode.ai/auth" target="_blank" rel="noopener">打开 OpenCode 控制台登录</a>
+      <button class="btn btn-ghost" id="oc-check" type="button">检测登录态（跑一次最小调用 ≈$0.002）</button>
+      <span id="oc-check-result" class="small muted"></span>
+    </div>
+    <script>
+    document.getElementById("oc-check").addEventListener("click", async function () {
+      const out = document.getElementById("oc-check-result");
+      out.textContent = "检测中…（最长 2 分钟）";
+      this.disabled = true;
+      try {
+        const r = await fetch("/api/opencode/check", {method: "POST"});
+        const j = await r.json();
+        out.textContent = j.ok ? "✓ 登录态正常（" + j.model + "）" : "✗ 异常：" + (j.detail || "").slice(0, 120);
+        out.className = j.ok ? "small chip-green" : "small chip-warn";
+      } catch (e) {
+        out.textContent = "✗ 请求失败：" + e;
+      } finally { this.disabled = false; }
+    });
+    </script>
     {% if opencode.free_preferences %}<p class="small muted">免费偏好记录：{% for m in opencode.free_preferences %}<code>{{ m }}</code> {% endfor %}</p>{% endif %}
     <p>allow_paid_api: <span class="chip {{ 'chip-green' if opencode.allow_paid_api }}">{{ opencode.allow_paid_api }}</span></p>
     <h3 class="mt">401/402/429 错误统计（worklog model/auth）</h3>

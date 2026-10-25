@@ -255,6 +255,23 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
         _audit(root, "set_feature", key, result)
         return RedirectResponse("/quota", status_code=303)
 
+    @app.post("/api/opencode/check")
+    def api_opencode_check():
+        """点击"检测登录态"：跑一次最小真实模型调用（约 $0.002 订阅额度）。"""
+        from scout_v2.workers.opencode_client import OpenCodeClient
+        from scout_v2.workers.repair import resolve_model
+        try:
+            model = resolve_model()
+        except Exception as e:  # noqa: BLE001
+            return JSONResponse({"ok": False, "detail": f"model resolve: {e}"})
+        try:
+            client = OpenCodeClient(timeout_seconds=120)
+            ok, detail = client.run(model, "Reply with the single word OK and nothing else.")
+        except Exception as e:  # noqa: BLE001
+            ok, detail = False, str(e)[:200]
+        _audit(root, "opencode_check", model, ("ok" if ok else "fail: " + detail[:120]))
+        return JSONResponse({"ok": ok, "model": model, "detail": detail[:200]})
+
     # ---------------- 1. 总览 ----------------
     @app.get("/", response_class=HTMLResponse)
     def overview(request: Request):

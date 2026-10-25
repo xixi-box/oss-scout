@@ -66,11 +66,11 @@ security:
   sanitize_logs: true
 
 routing:
-  # 用户裁定（2026-10-25）：两条后端能力全对称——每模式主选+备选可互换。
-  # 唯一保留的不对称：broad_scan 恒不上 Actions（计划 §1/§9 的 GitHub ToS 硬约束，
-  # 公共 runner 不得批量计算与所在仓库无关的第三方项目），属合规线而非能力线。
+  # 用户裁定（2026-10-25 修订）：只有"找 Bug"（scan）由 Modal 承担，
+  # 其余全部由 GitHub Actions 承担（主选），Modal 作备选。
+  # 唯一保留的不对称：broad_scan 恒不上 Actions（GitHub ToS 硬约束，合规线非能力线）。
   scan:      {primary: modal,   fallback: actions}
-  reproduce: {primary: modal,   fallback: actions}
+  reproduce: {primary: actions, fallback: modal}
   repair:    {primary: actions, fallback: modal}
   review:    {primary: actions, fallback: modal}
   ci:        {primary: actions, fallback: modal}

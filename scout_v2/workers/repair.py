@@ -75,6 +75,54 @@ def resolve_model() -> str:
     return models[0]
 
 
+def repo_rules_block(repo: str, root: Path | None = None) -> str:
+    """把该仓库的贡献规则注入 OpenCode 上下文（lane/pr_rules/notes/health 政策闸）。
+
+    来源：configs/repositories.yaml + lane_overrides.yaml（经 PolicyEngine 合并）
+    + state/health.json 的 policy flags。失败静默返回空串（不阻塞修复）。
+    """
+    root = root or Path(__file__).resolve().parents[2]
+    try:
+        from ..repo_policy import PolicyEngine
+        eng, err = PolicyEngine.load(root)
+        if err is not None:
+            return ""
+        entry = eng.repo_entry(repo)
+        lane = eng.repo_lane(repo)
+        lines = [f"Repository: {repo}",
+                 f"Contribution lane: {lane or 'unknown'}"]
+        if entry.get("pr_rules"):
+            lines.append("PR rules: " + ", ".join(entry["pr_rules"]))
+        if entry.get("only"):
+            lines.append(f"Only consume: {entry['only']}")
+        if entry.get("default_branch"):
+            lines.append(f"Default branch: {entry['default_branch']}")
+        hp = root / "state" / "health.json"
+        if hp.exists():
+            try:
+                h = json.loads(hp.read_text(encoding="utf-8")).get("repos", {}).get(repo) or {}
+                flags = (h.get("policy") or {}).get("flags") or []
+                if flags:
+                    lines.append("CONTRIBUTING policy flags: " + ", ".join(flags))
+                if h.get("lane_advisory") and h["lane_advisory"] != lane:
+                    lines.append(f"health lane_advisory: {h['lane_advisory']} (differs from config)")
+            except (json.JSONDecodeError, OSError):
+                pass
+        lane_guidance = {
+            "gated": "This repo requires comment-alignment + maintainer assignment "
+                     "before any PR; never write 'please assign me'.",
+            "restricted": "Only maintainer-confirmed candidates; PRs must include tests.",
+            "observe": "No GitHub writes allowed for this repo.",
+        }
+        if lane in lane_guidance:
+            lines.append("Lane guidance: " + lane_guidance[lane])
+        if len(lines) <= 2:
+            return ""
+        return "\n".join(lines)
+    except Exception:  # noqa: BLE001 — 规则注入失败不阻塞修复
+        return ""
+
+
 def opencode_patch_producer(job: Job, work_dir: Path, context: str,
                             client: OpenCodeClient | None = None,
                             model: str | None = None) -> tuple[str, list[str]]:
@@ -85,7 +133,9 @@ def opencode_patch_producer(job: Job, work_dir: Path, context: str,
     try:
         client = client or OpenCodeClient(timeout_seconds=1800, workdir=work_dir)
         model = model or resolve_model()
-        (work_dir / TASK_FILE).write_text(FIX_PROMPT.format(context=context[:4000]),
+        rules = repo_rules_block(job.repo)
+        full_context = (rules + "\n\n" + context) if rules else context
+        (work_dir / TASK_FILE).write_text(FIX_PROMPT.format(context=full_context[:4000]),
                                           encoding="utf-8")
         ok, detail = client.run(model, RUN_TASK_MSG)
         if not ok:

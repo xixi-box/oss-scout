@@ -191,3 +191,10 @@ code { background: var(--light-surface); border-radius: 6px; padding: 1px 6px; f
   box-shadow: rgba(14, 15, 12, 0.12) 0 0 0 1px;
 }
 .btn-ghost:hover { transform: scale(1.05); }
+
+/* ---- 策略页溢出根治（2026-10-25）：固定布局 + 全列换行，永不横向出框 ---- */
+.table-scroll table { min-width: 0 !important; width: 100%; table-layout: fixed; }
+.table-scroll th, .table-scroll td {
+  word-break: break-word; overflow-wrap: anywhere; white-space: normal;
+  vertical-align: top;
+}

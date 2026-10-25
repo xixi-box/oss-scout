@@ -23,7 +23,7 @@ import yaml
 # token 打码：ghp_ / gh_ / oc_sk_ / sk- 前缀 → 前 6 字符 + ***
 SECRET_RE = re.compile(r"\b(?:ghp_|gh_o|gh_|oc_sk_|sk-)[A-Za-z0-9_\-]{3,}")
 TERMINAL_JOB_STATES = {"succeeded", "failed", "inconclusive", "blocked"}
-GH_CACHE_TTL = 60.0
+GH_CACHE_TTL = 300.0   # gh 结果缓存 5 分钟：PR/run 数据低频变化，且降低抖动面
 
 
 def mask(text) -> str:
@@ -39,11 +39,21 @@ class GhError(Exception):
 
 
 def default_gh_runner(args: list[str]) -> str:
-    p = subprocess.run(["gh", *args], capture_output=True, text=True,
-                       encoding="utf-8", errors="replace", timeout=45)
-    if p.returncode != 0:
-        raise GhError((p.stderr or p.stdout or "").strip()[:300])
-    return p.stdout
+    # 本机 TLS 抖动是常态：带退避重试 3 次（PR 页显示"未知"的根因就是单发即败）
+    last = ""
+    for attempt in range(3):
+        try:
+            p = subprocess.run(["gh", *args], capture_output=True, text=True,
+                               encoding="utf-8", errors="replace", timeout=45)
+        except subprocess.TimeoutExpired:
+            last = "timeout"
+            time.sleep(min(20, (attempt + 1) * 6))
+            continue
+        if p.returncode == 0:
+            return p.stdout
+        last = (p.stderr or p.stdout or "").strip()[:300]
+        time.sleep(min(20, (attempt + 1) * 6))
+    raise GhError(last)
 
 
 def default_modal_runner(root: Path) -> str:

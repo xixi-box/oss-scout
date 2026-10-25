@@ -46,18 +46,18 @@ class TestBroadScan:
 
 
 class TestReproduce:
-    def test_reproduce_modal_primary(self):
+    def test_reproduce_actions_primary(self):
+        """用户裁定：找 Bug 归 Modal，其余（含 reproduce）主选 Actions。"""
         r = JobRouter(cfg(actions_enabled=True, actions_eligible=True,
                           modal_enabled=True, modal_budget_ok=True))
         d = r.route(job("reproduce"))
-        assert d.backend == "modal" and not d.fallback_used
+        assert d.backend == "github_actions" and not d.fallback_used
 
-    def test_reproduce_falls_back_to_actions(self):
-        """能力对称裁定：reproduce 主选 Modal 不可用时回退 Actions（project_contribution）。"""
-        r = JobRouter(cfg(actions_enabled=True, actions_eligible=True,
-                          modal_enabled=True, modal_budget_ok=False))
+    def test_reproduce_falls_back_to_modal(self):
+        r = JobRouter(cfg(actions_enabled=True, actions_eligible=False,
+                          modal_enabled=True, modal_budget_ok=True))
         d = r.route(job("reproduce"))
-        assert d.backend == "github_actions" and d.fallback_used
+        assert d.backend == "modal" and d.fallback_used and d.ineligible
 
     def test_repair_falls_back_to_modal(self):
         """对称：repair 主选 Actions 不可用回退 Modal（原方向的反向）。"""

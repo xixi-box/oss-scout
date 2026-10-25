@@ -18,7 +18,7 @@ from .schemas import MODES
 
 DEFAULT_ROUTING = {
     "scan": {"primary": "modal", "fallback": "actions"},
-    "reproduce": {"primary": "modal", "fallback": "actions"},
+    "reproduce": {"primary": "actions", "fallback": "modal"},
     "repair": {"primary": "actions", "fallback": "modal"},
     "review": {"primary": "actions", "fallback": "modal"},
     "ci": {"primary": "actions", "fallback": "modal"},
