@@ -2918,5 +2918,13 @@
  "OpenHands/OpenHands#18898": {
   "first_seen": "2026-10-25T19:40:29",
   "status": "queued"
+ },
+ "anomalyco/opencode#58961": {
+  "first_seen": "2026-10-25T19:42:54",
+  "status": "queued"
+ },
+ "anomalyco/opencode#58963": {
+  "first_seen": "2026-10-25T19:49:40",
+  "status": "queued"
  }
 }
