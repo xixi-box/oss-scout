@@ -168,6 +168,10 @@ def fixture_root(tmp_path: Path) -> Path:
                              "platform_hard_limits": {"included_credits_usd": 30.0,
                                                       "usage_limit_usd": 30.0,
                                                       "spend_limit_usd": 0.0}}},
+        "routing": {"scan": {"primary": "modal", "fallback": "actions"},
+                    "repair": {"primary": "actions", "fallback": "modal"}},
+        "features": {"bug_hunter_light": False, "bug_hunter_deep_modal": False,
+                     "actions_backend": False, "opencode_models": True},
     }, allow_unicode=True), encoding="utf-8")
     (cfg / "model_policy.yaml").write_text(yaml.safe_dump({
         "mode": "fixed", "allow_paid_api": True,
@@ -218,13 +222,15 @@ def fixture_root(tmp_path: Path) -> Path:
 
 @pytest.fixture()
 def client(fixture_root: Path) -> TestClient:
-    app = create_app(fixture_root, gh_runner=gh_ok_runner, modal_runner=modal_ok_runner)
+    app = create_app(fixture_root, gh_runner=gh_ok_runner, modal_runner=modal_ok_runner,
+                     auth_enabled=False, password="test-pw")
     return TestClient(app)
 
 
 @pytest.fixture()
 def failing_client(fixture_root: Path) -> TestClient:
-    app = create_app(fixture_root, gh_runner=gh_fail_runner, modal_runner=modal_fail_runner)
+    app = create_app(fixture_root, gh_runner=gh_fail_runner, modal_runner=modal_fail_runner,
+                     auth_enabled=False, password="test-pw")
     return TestClient(app)
 
 
@@ -437,3 +443,102 @@ def test_sqlite_opened_readonly(fixture_root: Path, client: TestClient):
     client.get("/")
     client.get("/quota")
     assert db.read_bytes() == before
+
+
+# ---------------- 认证 + 受审计写端点（2026-10-25） ----------------
+
+@pytest.fixture()
+def auth_client(fixture_root: Path) -> TestClient:
+    app = create_app(fixture_root, gh_runner=gh_ok_runner, modal_runner=modal_ok_runner,
+                     auth_enabled=True, password="pw-secret")
+    return TestClient(app)
+
+
+def _login(c: TestClient) -> None:
+    r = c.post("/login", data={"next": "/", "password": "pw-secret"},
+               follow_redirects=False)
+    assert r.status_code == 303
+    assert "os_session" in r.cookies
+
+
+class TestAuth:
+    def test_unauthenticated_redirects_to_login(self, auth_client):
+        r = auth_client.get("/", follow_redirects=False)
+        assert r.status_code == 303 and "/login" in r.headers["location"]
+
+    def test_api_unauthenticated_401(self, auth_client):
+        assert auth_client.get("/candidates", follow_redirects=False).status_code == 303
+        assert auth_client.post("/api/policies/lane", data={"repo": "a/b", "lane": "open"},
+                                follow_redirects=False).status_code == 401
+
+    def test_wrong_password_401(self, auth_client):
+        r = auth_client.post("/login", data={"next": "/", "password": "wrong"},
+                             follow_redirects=False)
+        assert r.status_code == 401 and "密码错误" in r.text
+
+    def test_login_logout_roundtrip(self, auth_client):
+        _login(auth_client)
+        assert auth_client.get("/").status_code == 200
+        r = auth_client.post("/logout", follow_redirects=False)
+        assert r.status_code == 303
+        assert auth_client.get("/", follow_redirects=False).status_code == 303
+
+    def test_static_and_login_public(self, auth_client):
+        assert auth_client.get("/login").status_code == 200
+        assert auth_client.get("/static/style.css").status_code == 200
+
+
+class TestAuditedWrites:
+    def test_set_lane_writes_override_and_audit(self, auth_client, fixture_root):
+        _login(auth_client)
+        r = auth_client.post("/api/policies/lane",
+                             data={"repo": "aaif-goose/goose", "lane": "gated"},
+                             follow_redirects=False)
+        assert r.status_code == 303
+        ov = yaml.safe_load((fixture_root / "configs" / "lane_overrides.yaml")
+                            .read_text(encoding="utf-8"))
+        assert ov["repositories"]["aaif-goose/goose"]["lane"] == "gated"
+        wl = (fixture_root / "state" / "worklog.jsonl").read_text(encoding="utf-8")
+        assert "dashboard_set_lane" in wl and "aaif-goose/goose" in wl
+
+    def test_policy_engine_merges_override(self, auth_client, fixture_root):
+        (fixture_root / "AGENTS.md").write_text("# fixture playbook\n", encoding="utf-8")
+        _login(auth_client)
+        auth_client.post("/api/policies/lane",
+                         data={"repo": "aaif-goose/goose", "lane": "observe"})
+        from scout_v2.repo_policy import PolicyEngine
+        eng, err = PolicyEngine.load(fixture_root)
+        assert err is None
+        assert eng.repo_lane("aaif-goose/goose") == "observe"
+
+    def test_set_lane_rejects_invalid_lane(self, auth_client):
+        _login(auth_client)
+        r = auth_client.post("/api/policies/lane",
+                             data={"repo": "a/b", "lane": "direct_pr"})
+        assert r.status_code == 400
+
+    def test_set_routing_edits_v2_yaml(self, auth_client, fixture_root):
+        _login(auth_client)
+        r = auth_client.post("/api/routing",
+                             data={"mode": "scan", "primary": "actions",
+                                   "fallback": "modal"}, follow_redirects=False)
+        assert r.status_code == 303
+        v2 = yaml.safe_load((fixture_root / "configs" / "v2.yaml").read_text(encoding="utf-8"))
+        assert v2["routing"]["scan"]["primary"] == "actions"
+        # 其余行未被破坏
+        assert v2["routing"]["repair"]["primary"] == "actions"
+        assert v2["budget"]["modal"]["monthly_soft_cap_usd"] == 25.0
+
+    def test_set_feature_toggles(self, auth_client, fixture_root):
+        _login(auth_client)
+        r = auth_client.post("/api/features",
+                             data={"key": "bug_hunter_light", "value": "true"},
+                             follow_redirects=False)
+        assert r.status_code == 303
+        v2 = yaml.safe_load((fixture_root / "configs" / "v2.yaml").read_text(encoding="utf-8"))
+        assert v2["features"]["bug_hunter_light"] is True
+
+    def test_invalid_feature_key_rejected(self, auth_client):
+        _login(auth_client)
+        r = auth_client.post("/api/features", data={"key": "nuke_everything", "value": "true"})
+        assert r.status_code == 400

@@ -32,7 +32,7 @@
     <h2>OpenCode</h2>
     <h3>主模型（{{ opencode.mode or "?" }} 模式）</h3>
     <ul>{% for m in opencode.primary_models %}<li><code>{{ m }}</code></li>{% endfor %}</ul>
-    <p class="small muted">免费偏好记录：{% for m in opencode.free_preferences %}<code>{{ m }}</code> {% endfor %}</p>
+    {% if opencode.free_preferences %}<p class="small muted">免费偏好记录：{% for m in opencode.free_preferences %}<code>{{ m }}</code> {% endfor %}</p>{% endif %}
     <p>allow_paid_api: <span class="chip {{ 'chip-green' if opencode.allow_paid_api }}">{{ opencode.allow_paid_api }}</span></p>
     <h3 class="mt">401/402/429 错误统计（worklog model/auth）</h3>
     {% if opencode.errors %}
@@ -63,5 +63,45 @@
     </tbody>
   </table>
   {% endif %}
+</div>
+
+<div class="card mt">
+  <h2>路由策略（每模式 主选/备选，可互换）</h2>
+  <p class="muted small">写入 configs/v2.yaml 的 routing 块；broad_scan 恒不上 Actions（GitHub ToS）。每次修改过 worklog 审计。</p>
+  <table class="mini table-scroll">
+    <thead><tr><th>mode</th><th>主选</th><th>备选</th><th>调整</th></tr></thead>
+    <tbody>
+      {% for mode, rt in routing.items() %}
+      <tr>
+        <td class="nowrap">{{ mode }}</td>
+        <td><span class="chip">{{ rt.primary }}</span></td>
+        <td><span class="chip">{{ rt.fallback }}</span></td>
+        <td>
+          <form method="post" action="/api/routing" class="inline-form">
+            <input type="hidden" name="mode" value="{{ mode }}">
+            <select name="primary" class="lane-select">
+              {% for b in ['modal', 'actions'] %}<option value="{{ b }}" {{ 'selected' if b == rt.primary }}>{{ b }}</option>{% endfor %}
+            </select>
+            <select name="fallback" class="lane-select">
+              {% for b in ['modal', 'actions'] %}<option value="{{ b }}" {{ 'selected' if b == rt.fallback }}>{{ b }}</option>{% endfor %}
+            </select>
+            <button class="btn btn-ghost" type="submit">改</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <h3 class="mt">Feature 开关</h3>
+  <div class="chips">
+    {% for key, val in features.items() %}
+    <form method="post" action="/api/features" class="inline-form chip-form">
+      <input type="hidden" name="key" value="{{ key }}">
+      <input type="hidden" name="value" value="{{ 'false' if val else 'true' }}">
+      <code>{{ key }}</code> = <span class="chip {{ 'chip-green' if val }}">{{ val }}</span>
+      <button class="btn btn-ghost" type="submit">{{ '关闭' if val else '开启' }}</button>
+    </form>
+    {% endfor %}
+  </div>
 </div>
 {% endblock %}

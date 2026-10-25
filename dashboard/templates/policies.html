@@ -5,9 +5,9 @@
 {% if health_expired %}
 <div class="banner warn">health.json 过期（{{ health_date }}）— health 相关列参考价值下降，待重跑 health_check.py</div>
 {% endif %}
-<p class="muted small">来源：configs/repositories.yaml（v2 策略基线）+ config.json（发现层名单）+ state/health.json（周检）。
-lane 文案对齐 scout_v2/repo_policy.py：gated → 先评论对齐等指派，禁止直接 PR。</p>
-<div class="card">
+<p class="muted small">来源：configs/repositories.yaml（v2 策略基线）+ configs/lane_overrides.yaml（Web 修改叠加层）+ config.json（发现层名单）+ state/health.json（周检）。
+lane 文案对齐 scout_v2/repo_policy.py：gated → 先评论对齐等指派，禁止直接 PR。修改 lane 走下方行内表单（需登录，逐条写入 worklog 审计）。</p>
+<div class="card table-scroll">
   <table>
     <thead><tr><th>仓库</th><th>lane</th><th>允许</th><th>禁止</th><th>PR 规则</th><th>health</th><th>备注</th></tr></thead>
     <tbody>
@@ -19,9 +19,19 @@ lane 文案对齐 scout_v2/repo_policy.py：gated → 先评论对齐等指派�
           {% if r.missing %}<span class="chip chip-warn">规则缺失 → 待确认</span>{% endif %}
           {% if r.internal %}<span class="chip">internal test</span>{% endif %}
         </td>
-        <td><span class="chip lane-{{ r.lane }}">{{ r.lane }}</span>
+        <td class="lane-cell">
+          <span class="chip lane-{{ r.lane }}">{{ r.lane }}</span>
           {% if r.gate %}<div class="small muted">gate: {{ r.gate }}</div>{% endif %}
           {% if r.only %}<div class="small muted">only: {{ r.only }}</div>{% endif %}
+          <form method="post" action="/api/policies/lane" class="inline-form">
+            <input type="hidden" name="repo" value="{{ r.repo }}">
+            <select name="lane" class="lane-select">
+              {% for l in ['open', 'gated', 'restricted', 'observe'] %}
+              <option value="{{ l }}" {{ 'selected' if l == r.lane }}>{{ l }}</option>
+              {% endfor %}
+            </select>
+            <button class="btn btn-ghost" type="submit">改</button>
+          </form>
         </td>
         <td class="wrap small"><ul class="tight">{% for a in r.allow %}<li>{{ a }}</li>{% endfor %}</ul></td>
         <td class="wrap small"><ul class="tight">{% for d in r.deny %}<li>{{ d }}</li>{% endfor %}</ul></td>

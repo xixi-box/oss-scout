@@ -1,15 +1,25 @@
-"""oss-scout v2 Web Dashboard（只读监控）。
+"""oss-scout v2 Web Dashboard（登录 + 只读监控 + 受审计的配置写入）。
 
 启动：python -m dashboard.app  → http://127.0.0.1:8787
-安全：全 Jinja2 自动转义；无 POST 写路由（统一 501）；日志查看有路径校验；token 打码。
+安全：登录会话（HMAC 签名 cookie）；全 Jinja2 自动转义；写端点全部过认证、
+校验并逐条写 worklog 审计；日志查看有路径校验；token 打码。
+密码来源：环境变量 DASHBOARD_PASSWORD 优先，否则自动生成
+state/dashboard_password.txt（gitignore，首启时展示一次）。
 """
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
+import json
 import os
+import secrets
+import time
 from pathlib import Path
 
-from fastapi import FastAPI, Query, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+import yaml
+from fastapi import FastAPI, Form, Query, Request
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -21,14 +31,137 @@ BASE_DIR = Path(__file__).resolve().parent
 templates_dir = BASE_DIR / "templates"
 static_dir = BASE_DIR / "static"
 
+SESSION_COOKIE = "os_session"
+SESSION_TTL = 7 * 24 * 3600
 
-def create_app(root: Path | None = None, gh_runner=None, modal_runner=None) -> FastAPI:
+VALID_LANES = ("open", "gated", "restricted", "observe")
+VALID_MODES = ("scan", "reproduce", "repair", "review", "ci")
+VALID_BACKENDS = ("modal", "actions")
+VALID_FEATURES = ("bug_hunter_light", "bug_hunter_deep_modal",
+                  "actions_backend", "opencode_models")
+
+
+def _secret(root: Path) -> bytes:
+    """会话签名密钥：每实例生成一次，存 state/dashboard_session_key。"""
+    p = root / "state" / "dashboard_session_key"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    if not p.exists():
+        p.write_text(secrets.token_hex(32), encoding="utf-8")
+    return p.read_text(encoding="utf-8").encode()
+
+
+def _dashboard_password(root: Path) -> str:
+    env = os.environ.get("DASHBOARD_PASSWORD")
+    if env:
+        return env
+    p = root / "state" / "dashboard_password.txt"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    if not p.exists():
+        pw = secrets.token_urlsafe(12)
+        p.write_text(pw + "\n", encoding="utf-8")
+        print(f"[dashboard] 首次生成登录密码 → {p}\n[dashboard] password: {pw}")
+    return p.read_text(encoding="utf-8").strip()
+
+
+def _sign(secret: bytes, payload: str) -> str:
+    return hmac.new(secret, payload.encode(), hashlib.sha256).hexdigest()[:32]
+
+
+def _make_session(secret: bytes) -> str:
+    payload = json.dumps({"ts": int(time.time())})
+    raw = base64.urlsafe_b64encode(payload.encode()).decode().rstrip("=")
+    return f"{raw}.{_sign(secret, raw)}"
+
+
+def _check_session(secret: bytes, token: str) -> bool:
+    try:
+        raw, sig = token.rsplit(".", 1)
+        if not hmac.compare_digest(sig, _sign(secret, raw)):
+            return False
+        pad = "=" * (-len(raw) % 4)
+        payload = json.loads(base64.urlsafe_b64decode(raw + pad))
+        return time.time() - payload["ts"] < SESSION_TTL
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _audit(root: Path, action: str, target: str, result: str) -> None:
+    """所有 Web 写操作的唯一审计出口（与 CLI/agent 共用 worklog 账本）。"""
+    import datetime as dt
+    rec = {"ts": dt.datetime.now().isoformat(timespec="seconds"),
+           "action": f"dashboard_{action}", "target": target, "result": result,
+           "source": "web-ui"}
+    with (root / "state" / "worklog.jsonl").open("a", encoding="utf-8") as f:
+        f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+
+
+def _atomic_write_text(path: Path, text: str) -> None:
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(text, encoding="utf-8")
+    yaml.safe_load(tmp.read_text(encoding="utf-8"))  # 校验
+    os.replace(tmp, path)
+
+
+def _set_lane(root: Path, repo: str, lane: str) -> None:
+    """写 configs/lane_overrides.yaml（叠加层，repo_policy.PolicyEngine 读取时合并）。"""
+    p = root / "configs" / "lane_overrides.yaml"
+    data = {}
+    if p.exists():
+        data = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+    data.setdefault("repositories", {})
+    data["repositories"].setdefault(repo, {})
+    data["repositories"][repo]["lane"] = lane
+    data.setdefault("_meta", {})["updated_at"] = time.strftime("%Y-%m-%dT%H:%M:%S")
+    _atomic_write_text(p, yaml.safe_dump(data, allow_unicode=True, sort_keys=True))
+
+
+def _replace_toplevel_block(text: str, key: str, new_block: str) -> str:
+    """替换 YAML 顶层键的整块内容（到下一个顶层键或 EOF），其余文本原样保留。"""
+    import re
+    pattern = re.compile(rf"(?ms)^{re.escape(key)}:[ \t]*\n(?:[ \t]+.*\n?)*")
+    if not pattern.search(text):
+        # 块不存在 → 追加到末尾
+        return text.rstrip("\n") + "\n\n" + new_block
+    return pattern.sub(new_block.replace("\\", "\\\\"), text, count=1)
+
+
+def _set_routing(root: Path, mode: str, primary: str, fallback: str) -> None:
+    """更新 configs/v2.yaml 的 routing 块：解析→改值→整块重渲染（流式），注释会丢
+    routing 块内的行注（可接受：语义由本函数与测试保证），其余注释原样保留。"""
+    p = root / "configs" / "v2.yaml"
+    data = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+    routing = data.get("routing") or {}
+    routing[mode] = {"primary": primary, "fallback": fallback}
+    lines = ["routing:"]
+    for m in ("scan", "reproduce", "repair", "review", "ci"):
+        e = routing.get(m) or {"primary": "modal", "fallback": "actions"}
+        lines.append(f"  {m}:      {{primary: {e['primary']},   fallback: {e['fallback']}}}")
+    _atomic_write_text(p, _replace_toplevel_block(
+        p.read_text(encoding="utf-8"), "routing", "\n".join(lines) + "\n"))
+
+
+def _set_feature(root: Path, key: str, value: bool) -> None:
+    p = root / "configs" / "v2.yaml"
+    data = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+    features = data.get("features") or {}
+    features[key] = value
+    lines = ["features:"]
+    for k in VALID_FEATURES:
+        lines.append(f"  {k}: {str(features.get(k, False)).lower()}")
+    _atomic_write_text(p, _replace_toplevel_block(
+        p.read_text(encoding="utf-8"), "features", "\n".join(lines) + "\n"))
+
+
+def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
+               auth_enabled: bool = True, password: str | None = None) -> FastAPI:
     root = Path(root) if root else Path(
         os.environ.get("OSSCOUT_DASHBOARD_ROOT", PROJECT_ROOT))
     app = FastAPI(title="oss-scout Dashboard", docs_url=None, redoc_url=None)
     ds = D.DataSource(root, gh_runner=gh_runner, modal_runner=modal_runner)
     app.state.ds = ds
     app.state.root = root
+    secret = _secret(root)
+    passwd = password or _dashboard_password(root)
     app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
     tpl = Jinja2Templates(directory=str(templates_dir))
@@ -38,6 +171,89 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None) -> F
     def render(request: Request, name: str, ctx: dict, status_code: int = 200):
         ctx.setdefault("request", request)
         return tpl.TemplateResponse(request, name, ctx, status_code=status_code)
+
+    # ---------------- 认证 ----------------
+    PUBLIC_PATHS = ("/login", "/static", "/favicon.ico")
+
+    @app.middleware("http")
+    async def auth_middleware(request: Request, call_next):
+        path = request.url.path
+        if not auth_enabled or any(path.startswith(p) for p in PUBLIC_PATHS):
+            return await call_next(request)
+        token = request.cookies.get(SESSION_COOKIE, "")
+        if _check_session(secret, token):
+            return await call_next(request)
+        if path.startswith("/api/"):
+            return JSONResponse({"detail": "unauthenticated"}, status_code=401)
+        url = str(request.url_for("login_page")) + f"?next={path}"
+        return RedirectResponse(url, status_code=303)
+
+    @app.get("/login", response_class=HTMLResponse, name="login_page")
+    def login_page(request: Request, next: str = "/"):
+        return render(request, "login.html", {"next": next, "error": ""})
+
+    @app.post("/login")
+    def login(request: Request, next: str = Form("/"), password: str = Form("")):
+        if not hmac.compare_digest(password, passwd):
+            time.sleep(1.0)  # 简单防爆破
+            return render(request, "login.html",
+                          {"next": next, "error": "密码错误"}, status_code=401)
+        resp = RedirectResponse(next or "/", status_code=303)
+        resp.set_cookie(SESSION_COOKIE, _make_session(secret),
+                        max_age=SESSION_TTL, httponly=True, samesite="lax")
+        _audit(root, "login", "web-ui", "login ok")
+        return resp
+
+    @app.post("/logout")
+    def logout():
+        resp = RedirectResponse("/login", status_code=303)
+        resp.delete_cookie(SESSION_COOKIE)
+        return resp
+
+    # ---------------- 受审计的写端点（登录后可用） ----------------
+    @app.post("/api/policies/lane")
+    def api_set_lane(request: Request, repo: str = Form(...), lane: str = Form(...)):
+        if lane not in VALID_LANES:
+            return JSONResponse({"detail": f"lane must be one of {VALID_LANES}"},
+                                status_code=400)
+        try:
+            _set_lane(root, repo, lane)
+        except Exception as e:  # noqa: BLE001
+            return JSONResponse({"detail": str(e)[:200]}, status_code=500)
+        result = f"lane={lane} written to lane_overrides (PolicyEngine merges on next load)"
+        _audit(root, "set_lane", repo, result)
+        return RedirectResponse("/policies", status_code=303)
+
+    @app.post("/api/routing")
+    def api_set_routing(request: Request, mode: str = Form(...),
+                        primary: str = Form(...), fallback: str = Form(...)):
+        if mode not in VALID_MODES:
+            return JSONResponse({"detail": f"mode must be one of {VALID_MODES}"},
+                                status_code=400)
+        if primary not in VALID_BACKENDS or fallback not in VALID_BACKENDS:
+            return JSONResponse({"detail": f"backends must be {VALID_BACKENDS}"},
+                                status_code=400)
+        try:
+            _set_routing(root, mode, primary, fallback)
+        except Exception as e:  # noqa: BLE001
+            return JSONResponse({"detail": str(e)[:200]}, status_code=500)
+        result = f"{mode}: primary={primary} fallback={fallback}"
+        _audit(root, "set_routing", mode, result)
+        return RedirectResponse("/quota", status_code=303)
+
+    @app.post("/api/features")
+    def api_set_feature(request: Request, key: str = Form(...), value: str = Form(...)):
+        if key not in VALID_FEATURES:
+            return JSONResponse({"detail": f"key must be one of {VALID_FEATURES}"},
+                                status_code=400)
+        val = value.lower() in ("true", "1", "on")
+        try:
+            _set_feature(root, key, val)
+        except Exception as e:  # noqa: BLE001
+            return JSONResponse({"detail": str(e)[:200]}, status_code=500)
+        result = f"{key}={val}"
+        _audit(root, "set_feature", key, result)
+        return RedirectResponse("/quota", status_code=303)
 
     # ---------------- 1. 总览 ----------------
     @app.get("/", response_class=HTMLResponse)
@@ -164,12 +380,18 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None) -> F
         repos = ds.own_repos()
         if repos:
             actions = ds.actions_runs(repos[0])
+        v2 = {}
+        vp = root / "configs" / "v2.yaml"
+        if vp.exists():
+            v2 = yaml.safe_load(vp.read_text(encoding="utf-8")) or {}
         return render(request, "quota.html", {
             "modal": modal,
             "measured_cost": ds.measured_cost_total(),
             "actions": actions,
             "actions_repo": repos[0] if repos else None,
             "opencode": ds.opencode_stats(),
+            "routing": (v2.get("routing") or {}),
+            "features": (v2.get("features") or {}),
             "active": "/quota",
         })
 
@@ -213,7 +435,7 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None) -> F
         return render(request, "log_view.html", {"name": f"artifacts/{name}/{hit[0]}",
                                                  "text": D.mask(hit[1]), "active": "/logs"})
 
-    # ---------------- 无 POST 写路由 ----------------
+    # ---------------- 未注册路径兜底 ----------------
     @app.get("/{rest:path}")
     def get_fallback(rest: str):
         return JSONResponse({"detail": "not found"}, status_code=404)
@@ -222,7 +444,7 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None) -> F
     @app.put("/{rest:path}")
     @app.delete("/{rest:path}")
     def no_writes(rest: str):
-        return JSONResponse({"detail": "dashboard is read-only"}, status_code=501)
+        return JSONResponse({"detail": "unknown write endpoint"}, status_code=501)
 
     return app
 

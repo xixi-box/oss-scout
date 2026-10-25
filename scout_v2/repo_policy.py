@@ -67,6 +67,13 @@ class PolicyEngine:
         except OSError as e:
             agents_err = f"AGENTS.md unreadable: {e}"
         repos_cfg = _load_yaml(root / "configs" / "repositories.yaml") or {}
+        # Dashboard 写入层（configs/lane_overrides.yaml）：用户经 Web 界面修改的 lane
+        # 覆盖，叠加在 repositories.yaml 之上；每次修改都过 worklog 审计。
+        overrides = _load_yaml(root / "configs" / "lane_overrides.yaml") or {}
+        for repo, entry in (overrides.get("repositories") or {}).items():
+            merged = dict((repos_cfg.get("repositories") or {}).get(repo) or {})
+            merged.update(entry or {})
+            repos_cfg.setdefault("repositories", {})[repo] = merged
         v2_cfg = _load_yaml(root / "configs" / "v2.yaml") or {}
         try:
             config_json = json_load(root / "config.json")

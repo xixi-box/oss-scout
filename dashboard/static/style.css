@@ -165,3 +165,29 @@ code { background: var(--light-surface); border-radius: 6px; padding: 1px 6px; f
   ul.runs-list { columns: 1; }
   h1.display { font-size: 40px; }
 }
+
+/* ---- 登录 + 表格滚动 + 行内编辑（2026-10-25） ---- */
+.table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.table-scroll table { min-width: 980px; }
+.lane-cell { min-width: 150px; }
+.inline-form { display: inline-flex; gap: 6px; align-items: center; margin: 0; }
+.lane-select {
+  font-size: 12.5px; padding: 4px 8px; border-radius: 8px;
+  border: 1px solid var(--warm-dark, #454745); background: #fff; font-weight: 600;
+}
+.chip-form { margin: 4px 8px 4px 0; }
+.login-wrap { display: flex; justify-content: center; padding-top: 8vh; }
+.login-card { max-width: 420px; width: 100%; }
+.login-card input[type="password"] { width: 100%; margin: 6px 0 14px; }
+.btn { cursor: pointer; border: none; font-family: inherit; }
+.btn-primary {
+  background: var(--wise-green, #9fe870); color: var(--dark-green, #163300);
+  border-radius: 9999px; padding: 10px 22px; font-weight: 700;
+}
+.btn-primary:hover { transform: scale(1.05); }
+.btn-ghost {
+  background: transparent; color: var(--near-black, #0e0f0c);
+  border-radius: 9999px; padding: 4px 12px; font-weight: 600; font-size: 12.5px;
+  box-shadow: rgba(14, 15, 12, 0.12) 0 0 0 1px;
+}
+.btn-ghost:hover { transform: scale(1.05); }

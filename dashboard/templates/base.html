@@ -11,17 +11,18 @@
 </head>
 <body>
 <header class="topbar">
-  <div class="brand">oss-scout<span class="brand-dot">.</span><span class="brand-sub">只读监控台</span></div>
+  <div class="brand">oss-scout<span class="brand-dot">.</span><span class="brand-sub">监控台</span></div>
   <nav>
     {% for href, label in [("/", "总览"), ("/candidates", "候选池"), ("/jobs", "任务中心"),
                           ("/prs", "PR 管理"), ("/policies", "策略"), ("/quota", "额度"), ("/logs", "日志")] %}
     <a href="{{ href }}" class="{{ 'nav-active' if active == href }}">{{ label }}</a>
     {% endfor %}
+    <form method="post" action="/logout" class="inline-form"><button class="btn btn-ghost" type="submit">退出</button></form>
   </nav>
 </header>
 <main class="container">
 {% block content %}{% endblock %}
 </main>
-<footer class="footer">read-only · 127.0.0.1:8787 · 所有写操作已禁用（POST → 501）</footer>
+<footer class="footer">127.0.0.1:8787 · 所有写操作经登录 + worklog 审计 · 不要暴露到公网</footer>
 </body>
 </html>

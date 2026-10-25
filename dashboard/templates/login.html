@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}登录 · oss-scout{% endblock %}
+{% block content %}
+<div class="login-wrap">
+  <div class="card login-card">
+    <h1 class="display">登录</h1>
+    <p class="muted small">oss-scout 监控台 · 仅限本机 / 受信网络访问</p>
+    {% if error %}<div class="banner warn">{{ error }}</div>{% endif %}
+    <form method="post" action="/login">
+      <input type="hidden" name="next" value="{{ next }}">
+      <label class="small muted" for="password">密码</label>
+      <input type="password" id="password" name="password" autofocus required>
+      <button class="btn btn-primary" type="submit">登录</button>
+    </form>
+    <p class="muted small mt">密码来源：环境变量 DASHBOARD_PASSWORD，或 state/dashboard_password.txt（首次启动自动生成）</p>
+  </div>
+</div>
+{% endblock %}

@@ -9,3 +9,5 @@ artifacts/
 *.sqlite3-wal
 *.sqlite3-shm
 testrepo_seed/
+state/dashboard_password.txt
+state/dashboard_session_key
