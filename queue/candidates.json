@@ -1361,5 +1361,77 @@
    "reason": "Clear reproducible silent fallback to built-in provider after configured provider is dropped; small scoped fix with no competing work.",
    "model": "deepseek-v4.1-flash"
   }
+ },
+ "crewAIInc/crewAI#8552": {
+  "id": "crewAIInc/crewAI#8552",
+  "repo": "crewAIInc/crewAI",
+  "number": 8552,
+  "title": "Task per-execution counters (retry_count, used_tools, tools_errors, delegations) never reset between executions",
+  "url": "https://github.com/crewAIInc/crewAI/issues/8552",
+  "lane": "open",
+  "score": 4,
+  "class": "B",
+  "blockers": [],
+  "signals": {
+   "body_len": 3329,
+   "reactions": 0,
+   "labels": [],
+   "comments": 0,
+   "claim_signal": false,
+   "maintainer_confirm": false,
+   "duplicate_flag": false,
+   "billing_flag": false,
+   "bot_claim": false,
+   "cross_ref_pr": false,
+   "repro_signal": true
+  },
+  "created_at": "2026-10-25T06:54:02Z",
+  "discovered_at": "2026-10-25T14:56:23",
+  "status": "new",
+  "lease": null,
+  "source": "cloudflare-worker",
+  "ai_grade": {
+   "grade": "A",
+   "score": 9,
+   "reason": "Clear, reproducible state-leak bug with specific fields and a small reset-at-execution-start fix.",
+   "model": "deepseek-v4.1-flash"
+  }
+ },
+ "infiniflow/ragflow#21435": {
+  "id": "infiniflow/ragflow#21435",
+  "repo": "infiniflow/ragflow",
+  "number": 21435,
+  "title": "[Bug]: Ingestion pipeline with Compiler node always fails in Tokenizer: \"vLLM embeddings API error 400: inputs cannot be empty\"",
+  "url": "https://github.com/infiniflow/ragflow/issues/21435",
+  "lane": "open",
+  "score": 4,
+  "class": "B",
+  "blockers": [],
+  "signals": {
+   "body_len": 1734,
+   "reactions": 1,
+   "labels": [
+    "🐞 bug"
+   ],
+   "comments": 4,
+   "claim_signal": false,
+   "maintainer_confirm": false,
+   "duplicate_flag": false,
+   "billing_flag": false,
+   "bot_claim": false,
+   "cross_ref_pr": false,
+   "repro_signal": true
+  },
+  "created_at": "2026-10-25T00:37:51Z",
+  "discovered_at": "2026-10-25T15:00:44",
+  "status": "new",
+  "lease": null,
+  "source": "cloudflare-worker",
+  "ai_grade": {
+   "grade": "A",
+   "score": 9,
+   "reason": "Clear reproducible bug with concrete pipeline steps and error, likely a small fix to skip empty Tokenizer inputs or correct Compiler output.",
+   "model": "deepseek-v4.1-flash"
+  }
  }
 }

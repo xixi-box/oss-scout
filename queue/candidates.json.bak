@@ -1246,7 +1246,7 @@
   },
   "created_at": "2026-10-25T00:00:00Z",
   "discovered_at": "2026-10-25T13:38:58",
-  "status": "new",
+  "status": "pr_open",
   "lease": null,
   "source": "cloudflare-worker",
   "body_excerpt": "Steps to reproduce: call div(7,2) in calc.py at main. Expected 3.5, actual 3. The regression test test_div.py fails on current main. Fix the implementation, not the test.",
@@ -1324,6 +1324,76 @@
    "grade": "C",
    "score": 1,
    "reason": "Billing/quota complaint with no reproduction or actionable bug details.",
+   "model": "deepseek-v4.1-flash"
+  }
+ },
+ "anomalyco/opencode#58909": {
+  "id": "anomalyco/opencode#58909",
+  "repo": "anomalyco/opencode",
+  "number": 58909,
+  "title": "config: the host drops an invalid provider entry and falls back to a built-in provider",
+  "url": "https://github.com/anomalyco/opencode/issues/58909",
+  "lane": "open",
+  "score": 4,
+  "class": "B",
+  "blockers": [],
+  "signals": {
+   "body_len": 4000,
+   "reactions": 0,
+   "labels": [],
+   "comments": 0,
+   "claim_signal": false,
+   "maintainer_confirm": false,
+   "duplicate_flag": false,
+   "billing_flag": false,
+   "bot_claim": false,
+   "cross_ref_pr": false,
+   "repro_signal": true
+  },
+  "created_at": "2026-10-25T06:26:30Z",
+  "discovered_at": "2026-10-25T14:26:56",
+  "status": "new",
+  "lease": null,
+  "source": "cloudflare-worker",
+  "ai_grade": {
+   "grade": "A",
+   "score": 9,
+   "reason": "Clear reproducible silent fallback to built-in provider after configured provider is dropped; small scoped fix with no competing work.",
+   "model": "deepseek-v4.1-flash"
+  }
+ },
+ "crewAIInc/crewAI#8552": {
+  "id": "crewAIInc/crewAI#8552",
+  "repo": "crewAIInc/crewAI",
+  "number": 8552,
+  "title": "Task per-execution counters (retry_count, used_tools, tools_errors, delegations) never reset between executions",
+  "url": "https://github.com/crewAIInc/crewAI/issues/8552",
+  "lane": "open",
+  "score": 4,
+  "class": "B",
+  "blockers": [],
+  "signals": {
+   "body_len": 3329,
+   "reactions": 0,
+   "labels": [],
+   "comments": 0,
+   "claim_signal": false,
+   "maintainer_confirm": false,
+   "duplicate_flag": false,
+   "billing_flag": false,
+   "bot_claim": false,
+   "cross_ref_pr": false,
+   "repro_signal": true
+  },
+  "created_at": "2026-10-25T06:54:02Z",
+  "discovered_at": "2026-10-25T14:56:23",
+  "status": "new",
+  "lease": null,
+  "source": "cloudflare-worker",
+  "ai_grade": {
+   "grade": "A",
+   "score": 9,
+   "reason": "Clear, reproducible state-leak bug with specific fields and a small reset-at-execution-start fix.",
    "model": "deepseek-v4.1-flash"
   }
  }
