@@ -98,11 +98,8 @@ jobs:
       MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
       MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
     steps:
-      - name: Checkout source code
-        uses: actions/checkout@v7
-        with:
-          ref: ${{ github.event.inputs.deploy_ref || 'main' }}
-
+      # 不 checkout：阿里云到 GitHub 的 git 协议不通（TLS/大包被拦，实测 130s 超时）。
+      # 部署只需 ACR 镜像 + 服务定义，全部内联在此（不依赖仓库文件）。
       - name: Deploy to self-hosted runner
         shell: bash
         run: |
@@ -120,26 +117,42 @@ jobs:
           DEPLOY_DIR="$HOME/deployments/$(basename '${{ github.repository }}')"
           mkdir -p "$DEPLOY_DIR"
 
-          # ---- 优先用项目自带的 deploy/prod-services.yaml（服务定义归项目）----
-          if [ -f deploy/prod-services.yaml ]; then
-            {
-              echo "OSS_SCOUT_IMAGE=$IMAGE:${{ github.sha }}"
-              # secrets 由 runner 环境或 environment 配置提供
-              env | grep -E "^(DASHBOARD_PASSWORD|GH_TOKEN|OPENCODE_API_KEY|MODAL_TOKEN_ID|MODAL_TOKEN_SECRET)=" || true
-            } > "$DEPLOY_DIR/.env"
-            cp deploy/prod-services.yaml "$DEPLOY_DIR/compose.yaml"
-            echo "using project prod-services.yaml"
-          else
-            # 无项目服务定义：退化为单服务
-            cat > "$DEPLOY_DIR/compose.yaml" <<COMPOSE
+          # 服务定义内联（deploy job 不 checkout）；/opt/oss-scout-data 持久化 state/queue/artifacts
+          cat > "$DEPLOY_DIR/compose.yaml" <<COMPOSE
           services:
-            app:
+            oss-scout:
               image: $IMAGE:${{ github.sha }}
+              container_name: oss-scout
               restart: unless-stopped
+              ports:
+                - "127.0.0.1:18787:8787"
+              volumes:
+                - /opt/oss-scout-data:/data
+              environment:
+                - OSSCOUT_DASHBOARD_ROOT=/data
+                - DASHBOARD_PASSWORD=\${DASHBOARD_PASSWORD}
+                - GH_TOKEN=\${GH_TOKEN}
+                - OPENCODE_API_KEY=\${OPENCODE_API_KEY}
+                - MODAL_TOKEN_ID=\${MODAL_TOKEN_ID}
+                - MODAL_TOKEN_SECRET=\${MODAL_TOKEN_SECRET}
+              healthcheck:
+                test: ["CMD", "curl", "-sf", "http://127.0.0.1:8787/login"]
+                interval: 60s
+                timeout: 10s
+                retries: 3
           COMPOSE
-          fi
+          # runner 进程环境里的 secrets 写入 .env 供 compose 插值
+          {
+            echo "DASHBOARD_PASSWORD=$DASHBOARD_PASSWORD"
+            echo "GH_TOKEN=$GH_TOKEN"
+            echo "OPENCODE_API_KEY=$OPENCODE_API_KEY"
+            echo "MODAL_TOKEN_ID=$MODAL_TOKEN_ID"
+            echo "MODAL_TOKEN_SECRET=$MODAL_TOKEN_SECRET"
+          } > "$DEPLOY_DIR/.env"
+          chmod 600 "$DEPLOY_DIR/.env"
           echo "compose written to $DEPLOY_DIR/compose.yaml"
 
+          echo "$ALIYUN_ACR_PASSWORD" | docker login "$ALIYUN_ACR_REGISTRY"             -u "$ALIYUN_ACR_USERNAME" --password-stdin
           docker compose -f "$DEPLOY_DIR/compose.yaml" pull || true
           docker compose -f "$DEPLOY_DIR/compose.yaml" up -d --remove-orphans
           docker image prune -f > /dev/null 2>&1 || true

@@ -3035,5 +3035,440 @@
    "reason": "Clear deterministic async race in `Memory.forget()`, with an obvious small fix to add `drain_writes()`/`_reset_lock` consistent with sibling destructive methods.",
    "model": "deepseek-v4.1-flash"
   }
+ },
+ "anomalyco/opencode#58981": {
+  "id": "anomalyco/opencode#58981",
+  "repo": "anomalyco/opencode",
+  "number": 58981,
+  "title": "cli: managed source service misses the TUI JSX runtime",
+  "url": "https://github.com/anomalyco/opencode/issues/58981",
+  "lane": "open",
+  "score": 4,
+  "class": "B",
+  "blockers": [],
+  "signals": {
+   "body_len": 1099,
+   "reactions": 0,
+   "labels": [],
+   "comments": 0,
+   "claim_signal": false,
+   "maintainer_confirm": false,
+   "duplicate_flag": false,
+   "billing_flag": false,
+   "bot_claim": false,
+   "cross_ref_pr": false,
+   "repro_signal": true
+  },
+  "created_at": "2026-10-25T12:56:54Z",
+  "discovered_at": "2026-10-25T20:58:19",
+  "status": "new",
+  "lease": null,
+  "source": "cloudflare-worker",
+  "ai_grade": {
+   "grade": "error",
+   "score": null,
+   "reason": "<urlopen error [SSL: UNEXPECTED_EOF_WHILE_READING] EOF occurred in violation of protocol (_ssl.c:1082)>",
+   "model": "deepseek-v4.1-flash"
+  }
+ },
+ "anomalyco/opencode#58988": {
+  "id": "anomalyco/opencode#58988",
+  "repo": "anomalyco/opencode",
+  "number": 58988,
+  "title": "sessions: new sessions named 'new session' instead of generated title",
+  "url": "https://github.com/anomalyco/opencode/issues/58988",
+  "lane": "open",
+  "score": 4,
+  "class": "B",
+  "blockers": [],
+  "signals": {
+   "body_len": 980,
+   "reactions": 0,
+   "labels": [],
+   "comments": 0,
+   "claim_signal": false,
+   "maintainer_confirm": false,
+   "duplicate_flag": false,
+   "billing_flag": false,
+   "bot_claim": false,
+   "cross_ref_pr": false,
+   "repro_signal": true
+  },
+  "created_at": "2026-10-25T13:39:01Z",
+  "discovered_at": "2026-10-25T21:41:33",
+  "status": "new",
+  "lease": null,
+  "source": "cloudflare-worker",
+  "ai_grade": {
+   "grade": "A",
+   "score": 8,
+   "reason": "Clear, small-scope session-title regression with simple reproduction and no apparent duplicate or competing work.",
+   "model": "deepseek-v4.1-flash"
+  }
+ },
+ "aaif-goose/goose#13132": {
+  "id": "aaif-goose/goose#13132",
+  "repo": "aaif-goose/goose",
+  "number": 13132,
+  "title": "nix run nixpkgs#goose-cli == panic",
+  "url": "https://github.com/aaif-goose/goose/issues/13132",
+  "lane": "open",
+  "score": 4,
+  "class": "B",
+  "blockers": [],
+  "signals": {
+   "body_len": 2108,
+   "reactions": 0,
+   "labels": [],
+   "comments": 0,
+   "claim_signal": false,
+   "maintainer_confirm": false,
+   "duplicate_flag": false,
+   "billing_flag": false,
+   "bot_claim": false,
+   "cross_ref_pr": false,
+   "repro_signal": true
+  },
+  "created_at": "2026-10-25T13:42:57Z",
+  "discovered_at": "2026-10-25T21:45:09",
+  "status": "new",
+  "lease": null,
+  "source": "cloudflare-worker",
+  "ai_grade": {
+   "grade": "A",
+   "score": 8,
+   "reason": "Clear reproducible CLI panic from missing provider configuration; likely a small error-handling fix, though the report omits expected behavior/version details.",
+   "model": "deepseek-v4.1-flash"
+  }
+ },
+ "langfuse/langfuse#19351": {
+  "id": "langfuse/langfuse#19351",
+  "repo": "langfuse/langfuse",
+  "number": 19351,
+  "title": "bug(web): searching \"evaluator\" or \"eval <name>\" in Cmd+K hides matching evaluators after debounce",
+  "url": "https://github.com/langfuse/langfuse/issues/19351",
+  "lane": "open",
+  "score": 5,
+  "class": "B",
+  "blockers": [],
+  "signals": {
+   "body_len": 1097,
+   "reactions": 1,
+   "labels": [
+    "bug",
+    "feat-evals"
+   ],
+   "comments": 0,
+   "claim_signal": false,
+   "maintainer_confirm": false,
+   "duplicate_flag": false,
+   "billing_flag": false,
+   "bot_claim": false,
+   "cross_ref_pr": false,
+   "repro_signal": false
+  },
+  "created_at": "2026-10-25T13:42:54Z",
+  "discovered_at": "2026-10-25T21:45:09",
+  "status": "new",
+  "lease": null,
+  "source": "cloudflare-worker",
+  "ai_grade": {
+   "grade": "A",
+   "score": 9,
+   "reason": "Clear, reproducible Cmd+K evaluator search bug with a narrow proposed fix and no competing work.",
+   "model": "deepseek-v4.1-flash"
+  }
+ },
+ "crewAIInc/crewAI#5802": {
+  "id": "crewAIInc/crewAI#5802",
+  "repo": "crewAIInc/crewAI",
+  "number": 5802,
+  "title": "Tool re-execution on task retry has no idempotency guard — duplicate payments, emails, trades possible",
+  "url": "https://github.com/crewAIInc/crewAI/issues/5802",
+  "lane": "open",
+  "score": 4,
+  "class": "B",
+  "blockers": [],
+  "signals": {
+   "body_len": 2002,
+   "reactions": 0,
+   "labels": [
+    "bug"
+   ],
+   "comments": 216,
+   "claim_signal": false,
+   "maintainer_confirm": false,
+   "duplicate_flag": false,
+   "billing_flag": false,
+   "bot_claim": false,
+   "cross_ref_pr": false,
+   "repro_signal": true
+  },
+  "created_at": "2026-05-14T03:00:55Z",
+  "discovered_at": "2026-10-25T21:48:07",
+  "status": "new",
+  "lease": null,
+  "source": "cloudflare-worker",
+  "ai_grade": {
+   "grade": "B",
+   "score": 5,
+   "reason": "Plausible serious duplicate-side-effect risk, but durable cross-process idempotency is a nontrivial architectural feature with unclear small-scope fix.",
+   "model": "deepseek-v4.1-flash"
+  }
+ },
+ "OpenHands/OpenHands#18938": {
+  "id": "OpenHands/OpenHands#18938",
+  "repo": "OpenHands/OpenHands",
+  "number": 18938,
+  "title": "[Bug]: OpenHands Cloud intermittently shows “Unable to connect to server” after idle periods",
+  "url": "https://github.com/OpenHands/OpenHands/issues/18938",
+  "lane": "open",
+  "score": 6,
+  "class": "A",
+  "blockers": [],
+  "signals": {
+   "body_len": 1241,
+   "reactions": 0,
+   "labels": [
+    "bug"
+   ],
+   "comments": 0,
+   "claim_signal": false,
+   "maintainer_confirm": false,
+   "duplicate_flag": false,
+   "billing_flag": false,
+   "bot_claim": false,
+   "cross_ref_pr": false,
+   "repro_signal": true
+  },
+  "created_at": "2026-10-25T14:18:37Z",
+  "discovered_at": "2026-10-25T22:21:12",
+  "status": "new",
+  "lease": null,
+  "source": "cloudflare-worker",
+  "ai_grade": {
+   "grade": "C",
+   "score": 3,
+   "reason": "Intermittent Cloud connectivity report lacks concrete reproduction/logs and is essentially a question/feature request for auto-reconnect, not an actionable small bug.",
+   "model": "deepseek-v4.1-flash"
+  }
+ },
+ "browser-use/browser-use#6209": {
+  "id": "browser-use/browser-use#6209",
+  "repo": "browser-use/browser-use",
+  "number": 6209,
+  "title": "Bug: SchemaOptimizer skips strict-mode `required` for a nested model under a field named \"required\"",
+  "url": "https://github.com/browser-use/browser-use/issues/6209",
+  "lane": "open",
+  "score": 6,
+  "class": "A",
+  "blockers": [],
+  "signals": {
+   "body_len": 2709,
+   "reactions": 0,
+   "labels": [
+    "bug"
+   ],
+   "comments": 0,
+   "claim_signal": false,
+   "maintainer_confirm": false,
+   "duplicate_flag": false,
+   "billing_flag": false,
+   "bot_claim": false,
+   "cross_ref_pr": false,
+   "repro_signal": true
+  },
+  "created_at": "2026-10-25T14:24:51Z",
+  "discovered_at": "2026-10-25T22:26:45",
+  "status": "new",
+  "lease": null,
+  "source": "cloudflare-worker",
+  "ai_grade": {
+   "grade": "A",
+   "score": 10,
+   "reason": "Clear reproducible strict-schema bug with provided repro, root cause, small fix, regression test, and no competing work.",
+   "model": "deepseek-v4.1-flash"
+  }
+ },
+ "anomalyco/opencode#58995": {
+  "id": "anomalyco/opencode#58995",
+  "repo": "anomalyco/opencode",
+  "number": 58995,
+  "title": "Zen free models return 429 FreeUsageLimitError from third-party client, retry-after ~10h, persists after 24h",
+  "url": "https://github.com/anomalyco/opencode/issues/58995",
+  "lane": "open",
+  "score": 4,
+  "class": "B",
+  "blockers": [],
+  "signals": {
+   "body_len": 870,
+   "reactions": 0,
+   "labels": [],
+   "comments": 0,
+   "claim_signal": false,
+   "maintainer_confirm": false,
+   "duplicate_flag": false,
+   "billing_flag": false,
+   "bot_claim": false,
+   "cross_ref_pr": false,
+   "repro_signal": true
+  },
+  "created_at": "2026-10-25T14:27:25Z",
+  "discovered_at": "2026-10-25T22:30:48",
+  "status": "new",
+  "lease": null,
+  "source": "cloudflare-worker",
+  "ai_grade": {
+   "grade": "C",
+   "score": 2,
+   "reason": "Quota/usage-limit complaint from an unsupported third-party client, not an actionable OpenCode bug.",
+   "model": "deepseek-v4.1-flash"
+  }
+ },
+ "langfuse/langfuse#19353": {
+  "id": "langfuse/langfuse#19353",
+  "repo": "langfuse/langfuse",
+  "number": 19353,
+  "title": "bug(topics): topicProviderGroups injects savedModel into all connections and TopicSetupSession doesn't fill null slots when adding a second connection",
+  "url": "https://github.com/langfuse/langfuse/issues/19353",
+  "lane": "open",
+  "score": 7,
+  "class": "A",
+  "blockers": [],
+  "signals": {
+   "body_len": 2464,
+   "reactions": 1,
+   "labels": [
+    "bug",
+    "🐞❔ unconfirmed bug",
+    "unconfirmed-bug"
+   ],
+   "comments": 0,
+   "claim_signal": false,
+   "maintainer_confirm": false,
+   "duplicate_flag": false,
+   "billing_flag": false,
+   "bot_claim": false,
+   "cross_ref_pr": false,
+   "repro_signal": true
+  },
+  "created_at": "2026-10-25T14:47:07Z",
+  "discovered_at": "2026-10-25T22:47:57",
+  "status": "new",
+  "lease": null,
+  "source": "cloudflare-worker",
+  "ai_grade": {
+   "grade": "A",
+   "score": 9,
+   "reason": "Detailed, code-referenced, reproducible UI bug with small fix scope and no indicated competing work.",
+   "model": "deepseek-v4.1-flash"
+  }
+ },
+ "anomalyco/opencode#58854": {
+  "id": "anomalyco/opencode#58854",
+  "repo": "anomalyco/opencode",
+  "number": 58854,
+  "title": "TLS handshake error",
+  "url": "https://github.com/anomalyco/opencode/issues/58854",
+  "lane": "open",
+  "score": 4,
+  "class": "B",
+  "blockers": [],
+  "signals": {
+   "body_len": 954,
+   "reactions": 0,
+   "labels": [
+    "triaging"
+   ],
+   "comments": 2,
+   "claim_signal": false,
+   "maintainer_confirm": false,
+   "duplicate_flag": false,
+   "billing_flag": false,
+   "bot_claim": false,
+   "cross_ref_pr": false,
+   "repro_signal": true
+  },
+  "created_at": "2026-10-25T03:24:49Z",
+  "discovered_at": "2026-10-25T23:46:15",
+  "status": "new",
+  "lease": null,
+  "source": "cloudflare-worker",
+  "ai_grade": {
+   "grade": "B",
+   "score": 6,
+   "reason": "Plausible client/network bug affecting multiple providers, but vague reproduction and missing logs make it not clearly actionable as an A.",
+   "model": "deepseek-v4.1-flash"
+  }
+ },
+ "anomalyco/opencode#59003": {
+  "id": "anomalyco/opencode#59003",
+  "repo": "anomalyco/opencode",
+  "number": 59003,
+  "title": "OpenCode Desktop 1.19.4: Zen free models fail while CLI 1.19.4 works with the same account",
+  "url": "https://github.com/anomalyco/opencode/issues/59003",
+  "lane": "open",
+  "score": 4,
+  "class": "B",
+  "blockers": [],
+  "signals": {
+   "body_len": 4000,
+   "reactions": 0,
+   "labels": [],
+   "comments": 0,
+   "claim_signal": false,
+   "maintainer_confirm": false,
+   "duplicate_flag": false,
+   "billing_flag": false,
+   "bot_claim": false,
+   "cross_ref_pr": false,
+   "repro_signal": true
+  },
+  "created_at": "2026-10-25T15:50:06Z",
+  "discovered_at": "2026-10-25T23:51:05",
+  "status": "new",
+  "lease": null,
+  "source": "cloudflare-worker",
+  "ai_grade": {
+   "grade": "A",
+   "score": 8,
+   "reason": "Clear Desktop-specific regression with reproducible steps and CLI control showing it is not a true quota issue.",
+   "model": "deepseek-v4.1-flash"
+  }
+ },
+ "anomalyco/opencode#59013": {
+  "id": "anomalyco/opencode#59013",
+  "repo": "anomalyco/opencode",
+  "number": 59013,
+  "title": "Manual compaction does not correctly trigger model switch",
+  "url": "https://github.com/anomalyco/opencode/issues/59013",
+  "lane": "open",
+  "score": 4,
+  "class": "B",
+  "blockers": [],
+  "signals": {
+   "body_len": 1809,
+   "reactions": 0,
+   "labels": [],
+   "comments": 0,
+   "claim_signal": false,
+   "maintainer_confirm": false,
+   "duplicate_flag": false,
+   "billing_flag": false,
+   "bot_claim": false,
+   "cross_ref_pr": false,
+   "repro_signal": true
+  },
+  "created_at": "2026-10-25T16:14:14Z",
+  "discovered_at": "2026-10-26T00:15:08",
+  "status": "new",
+  "lease": null,
+  "source": "cloudflare-worker",
+  "ai_grade": {
+   "grade": "A",
+   "score": 8,
+   "reason": "Clear reproducible regression with explicit steps showing manual compaction uses the previous model; likely small, actionable state/model-switch fix.",
+   "model": "deepseek-v4.1-flash"
+  }
  }
 }

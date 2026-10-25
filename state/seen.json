@@ -3042,5 +3042,93 @@
  "anomalyco/opencode#58981": {
   "first_seen": "2026-10-25T20:58:19",
   "status": "queued"
+ },
+ "OpenHands/software-agent-sdk#6219": {
+  "first_seen": "2026-10-25T21:41:33",
+  "status": "lowscore"
+ },
+ "anomalyco/opencode#58988": {
+  "first_seen": "2026-10-25T21:41:33",
+  "status": "queued"
+ },
+ "aaif-goose/goose#13132": {
+  "first_seen": "2026-10-25T21:45:09",
+  "status": "queued"
+ },
+ "langfuse/langfuse#19351": {
+  "first_seen": "2026-10-25T21:45:09",
+  "status": "queued"
+ },
+ "anomalyco/opencode#58989": {
+  "first_seen": "2026-10-25T21:45:09",
+  "status": "lowscore"
+ },
+ "anomalyco/opencode#58990": {
+  "first_seen": "2026-10-25T21:48:07",
+  "status": "lowscore"
+ },
+ "crewAIInc/crewAI#5802": {
+  "first_seen": "2026-10-25T21:48:07",
+  "status": "queued"
+ },
+ "OpenHands/OpenHands#18938": {
+  "first_seen": "2026-10-25T22:21:12",
+  "status": "queued"
+ },
+ "anomalyco/opencode#58992": {
+  "first_seen": "2026-10-25T22:21:12",
+  "status": "lowscore"
+ },
+ "anomalyco/opencode#58991": {
+  "first_seen": "2026-10-25T22:21:12",
+  "status": "lowscore"
+ },
+ "browser-use/browser-use#6209": {
+  "first_seen": "2026-10-25T22:26:45",
+  "status": "queued"
+ },
+ "anomalyco/opencode#58993": {
+  "first_seen": "2026-10-25T22:26:45",
+  "status": "blocked"
+ },
+ "anomalyco/opencode#58995": {
+  "first_seen": "2026-10-25T22:30:48",
+  "status": "queued"
+ },
+ "langfuse/langfuse#19353": {
+  "first_seen": "2026-10-25T22:47:57",
+  "status": "queued"
+ },
+ "anomalyco/opencode#58854": {
+  "first_seen": "2026-10-25T23:46:15",
+  "status": "queued"
+ },
+ "anomalyco/opencode#59003": {
+  "first_seen": "2026-10-25T23:51:05",
+  "status": "queued"
+ },
+ "OpenHands/software-agent-sdk#6225": {
+  "first_seen": "2026-10-26T00:15:08",
+  "status": "lowscore"
+ },
+ "OpenHands/software-agent-sdk#6224": {
+  "first_seen": "2026-10-26T00:15:08",
+  "status": "lowscore"
+ },
+ "anomalyco/opencode#59013": {
+  "first_seen": "2026-10-26T00:15:08",
+  "status": "queued"
+ },
+ "anomalyco/opencode#59012": {
+  "first_seen": "2026-10-26T00:15:08",
+  "status": "lowscore"
+ },
+ "anomalyco/opencode#59008": {
+  "first_seen": "2026-10-26T00:15:08",
+  "status": "lowscore"
+ },
+ "OpenHands/OpenHands#18939": {
+  "first_seen": "2026-10-26T00:23:23",
+  "status": "queued"
  }
 }
