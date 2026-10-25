@@ -1,0 +1,40 @@
+== aaif-goose/goose
+   {'external_merges_75d': 143, 'median_days': 4, 'le7d_pct': 60, 'zombie_prs': 1, 'zombie_ratio': 0.01, 'open_issues': 349}  policy=['none']  lane→open
+== openai/openai-agents-python
+   {'external_merges_75d': 140, 'median_days': 0, 'le7d_pct': 81, 'zombie_prs': 0, 'zombie_ratio': 0.0, 'open_issues': 18}  policy=['none']  lane→open
+== OpenHands/software-agent-sdk
+   {'external_merges_75d': 88, 'median_days': 4, 'le7d_pct': 59, 'zombie_prs': 42, 'zombie_ratio': 0.48, 'open_issues': 326}  policy=['none']  lane→open
+== browser-use/browser-use
+   {'external_merges_75d': 42, 'median_days': 3, 'le7d_pct': 69, 'zombie_prs': 36, 'zombie_ratio': 0.86, 'open_issues': 183}  policy=['none']  lane→open
+== OpenHands/OpenHands
+   {'external_merges_75d': 277, 'median_days': 3, 'le7d_pct': 75, 'zombie_prs': 58, 'zombie_ratio': 0.21, 'open_issues': 0}  policy=['no_contributing']  lane→open
+== deepset-ai/haystack
+   {'external_merges_75d': 0, 'median_days': None, 'le7d_pct': None, 'zombie_prs': 0, 'zombie_ratio': None, 'open_issues': 96}  policy=['no_contributing']  lane→observe
+== langfuse/langfuse
+   {'external_merges_75d': 0, 'median_days': None, 'le7d_pct': None, 'zombie_prs': 0, 'zombie_ratio': None, 'open_issues': 328}  policy=['none']  lane→observe
+== Arize-ai/phoenix
+   {'external_merges_75d': 490, 'median_days': 0, 'le7d_pct': 84, 'zombie_prs': 32, 'zombie_ratio': 0.07, 'open_issues': 1030}  policy=['none']  lane→open
+== anomalyco/opencode
+   {'external_merges_75d': 120, 'median_days': 0, 'le7d_pct': 100, 'zombie_prs': 0, 'zombie_ratio': 0.0, 'open_issues': 0}  policy=['no_contributing']  lane→open
+== langchain-ai/langsmith-sdk
+   {'external_merges_75d': 115, 'median_days': 0, 'le7d_pct': 92, 'zombie_prs': 55, 'zombie_ratio': 0.48, 'open_issues': 108}  policy=['none']  lane→open
+== e2b-dev/e2b
+   {'external_merges_75d': 29, 'median_days': 1, 'le7d_pct': 97, 'zombie_prs': 3, 'zombie_ratio': 0.1, 'open_issues': 40}  policy=['none']  lane→open
+== infiniflow/ragflow
+   {'external_merges_75d': 600, 'median_days': 0, 'le7d_pct': 90, 'zombie_prs': 76, 'zombie_ratio': 0.13, 'open_issues': 931}  policy=['no_contributing']  lane→open
+== openai/openai-python
+   {'external_merges_75d': 308, 'median_days': 0, 'le7d_pct': 86, 'zombie_prs': 31, 'zombie_ratio': 0.1, 'open_issues': 47}  policy=['none']  lane→open
+== crewAIInc/crewAI
+   {'external_merges_75d': 114, 'median_days': 1, 'le7d_pct': 74, 'zombie_prs': 70, 'zombie_ratio': 0.61, 'open_issues': 355}  policy=['ai_disclosure']  lane→open
+== pydantic/pydantic-ai
+   {'external_merges_75d': 903, 'median_days': 0, 'le7d_pct': 96, 'zombie_prs': 84, 'zombie_ratio': 0.09, 'open_issues': 1036}  policy=['assignment_gate', 'bot_close']  lane→gated
+== microsoft/playwright
+   {'external_merges_75d': 107, 'median_days': 1, 'le7d_pct': 91, 'zombie_prs': 0, 'zombie_ratio': 0.0, 'open_issues': 184}  policy=['assignment_gate']  lane→gated
+== microsoft/agent-framework
+   {'external_merges_75d': 430, 'median_days': 2, 'le7d_pct': 83, 'zombie_prs': 45, 'zombie_ratio': 0.1, 'open_issues': 630}  policy=['assignment_gate']  lane→gated
+== BerriAI/litellm
+   {'external_merges_75d': 739, 'median_days': 0, 'le7d_pct': 99, 'zombie_prs': 1217, 'zombie_ratio': 1.65, 'open_issues': 1804}  policy=['none']  lane→restricted
+== google-gemini/gemini-cli
+   {'external_merges_75d': 150, 'median_days': 1, 'le7d_pct': 95, 'zombie_prs': 0, 'zombie_ratio': 0.0, 'open_issues': 0}  policy=['assignment_gate', 'bot_close']  lane→gated
+
+已写入 G:\project\oss-scout\state\health.json

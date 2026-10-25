@@ -1,16 +1,34 @@
 {
- "computed_at": "2026-10-12T10:31:36",
+ "computed_at": "2026-10-25T09:35:35",
  "window_days": 75,
  "repos": {
+  "aaif-goose/goose": {
+   "config_lane": "open",
+   "stats": {
+    "external_merges_75d": 143,
+    "median_days": 4,
+    "le7d_pct": 60,
+    "zombie_prs": 1,
+    "zombie_ratio": 0.01,
+    "open_issues": 349
+   },
+   "policy": {
+    "flags": [
+     "none"
+    ],
+    "verify_manually": false
+   },
+   "lane_advisory": "open"
+  },
   "openai/openai-agents-python": {
    "config_lane": "open",
    "stats": {
-    "external_merges_75d": 233,
+    "external_merges_75d": 140,
     "median_days": 0,
-    "le7d_pct": 88,
+    "le7d_pct": 81,
     "zombie_prs": 0,
     "zombie_ratio": 0.0,
-    "open_issues": 17
+    "open_issues": 18
    },
    "policy": {
     "flags": [
@@ -23,12 +41,12 @@
   "OpenHands/software-agent-sdk": {
    "config_lane": "open",
    "stats": {
-    "external_merges_75d": 77,
-    "median_days": 5,
-    "le7d_pct": 57,
-    "zombie_prs": 16,
-    "zombie_ratio": 0.21,
-    "open_issues": 299
+    "external_merges_75d": 88,
+    "median_days": 4,
+    "le7d_pct": 59,
+    "zombie_prs": 42,
+    "zombie_ratio": 0.48,
+    "open_issues": 326
    },
    "policy": {
     "flags": [
@@ -41,12 +59,12 @@
   "browser-use/browser-use": {
    "config_lane": "open",
    "stats": {
-    "external_merges_75d": 70,
-    "median_days": 6,
-    "le7d_pct": 53,
-    "zombie_prs": 35,
-    "zombie_ratio": 0.5,
-    "open_issues": 169
+    "external_merges_75d": 42,
+    "median_days": 3,
+    "le7d_pct": 69,
+    "zombie_prs": 36,
+    "zombie_ratio": 0.86,
+    "open_issues": 183
    },
    "policy": {
     "flags": [
@@ -59,12 +77,12 @@
   "OpenHands/OpenHands": {
    "config_lane": "open",
    "stats": {
-    "external_merges_75d": 263,
+    "external_merges_75d": 277,
     "median_days": 3,
     "le7d_pct": 75,
-    "zombie_prs": 13,
-    "zombie_ratio": 0.05,
-    "open_issues": 492
+    "zombie_prs": 58,
+    "zombie_ratio": 0.21,
+    "open_issues": 0
    },
    "policy": {
     "flags": [
@@ -77,12 +95,12 @@
   "deepset-ai/haystack": {
    "config_lane": "open",
    "stats": {
-    "external_merges_75d": 145,
-    "median_days": 0,
-    "le7d_pct": 97,
-    "zombie_prs": 2,
-    "zombie_ratio": 0.01,
-    "open_issues": 102
+    "external_merges_75d": 0,
+    "median_days": null,
+    "le7d_pct": null,
+    "zombie_prs": 0,
+    "zombie_ratio": null,
+    "open_issues": 96
    },
    "policy": {
     "flags": [
@@ -90,17 +108,17 @@
     ],
     "verify_manually": true
    },
-   "lane_advisory": "open"
+   "lane_advisory": "observe"
   },
   "langfuse/langfuse": {
    "config_lane": "open",
    "stats": {
-    "external_merges_75d": 629,
-    "median_days": 0,
-    "le7d_pct": 97,
-    "zombie_prs": 296,
-    "zombie_ratio": 0.47,
-    "open_issues": 323
+    "external_merges_75d": 0,
+    "median_days": null,
+    "le7d_pct": null,
+    "zombie_prs": 0,
+    "zombie_ratio": null,
+    "open_issues": 328
    },
    "policy": {
     "flags": [
@@ -108,17 +126,17 @@
     ],
     "verify_manually": false
    },
-   "lane_advisory": "open"
+   "lane_advisory": "observe"
   },
   "Arize-ai/phoenix": {
    "config_lane": "open",
    "stats": {
-    "external_merges_75d": 416,
-    "median_days": 1,
+    "external_merges_75d": 490,
+    "median_days": 0,
     "le7d_pct": 84,
-    "zombie_prs": 18,
-    "zombie_ratio": 0.04,
-    "open_issues": 950
+    "zombie_prs": 32,
+    "zombie_ratio": 0.07,
+    "open_issues": 1030
    },
    "policy": {
     "flags": [
@@ -131,31 +149,30 @@
   "anomalyco/opencode": {
    "config_lane": "open",
    "stats": {
-    "external_merges_75d": 341,
+    "external_merges_75d": 120,
     "median_days": 0,
-    "le7d_pct": 96,
-    "zombie_prs": 5,
-    "zombie_ratio": 0.01,
-    "open_issues": 3228
+    "le7d_pct": 100,
+    "zombie_prs": 0,
+    "zombie_ratio": 0.0,
+    "open_issues": 0
    },
    "policy": {
     "flags": [
-     "ai_disclosure",
-     "no_ai_walls"
+     "no_contributing"
     ],
-    "verify_manually": false
+    "verify_manually": true
    },
    "lane_advisory": "open"
   },
   "langchain-ai/langsmith-sdk": {
    "config_lane": "open",
    "stats": {
-    "external_merges_75d": 126,
+    "external_merges_75d": 115,
     "median_days": 0,
-    "le7d_pct": 93,
-    "zombie_prs": 56,
-    "zombie_ratio": 0.44,
-    "open_issues": 121
+    "le7d_pct": 92,
+    "zombie_prs": 55,
+    "zombie_ratio": 0.48,
+    "open_issues": 108
    },
    "policy": {
     "flags": [
@@ -168,12 +185,12 @@
   "e2b-dev/e2b": {
    "config_lane": "open",
    "stats": {
-    "external_merges_75d": 30,
+    "external_merges_75d": 29,
     "median_days": 1,
     "le7d_pct": 97,
-    "zombie_prs": 1,
-    "zombie_ratio": 0.03,
-    "open_issues": 36
+    "zombie_prs": 3,
+    "zombie_ratio": 0.1,
+    "open_issues": 40
    },
    "policy": {
     "flags": [
@@ -186,12 +203,12 @@
   "infiniflow/ragflow": {
    "config_lane": "open",
    "stats": {
-    "external_merges_75d": 609,
+    "external_merges_75d": 600,
     "median_days": 0,
-    "le7d_pct": 94,
-    "zombie_prs": 78,
+    "le7d_pct": 90,
+    "zombie_prs": 76,
     "zombie_ratio": 0.13,
-    "open_issues": 988
+    "open_issues": 931
    },
    "policy": {
     "flags": [
@@ -204,12 +221,12 @@
   "openai/openai-python": {
    "config_lane": "open",
    "stats": {
-    "external_merges_75d": 240,
+    "external_merges_75d": 308,
     "median_days": 0,
-    "le7d_pct": 83,
-    "zombie_prs": 38,
-    "zombie_ratio": 0.16,
-    "open_issues": 59
+    "le7d_pct": 86,
+    "zombie_prs": 31,
+    "zombie_ratio": 0.1,
+    "open_issues": 47
    },
    "policy": {
     "flags": [
@@ -219,15 +236,33 @@
    },
    "lane_advisory": "open"
   },
+  "crewAIInc/crewAI": {
+   "config_lane": "open",
+   "stats": {
+    "external_merges_75d": 114,
+    "median_days": 1,
+    "le7d_pct": 74,
+    "zombie_prs": 70,
+    "zombie_ratio": 0.61,
+    "open_issues": 355
+   },
+   "policy": {
+    "flags": [
+     "ai_disclosure"
+    ],
+    "verify_manually": false
+   },
+   "lane_advisory": "open"
+  },
   "pydantic/pydantic-ai": {
    "config_lane": "gated",
    "stats": {
-    "external_merges_75d": 774,
+    "external_merges_75d": 903,
     "median_days": 0,
-    "le7d_pct": 94,
-    "zombie_prs": 72,
+    "le7d_pct": 96,
+    "zombie_prs": 84,
     "zombie_ratio": 0.09,
-    "open_issues": 1002
+    "open_issues": 1036
    },
    "policy": {
     "flags": [
@@ -241,12 +276,12 @@
   "microsoft/playwright": {
    "config_lane": "gated",
    "stats": {
-    "external_merges_75d": 120,
+    "external_merges_75d": 107,
     "median_days": 1,
     "le7d_pct": 91,
     "zombie_prs": 0,
     "zombie_ratio": 0.0,
-    "open_issues": 176
+    "open_issues": 184
    },
    "policy": {
     "flags": [
@@ -259,12 +294,12 @@
   "microsoft/agent-framework": {
    "config_lane": "gated",
    "stats": {
-    "external_merges_75d": 376,
+    "external_merges_75d": 430,
     "median_days": 2,
-    "le7d_pct": 82,
-    "zombie_prs": 43,
-    "zombie_ratio": 0.11,
-    "open_issues": 582
+    "le7d_pct": 83,
+    "zombie_prs": 45,
+    "zombie_ratio": 0.1,
+    "open_issues": 630
    },
    "policy": {
     "flags": [
@@ -277,12 +312,12 @@
   "BerriAI/litellm": {
    "config_lane": "restricted",
    "stats": {
-    "external_merges_75d": 401,
+    "external_merges_75d": 739,
     "median_days": 0,
     "le7d_pct": 99,
-    "zombie_prs": 1063,
-    "zombie_ratio": 2.65,
-    "open_issues": 1811
+    "zombie_prs": 1217,
+    "zombie_ratio": 1.65,
+    "open_issues": 1804
    },
    "policy": {
     "flags": [
@@ -295,12 +330,12 @@
   "google-gemini/gemini-cli": {
    "config_lane": "observe",
    "stats": {
-    "external_merges_75d": 129,
-    "median_days": 2,
-    "le7d_pct": 84,
-    "zombie_prs": 105,
-    "zombie_ratio": 0.81,
-    "open_issues": 503
+    "external_merges_75d": 150,
+    "median_days": 1,
+    "le7d_pct": 95,
+    "zombie_prs": 0,
+    "zombie_ratio": 0.0,
+    "open_issues": 0
    },
    "policy": {
     "flags": [
