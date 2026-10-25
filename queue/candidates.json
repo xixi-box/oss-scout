@@ -2814,5 +2814,152 @@
    "reason": "Free usage/quota complaint with no reproducible code bug; not actionable.",
    "model": "deepseek-v4.1-flash"
   }
+ },
+ "OpenHands/software-agent-sdk#6174": {
+  "id": "OpenHands/software-agent-sdk#6174",
+  "repo": "OpenHands/software-agent-sdk",
+  "number": 6174,
+  "title": "[Bug]: A missing event file makes a persisted conversation unloadable: every event route returns 500 'Unknown event_id'",
+  "url": "https://github.com/OpenHands/software-agent-sdk/issues/6174",
+  "lane": "open",
+  "score": 6,
+  "class": "A",
+  "blockers": [],
+  "signals": {
+   "body_len": 4000,
+   "reactions": 0,
+   "labels": [
+    "bug",
+    "priority:medium"
+   ],
+   "comments": 3,
+   "claim_signal": false,
+   "maintainer_confirm": false,
+   "duplicate_flag": false,
+   "billing_flag": false,
+   "bot_claim": false,
+   "cross_ref_pr": false,
+   "repro_signal": true
+  },
+  "created_at": "2026-10-23T08:56:03Z",
+  "discovered_at": "2026-10-25T20:11:58",
+  "status": "new",
+  "lease": null,
+  "source": "cloudflare-worker",
+  "ai_grade": {
+   "grade": "B",
+   "score": 7,
+   "reason": "Reproducible high-impact bug with clear pointers, but fix needs maintainer decision and touches core event-loading semantics, so not clearly small-scope A.",
+   "model": "deepseek-v4.1-flash"
+  }
+ },
+ "crewAIInc/crewAI#7753": {
+  "id": "crewAIInc/crewAI#7753",
+  "repo": "crewAIInc/crewAI",
+  "number": 7753,
+  "title": "[BUG] crewai create flow writes files in the locale encoding on Windows, so the generated crew fails to load",
+  "url": "https://github.com/crewAIInc/crewAI/issues/7753",
+  "lane": "open",
+  "score": 3,
+  "class": "B",
+  "blockers": [],
+  "signals": {
+   "body_len": 3215,
+   "reactions": 0,
+   "labels": [
+    "no-issue-activity"
+   ],
+   "comments": 2,
+   "claim_signal": false,
+   "maintainer_confirm": false,
+   "duplicate_flag": false,
+   "billing_flag": false,
+   "bot_claim": false,
+   "cross_ref_pr": false,
+   "repro_signal": true
+  },
+  "created_at": "2026-09-24T17:51:21Z",
+  "discovered_at": "2026-10-25T20:29:09",
+  "status": "new",
+  "lease": null,
+  "source": "cloudflare-worker",
+  "ai_grade": {
+   "grade": "A",
+   "score": 9,
+   "reason": "Clear, reproducible Windows encoding bug with a concrete root cause, minimal fix scope, and no indicated competing work.",
+   "model": "deepseek-v4.1-flash"
+  }
+ },
+ "crewAIInc/crewAI#7740": {
+  "id": "crewAIInc/crewAI#7740",
+  "repo": "crewAIInc/crewAI",
+  "number": 7740,
+  "title": "[BUG] GPT-6 Astra agents with tools fail on Bedrock's OpenAI-compatible API because the retry sends reasoning_effort 'none'",
+  "url": "https://github.com/crewAIInc/crewAI/issues/7740",
+  "lane": "open",
+  "score": 3,
+  "class": "B",
+  "blockers": [],
+  "signals": {
+   "body_len": 4000,
+   "reactions": 0,
+   "labels": [],
+   "comments": 2,
+   "claim_signal": false,
+   "maintainer_confirm": false,
+   "duplicate_flag": false,
+   "billing_flag": false,
+   "bot_claim": false,
+   "cross_ref_pr": false,
+   "repro_signal": true
+  },
+  "created_at": "2026-09-24T00:48:18Z",
+  "discovered_at": "2026-10-25T20:29:09",
+  "status": "new",
+  "lease": null,
+  "source": "cloudflare-worker",
+  "ai_grade": {
+   "grade": "A",
+   "score": 9,
+   "reason": "Clear, reproducible provider-specific bug with exact repro and a small retry-logic fix; no obvious competing work.",
+   "model": "deepseek-v4.1-flash"
+  }
+ },
+ "crewAIInc/crewAI#7691": {
+  "id": "crewAIInc/crewAI#7691",
+  "repo": "crewAIInc/crewAI",
+  "number": 7691,
+  "title": "[BUG] AsyncFileStream is rejected by file wrappers and cannot be resolved asynchronously",
+  "url": "https://github.com/crewAIInc/crewAI/issues/7691",
+  "lane": "open",
+  "score": 3,
+  "class": "B",
+  "blockers": [],
+  "signals": {
+   "body_len": 3575,
+   "reactions": 0,
+   "labels": [
+    "no-issue-activity"
+   ],
+   "comments": 1,
+   "claim_signal": false,
+   "maintainer_confirm": false,
+   "duplicate_flag": false,
+   "billing_flag": false,
+   "bot_claim": false,
+   "cross_ref_pr": false,
+   "repro_signal": true
+  },
+  "created_at": "2026-09-21T17:03:00Z",
+  "discovered_at": "2026-10-25T20:29:09",
+  "status": "new",
+  "lease": null,
+  "source": "cloudflare-worker",
+  "ai_grade": {
+   "grade": "A",
+   "score": 9,
+   "reason": "Clear reproducible bug with detailed steps and a small, well-localized fix in source coercion and async resolution.",
+   "model": "deepseek-v4.1-flash"
+  }
  }
 }

@@ -6,8 +6,9 @@ services:
     restart: unless-stopped
     ports:
       - "127.0.0.1:18787:8787"   # 宿主 18787（8787 被 ops-agent 占用）；容器内仍 8787
+    user: "0:0"    # /data 卷挂载目录属宿主 root；scout 用户无写权限会崩（实测 2026-10-25）
     volumes:
-      - /home/scoutdeploy/oss-scout-data:/data   # state/queue/artifacts/configs 持久化
+      - /opt/oss-scout-data:/data   # state/queue/artifacts/configs 持久化
     environment:
       - OSSCOUT_DASHBOARD_ROOT=/data
       - DASHBOARD_PASSWORD=${DASHBOARD_PASSWORD}

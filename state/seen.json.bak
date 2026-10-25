@@ -2926,5 +2926,21 @@
  "anomalyco/opencode#58963": {
   "first_seen": "2026-10-25T19:49:40",
   "status": "queued"
+ },
+ "langfuse/langfuse#19347": {
+  "first_seen": "2026-10-25T19:53:06",
+  "status": "queued"
+ },
+ "anomalyco/opencode#58965": {
+  "first_seen": "2026-10-25T19:53:06",
+  "status": "queued"
+ },
+ "OpenHands/software-agent-sdk#6174": {
+  "first_seen": "2026-10-25T20:11:58",
+  "status": "queued"
+ },
+ "deepset-ai/haystack#13428": {
+  "first_seen": "2026-10-25T20:11:58",
+  "status": "lowscore"
  }
 }
