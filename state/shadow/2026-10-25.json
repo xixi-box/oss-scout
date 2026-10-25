@@ -1,20 +1,21 @@
 {
  "date": "2026-10-25",
  "candidates": {
-  "candidates_total": 91,
-  "discovered_today": 0,
-  "ab_today": 0,
-  "effective_rate": null,
-  "duplicate_flagged_today": 0
+  "candidates_total": 92,
+  "discovered_today": 1,
+  "ab_today": 1,
+  "effective_rate": 1.0,
+  "duplicate_flagged_today": 1
  },
  "worklog": {
-  "worklog_lines": 265,
+  "worklog_lines": 266,
   "today_actions": {
    "v2_p4_model_policy": 1,
    "v2_p4_done_model_live": 1,
    "v2_p5_repair_bugfix": 1,
    "v2_p5_repair_engine": 1,
-   "v2_p5_closed_loop_verified": 1
+   "v2_p5_closed_loop_verified": 1,
+   "v2_p6_ab_complete": 1
   },
   "today_error_lines": 3
  },
@@ -27,18 +28,18 @@
   "total_minutes": 11.2
  },
  "modal": {
-  "metered_usd": 0.03014061,
+  "metered_usd": 0.04017589,
   "available": true
  },
  "resources": {
   "ram_total_mb": 33518,
-  "ram_used_pct": 51.0,
-  "cpu_pct": 1.8
+  "ram_used_pct": 39.0,
+  "cpu_pct": 1.3
  },
  "policy": {
   "health_repos": 17,
   "policy_flagged": 17,
   "health_stale": true
  },
- "generated_at": "2026-10-25T01:44:55"
+ "generated_at": "2026-10-25T09:31:33"
 }

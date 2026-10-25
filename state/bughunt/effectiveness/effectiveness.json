@@ -1,0 +1,106 @@
+{
+ "benchmark": "ground-truth regression (merged bugfix PRs, scanned pre-fix)",
+ "pr_count": 6,
+ "semgrep_detected": 1,
+ "opencode_real_bug": 0,
+ "metered_after": 0.06019288,
+ "results": [
+  {
+   "repo": "openai/openai-agents-python",
+   "number": 5384,
+   "title": "fix: raise MCP minimum to 1.21.2 for Pydantic and OAuth compatibility",
+   "base_sha": "17d994bd3045dae71acda676a4ef4762ed8ecd94",
+   "semgrep_total": 5,
+   "semgrep_hits_changed_files": 1,
+   "detected": true,
+   "hit_detail": [
+    {
+     "path": "/workspace/repo/.github/scripts/run_integration_tests.py",
+     "line": 400,
+     "rule_id": "python.lang.security.use-defused-xml-parse.use-defused-xml-parse"
+    }
+   ],
+   "opencode": {
+    "ok": true,
+    "verdict": "unclear",
+    "analysis": "**Verdict:** real-bug — but only in CI test coverage. **Location:** `.github/scripts/run_integration_tests.py:489` (pinned `mcp==1.19.0`). **Root cause:** MCP 1.19.0 is incompatible with the Pydantic 2.14 resolved in that environment (import failure) and lacks the OAuth 401 scope hotfix, so the lowest-bound `mcp-v1` job failed for dependency reasons rather than SDK regressions; bumping the floor to 1.21.2 fixes the matrix. Caveat: `pyproject.toml:16` still declares `mcp>=1.19.0`, so the declared supported floor is no longer tested."
+   }
+  },
+  {
+   "repo": "openai/openai-agents-python",
+   "number": 5379,
+   "title": "fix(deps): bump redis from 7.0.1 to 8.1.0",
+   "base_sha": "1c1a28df92f359dded4eed83976301c2f9850e89",
+   "semgrep_total": 5,
+   "semgrep_hits_changed_files": 0,
+   "detected": false,
+   "hit_detail": [],
+   "opencode": {
+    "ok": true,
+    "verdict": "unclear",
+    "analysis": "1. **real-bug** (the diff is a redis-py 7.0.1 → 8.1.0 bump; a genuine defect existed).\n2. `src/agents/extensions/memory/redis_session.py:747` (`_pop_item_locked`; dependency pin in `uv.lock`).\n3. Root cause: redis-py 8 replaced the combined `Union[Awaitable[T], T]` command hints with concrete async overloads, so the old `# type: ignore`/untyped `rpop` result no longer type-checks and the single-item pop value is mistyped as a list; the explicit `cast(\"bytes | str | None\", ...)` fixes it (runtime behavior unchanged). The test assertion change is just bytes-default consistency, not the bug."
+   }
+  },
+  {
+   "repo": "browser-use/browser-use",
+   "number": 6076,
+   "title": "Anthropic browser toolset: use the released SDK names (fixes pyright on main)",
+   "base_sha": "c75e8476e26d18b7617643bc2ae082fae8eae431",
+   "semgrep_total": 7,
+   "semgrep_hits_changed_files": 0,
+   "detected": false,
+   "hit_detail": [],
+   "opencode": {
+    "ok": true,
+    "verdict": "unclear",
+    "analysis": "1. **real-bug** — the pre-diff imports referenced stale Anthropic SDK symbols, breaking `import` at module load.\n2. `browser_use/integrations/anthropic/browser_use.py:25-31` (`BrowserState`, `BetaBrowserScreenshotResult`, `ToolError`) and `examples/integrations/toolsets-for-claude/quickstart.py:10` (`LocalFilePolicy`).\n3. Root cause: the SDK renamed these exports (`BetaBrowserState`, `BetaScreenshotResult`, `BetaLocalFilePolicy`, and `ToolError` moved to `anthropic.tools`), so the old names raise `ImportError`."
+   }
+  },
+  {
+   "repo": "browser-use/browser-use",
+   "number": 5703,
+   "title": "fix(openrouter): pass custom fields through SDK extra_body",
+   "base_sha": "e25ab65e699af3031a1f2d348526de2844be0e89",
+   "semgrep_total": 7,
+   "semgrep_hits_changed_files": 0,
+   "detected": false,
+   "hit_detail": [],
+   "opencode": {
+    "ok": true,
+    "verdict": "unclear",
+    "analysis": "1. **real-bug**\n2. `browser_use/llm/openrouter/chat.py:170` and `:202`\n3. `**(self.extra_body or {})` splats provider-specific fields as `create()` kwargs instead of forwarding them through the OpenAI SDK’s `extra_body`, so keys like `provider`/`transforms` never reach the HTTP JSON body and unknown keys can raise `TypeError`."
+   }
+  },
+  {
+   "repo": "langchain-ai/langsmith-sdk",
+   "number": 3716,
+   "title": "fix(py): make the /runs/multipart 404 fallback to /runs/batch reachable",
+   "base_sha": "30e5f701eaaaca3db007b294074355f240e53ed3",
+   "semgrep_total": 2,
+   "semgrep_hits_changed_files": 0,
+   "detected": false,
+   "hit_detail": [],
+   "opencode": {
+    "ok": true,
+    "verdict": "unclear",
+    "analysis": "(1) **real-bug.** (2) `python/langsmith/client.py:3710` (the generic `except Exception` in `_send_multipart_req`; fix is the re-raise added after line 3699). (3) The broad handler swallowed `LangSmithNotFoundError`, so `_multipart_ingest_ops`'s 404 fallback at line 3439 to `/runs/batch` was unreachable; the re-raise restores it."
+   }
+  },
+  {
+   "repo": "langchain-ai/langsmith-sdk",
+   "number": 3714,
+   "title": "fix(py): stop sandbox run() from waiting 100ms for the server's TCP close",
+   "base_sha": "84a1dc01d5f1939a1dddcc5e4e21ccedc5c97d06",
+   "semgrep_total": 2,
+   "semgrep_hits_changed_files": 0,
+   "detected": false,
+   "hit_detail": [],
+   "opencode": {
+    "ok": true,
+    "verdict": "unclear",
+    "analysis": "1. **real-bug** — a fixed per-command latency bug.\n2. `python/langsmith/sandbox/_ws_execute.py:61` (`WS_CLOSE_TIMEOUT` default; used at `:424`, `:533`, `:627`, `:718`).\n3. The 0.1s `close_timeout` was consumed on every `run()` waiting for the server's trailing TCP FIN, adding a fixed ~100ms to each command; lowering it to 0.01s removes most of that wait."
+   }
+  }
+ ],
+ "finished": "2026-10-25T09:36:35"
+}

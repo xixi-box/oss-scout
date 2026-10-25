@@ -72,8 +72,8 @@
 
 ## 9. 阻塞与未验证项
 
-1. **GitHub Actions artifact 存储配额已满**（账号级）：大补丁传输需清理旧 artifacts，当前走日志信封（~64KB 上限）。
-2. **真实第三方 Bug 复现数为 0**：Bug Hunter 只能宣称"功能链路可运行"，有效性待 Shadow Run（更宽规则集 + 复现任务接入）。
-3. health.json 已过期（>7 天），重跑被用户暂停中。
-4. review/ci 两种 worker 模式仍是骨架。
-5. discover.py 今日全量扫描耗时 40+ 分钟（TLS 退避放大），需在 VPS 环境复测基线。
+1. **GitHub Actions artifact 存储配额已满**（账号级）：实测盘点 73 仓 artifacts 仅 2.1MB，头号嫌疑为 Packages 容器镜像（joyshockmapper-site / cad2shp，API 不回显大小）；账单 API 需 `user` scope。清理工具 `scripts/artifacts_cleanup.py` 已就绪，待用户确认删除范围。
+2. **Bug Hunter 有效性基准（2026-10-25 补测）**：用"已合并 bugfix PR"当 ground truth 回溯 6 例——semgrep 命中改动文件 **1/6**，OpenCode 凭 diff 判真 **0/6**（verdict 均为 unclear）。解读：选样多为依赖升级/字段透传/路由回退等逻辑类修复，本就不在静态安全规则能覆盖的类内；结论——`p/python` 通用规则 + 裸 diff 分析对逻辑类 Bug 无效，有效性改进方向是"仓库自身测试做差分验证 + maintainer-confirmed 泳道"，而非调规则参数。成本 $0.03。
+3. **首个 A 级候选消费尝试（opencode#56297，2026-10-25）**：实时复检通过（open/无 assignee/龄 8d/reproduced 标签），但根因为分发渠道缺失（包未上架 winget-pkgs）且竞争 PR #56897（18 文件 Windows 分发重构）在途 → 按 Playbook §0.2 记 `aborted_competed`，未评论未认领，当日认领额度主动未用。
+4. health.json 重跑已按用户指示恢复（进行中）。
+5. review/ci 两种 worker 模式仍是骨架。

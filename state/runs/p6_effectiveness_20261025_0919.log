@@ -1,0 +1,22 @@
+D:\dev\miniconda3\Lib\site-packages\modal\_utils\async_utils.py:43: DeprecationWarning: 'asyncio.WindowsSelectorEventLoopPolicy' is deprecated and slated for removal in Python 3.16
+  asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+D:\dev\miniconda3\Lib\site-packages\modal\_utils\async_utils.py:43: DeprecationWarning: 'asyncio.set_event_loop_policy' is deprecated and slated for removal in Python 3.16
+  asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+[eff] metered at start: 0.03014061
+[eff] openai/openai-agents-python: 2 qualifying bugfix PRs
+  PR#5384: detected=True opencode=unclear
+  PR#5379: detected=False opencode=unclear
+[eff] browser-use/browser-use: 2 qualifying bugfix PRs
+  PR#6076: detected=False opencode=unclear
+  PR#5703: detected=False opencode=unclear
+[eff] langchain-ai/langsmith-sdk: 2 qualifying bugfix PRs
+  PR#3716: detected=False opencode=unclear
+  PR#3714: detected=False opencode=unclear
+{
+ "benchmark": "ground-truth regression (merged bugfix PRs, scanned pre-fix)",
+ "pr_count": 6,
+ "semgrep_detected": 1,
+ "opencode_real_bug": 0,
+ "metered_after": 0.06019288,
+ "finished": "2026-10-25T09:36:35"
+}
