@@ -293,3 +293,47 @@
 {"ts": "2026-10-25T12:11:29", "action": "cloudflare_kv_pull_mode", "result": "per user: wrangler OAuth blocked (dash auth timeout) but api.cloudflare.com direct OK -> deploy via CLOUDFLARE_API_TOKEN (no login). Ingest redesigned to KV pull: worker writes pending:<ts> batches (TTL 1h) + since watermark every 5min (KV free 1000 writes/day budget); dashboard background thread pulls KV every 60s via CF API, ingests via discover.score, deletes processed keys. No tunnel/server needed. GH token received (stored for wrangler secret). Awaiting user: CF API token + account id. 192 tests green."}
 {"ts": "2026-10-25T12:47:50", "action": "cloudflare_hunter_live", "result": "DEPLOYED AND LIVE: wrangler deploy via CLOUDFLARE_API_TOKEN (no OAuth); cron * * * * * active; diag key shows ok_repos=14/14 errors=[] after GH token rotation (first token was Bad credentials). KV pull mode verified end-to-end (pulled 3 batches). Local pull hardened with TLS retries. Dashboard background thread ingests every 60s. Sole discovery channel per user (discover.py fallback disabled). 192 tests green."}
 {"ts": "2026-10-25T12:48:18", "action": "dashboard_login", "target": "web-ui", "result": "login ok", "source": "web-ui"}
+{"ts": "2026-10-25T13:06:40", "action": "dashboard_login", "target": "web-ui", "result": "login ok", "source": "web-ui"}
+{"ts": "2026-10-25T13:14:57", "action": "pipeline_abort", "target": "xixi-box/oss-scout-v2-test#999", "result": "recheck incomplete: ['issue fetch failed', 'comments fetch failed']"}
+{"ts": "2026-10-25T13:28:52", "action": "claim", "target": "xixi-box/oss-scout-v2-test#5", "source": "auto-pipeline"}
+{"ts": "2026-10-25T13:31:36", "action": "claim", "target": "xixi-box/oss-scout-v2-test#5", "source": "auto-pipeline"}
+{"ts": "2026-10-25T13:31:42", "action": "pipeline_abort", "target": "xixi-box/oss-scout-v2-test#5", "result": "no test_cmd for this candidate (need failing test first); claim released"}
+{"ts": "2026-10-25T13:32:36", "action": "claim", "target": "xixi-box/oss-scout-v2-test#5", "source": "auto-pipeline"}
+{"ts": "2026-10-25T13:32:41", "action": "pipeline_abort", "target": "xixi-box/oss-scout-v2-test#5", "result": "no test_cmd and none inferable (need failing test first); claim released"}
+{"ts": "2026-10-25T13:33:43", "action": "claim", "target": "xixi-box/oss-scout-v2-test#5", "source": "auto-pipeline"}
+{"ts": "2026-10-25T13:34:13", "action": "pipeline_abort", "target": "xixi-box/oss-scout-v2-test#5", "result": "evidence chain incomplete: failed repro=True fixed=False gate=PASS; claim released"}
+{"ts": "2026-10-25T13:39:57", "action": "pipeline_abort", "target": "xixi-box/oss-scout-v2-test#5", "result": "recheck incomplete: ['issue fetch failed', 'comments fetch failed']"}
+{"ts": "2026-10-25T13:40:21", "action": "pipeline_abort", "target": "xixi-box/oss-scout-v2-test#6", "result": "recheck incomplete: ['issue fetch failed']"}
+{"ts": "2026-10-25T13:41:28", "action": "claim", "target": "xixi-box/oss-scout-v2-test#5", "source": "auto-pipeline"}
+{"ts": "2026-10-25T13:41:38", "action": "pipeline_abort", "target": "xixi-box/oss-scout-v2-test#5", "result": "head sha failed; claim released"}
+{"ts": "2026-10-25T13:42:16", "action": "claim", "target": "xixi-box/oss-scout-v2-test#6", "source": "auto-pipeline"}
+{"ts": "2026-10-25T13:42:26", "action": "pipeline_abort", "target": "xixi-box/oss-scout-v2-test#6", "result": "head sha failed; claim released"}
+{"ts": "2026-10-25T13:43:53", "action": "pipeline_abort", "target": "xixi-box/oss-scout-v2-test#5", "result": "recheck incomplete: ['issue fetch failed', 'comments fetch failed']"}
+{"ts": "2026-10-25T13:44:12", "action": "pipeline_abort", "target": "xixi-box/oss-scout-v2-test#6", "result": "recheck incomplete: ['issue fetch failed', 'comments fetch failed']"}
+{"ts": "2026-10-25T13:44:51", "action": "claim", "target": "xixi-box/oss-scout-v2-test#5", "source": "auto-pipeline"}
+{"ts": "2026-10-25T13:45:37", "action": "pipeline_abort", "target": "xixi-box/oss-scout-v2-test#5", "result": "evidence chain incomplete: failed repro=True fixed=False gate=PASS; claim released"}
+{"ts": "2026-10-25T13:46:03", "action": "pipeline_abort", "target": "xixi-box/oss-scout-v2-test#6", "result": "recheck incomplete: ['issue fetch failed', 'comments fetch failed']"}
+{"ts": "2026-10-25T13:47:58", "action": "claim", "target": "xixi-box/oss-scout-v2-test#5", "source": "auto-pipeline"}
+{"ts": "2026-10-25T13:50:31", "action": "pipeline_abort", "target": "xixi-box/oss-scout-v2-test#5", "result": "evidence chain incomplete: failed repro=True fixed=False gate=PASS; claim released"}
+{"ts": "2026-10-25T13:53:11", "action": "pipeline_abort", "target": "xixi-box/oss-scout-v2-test#5", "result": "recheck incomplete: ['issue fetch failed', 'comments fetch failed']"}
+{"ts": "2026-10-25T13:56:08", "action": "pipeline_abort", "target": "xixi-box/oss-scout-v2-test#6", "result": "recheck incomplete: ['issue fetch failed', 'comments fetch failed']"}
+{"ts": "2026-10-25T13:59:13", "action": "claim", "target": "xixi-box/oss-scout-v2-test#6", "source": "auto-pipeline"}
+{"ts": "2026-10-25T13:59:57", "action": "pipeline_abort", "target": "xixi-box/oss-scout-v2-test#6", "result": "evidence chain incomplete: failed repro=True fixed=False gate=PASS; claim released"}
+{"ts": "2026-10-25T14:00:48", "action": "claim", "target": "xixi-box/oss-scout-v2-test#6", "source": "auto-pipeline"}
+{"ts": "2026-10-25T14:02:17", "action": "pipeline_abort", "target": "xixi-box/oss-scout-v2-test#6", "result": "evidence chain incomplete: failed repro=True fixed=False gate=PASS; claim released"}
+{"ts": "2026-10-25T14:03:35", "action": "claim", "target": "xixi-box/oss-scout-v2-test#6", "source": "auto-pipeline"}
+{"ts": "2026-10-25T14:05:40", "action": "pipeline_abort", "target": "xixi-box/oss-scout-v2-test#6", "result": "evidence chain incomplete: failed repro=True fixed=False gate=PASS; claim released"}
+{"ts": "2026-10-25T14:08:01", "action": "claim", "target": "xixi-box/oss-scout-v2-test#6", "source": "auto-pipeline"}
+{"ts": "2026-10-25T14:09:17", "action": "pipeline_abort", "target": "xixi-box/oss-scout-v2-test#6", "result": "evidence chain incomplete: failed repro=True fixed=False gate=PASS; claim released"}
+{"ts": "2026-10-25T14:13:57", "action": "pipeline_abort", "target": "xixi-box/oss-scout-v2-test#6", "result": "recheck incomplete: ['comments fetch failed']"}
+{"ts": "2026-10-25T14:16:48", "action": "claim", "target": "xixi-box/oss-scout-v2-test#6", "source": "auto-pipeline"}
+{"ts": "2026-10-25T14:17:23", "action": "pipeline_abort", "target": "xixi-box/oss-scout-v2-test#6", "result": "evidence chain incomplete: failed repro=True fixed=False gate=PASS; claim released"}
+{"ts": "2026-10-25T14:18:53", "action": "claim", "target": "xixi-box/oss-scout-v2-test#6", "source": "auto-pipeline"}
+{"ts": "2026-10-25T14:20:15", "action": "pipeline_abort", "target": "xixi-box/oss-scout-v2-test#6", "result": "evidence chain incomplete: failed repro=True fixed=False gate=PASS; claim released"}
+{"ts": "2026-10-25T14:22:38", "action": "claim", "target": "xixi-box/oss-scout-v2-test#6", "source": "auto-pipeline"}
+{"ts": "2026-10-25T14:24:48", "action": "pipeline_abort", "target": "xixi-box/oss-scout-v2-test#6", "result": "evidence chain incomplete: failed repro=True fixed=False gate=PASS; claim released"}
+{"ts": "2026-10-25T14:25:59", "action": "claim", "target": "xixi-box/oss-scout-v2-test#6", "source": "auto-pipeline"}
+{"ts": "2026-10-25T14:27:14", "action": "pipeline_abort", "target": "xixi-box/oss-scout-v2-test#6", "result": "evidence chain incomplete: failed repro=True fixed=False gate=PASS; claim released"}
+{"ts": "2026-10-25T14:29:12", "action": "claim", "target": "xixi-box/oss-scout-v2-test#6", "source": "auto-pipeline"}
+{"ts": "2026-10-25T14:29:42", "action": "pipeline_pr_open", "target": "xixi-box/oss-scout-v2-test#6", "result": "https://github.com/xixi-box/oss-scout-v2-test/pull/7 (auto pipeline)"}
+{"ts": "2026-10-25T14:31:06", "action": "auto_pipeline_e2e_verified", "result": "FULL AUTO PIPELINE VERIFIED end-to-end on internal repo: worker ingest -> AI grade A/10 + rule A/7 -> recheck ok -> claim -> test_cmd inferred from issue body -> opencode repaired (calc.py 1-line) -> base-fail/patched-pass evidence -> quality gate PASS -> PR#7 (clean, calc.py only) -> pr-ci pytest pass 9s -> MERGED. Root cause of prior failures found: env_base={} built near-empty env (Winsock WinError 10106 killed pytest); fixed to env_base=None (inherit+blacklist). Also fixed this round: ingest lane source (PolicyEngine), thin_body AI-A exemption, body_excerpt persistence, claim ledger lifecycle, head-sha retries, edit-only opencode tolerance, RUN_TASK_MSG firmness, terminal status marking (no infinite retries), 10106 retry, RUN_CMD 10106 retry. Bug-finder cadence lowered to daily (v2.yaml daily_scan_hour_local). 193 tests green."}

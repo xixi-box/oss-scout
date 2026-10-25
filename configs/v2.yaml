@@ -52,7 +52,9 @@ features:
   opencode_models: true               # P4：opencode-go/deepseek-v4-flash（用户 Go 订阅，2026-10-25）
 
 bug_hunter:
-  # MVP 3~5 个中小型 Python 仓库，从 config.json 现有监控名单里选（用户 2026-10-25 确认来源）
+  # 用户裁定（2026-10-25）：Modal 用量有限，找 Bug 每日 1 次（非每分钟）；
+  # issue 发现靠 Cloudflare Worker（每分钟），AI 细筛后自动进修复流程。
+  daily_scan_hour_local: 4            # 本地每日 04:00 跑一轮 Modal 扫描
   mvp_repos:
     - "openai/openai-agents-python"
     - "browser-use/browser-use"

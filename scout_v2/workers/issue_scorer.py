@@ -71,7 +71,8 @@ class GoClient:
         return False, last
 
     def list_models(self) -> list[str]:
-        """Go 套餐可用模型 ID 列表。失败返回空列表。"""
+        """Go 套餐可用模型 ID 列表，每次实时从 OpenCode 拉取（绝不写死）。
+        失败返回空列表——界面显示"拉取失败"，不用本地兜底表。"""
         try:
             req = urllib.request.Request(f"{BASE}/models", headers=self._headers())
             with urllib.request.urlopen(req, timeout=self.timeout) as r:

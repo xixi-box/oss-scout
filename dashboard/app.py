@@ -559,6 +559,18 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
                f"repos={len(cfg['repos'])} token_set={bool(cfg['api_token'])}")
         return RedirectResponse("/quota", status_code=303)
 
+    @app.get("/api/pipeline/preview")
+    def api_pipeline_preview():
+        from scout_v2.workers.auto_pipeline import drain_ai_graded
+        return JSONResponse({"would_process": drain_ai_graded(root, limit=3, dry_run=True)})
+
+    @app.post("/api/pipeline/run")
+    def api_pipeline_run(request: Request):
+        from scout_v2.workers.auto_pipeline import drain_ai_graded
+        out = drain_ai_graded(root, limit=1, dry_run=False)
+        _audit(root, "pipeline_run", "auto", json.dumps(out, ensure_ascii=False)[:400])
+        return JSONResponse({"results": out})
+
     @app.post("/api/cloudflare/pull")
     def api_cloudflare_pull():
         out = D.cloudflare_pull(ds)

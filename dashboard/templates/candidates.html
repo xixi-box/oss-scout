@@ -1,6 +1,40 @@
 {% extends "base.html" %}
 {% block title %}候选池 · oss-scout{% endblock %}
 {% block content %}
+<div class="card mt">
+  <h2 style="font-size:18px">AI 细筛 → 自动修复流水线</h2>
+  <p class="muted small">筛选条件：AI 评 A + 规则 A/B + 未处理。执行前自动过：实时复检（竞争信号）→ 每日认领闸 → 证据链质量闸。闸门池仓库只记录不自动 PR。</p>
+  <div class="chips">
+    <button class="btn btn-ghost" id="pipe-preview" type="button">预览将处理哪些</button>
+    <button class="btn btn-primary" id="pipe-run" type="button">执行 1 条（全合规门）</button>
+    <span id="pipe-result" class="small muted"></span>
+  </div>
+  <script>
+  document.getElementById("pipe-preview").addEventListener("click", async function () {
+    const out = document.getElementById("pipe-result");
+    out.textContent = "加载…";
+    try {
+      const r = await fetch("/api/pipeline/preview");
+      const j = await r.json();
+      const list = j.would_process || [];
+      out.textContent = list.length ? list.map(x => x.id + "（AI:" + x.ai + "/规则:" + x.rule + "）").join("；") : "当前无符合条件候选";
+    } catch (e) { out.textContent = "失败：" + e; }
+  });
+  document.getElementById("pipe-run").addEventListener("click", async function () {
+    if (!confirm("将执行自动修复并可能向外部仓库提交 PR（过全部合规门，每日 1 条上限）。继续？")) return;
+    const out = document.getElementById("pipe-result");
+    out.textContent = "执行中（复检→修复→验证，最长 10 分钟）…";
+    this.disabled = true;
+    try {
+      const r = await fetch("/api/pipeline/run", {method: "POST"});
+      const j = await r.json();
+      out.textContent = JSON.stringify(j.results || j, null, 0).slice(0, 400);
+    } catch (e) { out.textContent = "失败：" + e; }
+    finally { this.disabled = false; }
+  });
+  </script>
+</div>
+
 <h1 class="display">候选池</h1>
 <div class="card">
   <form method="get" class="filters">

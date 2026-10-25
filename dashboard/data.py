@@ -556,12 +556,14 @@ def ingest_cloudflare_issues(ds, items: list[dict]) -> int:
     q = ds._cached("candidates", 5.0, _read_json(ds.root / "queue" / "candidates.json", {}))
     seen_path = ds.root / "state" / "seen.json"
     seen = _read_json(seen_path, {})()
-    cfg = ds.config_json()
+    # lane 判定走策略层（repositories.yaml + lane_overrides 合并，PolicyEngine 同源），
+    # 而非 config.json 发现名单——否则名单外仓库（如内部测试仓）会被静默丢弃
+    from scout_v2.repo_policy import PolicyEngine
+    eng, _eng_err = PolicyEngine.load(ds.root)
     lane_of: dict[str, str] = {}
-    for pool_key, lane in (("open_pool", "open"), ("gated_pool", "gated"),
-                           ("restricted_pool", "restricted"), ("observe_only", "observe")):
-        for it in cfg.get(pool_key) or []:
-            lane_of[it if isinstance(it, str) else it.get("repo", "")] = lane
+    if eng is not None:
+        for repo_name in ((eng.repos_cfg.get("repositories") or {})):
+            lane_of[repo_name] = eng.repo_lane(repo_name)
 
     now_iso = dt.datetime.now().isoformat(timespec="seconds")
     # AI 评分（用户裁定 2026-10-25）：对每条候选调 Go API，与规则评分并列存储；
@@ -586,17 +588,29 @@ def ingest_cloudflare_issues(ds, items: list[dict]) -> int:
         title = str(it.get("title", ""))
         body = str(it.get("body_excerpt", ""))
         labels = [str(l) for l in (it.get("labels") or [])]
+        # AI 评分先行：thin_body 一票否决可被 AI A 级豁免（用户裁定 2026-10-25）
+        ai_grade = None
+        if scorer is not None:
+            try:
+                ai_grade = scorer.score_issue({
+                    "repo": repo, "number": number, "title": title,
+                    "labels": labels, "reactions": int(it.get("reactions") or 0),
+                    "comments": int(it.get("comments") or 0), "body_excerpt": body})
+            except Exception:  # noqa: BLE001 — 评分失败不阻塞入队
+                ai_grade = {"grade": "error"}
         sig = {"body_len": len(body), "reactions": int(it.get("reactions") or 0),
                "labels": labels, "comments": int(it.get("comments") or 0),
                "claim_signal": False, "maintainer_confirm": False,
                "duplicate_flag": False, "billing_flag": False, "bot_claim": False,
                "cross_ref_pr": False,
-               "repro_signal": bool(discover.RE_REPRO.search(body))}
+               "repro_signal": bool(discover.RE_REPRO.search(body)),
+               "ai_grade_a": bool(ai_grade and ai_grade.get("grade") == "A")}
         try:
             score, sclass, blockers = discover.score(title, sig, it.get("created_at", ""), lane)
         except Exception:  # noqa: BLE001
             continue
-        if sclass == "C":
+        if sclass == "C" and not (ai_grade and ai_grade.get("grade") == "A"):
+            # AI A 级即使规则 C 也入队（带双方评分供人工复核），这是细筛的意义
             seen[key] = {"first_seen": now_iso,
                          "status": "blocked" if blockers else "lowscore"}
             continue
@@ -605,15 +619,10 @@ def ingest_cloudflare_issues(ds, items: list[dict]) -> int:
                  "lane": lane, "score": score, "class": sclass, "blockers": blockers,
                  "signals": {**sig, "labels": labels}, "created_at": it.get("created_at", ""),
                  "discovered_at": now_iso, "status": "new", "lease": None,
-                 "source": "cloudflare-worker"}
-        if scorer is not None:
-            try:
-                entry["ai_grade"] = scorer.score_issue({
-                    "repo": repo, "number": number, "title": title,
-                    "labels": labels, "reactions": sig["reactions"],
-                    "comments": sig["comments"], "body_excerpt": body})
-            except Exception:  # noqa: BLE001 — 评分失败不阻塞入队
-                entry["ai_grade"] = {"grade": "error"}
+                 "source": "cloudflare-worker",
+                 "body_excerpt": body[:2000]}
+        if ai_grade is not None:
+            entry["ai_grade"] = ai_grade
         q[key] = entry
         seen[key] = {"first_seen": now_iso, "status": "queued"}
         queued += 1

@@ -1104,5 +1104,262 @@
   "status": "new",
   "lease": null,
   "source": "cloudflare-worker"
+ },
+ "anomalyco/opencode#58891": {
+  "id": "anomalyco/opencode#58891",
+  "repo": "anomalyco/opencode",
+  "number": 58891,
+  "title": "fix(core): explain a 403 \"Workspace access denied\" from OpenCode Console instead of showing it raw",
+  "url": "https://github.com/anomalyco/opencode/issues/58891",
+  "lane": "open",
+  "score": 2,
+  "class": "C",
+  "blockers": [],
+  "signals": {
+   "body_len": 4000,
+   "reactions": 0,
+   "labels": [],
+   "comments": 1,
+   "claim_signal": false,
+   "maintainer_confirm": false,
+   "duplicate_flag": false,
+   "billing_flag": false,
+   "bot_claim": false,
+   "cross_ref_pr": false,
+   "repro_signal": false,
+   "ai_grade_a": true
+  },
+  "created_at": "2026-10-25T05:16:32Z",
+  "discovered_at": "2026-10-25T13:26:21",
+  "status": "new",
+  "lease": null,
+  "source": "cloudflare-worker",
+  "ai_grade": {
+   "grade": "A",
+   "score": 8,
+   "reason": "Clear reproducible error-handling bug with concrete logs/code paths and a small, well-scoped fix to explain unexplained 403s.",
+   "model": "deepseek-v4.1-flash"
+  }
+ },
+ "anomalyco/opencode#58789": {
+  "id": "anomalyco/opencode#58789",
+  "repo": "anomalyco/opencode",
+  "number": 58789,
+  "title": "429 rate limit after few request/ 429 rate limit persist even after a day reset on free models",
+  "url": "https://github.com/anomalyco/opencode/issues/58789",
+  "lane": "open",
+  "score": 4,
+  "class": "B",
+  "blockers": [],
+  "signals": {
+   "body_len": 432,
+   "reactions": 0,
+   "labels": [
+    "pending close",
+    "triaging"
+   ],
+   "comments": 2,
+   "claim_signal": false,
+   "maintainer_confirm": false,
+   "duplicate_flag": false,
+   "billing_flag": false,
+   "bot_claim": false,
+   "cross_ref_pr": false,
+   "repro_signal": true
+  },
+  "created_at": "2026-10-24T20:02:58Z",
+  "discovered_at": "2026-10-25T13:31:53",
+  "status": "new",
+  "lease": null,
+  "source": "cloudflare-worker",
+  "ai_grade": {
+   "grade": "C",
+   "score": 2,
+   "reason": "Rate-limit/quota complaint with no reproduction, version, or actionable bug details.",
+   "model": "deepseek-v4.1-flash"
+  }
+ },
+ "xixi-box/oss-scout-v2-test#5": {
+  "id": "xixi-box/oss-scout-v2-test#5",
+  "repo": "xixi-box/oss-scout-v2-test",
+  "number": 5,
+  "title": "div() returns integer division instead of true division",
+  "url": "u",
+  "lane": "open",
+  "score": 7,
+  "class": "A",
+  "blockers": [],
+  "signals": {
+   "body_len": 162,
+   "reactions": 3,
+   "labels": [
+    "bug"
+   ],
+   "comments": 0,
+   "claim_signal": false,
+   "maintainer_confirm": false,
+   "duplicate_flag": false,
+   "billing_flag": false,
+   "bot_claim": false,
+   "cross_ref_pr": false,
+   "repro_signal": true,
+   "ai_grade_a": true
+  },
+  "created_at": "2026-10-25T00:00:00Z",
+  "discovered_at": "2026-10-25T13:32:20",
+  "status": "aborted_no_evidence",
+  "lease": null,
+  "source": "cloudflare-worker",
+  "ai_grade": {
+   "grade": "A",
+   "score": 10,
+   "reason": "Clear reproducible bug with a failing regression test, small fix scope, and no competing work indicated.",
+   "model": "deepseek-v4.1-flash"
+  },
+  "body_excerpt": "Steps to reproduce: call div(7,2) in calc.py. Expected 3.5, actual 3. The regression test test_div.py fails on current main. Fix the implementation, not the test."
+ },
+ "xixi-box/oss-scout-v2-test#6": {
+  "id": "xixi-box/oss-scout-v2-test#6",
+  "repo": "xixi-box/oss-scout-v2-test",
+  "number": 6,
+  "title": "div() uses integer division, breaks test_div",
+  "url": "u",
+  "lane": "open",
+  "score": 7,
+  "class": "A",
+  "blockers": [],
+  "signals": {
+   "body_len": 170,
+   "reactions": 4,
+   "labels": [
+    "bug"
+   ],
+   "comments": 0,
+   "claim_signal": false,
+   "maintainer_confirm": false,
+   "duplicate_flag": false,
+   "billing_flag": false,
+   "bot_claim": false,
+   "cross_ref_pr": false,
+   "repro_signal": true,
+   "ai_grade_a": true
+  },
+  "created_at": "2026-10-25T00:00:00Z",
+  "discovered_at": "2026-10-25T13:38:58",
+  "status": "pr_open",
+  "lease": null,
+  "source": "cloudflare-worker",
+  "body_excerpt": "Steps to reproduce: call div(7,2) in calc.py at main. Expected 3.5, actual 3. The regression test test_div.py fails on current main. Fix the implementation, not the test.",
+  "ai_grade": {
+   "grade": "A",
+   "score": 10,
+   "reason": "Clear reproducible integer-division bug with a failing regression test and small, isolated fix scope.",
+   "model": "deepseek-v4.1-flash"
+  }
+ },
+ "anomalyco/opencode#58897": {
+  "id": "anomalyco/opencode#58897",
+  "repo": "anomalyco/opencode",
+  "number": 58897,
+  "title": "After upgrading from 1.19 to 2.0, attempting to switch Mimo reasoning replies \"does not support any variants\"",
+  "url": "https://github.com/anomalyco/opencode/issues/58897",
+  "lane": "open",
+  "score": 4,
+  "class": "B",
+  "blockers": [],
+  "signals": {
+   "body_len": 783,
+   "reactions": 0,
+   "labels": [],
+   "comments": 0,
+   "claim_signal": false,
+   "maintainer_confirm": false,
+   "duplicate_flag": false,
+   "billing_flag": false,
+   "bot_claim": false,
+   "cross_ref_pr": false,
+   "repro_signal": true
+  },
+  "created_at": "2026-10-25T05:45:20Z",
+  "discovered_at": "2026-10-25T13:48:10",
+  "status": "new",
+  "lease": null,
+  "source": "cloudflare-worker",
+  "ai_grade": {
+   "grade": "error",
+   "score": null,
+   "reason": "<urlopen error [SSL: UNEXPECTED_EOF_WHILE_READING] EOF occurred in violation of protocol (_ssl.c:1082)>",
+   "model": "deepseek-v4.1-flash"
+  }
+ },
+ "anomalyco/opencode#58906": {
+  "id": "anomalyco/opencode#58906",
+  "repo": "anomalyco/opencode",
+  "number": 58906,
+  "title": "Free usage exceeded, subscribe to Go retrying in 64049s - attempt #1",
+  "url": "https://github.com/anomalyco/opencode/issues/58906",
+  "lane": "open",
+  "score": 4,
+  "class": "B",
+  "blockers": [],
+  "signals": {
+   "body_len": 427,
+   "reactions": 0,
+   "labels": [],
+   "comments": 0,
+   "claim_signal": false,
+   "maintainer_confirm": false,
+   "duplicate_flag": false,
+   "billing_flag": false,
+   "bot_claim": false,
+   "cross_ref_pr": false,
+   "repro_signal": true
+  },
+  "created_at": "2026-10-25T06:13:37Z",
+  "discovered_at": "2026-10-25T14:14:39",
+  "status": "new",
+  "lease": null,
+  "source": "cloudflare-worker",
+  "ai_grade": {
+   "grade": "C",
+   "score": 1,
+   "reason": "Billing/quota complaint with no reproduction or actionable bug details.",
+   "model": "deepseek-v4.1-flash"
+  }
+ },
+ "anomalyco/opencode#58909": {
+  "id": "anomalyco/opencode#58909",
+  "repo": "anomalyco/opencode",
+  "number": 58909,
+  "title": "config: the host drops an invalid provider entry and falls back to a built-in provider",
+  "url": "https://github.com/anomalyco/opencode/issues/58909",
+  "lane": "open",
+  "score": 4,
+  "class": "B",
+  "blockers": [],
+  "signals": {
+   "body_len": 4000,
+   "reactions": 0,
+   "labels": [],
+   "comments": 0,
+   "claim_signal": false,
+   "maintainer_confirm": false,
+   "duplicate_flag": false,
+   "billing_flag": false,
+   "bot_claim": false,
+   "cross_ref_pr": false,
+   "repro_signal": true
+  },
+  "created_at": "2026-10-25T06:26:30Z",
+  "discovered_at": "2026-10-25T14:26:56",
+  "status": "new",
+  "lease": null,
+  "source": "cloudflare-worker",
+  "ai_grade": {
+   "grade": "A",
+   "score": 9,
+   "reason": "Clear reproducible silent fallback to built-in provider after configured provider is dropped; small scoped fix with no competing work.",
+   "model": "deepseek-v4.1-flash"
+  }
  }
 }

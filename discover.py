@@ -225,7 +225,9 @@ def score(title: str, sig: dict, created_at: str, lane: str) -> tuple[int, str, 
         blockers.append("billing_complaint")
     if any(RE_FEATURE_LABEL.search(lb) for lb in sig["labels"]):
         blockers.append("feature_label")
-    if sig["body_len"] < 200:
+    if sig["body_len"] < 200 and not sig.get("ai_grade_a"):
+        # 用户裁定（2026-10-25）：AI 细筛 A 级可豁免 thin_body 一票否决
+        #（短正文≠低质，Worker 场景正文常被截断）；其余一票否决保持不变
         blockers.append("thin_body")
     if RE_BAD_TITLE.search(title):
         blockers.append("question_or_feature_title")

@@ -20,16 +20,15 @@ DENY_MARKERS = ("TOKEN", "SECRET", "KEY", "PASSWORD", "CREDENTIAL",
 
 
 def sanitized_env(base: dict | None = None, home: str | Path | None = None) -> dict:
-    """构造用于运行不可信代码的最小环境：白名单 + 敏感关键字双重过滤。"""
+    """运行不可信代码的环境：完整父环境 - 敏感项（黑名单制）。
+
+    历史教训（2026-10-25）：早期用白名单重建环境，剥掉的非敏感系统变量让
+    Windows Winsock 初始化随机失败（WinError 10106，pytest 全灭）。改为
+    继承完整环境、只剥敏感关键字项 + HOME/TMP 重定向——既保隔离又保可跑。
+    """
     base = base if base is not None else dict(__import__("os").environ)
-    env = {}
-    for k in ALLOW_KEYS:
-        if k in base:
-            env[k] = base[k]
-    for k, v in base.items():
-        ku = k.upper()
-        if any(m in ku for m in DENY_MARKERS):
-            env.pop(k, None)
+    env = {k: v for k, v in base.items()
+           if not any(m in k.upper() for m in DENY_MARKERS)}
     if home is not None:
         env["HOME"] = str(home)
         env["TMP"] = env["TEMP"] = str(home)

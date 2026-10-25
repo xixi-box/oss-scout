@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import time
 import tempfile
 from pathlib import Path
 
@@ -35,8 +36,9 @@ Rules:
 # 会挂起或解析异常；Bash shell 下手动执行正常。长 prompt 写入工作目录文件，
 # argv 只传单行指令。
 TASK_FILE = "OSSCOUT_TASK.md"
-RUN_TASK_MSG = ("Read the file OSSCOUT_TASK.md in the current directory and follow its "
-                "instructions exactly. When done editing, stop.")
+RUN_TASK_MSG = ("Fix the bug described in OSSCOUT_TASK.md in this repository NOW: read it, "
+                "then immediately make the minimal edit to the source file. Do not ask "
+                "questions. When done editing, stop.")
 
 
 def _git(args: list[str], cwd: Path, check: bool = True) -> subprocess.CompletedProcess:
@@ -45,14 +47,22 @@ def _git(args: list[str], cwd: Path, check: bool = True) -> subprocess.Completed
 
 
 def _run_cmd(cmd: list[str], cwd: Path, env: dict) -> tuple[int, str, str]:
-    try:
-        p = subprocess.run(cmd, cwd=cwd, env=env, capture_output=True, text=True,
-                           encoding="utf-8", errors="replace", timeout=1800)
-    except FileNotFoundError as exc:
-        return 127, "", str(exc)
-    except subprocess.TimeoutExpired as exc:
-        return 124, str(exc.stdout or ""), str(exc.stderr or "")
-    return p.returncode, p.stdout, p.stderr
+    last = (1, "", "")
+    for attempt in range(3):   # Windows 网络栈偶发 10106（与 TLS 抖动同源）：最多 3 次
+        try:
+            p = subprocess.run(cmd, cwd=cwd, env=env, capture_output=True, text=True,
+                               encoding="utf-8", errors="replace", timeout=1800)
+        except FileNotFoundError as exc:
+            return 127, "", str(exc)
+        except subprocess.TimeoutExpired as exc:
+            return 124, str(exc.stdout or ""), str(exc.stderr or "")
+        if p.returncode == 0:
+            return p.returncode, p.stdout, p.stderr
+        last = (p.returncode, p.stdout, p.stderr)
+        if "10106" not in (p.stderr or "") and "10106" not in (p.stdout or ""):
+            return last
+        time.sleep(8)
+    return last
 
 
 def enforce_domain_b(work_dir: Path) -> str:
@@ -139,7 +149,13 @@ def opencode_patch_producer(job: Job, work_dir: Path, context: str,
                                           encoding="utf-8")
         ok, detail = client.run(model, RUN_TASK_MSG)
         if not ok:
-            raise RuntimeError(f"opencode repair run failed: {detail[:300]}")
+            # 模型 edit 后直接停（无 text 事件）不罕见——看 diff 是否非空再定论
+            probe = _git(["diff", "--cached"], work_dir).stdout if False else None
+            diff_early = _git(["diff"], work_dir).stdout
+            if diff_early.strip():
+                ok, detail = True, "(no text events; changes present)"
+            else:
+                raise RuntimeError(f"opencode repair run failed: {detail[:300]}")
         notes.append(f"model({model}) said: {detail[:200]}")
     finally:
         # 权限配置/任务文件是我们的运行时产物，绝不能混进补丁
