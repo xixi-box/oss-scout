@@ -23,7 +23,8 @@ COPY tests_v2 ./tests_v2
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY docker/entrypoint-dashboard.sh /entrypoint.sh
+# Windows 工作区写出的文件权限是 644，必须显式 +x（否则 runc: permission denied）
+COPY --chmod=0755 docker/entrypoint-dashboard.sh /entrypoint.sh
 RUN useradd -m scout && mkdir -p /data && chown -R scout:scout /app /data
 USER scout
 ENV OSSCOUT_DASHBOARD_ROOT=/data
