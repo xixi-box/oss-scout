@@ -28,6 +28,22 @@ from .repair import run_repair
 from .quality_gate import verify_result
 
 
+
+def _data_root(root: Path) -> Path:
+    """数据根：queue/state 所在目录。
+
+    容器部署时源码在 /app、数据在 /data（卷）；本地开发两者同目录。
+    判断依据：queue/candidates.json 在哪就跟到哪。
+    """
+    root = Path(root)
+    if (root / "queue" / "candidates.json").exists():
+        return root
+    alt = Path(__import__("os").environ.get("OSSCOUT_DASHBOARD_ROOT", "/data"))
+    if (alt / "queue" / "candidates.json").exists():
+        return alt
+    return root
+
+
 def log(root: Path, action: str, target: str, result: str) -> None:
     rec = {"ts": time.strftime("%Y-%m-%dT%H:%M:%S"), "action": f"pipeline_{action}",
            "target": target, "result": result[:500]}
@@ -54,7 +70,7 @@ def mark_candidate(root: Path, key: str, status: str) -> None:
 def candidate_pipeline(root: Path, entry: dict, *,
                        max_files: int = 6) -> dict:
     """对单条候选执行：复检 → 合规 → 修复 → PR。返回动作摘要。"""
-    root = Path(root)
+    root = _data_root(root)
     repo, number = entry["repo"], entry["number"]
     key = entry["id"]
     summary = {"id": key, "steps": []}
@@ -152,7 +168,8 @@ def candidate_pipeline(root: Path, entry: dict, *,
             job.test_cmd = [sys.executable, "-m", "pytest", tf, "-q"]
             summary["steps"].append(f"test_cmd inferred: pytest {tf}")
         else:
-            _r = _abort_release("no test_cmd and none inferable (need failing test first)")
+            # AI 从 issue 描述生成最小回归测试（Playbook：原始版必须失败才算复现）
+            job.test_cmd = _ai_generate_test(job, clone, out, summary)
             mark_candidate(root, key, "aborted_no_test")
             return _r
     res = run_repair(job, clone, out, test_cmd=list(job.test_cmd),
@@ -204,12 +221,60 @@ def candidate_pipeline(root: Path, entry: dict, *,
     return summary
 
 
+
+def _ai_generate_test(job, clone: Path, out: Path, summary: dict) -> list[str]:
+    """让 AI 依据 issue 描述 + 仓库结构生成最小回归测试。
+
+    生成的测试写入 clone 的 tests/AI_JUDGE 前缀文件（唯一命名，避免覆盖项目测试）；
+    返回用于验证的 pytest 命令。失败返回 []（调用方据此 abort，不盲修）。
+    """
+    try:
+        import importlib
+        from ..workers.issue_scorer import GoClient, load_scorer_config
+        eng_cfg_root = Path(__import__("os").environ.get("OSSCOUT_DASHBOARD_ROOT", str(clone)))
+        cfg = load_scorer_config(_data_root(Path("/app")) if Path("/app").is_dir() else clone)
+        if not cfg.get("api_key"):
+            return []
+        # 仓库结构摘要：顶层目录 + 常见测试目录
+        top = sorted(p.name for p in clone.iterdir() if not p.name.startswith("."))[:25]
+        tests_dir = next((d for d in ("tests", "test", "spec") if (clone / d).is_dir()), None)
+        prompt = (
+            "You are writing a MINIMAL regression test that must FAIL on the current code "
+            "and PASS after the bug is fixed.\n"
+            f"Repo: {job.repo} @ {job.base_sha[:12]}\n"
+            f"Issue context:\n{job.context[:2500]}\n\n"
+            f"Top-level entries: {', '.join(top)}\n"
+            f"Existing test dir: {tests_dir or 'none'}\n\n"
+            "Output ONLY a single Python file content using pytest (no markdown fences, "
+            "no explanations). It must import from the repo's own modules and assert the "
+            "behaviour described in the issue."
+        )
+        client = GoClient(key=cfg["api_key"],
+                          model=cfg.get("model", "deepseek-v4.1-flash"), timeout=180)
+        ok, code = client.chat(prompt)
+        if not ok or "def test" not in code:
+            return []
+        code = code.strip()
+        if code.startswith("```"):
+            code = "\n".join(code.splitlines()[1:-1])
+        target_dir = clone / (tests_dir or ".")
+        tf = target_dir / "test_ai_regression_issue.py"
+        tf.parent.mkdir(parents=True, exist_ok=True)
+        tf.write_text(code, encoding="utf-8")
+        rel = str(tf.relative_to(clone)).replace("\\", "/")
+        summary["steps"].append(f"AI-generated regression test: {rel}")
+        return [sys.executable, "-m", "pytest", rel, "-q"]
+    except Exception as e:  # noqa: BLE001 — 生成失败 → 返回 []，调用方 abort
+        summary["steps"].append(f"AI test generation failed: {str(e)[:120]}")
+        return []
+
+
 def drain_ai_graded(root: Path, limit: int = 3, dry_run: bool = True) -> list[dict]:
     """扫描候选池：AI 评 A 且规则 A/B、未处理过的 → 逐条走 pipeline。
 
     dry_run=True 只报告"会处理哪些"，不做任何写动作。
     """
-    root = Path(root)
+    root = _data_root(root)
     q = json.loads((root / "queue" / "candidates.json").read_text(encoding="utf-8"))
     picked = []
     for key, e in q.items():

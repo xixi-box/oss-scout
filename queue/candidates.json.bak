@@ -4193,5 +4193,119 @@
    "reason": "Clear reproducible bug with narrow scope in error handling, expected behavior specified, and no competing work indicated.",
    "model": "deepseek-v4.1-flash"
   }
+ },
+ "deepset-ai/haystack#13448": {
+  "id": "deepset-ai/haystack#13448",
+  "repo": "deepset-ai/haystack",
+  "number": 13448,
+  "title": "DocumentToImageContent fails the whole batch when a direct image cannot be decoded",
+  "url": "https://github.com/deepset-ai/haystack/issues/13448",
+  "lane": "open",
+  "score": 2,
+  "class": "C",
+  "blockers": [],
+  "signals": {
+   "body_len": 1934,
+   "reactions": 0,
+   "labels": [],
+   "comments": 0,
+   "claim_signal": false,
+   "maintainer_confirm": false,
+   "duplicate_flag": false,
+   "billing_flag": false,
+   "bot_claim": false,
+   "cross_ref_pr": false,
+   "repro_signal": false,
+   "ai_grade_a": true
+  },
+  "created_at": "2026-10-26T14:17:26Z",
+  "discovered_at": "2026-10-26T22:40:56",
+  "status": "new",
+  "lease": null,
+  "source": "cloudflare-worker",
+  "body_excerpt": "**Describe the bug**\n\n`DocumentToImageContent` is designed to report per-document failures: invalid metadata, unsupported MIME types, unreadable PDFs and out-of-range PDF pages all become `None` in `image_contents` while the remaining documents are converted. Direct image files are the exception. When resizing is enabled (`size=...`), the image is decoded with Pillow, and a file whose bytes cannot be decoded raises `PIL.UnidentifiedImageError` out of `run()`, so every document in the batch is lost.\n\nThe PDF branch already catches its conversion errors and leaves `None` for that entry; the direct-image branch does not.\n\n**To Reproduce**\n\n```python\nfrom pathlib import Path\nimport tempfile\n\nfrom haystack import Document\nfrom haystack.components.converters.image import DocumentToImageContent\n\ncorrupt = Path(tempfile.mkdtemp()) / \"corrupt.jpg\"\ncorrupt.write_bytes(b\"not an image\")\n\nconverter = DocumentToImageContent(size=(64, 64))\nconverter.run(\n    documents=[\n        Document(content=\"\", meta={\"file_path\": \"test/test_files/images/apple.jpg\"}),\n        Document(content=\"\", meta={\"file_path\": str(corrupt)}),\n    ]\n)\n```\n\nActual result:\n\n```text\nPIL.UnidentifiedImageError: cannot identify image file <_io.BytesIO object ...>\n```\n\n**Expected behavior**\n\nThe valid image is returned, the corrupt image gets `None` in its `image_contents` slot, and a warning names the skipped document. One bad image must not discard the rest of the batch.\n\n**Additional context**\n\nWithout `size=...` the component copies the bytes without decoding them, so corrupt data is not detected there. The failure is specific to the resize path, which calls `_encode_image_to_base64` with a size and opens the image with Pillow.\n\n**System**\n\n- Haystack `main` at `e9aa11240a`\n- Python 3.12\n- `pypdfium2` and `Pillow` from the repository's test dependencies\n\nRequested labels: `bug`, `P3` (this account cannot set labels on the upstream repository).\n",
+  "ai_grade": {
+   "grade": "A",
+   "score": 9,
+   "reason": "Clear reproducible bug with small targeted fix and no competing work.",
+   "model": "deepseek-v4.1-flash"
+  }
+ },
+ "OpenHands/OpenHands#18980": {
+  "id": "OpenHands/OpenHands#18980",
+  "repo": "OpenHands/OpenHands",
+  "number": 18980,
+  "title": "[Bug]: Mid-turn errors strand the queued user message — no resume affordance, re-send duplicates the turn and deterministically re-triggers the failure",
+  "url": "https://github.com/OpenHands/OpenHands/issues/18980",
+  "lane": "open",
+  "score": 4,
+  "class": "B",
+  "blockers": [],
+  "signals": {
+   "body_len": 3785,
+   "reactions": 0,
+   "labels": [],
+   "comments": 0,
+   "claim_signal": false,
+   "maintainer_confirm": false,
+   "duplicate_flag": false,
+   "billing_flag": false,
+   "bot_claim": false,
+   "cross_ref_pr": false,
+   "repro_signal": true,
+   "ai_grade_a": false
+  },
+  "created_at": "2026-10-26T14:32:42Z",
+  "discovered_at": "2026-10-26T23:23:43",
+  "status": "new",
+  "lease": null,
+  "source": "cloudflare-worker",
+  "body_excerpt": "### Is there an existing issue for the same bug?\n\n- [x] I have searched existing issues and this is not a duplicate.\n\n(Adjacent but distinct: software-agent-sdk#6224 tracks the deterministic 5×300s silent timeout itself; #16719 the \"Thinking\" status shown while stuck/errored; #9595 duplicate sends from \"Push to Branch\". None cover the stranded-queued-message recovery gap below.)\n\n### Bug Description\n\nWhen a conversation's turn dies with a `ConversationErrorEvent` (e.g. `LLMTimeoutError` after the silent `num_retries=5` × 300s retry loop of software-agent-sdk#6224), the user message that triggered the turn has already been consumed but is never answered — and the conversation offers no resume/replay affordance. The only visible way to get the answer is to **re-send the same message**, which:\n\n1. duplicates the message in the transcript,\n2. re-runs the whole (now larger) context, and\n3. when the failure is deterministic (a generation that exceeds the 300s hard cap), silently hangs for ~27 minutes and errors out again — consuming the re-sent message the same way.\n\nNet effect: the conversation \"keeps failing\", can never \"continue where it left off\", and every recovery attempt grows the context — making the deterministic timeout more likely next time.\n\n### Evidence (OpenHands Cloud, conversation `2e163e560b2e4de5af2cd43838607d7c`, 2026-10-26, model `openrouter/xiaomi/mimo-v2.6-pro` via the LiteLLM proxy, `context_window: 1,000,000`)\n\n1. **13:01:58Z** — user message queued (the answer to three decisions the previous assistant turn had explicitly left open). `execution_status` → `running`.\n2. **13:28:59Z** — ~27 minutes of complete silence, then `ConversationErrorEvent` `LLMTimeoutError: litellm.Timeout: LLM hard timeout after 300 seconds`, `classification: {kind: \"transient\", retryable: true, user_action: \"retry\"}`. `execution_status` → `error`. The queued message is consumed; no assistant turn is produced.\n3. **13:40:32Z** — the user re-sends the **identical** message (t",
+  "ai_grade": {
+   "grade": "B",
+   "score": 7,
+   "reason": "Detailed, reproducible recovery bug with distinct adjacent issues, but the fix likely spans queue/error state and UI resume behavior, so scope is larger than a small A-grade issue.",
+   "model": "deepseek-v4.1-flash"
+  }
+ },
+ "OpenHands/OpenHands#18951": {
+  "id": "OpenHands/OpenHands#18951",
+  "repo": "OpenHands/OpenHands",
+  "number": 18951,
+  "title": "[Bug]: Transient LiteLLM token-not-found 401 at conversation start is reported as a fatal, non-retryable LLMAuthenticationError",
+  "url": "https://github.com/OpenHands/OpenHands/issues/18951",
+  "lane": "open",
+  "score": 4,
+  "class": "B",
+  "blockers": [],
+  "signals": {
+   "body_len": 4000,
+   "reactions": 0,
+   "labels": [
+    "priority:medium",
+    "ready-for-dev"
+   ],
+   "comments": 1,
+   "claim_signal": false,
+   "maintainer_confirm": false,
+   "duplicate_flag": false,
+   "billing_flag": false,
+   "bot_claim": false,
+   "cross_ref_pr": false,
+   "repro_signal": true,
+   "ai_grade_a": true
+  },
+  "created_at": "2026-10-26T00:24:00Z",
+  "discovered_at": "2026-10-26T23:23:43",
+  "status": "new",
+  "lease": null,
+  "source": "cloudflare-worker",
+  "body_excerpt": "### Is there an existing issue for the same bug?\n\n- [x] I have searched existing issues and this is not a duplicate.\n\n### Bug Description\n\nA brand-new conversation on OpenHands Cloud can emit a `ConversationErrorEvent` with `code: LLMAuthenticationError` on the **first** LLM call — an instant 401 from the LiteLLM proxy (\"Invalid proxy server token passed … Unable to find token in cache or `LiteLLM_VerificationTokenTable`\") — even though the token is valid and the very same call succeeds seconds later via the automatic retry. The conversation then works normally, but the chat is permanently marked as failed/errored in the UI and event log, and the error is classified as **non-retryable / `user_action: settings`**, which misleads users into rotating keys and \"fixing\" settings that were never broken.\n\nWe hit this in conversation `fb292e39-465d-4d50-9879-99174dd9e72f` on OpenHands Cloud (2026-10-25). Event timeline from the conversation event log:\n\n```\n23:02:22.084  MessageEvent      user message arrives\n23:02:22.154  state             execution_status = running\n23:02:22.220  ConversationErrorEvent\n              code: LLMAuthenticationError\n              detail: litellm.AuthenticationError: AuthenticationError:\n                Litellm_proxyException - Authentication Error,\n                Invalid proxy server token passed.\n                Received API Key = sk-...8fe4,\n                Key Hash (Token) = b991ad5c550d…e984.\n                Unable to find token in cache or `LiteLLM_VerificationTokenTable`\n              classification: {kind: auth, retryable: false, user_action: settings}\n23:02:29.6    ActionEvent       first agent turn completes successfully\n                                (llm_response_id gen-1792969342-…, latency 7.28 s)\n```\n\nThe 401 arrived **136 ms** after the request went out — an instant token-lookup miss, not a timeout and not a bad key. The retry of the very same call succeeded and the conversation went on to run dozens of tool calls normally. The ",
+  "ai_grade": {
+   "grade": "A",
+   "score": 9,
+   "reason": "Clear, reproducible transient-auth misclassification bug with detailed event timeline, concrete expected behavior, and a small retry/error-classification scope; related issues are distinct.",
+   "model": "deepseek-v4.1-flash"
+  }
  }
 }

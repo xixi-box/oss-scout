@@ -4230,5 +4230,121 @@
    "reason": "Clear reproducible bug with small targeted fix and no competing work.",
    "model": "deepseek-v4.1-flash"
   }
+ },
+ "OpenHands/OpenHands#18980": {
+  "id": "OpenHands/OpenHands#18980",
+  "repo": "OpenHands/OpenHands",
+  "number": 18980,
+  "title": "[Bug]: Mid-turn errors strand the queued user message — no resume affordance, re-send duplicates the turn and deterministically re-triggers the failure",
+  "url": "https://github.com/OpenHands/OpenHands/issues/18980",
+  "lane": "open",
+  "score": 4,
+  "class": "B",
+  "blockers": [],
+  "signals": {
+   "body_len": 3785,
+   "reactions": 0,
+   "labels": [],
+   "comments": 0,
+   "claim_signal": false,
+   "maintainer_confirm": false,
+   "duplicate_flag": false,
+   "billing_flag": false,
+   "bot_claim": false,
+   "cross_ref_pr": false,
+   "repro_signal": true,
+   "ai_grade_a": false
+  },
+  "created_at": "2026-10-26T14:32:42Z",
+  "discovered_at": "2026-10-26T23:23:43",
+  "status": "new",
+  "lease": null,
+  "source": "cloudflare-worker",
+  "body_excerpt": "### Is there an existing issue for the same bug?\n\n- [x] I have searched existing issues and this is not a duplicate.\n\n(Adjacent but distinct: software-agent-sdk#6224 tracks the deterministic 5×300s silent timeout itself; #16719 the \"Thinking\" status shown while stuck/errored; #9595 duplicate sends from \"Push to Branch\". None cover the stranded-queued-message recovery gap below.)\n\n### Bug Description\n\nWhen a conversation's turn dies with a `ConversationErrorEvent` (e.g. `LLMTimeoutError` after the silent `num_retries=5` × 300s retry loop of software-agent-sdk#6224), the user message that triggered the turn has already been consumed but is never answered — and the conversation offers no resume/replay affordance. The only visible way to get the answer is to **re-send the same message**, which:\n\n1. duplicates the message in the transcript,\n2. re-runs the whole (now larger) context, and\n3. when the failure is deterministic (a generation that exceeds the 300s hard cap), silently hangs for ~27 minutes and errors out again — consuming the re-sent message the same way.\n\nNet effect: the conversation \"keeps failing\", can never \"continue where it left off\", and every recovery attempt grows the context — making the deterministic timeout more likely next time.\n\n### Evidence (OpenHands Cloud, conversation `2e163e560b2e4de5af2cd43838607d7c`, 2026-10-26, model `openrouter/xiaomi/mimo-v2.6-pro` via the LiteLLM proxy, `context_window: 1,000,000`)\n\n1. **13:01:58Z** — user message queued (the answer to three decisions the previous assistant turn had explicitly left open). `execution_status` → `running`.\n2. **13:28:59Z** — ~27 minutes of complete silence, then `ConversationErrorEvent` `LLMTimeoutError: litellm.Timeout: LLM hard timeout after 300 seconds`, `classification: {kind: \"transient\", retryable: true, user_action: \"retry\"}`. `execution_status` → `error`. The queued message is consumed; no assistant turn is produced.\n3. **13:40:32Z** — the user re-sends the **identical** message (t",
+  "ai_grade": {
+   "grade": "B",
+   "score": 7,
+   "reason": "Detailed, reproducible recovery bug with distinct adjacent issues, but the fix likely spans queue/error state and UI resume behavior, so scope is larger than a small A-grade issue.",
+   "model": "deepseek-v4.1-flash"
+  }
+ },
+ "OpenHands/OpenHands#18951": {
+  "id": "OpenHands/OpenHands#18951",
+  "repo": "OpenHands/OpenHands",
+  "number": 18951,
+  "title": "[Bug]: Transient LiteLLM token-not-found 401 at conversation start is reported as a fatal, non-retryable LLMAuthenticationError",
+  "url": "https://github.com/OpenHands/OpenHands/issues/18951",
+  "lane": "open",
+  "score": 4,
+  "class": "B",
+  "blockers": [],
+  "signals": {
+   "body_len": 4000,
+   "reactions": 0,
+   "labels": [
+    "priority:medium",
+    "ready-for-dev"
+   ],
+   "comments": 1,
+   "claim_signal": false,
+   "maintainer_confirm": false,
+   "duplicate_flag": false,
+   "billing_flag": false,
+   "bot_claim": false,
+   "cross_ref_pr": false,
+   "repro_signal": true,
+   "ai_grade_a": true
+  },
+  "created_at": "2026-10-26T00:24:00Z",
+  "discovered_at": "2026-10-26T23:23:43",
+  "status": "new",
+  "lease": null,
+  "source": "cloudflare-worker",
+  "body_excerpt": "### Is there an existing issue for the same bug?\n\n- [x] I have searched existing issues and this is not a duplicate.\n\n### Bug Description\n\nA brand-new conversation on OpenHands Cloud can emit a `ConversationErrorEvent` with `code: LLMAuthenticationError` on the **first** LLM call — an instant 401 from the LiteLLM proxy (\"Invalid proxy server token passed … Unable to find token in cache or `LiteLLM_VerificationTokenTable`\") — even though the token is valid and the very same call succeeds seconds later via the automatic retry. The conversation then works normally, but the chat is permanently marked as failed/errored in the UI and event log, and the error is classified as **non-retryable / `user_action: settings`**, which misleads users into rotating keys and \"fixing\" settings that were never broken.\n\nWe hit this in conversation `fb292e39-465d-4d50-9879-99174dd9e72f` on OpenHands Cloud (2026-10-25). Event timeline from the conversation event log:\n\n```\n23:02:22.084  MessageEvent      user message arrives\n23:02:22.154  state             execution_status = running\n23:02:22.220  ConversationErrorEvent\n              code: LLMAuthenticationError\n              detail: litellm.AuthenticationError: AuthenticationError:\n                Litellm_proxyException - Authentication Error,\n                Invalid proxy server token passed.\n                Received API Key = sk-...8fe4,\n                Key Hash (Token) = b991ad5c550d…e984.\n                Unable to find token in cache or `LiteLLM_VerificationTokenTable`\n              classification: {kind: auth, retryable: false, user_action: settings}\n23:02:29.6    ActionEvent       first agent turn completes successfully\n                                (llm_response_id gen-1792969342-…, latency 7.28 s)\n```\n\nThe 401 arrived **136 ms** after the request went out — an instant token-lookup miss, not a timeout and not a bad key. The retry of the very same call succeeded and the conversation went on to run dozens of tool calls normally. The ",
+  "ai_grade": {
+   "grade": "A",
+   "score": 9,
+   "reason": "Clear, reproducible transient-auth misclassification bug with detailed event timeline, concrete expected behavior, and a small retry/error-classification scope; related issues are distinct.",
+   "model": "deepseek-v4.1-flash"
+  }
+ },
+ "anomalyco/opencode#58176": {
+  "id": "anomalyco/opencode#58176",
+  "repo": "anomalyco/opencode",
+  "number": 58176,
+  "title": "session: titles never generated in v2 (no auto trigger + free-tier rejection)",
+  "url": "https://github.com/anomalyco/opencode/issues/58176",
+  "lane": "open",
+  "score": 1,
+  "class": "C",
+  "blockers": [],
+  "signals": {
+   "body_len": 2424,
+   "reactions": 0,
+   "labels": [
+    "reproduced"
+   ],
+   "comments": 5,
+   "claim_signal": false,
+   "maintainer_confirm": false,
+   "duplicate_flag": false,
+   "billing_flag": false,
+   "bot_claim": false,
+   "cross_ref_pr": false,
+   "repro_signal": false,
+   "ai_grade_a": true
+  },
+  "created_at": "2026-10-22T16:51:33Z",
+  "discovered_at": "2026-10-26T23:24:21",
+  "status": "new",
+  "lease": null,
+  "source": "cloudflare-worker",
+  "body_excerpt": "## Summary\n\nV2 never generates session titles. New sessions keep `title = NULL` (\"Untitled session\"), while v1.18.x auto-titled the same setup with the same model.\n\n## Environment\n\n- opencode version: 2.1.3\n- OS: macOS 26.5 (Darwin 25.5.0, arm64)\n- Terminal: Apple_Terminal, TERM=xterm-256color, COLORTERM=truecolor\n- Shell: /bin/zsh\n- Install/channel: Homebrew `anomalyco/tap/opencode-v2` 2.1.3, latest\n- Plugins: none\n\n## Reproduction\n\nGlobal config exposes only the free `opencode` provider (no entries in `opencode auth list`):\n\n```jsonc\n{ \"model\": \"opencode/big-pickle\", \"small_model\": \"opencode/big-pickle\" }\n```\n\n1. `opencode run \"reply with exactly: hi\"`\n2. `opencode session list` → new session shows `Untitled session`; `session_v2.title` is NULL.\n3. Force generation: `opencode api patch /api/session/<id> --data '{\"title\":\"\"}'` → title stays NULL; no output, no log line.\n\nReproduces with a fresh data dir and `--standalone`, so it is not migration or DB related.\n\n## Expected Behavior\n\nThe session gets a generated title after the first user message, as in v1 (which logged `agent=title small=true`).\n\n## Actual Behavior\n\nTwo separate defects:\n\n**1. The title request is rejected by the free-tier gate.**\n\n```sh\nopencode run --standalone --agent title \"say ok\"\n# Error: OpenCode's free tier can only be used from within OpenCode. Download it at https://opencode.ai and keep building.\nopencode run --standalone --agent summary \"say ok\"    # same error\nopencode run --standalone --agent build \"say ok\"      # works\nopencode run --standalone --agent compaction \"say ok\" # works\n```\n\nSame for every `opencode/*` model, so it is the maintenance request shape, not the model. `SessionTitle.attempt` swallows provider errors and returns `undefined` without logging, so the failure is invisible.\n\n**2. No automatic trigger.**\n\nInspecting the 2.1.3 binary, the only caller of title generation is the `session.update` handler when `title` is an empty string, and the only UI caller of that is `/re",
+  "ai_grade": {
+   "grade": "A",
+   "score": 9,
+   "reason": "Reproduced v2 regression with clear repro steps and two focused defects (missing auto-trigger and internal title requests blocked by free-tier gate); actionable and worth fixing.",
+   "model": "deepseek-v4.1-flash"
+  }
  }
 }

@@ -13,6 +13,7 @@ done
 
 # AGENTS.md：PolicyEngine fail-closed 依赖它，缺失会导致所有仓库 lane=unknown
 [ -f /data/AGENTS.md ] || cp /app/AGENTS.md /data/AGENTS.md 2>/dev/null   || echo "[entrypoint] WARN: cannot seed AGENTS.md (permission)"
+[ -f /data/config.json ] || cp /app/config.json /data/config.json 2>/dev/null || true
 
 [ -f /data/queue/candidates.json ] || echo '{}' > /data/queue/candidates.json
 [ -f /data/state/seen.json ] || echo '{}' > /data/state/seen.json

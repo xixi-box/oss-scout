@@ -158,6 +158,42 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
         os.environ.get("OSSCOUT_DASHBOARD_ROOT", PROJECT_ROOT))
     app = FastAPI(title="oss-scout Dashboard", docs_url=None, redoc_url=None)
 
+
+    def _auto_repair_loop():
+        """自动修复：周期性扫描候选池，A 级（AI=A 且规则 A/B）即触发 pipeline。
+
+        受 Playbook 硬约束：每日 1 条新认领（ClaimLedger 内建，超了自动跳过）。
+        间隔可配（configs/dashboard.yaml: auto_repair_seconds，0=关闭）。
+        """
+        import threading as _th
+        import time as _t
+
+        def _loop():
+            _t.sleep(30)   # 启动后先等容器就绪
+            while True:
+                try:
+                    cfg = D.dashboard_settings(ds)
+                    interval = int(cfg.get("auto_repair_seconds", 300))
+                    if interval <= 0:
+                        _t.sleep(60)
+                        continue
+                    from scout_v2.workers.auto_pipeline import drain_ai_graded
+                    ready = drain_ai_graded(root, limit=1, dry_run=True)
+                    if ready:
+                        out = drain_ai_graded(root, limit=1, dry_run=False)
+                        if out:
+                            _audit(root, "auto_repair", str(out[0].get("id", "")),
+                                   json.dumps(out[0], ensure_ascii=False)[:400])
+                    _t.sleep(interval)
+                except Exception as e:  # noqa: BLE001 — 永不因单次异常停摆
+                    try:
+                        _audit(root, "auto_repair_error", "-", str(e)[:200])
+                    except Exception:  # noqa: BLE001
+                        pass
+                    _t.sleep(120)
+
+        _th.Thread(target=_loop, daemon=True).start()
+
     def _cf_poll_loop():
         """按配置间隔（默认 20s）从 CF KV 拉取 Worker 发现（失败静默，下轮重试）。"""
         import threading as _th
@@ -180,6 +216,7 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
 
     ds = D.DataSource(root, gh_runner=gh_runner, modal_runner=modal_runner)
     _cf_poll_loop()   # 必须在 ds 创建后启动（依赖 ds 读配置）
+    _auto_repair_loop()
     app.state.ds = ds
     app.state.root = root
     secret = _secret(root)

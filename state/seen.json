@@ -3238,5 +3238,25 @@
  "deepset-ai/haystack#13448": {
   "first_seen": "2026-10-26T22:40:56",
   "status": "queued"
+ },
+ "OpenHands/OpenHands#18980": {
+  "first_seen": "2026-10-26T23:23:43",
+  "status": "queued"
+ },
+ "OpenHands/OpenHands#18951": {
+  "first_seen": "2026-10-26T23:23:43",
+  "status": "queued"
+ },
+ "anomalyco/opencode#59302": {
+  "first_seen": "2026-10-26T23:23:43",
+  "status": "lowscore"
+ },
+ "anomalyco/opencode#59300": {
+  "first_seen": "2026-10-26T23:23:43",
+  "status": "lowscore"
+ },
+ "anomalyco/opencode#58176": {
+  "first_seen": "2026-10-26T23:24:21",
+  "status": "queued"
  }
 }

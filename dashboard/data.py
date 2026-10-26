@@ -864,6 +864,7 @@ DASHBOARD_DEFAULTS = {
     "cf_pull_seconds": 20,        # Cloudflare KV 拉取间隔（20s = 4320 次读/天，占 10 万额度 4%）
     "pr_refresh_seconds": 120,    # PR 列表自动刷新间隔
     "gh_cache_ttl": 300,          # gh 外部命令结果缓存秒数
+    "auto_repair_seconds": 300,   # 自动修复轮询间隔（0=关闭）；每日认领上限仍由 ClaimLedger 强制
 }
 
 
