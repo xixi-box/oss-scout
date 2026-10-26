@@ -6,11 +6,13 @@ mkdir -p /data/state /data/queue /data/artifacts /data/state/runs /data/configs
 for f in /app/configs.seed/*; do
   [ -e "$f" ] || continue
   name=$(basename "$f")
-  [ -e "/data/configs/$name" ] || cp "$f" "/data/configs/$name"
+  if [ ! -e "/data/configs/$name" ]; then
+    cp "$f" "/data/configs/$name" 2>/dev/null       || echo "[entrypoint] WARN: cannot seed $name (permission); continuing"
+  fi
 done
 
 # AGENTS.md：PolicyEngine fail-closed 依赖它，缺失会导致所有仓库 lane=unknown
-[ -f /data/AGENTS.md ] || cp /app/AGENTS.md /data/AGENTS.md
+[ -f /data/AGENTS.md ] || cp /app/AGENTS.md /data/AGENTS.md 2>/dev/null   || echo "[entrypoint] WARN: cannot seed AGENTS.md (permission)"
 
 [ -f /data/queue/candidates.json ] || echo '{}' > /data/queue/candidates.json
 [ -f /data/state/seen.json ] || echo '{}' > /data/state/seen.json

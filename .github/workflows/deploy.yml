@@ -156,6 +156,9 @@ jobs:
           echo "compose written to $DEPLOY_DIR/compose.yaml"
 
           echo "$ALIYUN_ACR_PASSWORD" | docker login "$ALIYUN_ACR_REGISTRY"             -u "$ALIYUN_ACR_USERNAME" --password-stdin
+          # 数据目录属主必须是容器运行用户（scout=1000），否则 entrypoint 无法 seed / 写状态
+          mkdir -p /opt/oss-scout-data/{state/runs,queue,artifacts,configs}
+          chown -R 1000:1000 /opt/oss-scout-data 2>/dev/null || true
           docker compose -f "$DEPLOY_DIR/compose.yaml" pull || true
           docker compose -f "$DEPLOY_DIR/compose.yaml" up -d --remove-orphans
           docker image prune -f > /dev/null 2>&1 || true
