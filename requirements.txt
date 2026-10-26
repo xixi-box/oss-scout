@@ -5,3 +5,4 @@ pyyaml
 python-multipart
 tenacity
 pytest
+modal
