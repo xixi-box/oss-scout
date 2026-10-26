@@ -84,4 +84,17 @@
     });
     </script>
   </div>
+<div class="card mt">
+  <h2>运行参数（改动即时生效，无需重启）</h2>
+  <form method="post" action="/api/dashboard/settings">
+    <label class="small muted">Cloudflare KV 拉取间隔（秒，10-300；20s = 4320 读/天，占 10 万读额度 4%）</label><br>
+    <input type="number" name="cf_pull_seconds" value="{{ settings.cf_pull_seconds }}" min="10" max="300" style="width:120px"><br>
+    <label class="small muted">PR 页刷新间隔（秒，30-3600）</label><br>
+    <input type="number" name="pr_refresh_seconds" value="{{ settings.pr_refresh_seconds }}" min="30" max="3600" style="width:120px"><br>
+    <label class="small muted">gh 查询缓存（秒，30-3600；越小越实时，越大越省 API）</label><br>
+    <input type="number" name="gh_cache_ttl" value="{{ settings.gh_cache_ttl }}" min="30" max="3600" style="width:120px"><br>
+    <button class="btn btn-primary" type="submit">保存</button>
+    <span class="small muted">KV 额度：读 10 万/天 · 写 1000/天 · 删除 1000/天 · 列表 1000/天</span>
+  </form>
+</div>
 {% endblock %}

@@ -3130,5 +3130,49 @@
  "OpenHands/OpenHands#18939": {
   "first_seen": "2026-10-26T00:23:23",
   "status": "queued"
+ },
+ "anomalyco/opencode#59143": {
+  "first_seen": "2026-10-26T12:26:40",
+  "status": "queued"
+ },
+ "anomalyco/opencode#59140": {
+  "first_seen": "2026-10-26T12:26:40",
+  "status": "queued"
+ },
+ "deepset-ai/haystack#13436": {
+  "first_seen": "2026-10-26T12:27:15",
+  "status": "queued"
+ },
+ "anomalyco/opencode#59133": {
+  "first_seen": "2026-10-26T12:28:28",
+  "status": "queued"
+ },
+ "OpenHands/OpenHands#18472": {
+  "first_seen": "2026-10-26T12:28:59",
+  "status": "queued"
+ },
+ "OpenHands/OpenHands#18955": {
+  "first_seen": "2026-10-26T12:29:19",
+  "status": "queued"
+ },
+ "anomalyco/opencode#58406": {
+  "first_seen": "2026-10-26T12:29:19",
+  "status": "lowscore"
+ },
+ "aaif-goose/goose#12653": {
+  "first_seen": "2026-10-26T12:29:32",
+  "status": "queued"
+ },
+ "anomalyco/opencode#59147": {
+  "first_seen": "2026-10-26T12:29:32",
+  "status": "queued"
+ },
+ "OpenHands/OpenHands#18956": {
+  "first_seen": "2026-10-26T12:32:00",
+  "status": "queued"
+ },
+ "crewAIInc/crewAI#8583": {
+  "first_seen": "2026-10-26T12:32:00",
+  "status": "lowscore"
  }
 }

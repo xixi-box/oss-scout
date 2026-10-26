@@ -338,7 +338,7 @@ class DataSource:
                 return json.loads(out)
             except Exception:  # noqa: BLE001 — TLS 抖动/超时/坏 JSON 都显示"未知"
                 return None
-        return self._cached("gh:" + " ".join(args), GH_CACHE_TTL, _call)
+        return self._cached("gh:" + " ".join(args), dashboard_settings(self)["gh_cache_ttl"], _call)
 
     def own_repos(self) -> list[str]:
         """从 worklog target/detail 与 artifacts pr_url.txt 提取自有仓库（xixi-box/*）。"""
@@ -356,11 +356,59 @@ class DataSource:
         return sorted(repos)
 
     def pr_list(self, repo: str):
+        """PR 列表（含完整状态/评论/review/diff 统计/正文）。
+
+        字段取舍：gh pr list 的 comments 只有作者+时间，正文需逐条评论；
+        这里一次请求拿到 comments.author/login 与 reviews，正文由 pr_detail 按需取
+        （避免一次拉 30 个 PR 的全部评论正文打爆 API）。
+        """
         return self._gh_json([
             "pr", "list", "-R", repo, "--state", "all",
-            "--json", "number,title,state,createdAt,url,statusCheckRollup,comments",
-            "--limit", "30",
+            "--json", ("number,title,state,isDraft,createdAt,updatedAt,closedAt,mergedAt,"
+                       "url,author,statusCheckRollup,comments,reviews,"
+                       "additions,deletions,changedFiles,baseRefName,headRefName,"
+                       "mergeable,mergeStateStatus,reviewDecision,body,labels"),
+            "--limit", "50",
         ])
+
+    def pr_detail(self, repo: str, number: int):
+        """单个 PR 详情：完整描述 + 全部评论正文 + review 意见 + 文件清单。"""
+        detail = self._gh_json([
+            "pr", "view", str(number), "-R", repo,
+            "--json", ("number,title,body,state,isDraft,author,createdAt,mergedAt,closedAt,"
+                       "url,additions,deletions,changedFiles,mergeable,mergeStateStatus,"
+                       "reviewDecision,statusCheckRollup,labels,baseRefName,headRefName"),
+        ])
+        if detail is None:
+            return None
+        comments = self._gh_json([
+            "api", f"repos/{repo}/issues/{number}/comments?per_page=50",
+        ]) or []
+        reviews = self._gh_json([
+            "pr", "view", str(number), "-R", repo, "--json", "reviews",
+        ]) or {}
+        files = self._gh_json([
+            "pr", "view", str(number), "-R", repo, "--json", "files",
+        ]) or {}
+        detail["_comments"] = [
+            {"author": (c.get("user") or {}).get("login", ""),
+             "association": c.get("author_association", ""),
+             "created": c.get("created_at", ""),
+             "body": c.get("body") or ""}
+            for c in comments
+        ]
+        detail["_reviews"] = [
+            {"author": (r.get("author") or {}).get("login", ""),
+             "state": r.get("state", ""), "body": r.get("body") or "",
+             "submitted": r.get("submittedAt", "")}
+            for r in (reviews.get("reviews") or [])
+        ]
+        detail["_files"] = [
+            {"path": f.get("path", ""), "additions": f.get("additions", 0),
+             "deletions": f.get("deletions", 0)}
+            for f in (files.get("files") or [])
+        ]
+        return detail
 
     def actions_runs(self, repo: str):
         return self._gh_json([
@@ -700,3 +748,29 @@ def cloudflare_last_pull(ds) -> str:
         return json.loads(p.read_text(encoding="utf-8")).get("at", "")
     except Exception:  # noqa: BLE001
         return ""
+
+
+# ---------- Dashboard 运行参数（前端可改，落 configs/dashboard.yaml） ----------
+
+DASHBOARD_DEFAULTS = {
+    "cf_pull_seconds": 20,        # Cloudflare KV 拉取间隔（20s = 4320 次读/天，占 10 万额度 4%）
+    "pr_refresh_seconds": 120,    # PR 列表自动刷新间隔
+    "gh_cache_ttl": 300,          # gh 外部命令结果缓存秒数
+}
+
+
+def dashboard_settings(ds) -> dict:
+    p = ds.root / "configs" / "dashboard.yaml"
+    cfg = dict(DASHBOARD_DEFAULTS)
+    try:
+        cfg.update(yaml.safe_load(p.read_text(encoding="utf-8")) or {})
+    except Exception:  # noqa: BLE001
+        pass
+    return cfg
+
+
+def cf_pull_seconds(ds) -> int:
+    try:
+        return max(10, int(dashboard_settings(ds)["cf_pull_seconds"]))
+    except Exception:  # noqa: BLE001
+        return DASHBOARD_DEFAULTS["cf_pull_seconds"]

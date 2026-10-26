@@ -159,7 +159,7 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
     app = FastAPI(title="oss-scout Dashboard", docs_url=None, redoc_url=None)
 
     def _cf_poll_loop():
-        """每 60s 从 CF KV 拉取 Worker 发现（失败静默，下轮重试）。"""
+        """按配置间隔（默认 20s）从 CF KV 拉取 Worker 发现（失败静默，下轮重试）。"""
         import threading as _th
         import time as _t
         def _loop():
@@ -173,10 +173,13 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
                             encoding="utf-8")
                 except Exception:  # noqa: BLE001
                     pass
-                _t.sleep(60)
+                # 间隔可前端配置（configs/dashboard.yaml）；默认 20s
+                # KV 读额度 10 万/天，20s 轮询 = 4320 次/天，仅占 4%
+                _t.sleep(D.cf_pull_seconds(ds))
         _th.Thread(target=_loop, daemon=True).start()
-    _cf_poll_loop()
+
     ds = D.DataSource(root, gh_runner=gh_runner, modal_runner=modal_runner)
+    _cf_poll_loop()   # 必须在 ds 创建后启动（依赖 ds 读配置）
     app.state.ds = ds
     app.state.root = root
     secret = _secret(root)
@@ -409,17 +412,42 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
                     ci = "—"
                 elif all(c in ("SUCCESS", "NEUTRAL", "SKIPPED") for c in conclusions):
                     ci = "通过"
+                elif any(c in ("FAILURE", "CANCELLED", "TIMED_OUT") for c in conclusions):
+                    ci = "失败"
                 else:
-                    ci = "失败/进行中"
+                    ci = "进行中"
                 pr["_repo"] = repo
                 pr["_deadline_left_h"] = deadline_left
-                pr["_has_review"] = bool(comments)
+                pr["_has_review"] = bool(pr.get("reviews") or comments)
                 pr["_ci"] = ci
             repo_prs.append({"repo": repo, "prs": pr_list})
         return render(request, "prs.html", {
             "repo_prs": repo_prs, "any_unknown": any_unknown,
             "merge_history": ds.merge_history(), "active": "/prs",
+            "settings": D.dashboard_settings(ds),
         })
+
+    @app.get("/prs/{repo_slug}/{number}/detail", response_class=HTMLResponse)
+    def pr_detail_fragment(request: Request, repo_slug: str, number: int):
+        """PR 详情片段：完整描述、全部评论、review 意见、改动文件。"""
+        repo = repo_slug.replace("__", "/")
+        detail = ds.pr_detail(repo, number)
+        if detail is None:
+            return HTMLResponse("<p class='muted'>PR 详情获取失败（gh 查询失败或 PR 不存在）</p>",
+                                status_code=404)
+        # 48h 响应期限
+        deadline_h = None
+        created = detail.get("createdAt")
+        if created:
+            try:
+                import datetime as _dt
+                c = _dt.datetime.fromisoformat(str(created).replace("Z", "+00:00"))
+                deadline_h = (c + _dt.timedelta(hours=48)
+                              - _dt.datetime.now(_dt.timezone.utc)).total_seconds() / 3600
+            except ValueError:
+                pass
+        return render(request, "_pr_detail.html", {
+            "pr": detail, "repo": repo, "deadline_h": deadline_h})
 
     # ---------------- 5. 策略页 ----------------
     @app.get("/policies", response_class=HTMLResponse)
@@ -454,6 +482,7 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
                 else {"model": "deepseek-v4.1-flash"},
             "cf": D.cloudflare_cfg(ds),
             "last_pull": D.cloudflare_last_pull(ds),
+            "settings": D.dashboard_settings(ds),
             "active": "/quota",
         })
 
@@ -570,6 +599,21 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
         out = drain_ai_graded(root, limit=1, dry_run=False)
         _audit(root, "pipeline_run", "auto", json.dumps(out, ensure_ascii=False)[:400])
         return JSONResponse({"results": out})
+
+    @app.post("/api/dashboard/settings")
+    def api_dashboard_settings(request: Request,
+                               cf_pull_seconds: int = Form(20),
+                               pr_refresh_seconds: int = Form(120),
+                               gh_cache_ttl: int = Form(300)):
+        cfg = {"cf_pull_seconds": max(10, min(300, cf_pull_seconds)),
+               "pr_refresh_seconds": max(30, min(3600, pr_refresh_seconds)),
+               "gh_cache_ttl": max(30, min(3600, gh_cache_ttl)),
+               "updated_at": time.strftime("%Y-%m-%dT%H:%M:%S")}
+        _atomic_write_text(root / "configs" / "dashboard.yaml",
+                           yaml.safe_dump(cfg, allow_unicode=True, sort_keys=True))
+        _audit(root, "dashboard_settings", "configs/dashboard.yaml",
+               f"pull={cfg['cf_pull_seconds']}s pr={cfg['pr_refresh_seconds']}s ttl={cfg['gh_cache_ttl']}s")
+        return RedirectResponse("/quota", status_code=303)
 
     @app.post("/api/cloudflare/pull")
     def api_cloudflare_pull():

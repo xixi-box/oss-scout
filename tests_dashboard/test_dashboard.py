@@ -323,10 +323,10 @@ def test_prs_with_fake_gh(client: TestClient):
     assert r.status_code == 200
     assert "fix: planted div bug repair" in r.text
     assert "MERGED" in r.text
-    # open PR 无评论 → 如实显示"无 review 记录"
-    assert "无 review 记录" in r.text
+    # open PR 无 review → review 列显示占位（—）；状态列显示 OPEN
+    assert "OPEN" in r.text
     # 48h 窗口
-    assert "48h 响应窗口" in r.text
+    assert "48h 窗口" in r.text
     # 合并历史来自 worklog
     assert "PR#2 merged by maintainer" in r.text
 

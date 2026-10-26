@@ -4,8 +4,8 @@
  * 每 1 分钟：GitHub REST 增量轮询 → 预筛 → 发现写入 KV（pending:* 键，TTL 1h）
  * 本地 dashboard 每分钟用 CLOUDFLARE_API_TOKEN 拉取 KV → 入队 → 删除已处理键。
  *
- * KV 免费档 1000 写/天：since 水位每 5 分钟才落一次（288/天）+ 发现批次（偶发），
- * 重复窗口由本地 seen.json 去重，不会产生重复候选。
+ * KV 免费档仅 1000 write/天。写预算：diag ≤48/天 + since 水位 48/天 + 发现批次（偶发）
+ * = 常况 ~100/天，留足余量。中间每分钟重查同一窗口由本地 seen.json 去重。
  *
  * Secrets（npx wrangler secret put）：GH_TOKEN
  * vars（wrangler.toml）：REPOS
@@ -74,15 +74,20 @@ async function pollOnce(env) {
     }
   }
 
-  // 诊断键：每轮必写，本地/控制台可见最近一轮状态（KV 写额度：1/分钟 = 1440/天）
-  await env.SEEN.put("diag", JSON.stringify({
-    at: now.toISOString(), ok_repos, errors: errors.slice(0, 5),
-    found: issues.length, repos: repos.length,
-    has_token: Boolean(env.GH_TOKEN),
-  }));
+  // 诊断键：降频到每 30 分钟 或 有错误时写。
+  // KV 免费档仅 1000 write/天——原来每分钟写 = 1440/天，单这一项就超额（2026-10-25 实测 2139）。
+  const diagDue = now.getUTCMinutes() % 30 === 0 || errors.length > 0;
+  if (diagDue) {
+    await env.SEEN.put("diag", JSON.stringify({
+      at: now.toISOString(), ok_repos, errors: errors.slice(0, 5),
+      found: issues.length, repos: repos.length,
+      has_token: Boolean(env.GH_TOKEN),
+    }));
+  }
 
-  // 水位每 5 分钟推进一次（分钟数 % 5 === 0），否则下轮同窗口重叠重查（本地去重兜底）
-  if (ok_repos > 0 && now.getUTCMinutes() % 5 === 0) {
+  // 水位每 30 分钟推进（48 写/天）。中间每分钟重查同一窗口靠本地 seen.json 去重，
+  // 不产生重复候选；GitHub core API 5000/h 足够（14 仓 × 60 = 840/h）。
+  if (ok_repos > 0 && now.getUTCMinutes() % 30 === 0) {
     await env.SEEN.put("since", now.toISOString());
   }
 

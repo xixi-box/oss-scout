@@ -1,0 +1,56 @@
+{# PR 详情片段（HTMX 展开） #}
+<div class="pr-detail">
+  <div class="chips">
+    <span class="chip {{ 'chip-green' if pr.state == 'MERGED' else ('chip-warn' if pr.state == 'CLOSED' else '') }}">
+      {{ pr.state }}{{ ' · draft' if pr.isDraft }}
+    </span>
+    {% if pr.reviewDecision %}<span class="chip">review: {{ pr.reviewDecision }}</span>{% endif %}
+    <span class="chip">+{{ pr.additions }} / -{{ pr.deletions }} · {{ pr.changedFiles }} files</span>
+    <span class="chip">{{ pr.baseRefName }} ← {{ pr.headRefName }}</span>
+    {% if deadline_h is not none and pr.state == 'OPEN' %}
+      <span class="chip {{ 'chip-warn' if deadline_h < 0 }}">48h 期限：{{ '%+.1f'|format(deadline_h) }}h</span>
+    {% endif %}
+    <a class="small" href="{{ pr.url }}" target="_blank" rel="noopener">在 GitHub 打开 ↗</a>
+  </div>
+
+  <h4 class="mt">描述</h4>
+  <pre class="pr-body">{{ pr.body or '（无描述）' }}</pre>
+
+  {% if pr._reviews %}
+  <h4 class="mt">Review（{{ pr._reviews|length }}）</h4>
+  {% for r in pr._reviews %}
+  <div class="pr-item">
+    <strong>{{ r.author }}</strong>
+    <span class="chip {{ 'chip-green' if r.state == 'APPROVED' else ('chip-warn' if r.state == 'CHANGES_REQUESTED' else '') }}">{{ r.state }}</span>
+    <span class="muted small">{{ r.submitted }}</span>
+    {% if r.body %}<pre class="pr-body">{{ r.body }}</pre>{% endif %}
+  </div>
+  {% endfor %}
+  {% endif %}
+
+  {% if pr._comments %}
+  <h4 class="mt">评论（{{ pr._comments|length }}）</h4>
+  {% for c in pr._comments %}
+  <div class="pr-item">
+    <strong>{{ c.author }}</strong>
+    <span class="chip">{{ c.association }}</span>
+    <span class="muted small">{{ c.created }}</span>
+    <pre class="pr-body">{{ c.body }}</pre>
+  </div>
+  {% endfor %}
+  {% else %}
+  <p class="muted small mt">暂无评论</p>
+  {% endif %}
+
+  {% if pr._files %}
+  <h4 class="mt">改动文件（{{ pr._files|length }}）</h4>
+  <table class="mini">
+    <tbody>
+      {% for f in pr._files %}
+      <tr><td><code>{{ f.path }}</code></td>
+          <td class="nowrap"><span class="chip-green">+{{ f.additions }}</span> <span class="chip-warn">-{{ f.deletions }}</span></td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</div>

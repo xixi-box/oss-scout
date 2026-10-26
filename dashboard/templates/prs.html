@@ -1,9 +1,13 @@
 {% extends "base.html" %}
 {% block title %}PR 管理 · oss-scout{% endblock %}
 {% block content %}
-<h1 class="display">PR 管理</h1>
+<div class="chips" style="justify-content:space-between">
+  <h1 class="display" style="margin:0">PR 管理</h1>
+  <span class="small muted">每 {{ settings.pr_refresh_seconds }}s 自动刷新 ·
+    <a href="#" onclick="location.reload();return false">立即刷新</a></span>
+</div>
 {% if any_unknown %}
-<div class="banner warn">部分仓库 gh 查询失败 → 显示"未知"（TLS 抖动 / 未登录 / 限流），60 秒后自动重试</div>
+<div class="banner warn">部分仓库 gh 查询失败 → 显示"未知"（TLS 抖动 / 未登录 / 限流），自动重试中</div>
 {% endif %}
 {% if not repo_prs %}
 <div class="card"><p class="muted">worklog / artifacts 中未发现自有仓库（xixi-box/*）</p></div>
@@ -14,33 +18,52 @@
   {% if rp.prs is none %}
   <p class="muted">未知（gh 查询失败）</p>
   {% elif not rp.prs %}
-  <p class="muted">无 open/closed PR 记录</p>
+  <p class="muted">无 PR 记录</p>
   {% else %}
+  <div class="table-scroll">
   <table>
-    <thead><tr><th>#</th><th>标题</th><th>state</th><th>创建时间</th><th>48h 响应窗口</th><th>review/评论</th><th>CI</th></tr></thead>
+    <thead><tr>
+      <th>#</th><th>标题</th><th>状态</th><th>review</th><th>CI</th>
+      <th>改动</th><th>创建</th><th>48h 窗口</th><th>评论</th><th></th>
+    </tr></thead>
     <tbody>
       {% for pr in rp.prs %}
       <tr>
-        <td><a href="{{ pr.url }}" target="_blank" rel="noreferrer">#{{ pr.number }}</a></td>
-        <td class="wrap">{{ pr.title|mask }}</td>
-        <td><span class="chip {{ 'chip-green' if pr.state == 'OPEN' }}">{{ pr.state }}</span></td>
-        <td class="nowrap muted small">{{ pr.createdAt or "未知" }}</td>
-        <td>
+        <td class="nowrap"><a href="{{ pr.url }}" target="_blank" rel="noreferrer">#{{ pr.number }}</a></td>
+        <td class="wrap small">{{ pr.title|mask }}</td>
+        <td class="nowrap">
+          <span class="chip {{ 'chip-green' if pr.state == 'MERGED' else ('chip-warn' if pr.state == 'CLOSED' else '') }}">
+            {{ pr.state }}</span>
+          {% if pr.isDraft %}<span class="chip">draft</span>{% endif %}
+          {% if pr.mergedAt %}<div class="small muted">合并于 {{ pr.mergedAt[:10] }}</div>{% endif %}
+        </td>
+        <td class="nowrap small">
+          {% if pr.reviewDecision %}<span class="chip">{{ pr.reviewDecision }}</span>
+          {% elif pr.reviews %}<span class="chip">{{ pr.reviews|length }} review</span>
+          {% else %}<span class="muted">—</span>{% endif %}
+        </td>
+        <td class="nowrap small">{{ pr._ci }}</td>
+        <td class="nowrap small">+{{ pr.additions or 0 }}/-{{ pr.deletions or 0 }}<div class="muted">{{ pr.changedFiles or 0 }} files</div></td>
+        <td class="nowrap muted small">{{ (pr.createdAt or "")[:16] }}</td>
+        <td class="nowrap">
           {% if pr._deadline_left_h is none %}未知
           {% elif pr.state != 'OPEN' %}—
           {% elif pr._deadline_left_h >= 0 %}<span class="chip chip-warn">剩 {{ '%.1f'|format(pr._deadline_left_h) }}h</span>
           {% else %}<span class="chip">已过 {{ '%.1f'|format(-pr._deadline_left_h) }}h</span>{% endif %}
         </td>
+        <td class="nowrap small">{{ pr.comments|length if pr.comments else 0 }}</td>
         <td>
-          {% if pr.state == 'OPEN' and not pr._has_review %}
-          <span class="chip chip-warn">无 review 记录</span>
-          {% else %}{{ pr.comments|length }} 条评论{% endif %}
+          <button class="btn btn-ghost" type="button"
+                  hx-get="/prs/{{ rp.repo|replace('/', '__') }}/{{ pr.number }}/detail"
+                  hx-target="#prdetail-{{ rp.repo|replace('/', '__') }}-{{ pr.number }}"
+                  hx-swap="innerHTML">详情</button>
         </td>
-        <td>{{ pr._ci }}</td>
       </tr>
+      <tr><td colspan="10" id="prdetail-{{ rp.repo|replace('/', '__') }}-{{ pr.number }}"></td></tr>
       {% endfor %}
     </tbody>
   </table>
+  </div>
   {% endif %}
 </div>
 {% endfor %}
