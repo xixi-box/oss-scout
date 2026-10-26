@@ -78,7 +78,6 @@ def opencode_analyze(repo: str, sha: str, finding: dict, workdir: Path) -> dict:
     代码片段优先取 Sandbox 回传的 finding["snippet"]——部署机常连不上 GitHub，
     在那里 clone 会失败；Sandbox 内网络通畅且仓库已在本地，扫描时顺手带回。
     """
-    from scout_v2.workers.opencode_client import OpenCodeClient
     snippet = (finding.get("snippet") or "").strip()
     if not snippet:
         try:
@@ -102,9 +101,14 @@ def opencode_analyze(repo: str, sha: str, finding: dict, workdir: Path) -> dict:
         "Question: is this plausibly a real bug worth a maintainer's time, a false "
         "positive, or needs-more-context? State which test would settle it. "
         "Do NOT modify any files.")
-    workdir.mkdir(parents=True, exist_ok=True)   # OpenCodeClient 以 cwd 运行
-    client = OpenCodeClient(timeout_seconds=300, workdir=workdir)
-    ok, detail = client.run("opencode-go/deepseek-v4.1-flash", prompt)
+    # 直调 OpenCode Go HTTP API（不依赖 CLI 二进制；容器/服务器上更可靠）
+    from scout_v2.workers.issue_scorer import GoClient, load_scorer_config
+    cfg = load_scorer_config(ROOT)
+    if not cfg.get("api_key"):
+        return {"ok": False, "analysis": "no OPENCODE_API_KEY configured"}
+    client = GoClient(key=cfg["api_key"], model=cfg.get("model", "deepseek-v4.1-flash"),
+                      timeout=180)
+    ok, detail = client.chat(prompt)
     return {"ok": ok, "analysis": detail[:1200] if ok else detail[:300]}
 
 
