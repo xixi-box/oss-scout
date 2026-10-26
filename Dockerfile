@@ -34,3 +34,5 @@ HEALTHCHECK --interval=60s --timeout=10s --retries=3 \
 
 EXPOSE 8787
 CMD ["python", "-m", "uvicorn", "dashboard.app:app", "--host", "0.0.0.0", "--port", "8787"]
+
+ENTRYPOINT ["/entrypoint.sh"]
