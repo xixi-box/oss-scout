@@ -12,7 +12,7 @@ RUN useradd -m worker \
 WORKDIR /workspace
 
 COPY scout_v2 /workspace/scout_v2
-COPY configs /workspace/configs
+COPY configs.seed /workspace/configs
 
 # worker 用户需要写 artifacts；/workspace 默认归 root（P6-A 实测修复）
 RUN mkdir -p /workspace/artifacts /workspace/repo && chown -R worker:worker /workspace
