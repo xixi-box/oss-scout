@@ -625,12 +625,10 @@ def ingest_cloudflare_issues(ds, items: list[dict]) -> int:
     规则对齐 Playbook：只入队已知监控仓库；C 级/未知仓库记 seen 不入队；
     去重与 discover.py 共用 state/seen.json。写路径走 atomic_json_write。
     """
-    import importlib
-    import sys as _sys
     from scout_v2.state_store import atomic_json_write
-    if str(ds.root) not in _sys.path:
-        _sys.path.insert(0, str(ds.root))
-    discover = importlib.import_module("discover")
+    # 不 import discover.py：它在模块顶层硬读 config.json，容器里没有该文件会崩。
+    # 只复用它的评分实现（纯函数 + 正则），通过 _discover_score() 取得。
+    discover = _discover_score()
 
     q = ds._cached("candidates", 5.0, _read_json(ds.root / "queue" / "candidates.json", {}))
     seen_path = ds.root / "state" / "seen.json"
@@ -720,6 +718,24 @@ def _read_json(path: Path, default):
     return _fn
 
 
+
+def _discover_score():
+    """返回带 score()/RE_REPRO 的对象：优先用项目根 discover.py（本地开发），
+    容器内无 config.json 时用内置等价实现（与 discover.py 评分规则一致）。"""
+    import sys as _sys
+    from pathlib import Path as _P
+    root = _P(__file__).resolve().parents[1]
+    if (root / "config.json").exists():
+        if str(root) not in _sys.path:
+            _sys.path.insert(0, str(root))
+        try:
+            import importlib
+            return importlib.import_module("discover")
+        except Exception:  # noqa: BLE001
+            pass
+    return _BuiltinScorer()
+
+
 def cloudflare_pull(ds) -> dict:
     """从 CF KV 拉取 pending 批次 → ingest → 删除已处理键。返回摘要。
 
@@ -799,3 +815,76 @@ def cf_pull_seconds(ds) -> int:
         return max(10, int(dashboard_settings(ds)["cf_pull_seconds"]))
     except Exception:  # noqa: BLE001
         return DASHBOARD_DEFAULTS["cf_pull_seconds"]
+
+
+class _BuiltinScorer:
+    """discover.py 评分规则的内置等价实现（容器内无 config.json 时用）。
+
+    与 discover.score 保持同一套信号与 blocker 判定；正则从 discover.py 的语义复制，
+    避免运行时依赖（config.json / ROOT 常量）。
+    """
+
+    import re as _re
+
+    RE_REPRO = _re.compile(
+        r"\b(?:steps?\s+to\s+(?:reproduce|repro)|traceback|minimal\s+(?:repro|example)|"
+        r"reproduction\s+steps|expected\s+.{0,40}actual)\b", _re.I)
+    _RE_BILLING = _re.compile(r"\b(quota|billing|subscription|refund|scam|re-?charge[d]?|plan limit)\b", _re.I)
+    _RE_FEATURE = _re.compile(r"enhancement|feature|rfc|proposal|design|discussion|idea", _re.I)
+    _RE_BAD_TITLE = _re.compile(
+        r"^(how\s+(?:do|to|can)\b|is\s+it\s+possible|any\s+(?:plan|way|update)|"
+        r"\[?question\]?|\[?feature\s+(?:request|idea)\]?|support\s+for\b|roadmap|"
+        r"support\b|add\s+(?:support|ability|option))", _re.I)
+    _RE_DOCS = _re.compile(r"\b(typo|doc(?:umentation|s)?|readme|changelog|comment\s+fix)\b", _re.I)
+
+    def score(self, title, sig, created_at, lane):
+        import datetime as _dt
+        blockers = []
+        s = 0
+        if sig.get("maintainer_confirm"):
+            s += 3
+        if sig.get("reactions", 0) >= 5:
+            s += 3
+        elif sig.get("reactions", 0) >= 1:
+            s += 1
+        labels_l = [str(lb).lower() for lb in (sig.get("labels") or [])]
+        if "bug" in labels_l:
+            s += 2
+        if "help wanted" in labels_l:
+            s += 2
+        if sig.get("repro_signal"):
+            s += 2
+        try:
+            created = _dt.datetime.fromisoformat(str(created_at).replace("Z", "+00:00"))
+            age_days = (_dt.datetime.now(_dt.timezone.utc) - created).days
+            if age_days <= 7:
+                s += 1
+        except Exception:  # noqa: BLE001
+            pass
+        if sig.get("comments", 0) <= 3:
+            s += 1
+
+        if sig.get("cross_ref_pr"):
+            blockers.append("cross_ref_pr")
+        if sig.get("claim_signal"):
+            blockers.append("claim_signal")
+        if sig.get("duplicate_flag"):
+            blockers.append("duplicate_flagged")
+        if sig.get("bot_claim"):
+            blockers.append("org_bot_claimed")
+        if self._RE_BILLING.search(title or ""):
+            blockers.append("billing_complaint")
+        if any(self._RE_FEATURE.search(lb) for lb in (sig.get("labels") or [])):
+            blockers.append("feature_label")
+        if sig.get("body_len", 0) < 200 and not sig.get("ai_grade_a"):
+            blockers.append("thin_body")
+        if self._RE_BAD_TITLE.search(title or ""):
+            blockers.append("question_or_feature_title")
+        if self._RE_DOCS.search(title or ""):
+            blockers.append("docs_only")
+        if lane == "restricted" and not (sig.get("maintainer_confirm") or "help wanted" in labels_l):
+            blockers.append("restricted_requires_confirm")
+
+        if blockers:
+            return s, "C", blockers
+        return s, ("A" if s >= 6 else "B" if s >= 3 else "C"), []
