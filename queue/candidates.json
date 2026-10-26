@@ -3925,5 +3925,158 @@
    "reason": "Reproducible CLI bug where `opencode plugin <unknown>` silently installs a bogus plugin; small validation fix with no competing work, though the missing-command/docs claims add minor scope.",
    "model": "deepseek-v4.1-flash"
   }
+ },
+ "anomalyco/opencode#59285": {
+  "id": "anomalyco/opencode#59285",
+  "repo": "anomalyco/opencode",
+  "number": 59285,
+  "title": "free tier usage bug",
+  "url": "https://github.com/anomalyco/opencode/issues/59285",
+  "lane": "open",
+  "score": 4,
+  "class": "B",
+  "blockers": [],
+  "signals": {
+   "body_len": 258,
+   "reactions": 0,
+   "labels": [
+    "pending close",
+    "triaging"
+   ],
+   "comments": 1,
+   "claim_signal": false,
+   "maintainer_confirm": false,
+   "duplicate_flag": false,
+   "billing_flag": false,
+   "bot_claim": false,
+   "cross_ref_pr": false,
+   "repro_signal": true,
+   "ai_grade_a": false
+  },
+  "created_at": "2026-10-26T13:34:18Z",
+  "discovered_at": "2026-10-26T21:55:05",
+  "status": "new",
+  "lease": null,
+  "source": "cloudflare-worker",
+  "body_excerpt": "### Description\n\nthe free tier usage always get exceeded \n\n### Plugins\n\n_No response_\n\n### OpenCode version\n\n_No response_\n\n### Steps to reproduce\n\n_No response_\n\n### Screenshot\n\n_No response_\n\n### Operating System\n\n_No response_\n\n### Terminal\n\n_No response_",
+  "ai_grade": {
+   "grade": "C",
+   "score": 2,
+   "reason": "Vague billing/quota complaint with no reproduction steps, version, or OS details — not actionable per rules.",
+   "model": "deepseek-v4.1-flash"
+  }
+ },
+ "anomalyco/opencode#59282": {
+  "id": "anomalyco/opencode#59282",
+  "repo": "anomalyco/opencode",
+  "number": 59282,
+  "title": "opencode is not working The message \"Free data allowance exhausted; subscribe to Go\" keeps appearing, even though Opencode hasn't been used for several days.",
+  "url": "https://github.com/anomalyco/opencode/issues/59282",
+  "lane": "open",
+  "score": 4,
+  "class": "B",
+  "blockers": [],
+  "signals": {
+   "body_len": 445,
+   "reactions": 0,
+   "labels": [
+    "triaging"
+   ],
+   "comments": 1,
+   "claim_signal": false,
+   "maintainer_confirm": false,
+   "duplicate_flag": false,
+   "billing_flag": false,
+   "bot_claim": false,
+   "cross_ref_pr": false,
+   "repro_signal": true,
+   "ai_grade_a": false
+  },
+  "created_at": "2026-10-26T13:13:44Z",
+  "discovered_at": "2026-10-26T21:55:05",
+  "status": "new",
+  "lease": null,
+  "source": "cloudflare-worker",
+  "body_excerpt": "### Description\n\nOpenCode v2 + the desktop application aren't working. The support team suggested downloading version 2+, claiming it would solve the issue, but that didn't help—nothing works. It’s clear that there are restrictions on the site.\n\n### Plugins\n\n_No response_\n\n### OpenCode version\n\n_No response_\n\n### Steps to reproduce\n\n_No response_\n\n### Screenshot\n\n_No response_\n\n### Operating System\n\n_No response_\n\n### Terminal\n\n_No response_",
+  "ai_grade": {
+   "grade": "C",
+   "score": 0,
+   "reason": "Billing/quota complaint with no reproducible steps or environment details; not actionable.",
+   "model": "deepseek-v4.1-flash"
+  }
+ },
+ "anomalyco/opencode#59287": {
+  "id": "anomalyco/opencode#59287",
+  "repo": "anomalyco/opencode",
+  "number": 59287,
+  "title": "cli: opencode run hangs before session creation on Linux VPS (v2.1.4 / v2.0.32)",
+  "url": "https://github.com/anomalyco/opencode/issues/59287",
+  "lane": "open",
+  "score": 2,
+  "class": "C",
+  "blockers": [],
+  "signals": {
+   "body_len": 3716,
+   "reactions": 0,
+   "labels": [],
+   "comments": 0,
+   "claim_signal": false,
+   "maintainer_confirm": false,
+   "duplicate_flag": false,
+   "billing_flag": false,
+   "bot_claim": false,
+   "cross_ref_pr": false,
+   "repro_signal": false,
+   "ai_grade_a": true
+  },
+  "created_at": "2026-10-26T13:44:17Z",
+  "discovered_at": "2026-10-26T21:55:28",
+  "status": "new",
+  "lease": null,
+  "source": "cloudflare-worker",
+  "body_excerpt": "## Summary\n\nOn a Linux VPS, `opencode run` (V2, v2.1.4 and v2.0.32) hangs during initialization: no session is created, stdout stays empty, and no error is emitted. The same hang occurs with a clean `HOME` (no config, no credentials) using a free model. Direct calls to the provider API from the same host succeed, so the provider and network egress are functional.\n\nThis looks related to the V1 report in #38723 (hang before session creation; established connection to the model registry held open).\n\n## Environment\n\n- opencode version: **2.1.4** (also reproduced on **2.0.32**)\n- OS: **Ubuntu 24.04.4 LTS**, Linux 6.8 x86_64 (VPS, direct outbound access, no proxy)\n- Terminal: none — non-interactive SSH (`TERM` unset), `ssh host 'opencode run …'`\n- Shell: `/bin/bash` (server default)\n- Install/channel: `curl -fsSL https://opencode.ai/v2/install | bash` (latest channel)\n- Active plugins: none. Config contains one remote MCP server; the bug also reproduces with **no user config at all**\n\n## Reproduction\n\n1. On a clean account/home (no `~/.config/opencode`, no credentials):\n\n   ```bash\n   mkdir -p /tmp/oc-repro && cd /tmp/oc-repro\n   HOME=/tmp/oc-clean timeout 90 opencode run --auto \\\n     -m opencode/deepseek-v4.1-flash-free \"Reply with exactly: OK\"\n   echo \"exit=$?\"\n   ```\n\n2. The process stays alive with **zero stdout**; it exits only via the external `timeout` (`exit=124`).\n\n3. With a configured instance (provider key + a remote MCP server), the same command hangs the same way; the server log stops after location/MCP initialization and never reaches session creation.\n\n## Expected Behavior\n\nThe run creates a session, performs the model request, and prints the model's answer (`OK`). Direct API calls from the same machine complete in ~2 seconds.\n\n## Actual Behavior\n\n- No output, no error, no session; only an external timeout ends it.\n- Server log tail during the hang (DEBUG level):\n\n  ```text\n  message=\"location services booted\" directory=/tmp/oc-repro\n  message=\"mcp connect",
+  "ai_grade": {
+   "grade": "A",
+   "score": 9,
+   "reason": "Clear reproducible CLI hang with exact repro steps, multiple affected versions, detailed logs, and no competing work; likely small initialization/timeout bug.",
+   "model": "deepseek-v4.1-flash"
+  }
+ },
+ "anomalyco/opencode#59289": {
+  "id": "anomalyco/opencode#59289",
+  "repo": "anomalyco/opencode",
+  "number": 59289,
+  "title": "Switching the composer agent while a turn is running reconfigures the running turn (plan turn gains write access)",
+  "url": "https://github.com/anomalyco/opencode/issues/59289",
+  "lane": "open",
+  "score": 2,
+  "class": "C",
+  "blockers": [],
+  "signals": {
+   "body_len": 2311,
+   "reactions": 0,
+   "labels": [],
+   "comments": 0,
+   "claim_signal": false,
+   "maintainer_confirm": false,
+   "duplicate_flag": false,
+   "billing_flag": false,
+   "bot_claim": false,
+   "cross_ref_pr": false,
+   "repro_signal": false,
+   "ai_grade_a": true
+  },
+  "created_at": "2026-10-26T13:45:14Z",
+  "discovered_at": "2026-10-26T21:55:49",
+  "status": "new",
+  "lease": null,
+  "source": "cloudflare-worker",
+  "body_excerpt": "### Description\n\nSubmitting a prompt while a turn is running reconfigures the **running** turn when the composer's agent differs from the turn's agent. A plan-mode turn that is mid-execution silently gains the new agent's tools, permissions, and system prompt, and the plan plugin tells the model it is no longer restricted.\n\n### Repro\n\n1. Set the composer agent to **plan** and submit a prompt (turn starts, runs for a while).\n2. While that turn is still running, switch the composer to **build** and submit the next prompt.\n3. Watch the running plan turn's next steps.\n\n### Actual\n\nThe still-running plan turn switches to build mid-flight:\n\n- build's permission rules and tool snapshot apply to the remaining steps (read-only plan work can write),\n- the system prompt is re-resolved for build,\n- the plan plugin injects a \"You are NO LONGER in Plan mode\" reminder into the running turn.\n\n### Expected\n\nThe running turn should keep the agent it started with, end to end. The composer's selection should apply to the next prompt's turn — never to a turn that is already executing.\n\n### Root cause\n\nPrompt admission does not carry an agent selection. Clients instead call `POST /api/session/:sessionID/agent` (`session.switchAgent`) eagerly on submit. `Session.switchAgent` publishes `session.agent.selected` unconditionally (no busy check), the projector persists `session.agent` immediately, and the runner re-reads the persisted agent at every step boundary (`prepareContext` → `SessionContext.select`), so the remainder of the in-flight turn runs under the new agent — including its permissions.\n\n### Related\n\n- #4156 — queued prompts picking up the running turn's mode (inverse direction)\n- #46111 — injected prompts without an agent silently switching session agent/model\n- PR #44683 — app-side queue/steer; its description notes that honoring a different selection per queued prompt \"needs per-prompt selection in the admission API (server change, out of scope here)\"\n\n### Proposed direction\n\nC",
+  "ai_grade": {
+   "grade": "A",
+   "score": 8,
+   "reason": "Clear reproducible, security-relevant bug with detailed root cause and no competing work, though the fix spans multiple components.",
+   "model": "deepseek-v4.1-flash"
+  }
  }
 }

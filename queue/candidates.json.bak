@@ -3887,23 +3887,63 @@
    "model": "deepseek-v4.1-flash"
   }
  },
- "anomalyco/opencode#59244": {
-  "id": "anomalyco/opencode#59244",
+ "anomalyco/opencode#59251": {
+  "id": "anomalyco/opencode#59251",
   "repo": "anomalyco/opencode",
-  "number": 59244,
-  "title": "`opencode run --format json` prints nothing when it can't connect to the server",
-  "url": "https://github.com/anomalyco/opencode/issues/59244",
+  "number": 59251,
+  "title": "cli: docs advertise service/api/\"plugin list\" subcommands missing in v2.1.4; \"opencode plugin <word>\" silently installs the word",
+  "url": "https://github.com/anomalyco/opencode/issues/59251",
+  "lane": "open",
+  "score": 2,
+  "class": "C",
+  "blockers": [
+   "docs_only"
+  ],
+  "signals": {
+   "body_len": 2769,
+   "reactions": 0,
+   "labels": [],
+   "comments": 0,
+   "claim_signal": false,
+   "maintainer_confirm": false,
+   "duplicate_flag": false,
+   "billing_flag": false,
+   "bot_claim": false,
+   "cross_ref_pr": false,
+   "repro_signal": false,
+   "ai_grade_a": true
+  },
+  "created_at": "2026-10-26T11:21:45Z",
+  "discovered_at": "2026-10-26T20:14:13",
+  "status": "new",
+  "lease": null,
+  "source": "cloudflare-worker",
+  "body_excerpt": "\n## Summary\n\nAfter updating OpenCode to v2.1.4, several CLI subcommands documented at opencode.ai/v2/docs do not exist in the installed binary, and one that does exist traps users: `opencode plugin <module>` treats any unknown word — including the `list` documented by the docs — as a module name and silently installs/registers a bogus plugin.\n\n## Environment\n\n- opencode version: 2.1.4 (channel: latest)\n- OS: Linux 7.2.5-3-omarchy (linux x64, Arch/Hyprland)\n- Terminal: ghostty (TERM=xterm-ghostty, COLORTERM=truecolor)\n- Shell: /usr/bin/bash\n- Install/channel: latest, `~/.opencode/bin/opencode`, updated via built-in auto-update\n- Active plugins: 10 local plugin files under `<XDG_CONFIG_HOME>/opencode/plugins/*.js`, npm package `opencode-agent-monitor`\n\n## Reproduction\n\n1. Install opencode v2.1.4 via the update channel.\n2. Run any of the commands documented on opencode.ai/v2/docs:\n   - `opencode service status` / `opencode service restart` (docs: troubleshooting page)\n   - `opencode api get /api/info` (docs: API page)\n   - `opencode plugin list` (implied by the plugin install verb's help docs)\n   - `opencode mcp auth <server>` (docs: MCP page)\n3. `opencode service` and `opencode api` print the general help text and exit as if the word were not a subcommand.\n4. `opencode plugin list` shows a \"Plugin package ready … Plugin config updated\" flow and writes `{ \"plugin\": [\"list\"] }` into the cwd's `.opencode/opencode.json` (local scope).\n\n## Expected Behavior\n\n- Documented subcommands should exist, or the CLI should point to the version of the docs matching the installed build.\n- `opencode plugin <unknown-verb>` should error with \"unknown subcommand\" instead of running the install flow for a package named after the verb. `list` is a particularly bad trap: it appears in issue-report skill flows and litters project configs with a bogus plugin entry that fails to load on next boot.\n\n## Actual Behavior\n\n- `service`, `api` subcommands absent from the 2.1.4 binary (help text shown",
+  "ai_grade": {
+   "grade": "A",
+   "score": 8,
+   "reason": "Reproducible CLI bug where `opencode plugin <unknown>` silently installs a bogus plugin; small validation fix with no competing work, though the missing-command/docs claims add minor scope.",
+   "model": "deepseek-v4.1-flash"
+  }
+ },
+ "anomalyco/opencode#59285": {
+  "id": "anomalyco/opencode#59285",
+  "repo": "anomalyco/opencode",
+  "number": 59285,
+  "title": "free tier usage bug",
+  "url": "https://github.com/anomalyco/opencode/issues/59285",
   "lane": "open",
   "score": 4,
   "class": "B",
   "blockers": [],
   "signals": {
-   "body_len": 1346,
+   "body_len": 258,
    "reactions": 0,
    "labels": [
-    "reproduced"
+    "pending close",
+    "triaging"
    ],
-   "comments": 2,
+   "comments": 1,
    "claim_signal": false,
    "maintainer_confirm": false,
    "duplicate_flag": false,
@@ -3911,18 +3951,94 @@
    "bot_claim": false,
    "cross_ref_pr": false,
    "repro_signal": true,
-   "ai_grade_a": true
+   "ai_grade_a": false
   },
-  "created_at": "2026-10-26T10:40:55Z",
-  "discovered_at": "2026-10-26T20:14:09",
+  "created_at": "2026-10-26T13:34:18Z",
+  "discovered_at": "2026-10-26T21:55:05",
   "status": "new",
   "lease": null,
   "source": "cloudflare-worker",
-  "body_excerpt": "### Description\n\nWhen `opencode run --format json` fails while connecting to its server (server down, missing password, or something other than the OpenCode API answering), it exits 1 with an empty stdout. The error only goes to stderr, as a stack trace. A script that reads the JSON stream gets no error record and no reason.\n\nErrors that happen after the connection, for example a failed session request, already come out as one JSON error record on stdout (`{\"type\":\"error\",\"sessionID\":\"\",...}`). Connection errors should use the same record.\n\n### Plugins\n\nNone\n\n### OpenCode version\n\ndev at ed74ec8 (2.1.4)\n\n### Steps to reproduce\n\n1. `opencode run --format json --server http://127.0.0.1:1 hi > out.jsonl`\n2. The exit code is 1 and `out.jsonl` is empty.\n3. stderr shows `Error: Could not reach server at http://127.0.0.1:1` followed by a stack trace.\n\nSame result with a server that answers 401 (the \"set OPENCODE_PASSWORD\" hint only shows up on stderr) and with one that returns an HTML page.\n\nExpected: one JSON error record on stdout that carries the message and its reason (for example `self signed certificate` for an HTTPS server with a self-signed certificate), and exit code 1.\n\n### Screenshot\n\nNot applicable, CLI output.\n\n### Operating System\n\nmacOS 26.6.2 (arm64)\n\n### Terminal\n\nNot terminal specific, stdout captured by a script\n",
+  "body_excerpt": "### Description\n\nthe free tier usage always get exceeded \n\n### Plugins\n\n_No response_\n\n### OpenCode version\n\n_No response_\n\n### Steps to reproduce\n\n_No response_\n\n### Screenshot\n\n_No response_\n\n### Operating System\n\n_No response_\n\n### Terminal\n\n_No response_",
+  "ai_grade": {
+   "grade": "C",
+   "score": 2,
+   "reason": "Vague billing/quota complaint with no reproduction steps, version, or OS details — not actionable per rules.",
+   "model": "deepseek-v4.1-flash"
+  }
+ },
+ "anomalyco/opencode#59282": {
+  "id": "anomalyco/opencode#59282",
+  "repo": "anomalyco/opencode",
+  "number": 59282,
+  "title": "opencode is not working The message \"Free data allowance exhausted; subscribe to Go\" keeps appearing, even though Opencode hasn't been used for several days.",
+  "url": "https://github.com/anomalyco/opencode/issues/59282",
+  "lane": "open",
+  "score": 4,
+  "class": "B",
+  "blockers": [],
+  "signals": {
+   "body_len": 445,
+   "reactions": 0,
+   "labels": [
+    "triaging"
+   ],
+   "comments": 1,
+   "claim_signal": false,
+   "maintainer_confirm": false,
+   "duplicate_flag": false,
+   "billing_flag": false,
+   "bot_claim": false,
+   "cross_ref_pr": false,
+   "repro_signal": true,
+   "ai_grade_a": false
+  },
+  "created_at": "2026-10-26T13:13:44Z",
+  "discovered_at": "2026-10-26T21:55:05",
+  "status": "new",
+  "lease": null,
+  "source": "cloudflare-worker",
+  "body_excerpt": "### Description\n\nOpenCode v2 + the desktop application aren't working. The support team suggested downloading version 2+, claiming it would solve the issue, but that didn't help—nothing works. It’s clear that there are restrictions on the site.\n\n### Plugins\n\n_No response_\n\n### OpenCode version\n\n_No response_\n\n### Steps to reproduce\n\n_No response_\n\n### Screenshot\n\n_No response_\n\n### Operating System\n\n_No response_\n\n### Terminal\n\n_No response_",
+  "ai_grade": {
+   "grade": "C",
+   "score": 0,
+   "reason": "Billing/quota complaint with no reproducible steps or environment details; not actionable.",
+   "model": "deepseek-v4.1-flash"
+  }
+ },
+ "anomalyco/opencode#59287": {
+  "id": "anomalyco/opencode#59287",
+  "repo": "anomalyco/opencode",
+  "number": 59287,
+  "title": "cli: opencode run hangs before session creation on Linux VPS (v2.1.4 / v2.0.32)",
+  "url": "https://github.com/anomalyco/opencode/issues/59287",
+  "lane": "open",
+  "score": 2,
+  "class": "C",
+  "blockers": [],
+  "signals": {
+   "body_len": 3716,
+   "reactions": 0,
+   "labels": [],
+   "comments": 0,
+   "claim_signal": false,
+   "maintainer_confirm": false,
+   "duplicate_flag": false,
+   "billing_flag": false,
+   "bot_claim": false,
+   "cross_ref_pr": false,
+   "repro_signal": false,
+   "ai_grade_a": true
+  },
+  "created_at": "2026-10-26T13:44:17Z",
+  "discovered_at": "2026-10-26T21:55:28",
+  "status": "new",
+  "lease": null,
+  "source": "cloudflare-worker",
+  "body_excerpt": "## Summary\n\nOn a Linux VPS, `opencode run` (V2, v2.1.4 and v2.0.32) hangs during initialization: no session is created, stdout stays empty, and no error is emitted. The same hang occurs with a clean `HOME` (no config, no credentials) using a free model. Direct calls to the provider API from the same host succeed, so the provider and network egress are functional.\n\nThis looks related to the V1 report in #38723 (hang before session creation; established connection to the model registry held open).\n\n## Environment\n\n- opencode version: **2.1.4** (also reproduced on **2.0.32**)\n- OS: **Ubuntu 24.04.4 LTS**, Linux 6.8 x86_64 (VPS, direct outbound access, no proxy)\n- Terminal: none — non-interactive SSH (`TERM` unset), `ssh host 'opencode run …'`\n- Shell: `/bin/bash` (server default)\n- Install/channel: `curl -fsSL https://opencode.ai/v2/install | bash` (latest channel)\n- Active plugins: none. Config contains one remote MCP server; the bug also reproduces with **no user config at all**\n\n## Reproduction\n\n1. On a clean account/home (no `~/.config/opencode`, no credentials):\n\n   ```bash\n   mkdir -p /tmp/oc-repro && cd /tmp/oc-repro\n   HOME=/tmp/oc-clean timeout 90 opencode run --auto \\\n     -m opencode/deepseek-v4.1-flash-free \"Reply with exactly: OK\"\n   echo \"exit=$?\"\n   ```\n\n2. The process stays alive with **zero stdout**; it exits only via the external `timeout` (`exit=124`).\n\n3. With a configured instance (provider key + a remote MCP server), the same command hangs the same way; the server log stops after location/MCP initialization and never reaches session creation.\n\n## Expected Behavior\n\nThe run creates a session, performs the model request, and prints the model's answer (`OK`). Direct API calls from the same machine complete in ~2 seconds.\n\n## Actual Behavior\n\n- No output, no error, no session; only an external timeout ends it.\n- Server log tail during the hang (DEBUG level):\n\n  ```text\n  message=\"location services booted\" directory=/tmp/oc-repro\n  message=\"mcp connect",
   "ai_grade": {
    "grade": "A",
    "score": 9,
-   "reason": "Reproducible CLI bug with clear expected JSON error output and small scoped fix.",
+   "reason": "Clear reproducible CLI hang with exact repro steps, multiple affected versions, detailed logs, and no competing work; likely small initialization/timeout bug.",
    "model": "deepseek-v4.1-flash"
   }
  }

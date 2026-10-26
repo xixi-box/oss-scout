@@ -3186,5 +3186,33 @@
  "anomalyco/opencode#59244": {
   "first_seen": "2026-10-26T20:14:09",
   "status": "queued"
+ },
+ "anomalyco/opencode#59251": {
+  "first_seen": "2026-10-26T20:14:13",
+  "status": "queued"
+ },
+ "OpenHands/software-agent-sdk#6245": {
+  "first_seen": "2026-10-26T21:55:05",
+  "status": "lowscore"
+ },
+ "OpenHands/OpenHands#18977": {
+  "first_seen": "2026-10-26T21:55:05",
+  "status": "lowscore"
+ },
+ "anomalyco/opencode#59285": {
+  "first_seen": "2026-10-26T21:55:05",
+  "status": "queued"
+ },
+ "anomalyco/opencode#59282": {
+  "first_seen": "2026-10-26T21:55:05",
+  "status": "queued"
+ },
+ "anomalyco/opencode#59288": {
+  "first_seen": "2026-10-26T21:55:28",
+  "status": "lowscore"
+ },
+ "anomalyco/opencode#59287": {
+  "first_seen": "2026-10-26T21:55:28",
+  "status": "queued"
  }
 }

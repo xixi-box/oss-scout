@@ -30,6 +30,20 @@ def _run(cmd: list[str], cwd: Path | None = None) -> tuple[int, str, str]:
     return p.returncode, p.stdout, p.stderr
 
 
+def _snippet(repo_dir: Path, rel_path: str, line: int, context: int = 15) -> str:
+    """取命中行附近代码（带行号）。文件读不到返回空串，不影响扫描结果。"""
+    try:
+        f = repo_dir / rel_path
+        if not f.is_file():
+            return ""
+        lines = f.read_text(encoding="utf-8", errors="replace").splitlines()
+        lo = max(0, line - context - 1)
+        hi = min(len(lines), line + context)
+        return "\n".join(f"{i + lo + 1}: {ln}" for i, ln in enumerate(lines[lo:hi]))[:3000]
+    except OSError:
+        return ""
+
+
 def run_scan(job: Job, repo_dir: Path, out_dir: Path, *,
              ruleset: str = "p/python", max_findings: int = 50,
              semgrep_bin: str = "semgrep", runner=None) -> Result:
@@ -66,6 +80,8 @@ def run_scan(job: Job, repo_dir: Path, out_dir: Path, *,
             check_id = r.get("check_id") or ""
             line = int((r.get("start") or {}).get("line") or 0)
             fp = bug_fingerprint(job.repo, path, check_id, line)
+            # 连带代码片段一起回传：Sandbox 里网络通畅、仓库已在本地，
+            # 这样下游 OpenCode 分析无需再 clone（部署机可能连不上 GitHub）
             findings.append({
                 "path": str(PurePosixPath(path)),
                 "line": line,
@@ -73,6 +89,7 @@ def run_scan(job: Job, repo_dir: Path, out_dir: Path, *,
                 "message": (r.get("extra") or {}).get("message", "")[:300],
                 "fingerprint": fp,
                 "candidate_id": bug_candidate_id(job.repo, job.base_sha, fp),
+                "snippet": _snippet(repo_dir, path, line, context=15),
             })
     except (json.JSONDecodeError, ValueError, AttributeError) as e:
         return Result(job_id=job.job_id, backend="local", outcome="failed",

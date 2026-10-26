@@ -73,22 +73,27 @@ def dedupe_search(repo: str, finding: dict) -> dict:
 
 
 def opencode_analyze(repo: str, sha: str, finding: dict, workdir: Path) -> dict:
-    """OpenCode 只读分析一个可疑线索（不修改任何文件）。"""
+    """OpenCode 只读分析一个可疑线索（不修改任何文件）。
+
+    代码片段优先取 Sandbox 回传的 finding["snippet"]——部署机常连不上 GitHub，
+    在那里 clone 会失败；Sandbox 内网络通畅且仓库已在本地，扫描时顺手带回。
+    """
     from scout_v2.workers.opencode_client import OpenCodeClient
-    subprocess.run(["git", "clone", "--quiet", "--depth", "1", "--filter=blob:none",
-                    f"https://github.com/{repo}.git", str(workdir)],
-                   check=True, capture_output=True, timeout=600)
-    subprocess.run(["git", "-C", str(workdir), "fetch", "--quiet", "--depth", "1",
-                    "origin", sha], capture_output=True, timeout=300)
-    subprocess.run(["git", "-C", str(workdir), "checkout", "--quiet", "--detach",
-                    "FETCH_HEAD"], capture_output=True, timeout=120)
-    snippet = ""
-    fpath = workdir / finding["path"]
-    if fpath.is_file():
-        lines = fpath.read_text(encoding="utf-8", errors="replace").splitlines()
-        lo = max(0, finding["line"] - 15)
-        snippet = "\n".join(f"{i+lo+1}: {l}" for i, l in
-                            enumerate(lines[lo:finding["line"] + 5]))[:3000]
+    snippet = (finding.get("snippet") or "").strip()
+    if not snippet:
+        try:
+            workdir.mkdir(parents=True, exist_ok=True)
+            subprocess.run(["git", "clone", "--quiet", "--depth", "1", "--filter=blob:none",
+                            f"https://github.com/{repo}.git", str(workdir)],
+                           check=True, capture_output=True, timeout=180)
+            fpath = workdir / finding["path"]
+            if fpath.is_file():
+                ls = fpath.read_text(encoding="utf-8", errors="replace").splitlines()
+                lo = max(0, finding["line"] - 15)
+                snippet = chr(10).join(f"{i+lo+1}: {l}" for i, l in
+                                       enumerate(ls[lo:finding["line"] + 5]))[:3000]
+        except Exception:  # noqa: BLE001 — 无片段也能凭规则描述分析
+            snippet = "(code snippet unavailable; analyze from rule + message only)"
     prompt = (
         "You are reviewing a static-analysis finding. Answer in <=6 lines.\n"
         f"Repo: {repo} at commit {sha}\n"
@@ -97,6 +102,7 @@ def opencode_analyze(repo: str, sha: str, finding: dict, workdir: Path) -> dict:
         "Question: is this plausibly a real bug worth a maintainer's time, a false "
         "positive, or needs-more-context? State which test would settle it. "
         "Do NOT modify any files.")
+    workdir.mkdir(parents=True, exist_ok=True)   # OpenCodeClient 以 cwd 运行
     client = OpenCodeClient(timeout_seconds=300, workdir=workdir)
     ok, detail = client.run("opencode-go/deepseek-v4.1-flash", prompt)
     return {"ok": ok, "analysis": detail[:1200] if ok else detail[:300]}
