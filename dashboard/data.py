@@ -341,8 +341,33 @@ class DataSource:
         return self._cached("gh:" + " ".join(args), dashboard_settings(self)["gh_cache_ttl"], _call)
 
     def own_repos(self) -> list[str]:
-        """从 worklog target/detail 与 artifacts pr_url.txt 提取自有仓库（xixi-box/*）。"""
+        """自有仓库列表：配置声明 + 实际调用 gh 查询的仓库。
+
+        来源（并集）：
+        1. configs/dashboard.yaml: pr_repos（显式声明，适合新部署的空数据目录）
+        2. repositories.yaml 里 internal_test_repo / 属于当前 gh 用户的仓库
+        3. worklog / artifacts 历史痕迹（兼容老部署）
+        """
         repos: set[str] = set()
+        # 1) 显式配置
+        try:
+            cfg = dashboard_settings(self)
+            for r in (cfg.get("pr_repos") or []):
+                if isinstance(r, str) and "/" in r:
+                    repos.add(r)
+        except Exception:  # noqa: BLE001
+            pass
+        # 2) 当前 gh 用户的仓库（有 admin 权限者，避免查询他人仓库）
+        try:
+            out = self.gh_runner(["api", "user", "--jq", ".login"])
+            me = (out or "").strip()
+            if me:
+                cfg_repos = (self.repositories_yaml().get("repositories") or {})
+                for repo_name in cfg_repos:
+                    if repo_name.startswith(me + "/"):
+                        repos.add(repo_name)
+        except Exception:  # noqa: BLE001
+            pass
         pat = re.compile(r"xixi-box/[A-Za-z0-9_.\-]+")
         for rec in self.worklog():
             blob = " ".join(str(rec.get(k, "")) for k in ("target", "result", "detail", "repo"))
