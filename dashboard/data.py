@@ -72,9 +72,15 @@ def default_modal_runner(root: Path) -> str:
         "import json\n"
         "print('METERED', json.dumps(ModalCliBilling().metered_usage_usd()))\n"
     )
+    # cwd 必须能 import scout_v2：优先包所在目录（容器 /app），回退数据根
+    pkg_root = Path(__file__).resolve().parents[1]
+    run_cwd = pkg_root if (pkg_root / "scout_v2").is_dir() else Path(root)
+    env = dict(__import__("os").environ)
+    env["PYTHONPATH"] = str(pkg_root) + (
+        (__import__("os").pathsep + env["PYTHONPATH"]) if env.get("PYTHONPATH") else "")
     p = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True,
-                       encoding="utf-8", errors="replace", timeout=60, cwd=str(root),
-                       env=None)
+                       encoding="utf-8", errors="replace", timeout=60, cwd=str(run_cwd),
+                       env=env)
     if p.returncode != 0:
         raise RuntimeError((p.stderr or "").strip()[:300])
     return p.stdout
@@ -340,11 +346,16 @@ class DataSource:
     def _gh_json(self, args: list[str]):
         def _call():
             try:
-                out = self.gh_runner(args)
-                return json.loads(out)
+                return json.loads(self.gh_runner(args))
             except Exception:  # noqa: BLE001 — TLS 抖动/超时/坏 JSON 都显示"未知"
                 return None
-        return self._cached("gh:" + " ".join(args), dashboard_settings(self)["gh_cache_ttl"], _call)
+        key = "gh:" + " ".join(args)
+        ttl = dashboard_settings(self)["gh_cache_ttl"]
+        # 失败（None）只缓存 30s：TLS 抖动恢复后能立刻出数据，不被长 TTL 卡住
+        hit = self._cache.get(key)
+        if hit and hit[1] is None:
+            ttl = min(ttl, 30)
+        return self._cached(key, ttl, _call)
 
     def own_repos(self) -> list[str]:
         """自有仓库列表：配置声明 + 实际调用 gh 查询的仓库。
@@ -399,30 +410,32 @@ class DataSource:
         if not me:
             return None
         self._me_login = me
-        q = f"author:{me} is:pr sort:updated-desc"
-        data = self._gh_json([
-            "search/issues", "-X", "GET", "-f", f"q={q}",
-            "-f", "per_page", "-f", str(limit),
-            "--jq", ("{items: [.items[] | {number, title, state, created_at, updated_at, "
-                     "html_url, repository_url, comments, draft, pull_request}]}"),
+        # 用 gh search prs（高层命令）而不是 gh api search/issues：
+        # 后者在部分 gh 版本会把 search 当子命令解析，返回帮助文本而非 JSON
+        items = self._gh_json([
+            "search", "prs", "--author", me,
+            "--limit", str(limit), "--sort", "updated", "--order", "desc",
+            "--json", ("number,title,state,createdAt,updatedAt,url,repository,"
+                       "commentsCount,isDraft"),
         ])
+        data = items if isinstance(items, list) else None
         if data is None:
             return None
         out = []
-        for it in data.get("items") or []:
-            repo = str(it.get("repository_url", "")).rsplit("/repos/", 1)[-1]
-            pr = it.get("pull_request") or {}
-            merged = bool(pr.get("merged_at"))
+        for it in data:
+            repo_obj = it.get("repository") or {}
+            repo = (repo_obj.get("nameWithOwner") if isinstance(repo_obj, dict)
+                    else str(repo_obj)) or ""
             out.append({
                 "repo": repo,
                 "number": it.get("number"),
                 "title": it.get("title", ""),
-                "state": "MERGED" if merged else str(it.get("state", "")).upper(),
-                "url": it.get("html_url", ""),
-                "createdAt": it.get("created_at", ""),
-                "updatedAt": it.get("updated_at", ""),
-                "comments": it.get("comments", 0),
-                "isDraft": bool(it.get("draft")),
+                "state": str(it.get("state", "")).upper(),
+                "url": it.get("url", ""),
+                "createdAt": it.get("createdAt", ""),
+                "updatedAt": it.get("updatedAt", ""),
+                "comments": it.get("commentsCount", 0),
+                "isDraft": bool(it.get("isDraft")),
                 "external": not repo.startswith((me + "/")),
             })
         return out
