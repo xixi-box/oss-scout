@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import base64
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -26,6 +27,10 @@ from pathlib import Path
 sys.stdout.reconfigure(encoding="utf-8")
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+
+# 配置根：容器里运行时配置在 /data/configs（卷持久化），本地开发在项目根
+CFG_ROOT = ROOT if (ROOT / "configs" / "v2.yaml").exists() else Path(
+    os.environ.get("OSSCOUT_DASHBOARD_ROOT", "/data"))
 
 import yaml  # noqa: E402
 
@@ -103,7 +108,7 @@ def main() -> int:
     ap.add_argument("--repos", type=int, default=3, help="扫描 MVP 名单前 N 个仓库")
     ap.add_argument("--findings-cap", type=int, default=20)
     args = ap.parse_args()
-    v2 = yaml.safe_load((ROOT / "configs" / "v2.yaml").read_text(encoding="utf-8"))
+    v2 = yaml.safe_load((CFG_ROOT / "configs" / "v2.yaml").read_text(encoding="utf-8"))
     mb = v2["budget"]["modal"]
     repos = v2["bug_hunter"]["mvp_repos"][:args.repos]
     stop_threshold = 27.0  # 用户约定：$27 或更保守值即停

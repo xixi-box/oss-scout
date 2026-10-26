@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import json
+import os
 import urllib.error
 import urllib.request
 import uuid
@@ -136,12 +137,19 @@ def load_scorer_config(root: Path) -> dict:
         except Exception:  # noqa: BLE001
             cfg = {}
     if not cfg.get("api_key"):
-        try:
-            auth = json.loads((Path.home() / ".local/share/opencode/auth.json")
-                              .read_text(encoding="utf-8"))
-            cfg["api_key"] = (auth.get("opencode-go") or {}).get("key", "")
-        except Exception:  # noqa: BLE001
-            cfg["api_key"] = ""
+        # 1) 环境变量优先（容器/CI 里由 Secret 注入，不落盘）
+        env_key = (os.environ.get("OPENCODE_API_KEY")
+                   or os.environ.get("OPENCODE_GO_API_KEY") or "").strip()
+        if env_key:
+            cfg["api_key"] = env_key
+        else:
+            # 2) 本地开发：opencode CLI 的登录态
+            try:
+                auth = json.loads((Path.home() / ".local/share/opencode/auth.json")
+                                  .read_text(encoding="utf-8"))
+                cfg["api_key"] = (auth.get("opencode-go") or {}).get("key", "")
+            except Exception:  # noqa: BLE001
+                cfg["api_key"] = ""
     cfg.setdefault("model", DEFAULT_MODEL)
     return cfg
 

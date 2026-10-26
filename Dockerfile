@@ -18,6 +18,7 @@ COPY dashboard ./dashboard
 COPY configs ./configs.seed
 COPY scripts ./scripts
 COPY cloudflare ./cloudflare
+COPY docker ./docker
 COPY discover.py health_check.py AGENTS.md ./
 COPY tests_v2 ./tests_v2
 COPY requirements.txt ./
