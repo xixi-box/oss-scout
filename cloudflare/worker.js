@@ -92,8 +92,28 @@ async function pollOnce(env) {
   }
 
   if (!issues.length) return;
-  const key = `pending:${now.toISOString().replace(/[:.]/g, "-")}`;
-  await env.SEEN.put(key, JSON.stringify({
+
+  // 主通道：直接 POST 到 dashboard /api/ingest/issues（免 KV 写额度）。
+  // 兜底：INGEST_URL 不可达时才写 KV pending（KV 免费档仅 1000 write/天）。
+  const payload = JSON.stringify({
     repos_scanned: repos.length, scanned_at: now.toISOString(), issues,
-  }), {expirationTtl: 3600});   // 1 小时未被拉取自动过期
+  });
+  let delivered = false;
+  if (env.INGEST_URL && env.INGEST_TOKEN) {
+    try {
+      const resp = await fetch(env.INGEST_URL, {
+        method: "POST",
+        headers: {"Content-Type": "application/json",
+                  "X-Ingest-Token": env.INGEST_TOKEN},
+        body: payload,
+      });
+      delivered = resp.ok;
+    } catch (e) {
+      delivered = false;
+    }
+  }
+  if (!delivered) {
+    const key = `pending:${now.toISOString().replace(/[:.]/g, "-")}`;
+    await env.SEEN.put(key, payload, {expirationTtl: 3600});
+  }
 }

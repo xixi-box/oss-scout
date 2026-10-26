@@ -3174,5 +3174,21 @@
  "crewAIInc/crewAI#8583": {
   "first_seen": "2026-10-26T12:32:00",
   "status": "lowscore"
+ },
+ "anomalyco/opencode#59229": {
+  "first_seen": "2026-10-26T20:12:34",
+  "status": "queued"
+ },
+ "anomalyco/opencode#59113": {
+  "first_seen": "2026-10-26T20:12:34",
+  "status": "blocked"
+ },
+ "anomalyco/opencode#59244": {
+  "first_seen": "2026-10-26T20:14:09",
+  "status": "queued"
+ },
+ "anomalyco/opencode#59251": {
+  "first_seen": "2026-10-26T20:14:13",
+  "status": "queued"
  }
 }

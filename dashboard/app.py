@@ -195,7 +195,7 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
         return tpl.TemplateResponse(request, name, ctx, status_code=status_code)
 
     # ---------------- 认证 ----------------
-    PUBLIC_PATHS = ("/login", "/static", "/favicon.ico")
+    PUBLIC_PATHS = ("/login", "/static", "/favicon.ico", "/api/ingest/")
 
     @app.middleware("http")
     async def auth_middleware(request: Request, call_next):
@@ -599,6 +599,49 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
         out = drain_ai_graded(root, limit=1, dry_run=False)
         _audit(root, "pipeline_run", "auto", json.dumps(out, ensure_ascii=False)[:400])
         return JSONResponse({"results": out})
+
+    # ---------------- Cloudflare Worker 直推入口（KV 免费额度不够时的主通道） ----------------
+    @app.post("/api/ingest/issues")
+    async def api_ingest_issues(request: Request):
+        """Worker 直接回传 issue（免 KV 写额度）。
+
+        安全：X-Ingest-Token 对比 configs/cloudflare.yaml:ingest_token；
+        请求体是 Worker 自己的 JSON（不可信），只取白名单字段，评分走本地规则 + AI。
+        """
+        cfg = D.cloudflare_cfg(ds)
+        expect = (cfg.get("ingest_token") or "").strip()
+        got = request.headers.get("X-Ingest-Token", "").strip()
+        if not expect:
+            return JSONResponse({"detail": "ingest_token not configured"}, status_code=503)
+        if not hmac.compare_digest(got, expect):
+            return JSONResponse({"detail": "forbidden"}, status_code=403)
+        try:
+            body = json.loads((await request.body()) or b"{}")
+        except Exception:  # noqa: BLE001
+            return JSONResponse({"detail": "bad json"}, status_code=400)
+        items = body.get("issues")
+        if not isinstance(items, list):
+            return JSONResponse({"detail": "issues must be a list"}, status_code=400)
+        # 字段收敛：只保留白名单，防注入超大/异常结构
+        clean = []
+        for it in items[:200]:
+            if not isinstance(it, dict):
+                continue
+            clean.append({
+                "repo": str(it.get("repo", ""))[:120],
+                "number": int(it.get("number") or 0),
+                "title": str(it.get("title", ""))[:400],
+                "url": str(it.get("url", ""))[:400],
+                "created_at": str(it.get("created_at", ""))[:40],
+                "labels": [str(x)[:60] for x in (it.get("labels") or [])][:20],
+                "reactions": int(it.get("reactions") or 0),
+                "comments": int(it.get("comments") or 0),
+                "body_excerpt": str(it.get("body_excerpt", ""))[:4000],
+            })
+        queued = D.ingest_cloudflare_issues(ds, clean)
+        _audit(root, "ingest_issues", f"{len(clean)} items",
+               f"queued={queued} repos={body.get('repos_scanned', '?')}")
+        return JSONResponse({"queued": queued, "received": len(clean)})
 
     @app.post("/api/dashboard/settings")
     def api_dashboard_settings(request: Request,

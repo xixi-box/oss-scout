@@ -3847,5 +3847,83 @@
    "reason": "Clear reproducible bug, but explicitly duplicates #18472, so not separately actionable.",
    "model": "deepseek-v4.1-flash"
   }
+ },
+ "anomalyco/opencode#59229": {
+  "id": "anomalyco/opencode#59229",
+  "repo": "anomalyco/opencode",
+  "number": 59229,
+  "title": "[BUG] Desktop (Windows): app intermittently becomes an invisible input-eating overlay after display/DPI changes on multi-monitor setups",
+  "url": "https://github.com/anomalyco/opencode/issues/59229",
+  "lane": "open",
+  "score": 3,
+  "class": "B",
+  "blockers": [],
+  "signals": {
+   "body_len": 4000,
+   "reactions": 0,
+   "labels": [
+    "triaging"
+   ],
+   "comments": 10,
+   "claim_signal": false,
+   "maintainer_confirm": false,
+   "duplicate_flag": false,
+   "billing_flag": false,
+   "bot_claim": false,
+   "cross_ref_pr": false,
+   "repro_signal": true,
+   "ai_grade_a": false
+  },
+  "created_at": "2026-10-26T09:31:59Z",
+  "discovered_at": "2026-10-26T20:12:34",
+  "status": "new",
+  "lease": null,
+  "source": "cloudflare-worker",
+  "body_excerpt": "### Description\n\n## Description\n\nOn a dual-monitor Windows setup, OpenCode Desktop intermittently enters a state where an invisible window (an app-owned `Chrome_WidgetWin_1` window — either the main BrowserWindow with stale bounds or a transparent overlay BrowserWindow) sits on top of **other** applications and swallows all mouse input. Affected windows stay fully visible but cannot be clicked (\"behind glass\" feeling). In the worst observed episode, **no window on the entire desktop could be interacted with** — `GetForegroundWindow()` returned `NULL`, i.e. Windows input/foreground routing was wedged system-wide.\n\nOnly recoveries that work: lock screen + log back in, killing the OpenCode process, or restarting the graphics driver (`Win+Ctrl+Shift+B`).\n\nNote: this was observed on an enterprise-customized build of OpenCode Desktop **2.1.4** (custom updater/config; the desktop shell itself appears unmodified). The window-management path involved is upstream `packages/desktop`, so I believe this is worth reporting here.\n\n### Environment\n\n- OpenCode Desktop 2.1.4 (Electron), bundled opencode-cli 2.1.4\n- Windows 11 Pro 23H2, build 10.0.22631\n- Two monitors; **secondary monitor arranged above the primary → negative Y coordinates** (OpenCode main window lives at `(-128,-1440)`, size 3440x1440)\n\n### Steps to reproduce (probabilistic)\n\n1. Run OpenCode Desktop on a multi-monitor setup where one monitor has negative coordinates / mixed DPI scale.\n2. Use it across display-state transitions: lock screen / monitors sleep+wake / scale changes. Episodes occurred roughly daily.\n3. At some point after such a transition (suspiciously often right after a task-completion toast appears), other windows become visible-but-unclickable. Sometimes it escalates to the whole desktop being unclickable.\n\n### Evidence\n\nCaptured with a background watcher sampling `WindowFromPoint()` at the cursor every 2 s, comparing the top window's owner PID against the foreground window's PID.\n\nDuring a freeze:\n\n[",
+  "ai_grade": {
+   "grade": "B",
+   "score": 7,
+   "reason": "Serious and plausibly upstream desktop window/DPI bug, but probabilistic reproduction and multi-monitor/Electron scope make it too complex for an A.",
+   "model": "deepseek-v4.1-flash"
+  }
+ },
+ "anomalyco/opencode#59251": {
+  "id": "anomalyco/opencode#59251",
+  "repo": "anomalyco/opencode",
+  "number": 59251,
+  "title": "cli: docs advertise service/api/\"plugin list\" subcommands missing in v2.1.4; \"opencode plugin <word>\" silently installs the word",
+  "url": "https://github.com/anomalyco/opencode/issues/59251",
+  "lane": "open",
+  "score": 2,
+  "class": "C",
+  "blockers": [
+   "docs_only"
+  ],
+  "signals": {
+   "body_len": 2769,
+   "reactions": 0,
+   "labels": [],
+   "comments": 0,
+   "claim_signal": false,
+   "maintainer_confirm": false,
+   "duplicate_flag": false,
+   "billing_flag": false,
+   "bot_claim": false,
+   "cross_ref_pr": false,
+   "repro_signal": false,
+   "ai_grade_a": true
+  },
+  "created_at": "2026-10-26T11:21:45Z",
+  "discovered_at": "2026-10-26T20:14:13",
+  "status": "new",
+  "lease": null,
+  "source": "cloudflare-worker",
+  "body_excerpt": "\n## Summary\n\nAfter updating OpenCode to v2.1.4, several CLI subcommands documented at opencode.ai/v2/docs do not exist in the installed binary, and one that does exist traps users: `opencode plugin <module>` treats any unknown word — including the `list` documented by the docs — as a module name and silently installs/registers a bogus plugin.\n\n## Environment\n\n- opencode version: 2.1.4 (channel: latest)\n- OS: Linux 7.2.5-3-omarchy (linux x64, Arch/Hyprland)\n- Terminal: ghostty (TERM=xterm-ghostty, COLORTERM=truecolor)\n- Shell: /usr/bin/bash\n- Install/channel: latest, `~/.opencode/bin/opencode`, updated via built-in auto-update\n- Active plugins: 10 local plugin files under `<XDG_CONFIG_HOME>/opencode/plugins/*.js`, npm package `opencode-agent-monitor`\n\n## Reproduction\n\n1. Install opencode v2.1.4 via the update channel.\n2. Run any of the commands documented on opencode.ai/v2/docs:\n   - `opencode service status` / `opencode service restart` (docs: troubleshooting page)\n   - `opencode api get /api/info` (docs: API page)\n   - `opencode plugin list` (implied by the plugin install verb's help docs)\n   - `opencode mcp auth <server>` (docs: MCP page)\n3. `opencode service` and `opencode api` print the general help text and exit as if the word were not a subcommand.\n4. `opencode plugin list` shows a \"Plugin package ready … Plugin config updated\" flow and writes `{ \"plugin\": [\"list\"] }` into the cwd's `.opencode/opencode.json` (local scope).\n\n## Expected Behavior\n\n- Documented subcommands should exist, or the CLI should point to the version of the docs matching the installed build.\n- `opencode plugin <unknown-verb>` should error with \"unknown subcommand\" instead of running the install flow for a package named after the verb. `list` is a particularly bad trap: it appears in issue-report skill flows and litters project configs with a bogus plugin entry that fails to load on next boot.\n\n## Actual Behavior\n\n- `service`, `api` subcommands absent from the 2.1.4 binary (help text shown",
+  "ai_grade": {
+   "grade": "A",
+   "score": 8,
+   "reason": "Reproducible CLI bug where `opencode plugin <unknown>` silently installs a bogus plugin; small validation fix with no competing work, though the missing-command/docs claims add minor scope.",
+   "model": "deepseek-v4.1-flash"
+  }
  }
 }
