@@ -23,8 +23,13 @@ from pathlib import Path
 
 sys.stdout.reconfigure(encoding="utf-8")
 
-ROOT = Path(__file__).resolve().parent
-CONFIG = json.loads((ROOT / "config.json").read_text(encoding="utf-8"))
+_SRC = Path(__file__).resolve().parent
+# 输出/配置根：容器里运行在 /data（卷持久化），本地开发在源码目录
+import os as _os
+ROOT = Path(_os.environ.get("OSSCOUT_HEALTH_ROOT") or
+            (_SRC if (_SRC / "config.json").exists() else "/data"))
+CONFIG_PATH = (_SRC / "config.json") if (_SRC / "config.json").exists() else (ROOT / "config.json")
+CONFIG = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
 WINDOW_DAYS = 75
 
 RE_ASSIGN_GATE = re.compile(

@@ -663,6 +663,31 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
                f"pull={cfg['cf_pull_seconds']}s pr={cfg['pr_refresh_seconds']}s ttl={cfg['gh_cache_ttl']}s")
         return RedirectResponse("/quota", status_code=303)
 
+    @app.post("/api/health/refresh")
+    def api_health_refresh():
+        """重跑 health_check.py（读仓库生态 + CONTRIBUTING 政策闸），后台线程执行。"""
+        import threading as _th
+
+        def _run():
+            import subprocess as _sp
+            try:
+                log_dir = root / "state" / "runs"
+                log_dir.mkdir(parents=True, exist_ok=True)
+                out = log_dir / f"health_{time.strftime('%Y%m%d_%H%M')}_manual.log"
+                with out.open("w", encoding="utf-8") as fh:
+                    _sp.run([sys.executable, "health_check.py"], cwd=str(root),
+                            stdout=fh, stderr=_sp.STDOUT, timeout=1800,
+                            env={**__import__("os").environ,
+                                 "OSSCOUT_HEALTH_ROOT": str(root)})
+                _audit(root, "health_refresh", "health_check.py",
+                       f"done -> {out.name}")
+            except Exception as e:  # noqa: BLE001
+                _audit(root, "health_refresh", "health_check.py", f"fail: {str(e)[:150]}")
+
+        _th.Thread(target=_run, daemon=True).start()
+        _audit(root, "health_refresh_requested", "health_check.py", "background started")
+        return RedirectResponse("/quota", status_code=303)
+
     @app.post("/api/cloudflare/pull")
     def api_cloudflare_pull():
         out = D.cloudflare_pull(ds)

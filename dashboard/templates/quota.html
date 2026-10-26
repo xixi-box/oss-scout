@@ -85,6 +85,15 @@
     </script>
   </div>
 <div class="card mt">
+  <h2>健康检查</h2>
+  <p class="muted small">health.json 记录各仓库外部 PR 生态与 CONTRIBUTING 政策闸，建议每周重算。</p>
+  <form method="post" action="/api/health/refresh" class="inline-form">
+    <button class="btn btn-primary" type="submit">重跑健康检查</button>
+    <span class="small muted">后台执行，约 2-5 分钟（19 个仓库全量扫描）</span>
+  </form>
+</div>
+
+<div class="card mt">
   <h2>运行参数（改动即时生效，无需重启）</h2>
   <form method="post" action="/api/dashboard/settings">
     <label class="small muted">Cloudflare KV 拉取间隔（秒，10-300；20s = 4320 读/天，占 10 万读额度 4%）</label><br>
