@@ -161,8 +161,14 @@ class DataSource:
     # ---------- health ----------
 
     def health(self) -> tuple[dict | None, bool]:
-        """返回 (health dict|None, 是否过期>7天)。"""
+        """返回 (health dict|None, 是否过期>7天)。
+
+        文件不存在 → (None, False)：页面显示"尚未计算"，不误报为"已过期"。
+        （原先返回 True 会让全新部署一上来就显示"过期>7天"的误导提示）
+        """
         path = self.root / "state" / "health.json"
+        if not path.exists():
+            return None, False
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
         except Exception:  # noqa: BLE001
@@ -380,6 +386,53 @@ class DataSource:
                     repos.add(m.group(1))
         return sorted(repos)
 
+
+    def my_external_prs(self, limit: int = 50):
+        """我（gh 当前用户）在全 GitHub 的作者 PR——含贡献给第三方仓库的。
+
+        用 search API：author:<me> is:pr。返回 None 表示查询失败（页面显示未知）。
+        """
+        try:
+            me = (self.gh_runner(["api", "user", "--jq", ".login"]) or "").strip()
+        except Exception:  # noqa: BLE001
+            return None
+        if not me:
+            return None
+        self._me_login = me
+        q = f"author:{me} is:pr sort:updated-desc"
+        data = self._gh_json([
+            "search/issues", "-X", "GET", "-f", f"q={q}",
+            "-f", "per_page", "-f", str(limit),
+            "--jq", ("{items: [.items[] | {number, title, state, created_at, updated_at, "
+                     "html_url, repository_url, comments, draft, pull_request}]}"),
+        ])
+        if data is None:
+            return None
+        out = []
+        for it in data.get("items") or []:
+            repo = str(it.get("repository_url", "")).rsplit("/repos/", 1)[-1]
+            pr = it.get("pull_request") or {}
+            merged = bool(pr.get("merged_at"))
+            out.append({
+                "repo": repo,
+                "number": it.get("number"),
+                "title": it.get("title", ""),
+                "state": "MERGED" if merged else str(it.get("state", "")).upper(),
+                "url": it.get("html_url", ""),
+                "createdAt": it.get("created_at", ""),
+                "updatedAt": it.get("updated_at", ""),
+                "comments": it.get("comments", 0),
+                "isDraft": bool(it.get("draft")),
+                "external": not repo.startswith((me + "/")),
+            })
+        return out
+
+    def me_login(self) -> str:
+        try:
+            return (self.gh_runner(["api", "user", "--jq", ".login"]) or "").strip()
+        except Exception:  # noqa: BLE001
+            return ""
+
     def pr_list(self, repo: str):
         """PR 列表（含完整状态/评论/review/diff 统计/正文）。
 
@@ -546,6 +599,7 @@ class DataSource:
             "recent_worklog": recent,
             "modal": self.modal_usage(),
             "health_expired": health_expired,
+            "health_missing": not (self.root / "state" / "health.json").exists(),
             "health_date": self.health_date(),
         }
 

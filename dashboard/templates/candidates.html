@@ -1,5 +1,22 @@
 {% extends "base.html" %}
-{% block title %}候选池 · oss-scout{% endblock %}
+{% block title %}候选池 · oss-scout<script>
+function toggleDetail(row, slug) {
+  const cell = document.getElementById('detail-' + slug);
+  if (!cell) return;
+  const open = row.classList.contains('expanded');
+  if (open) {
+    cell.innerHTML = '';
+    row.classList.remove('expanded');
+    row.querySelector('.cand-toggle').textContent = '▸';
+  } else {
+    row.classList.add('expanded');
+    row.querySelector('.cand-toggle').textContent = '▾';
+    // 触发 HTMX 加载
+    htmx.ajax('GET', row.getAttribute('hx-get'), {target: cell, swap: 'innerHTML'});
+  }
+}
+</script>
+{% endblock %}
 {% block content %}
 <div class="card mt">
   <h2 style="font-size:18px">AI 细筛 → 自动修复流水线</h2>
@@ -71,12 +88,14 @@
       {% set k = c.get("id", "") %}
       {% set slug = k | replace('/', '-') | replace('#', '-') %}
       <tr class="cand-row" hx-get="/candidates/{{ k | urlencode }}/detail"
-          hx-target="#detail-{{ slug }}" hx-swap="innerHTML">
-        <td class="muted">▸</td>
+          hx-target="#detail-{{ slug }}" hx-swap="innerHTML"
+          hx-trigger="click[!this.classList.contains('expanded')], click from:.cand-toggle"
+          onclick="toggleDetail(this, '{{ slug }}')">
+        <td class="muted cand-toggle">▸</td>
         <td class="wrap"><a href="{{ c.get('url', '#') }}" target="_blank" rel="noreferrer">{{ c.get("title", "") }}</a></td>
         <td class="nowrap">{{ c.get("repo", "") }}#{{ c.get("number", "") }}</td>
         <td><span class="chip lane-{{ c.get('lane', 'open') }}">{{ c.get("lane", "?") }}</span></td>
-        <td><span class="chip {{ 'chip-a' if c.get('class') == 'A' }}">{{ c.get("class") or "—" }}</span></td>
+        <td><span class="chip {{ 'chip-a' if c.get('class') == 'A' else ('chip-c' if c.get('class') == 'C' or not c.get('class') else '') }}">{{ c.get("class") or "C" }}</span></td>
         <td>{{ c.get("score", "") }}</td>
         <td><span class="chip">{{ c.get("status", "") }}</span></td>
         <td class="nowrap muted small">{{ c.get("discovered_at", "") }}</td>
@@ -105,4 +124,21 @@
   <p class="muted">暂无 bug 车道任务（artifacts 也无 findings.json）</p>
   {% endif %}
 </div>
+<script>
+function toggleDetail(row, slug) {
+  const cell = document.getElementById('detail-' + slug);
+  if (!cell) return;
+  const open = row.classList.contains('expanded');
+  if (open) {
+    cell.innerHTML = '';
+    row.classList.remove('expanded');
+    row.querySelector('.cand-toggle').textContent = '▸';
+  } else {
+    row.classList.add('expanded');
+    row.querySelector('.cand-toggle').textContent = '▾';
+    // 触发 HTMX 加载
+    htmx.ajax('GET', row.getAttribute('hx-get'), {target: cell, swap: 'innerHTML'});
+  }
+}
+</script>
 {% endblock %}

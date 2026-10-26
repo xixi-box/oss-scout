@@ -12,6 +12,46 @@
 {% if not repo_prs %}
 <div class="card"><p class="muted">worklog / artifacts 中未发现自有仓库（xixi-box/*）</p></div>
 {% endif %}
+<div class="card mt">
+  <h2>我提交的全部 PR（{{ my_login or "当前账号" }}）</h2>
+  {% if external_prs is none %}
+  <p class="muted">未知（gh search 查询失败，稍后自动重试）</p>
+  {% elif not external_prs %}
+  <p class="muted">暂无记录</p>
+  {% else %}
+  <div class="table-scroll">
+  <table>
+    <thead><tr><th>#</th><th>仓库</th><th>标题</th><th>状态</th><th>评论</th><th>更新</th><th></th></tr></thead>
+    <tbody>
+      {% for pr in external_prs %}
+      <tr>
+        <td class="nowrap"><a href="{{ pr.url }}" target="_blank" rel="noreferrer">#{{ pr.number }}</a></td>
+        <td class="nowrap small">
+          {{ pr.repo }}
+          {% if pr.external %}<span class="chip">外部</span>{% endif %}
+        </td>
+        <td class="wrap small">{{ pr.title|mask }}</td>
+        <td class="nowrap">
+          <span class="chip {{ 'chip-green' if pr.state == 'MERGED' else ('chip-warn' if pr.state == 'CLOSED' else '') }}">
+            {{ pr.state }}</span>
+          {% if pr.isDraft %}<span class="chip">draft</span>{% endif %}
+        </td>
+        <td class="nowrap small">{{ pr.comments }}</td>
+        <td class="nowrap muted small">{{ (pr.updatedAt or "")[:16] }}</td>
+        <td>
+          <button class="btn btn-ghost" type="button"
+                  hx-get="/prs/{{ pr.repo|replace('/', '__') }}/{{ pr.number }}/detail"
+                  hx-target="#extdetail-{{ loop.index }}" hx-swap="innerHTML">详情</button>
+        </td>
+      </tr>
+      <tr><td colspan="7" id="extdetail-{{ loop.index }}"></td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% endif %}
+</div>
+
 {% for rp in repo_prs %}
 <div class="card mt">
   <h2>{{ rp.repo }}</h2>

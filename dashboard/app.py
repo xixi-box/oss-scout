@@ -421,8 +421,13 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
                 pr["_has_review"] = bool(pr.get("reviews") or comments)
                 pr["_ci"] = ci
             repo_prs.append({"repo": repo, "prs": pr_list})
+        external = ds.my_external_prs(limit=50)
+        if external is None:
+            any_unknown = True
+        my_login = ds.me_login()
         return render(request, "prs.html", {
             "repo_prs": repo_prs, "any_unknown": any_unknown,
+            "external_prs": external, "my_login": my_login,
             "merge_history": ds.merge_history(), "active": "/prs",
             "settings": D.dashboard_settings(ds),
         })

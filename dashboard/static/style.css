@@ -216,3 +216,11 @@ code { background: var(--light-surface); border-radius: 6px; padding: 1px 6px; f
   max-height: 320px; overflow-y: auto; margin: 6px 0;
 }
 .pr-item { border-left: 3px solid var(--wise-green, #9fe870); padding-left: 10px; margin: 10px 0; }
+
+/* ---- 候选行展开态 ---- */
+.cand-row { cursor: pointer; }
+.cand-row:hover { background: var(--light-mint, #e2f6d5); }
+.cand-row.expanded { background: var(--light-mint, #e2f6d5); }
+.cand-toggle { font-size: 14px; user-select: none; width: 18px; }
+.chip-c { background: var(--light-surface, #e8ebe6); color: var(--warm-dark, #454745); }
+.banner.info { background: rgba(56,200,255,0.10); border-left: 3px solid #38c8ff; }

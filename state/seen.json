@@ -3218,5 +3218,25 @@
  "anomalyco/opencode#59289": {
   "first_seen": "2026-10-26T21:55:49",
   "status": "queued"
+ },
+ "anomalyco/opencode#59293": {
+  "first_seen": "2026-10-26T22:37:55",
+  "status": "queued"
+ },
+ "crewAIInc/crewAI#8621": {
+  "first_seen": "2026-10-26T22:40:25",
+  "status": "queued"
+ },
+ "crewAIInc/crewAI#8619": {
+  "first_seen": "2026-10-26T22:40:25",
+  "status": "lowscore"
+ },
+ "deepset-ai/haystack#13446": {
+  "first_seen": "2026-10-26T22:40:47",
+  "status": "queued"
+ },
+ "deepset-ai/haystack#13448": {
+  "first_seen": "2026-10-26T22:40:56",
+  "status": "queued"
  }
 }

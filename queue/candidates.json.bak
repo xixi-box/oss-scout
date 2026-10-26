@@ -4041,5 +4041,157 @@
    "reason": "Clear reproducible CLI hang with exact repro steps, multiple affected versions, detailed logs, and no competing work; likely small initialization/timeout bug.",
    "model": "deepseek-v4.1-flash"
   }
+ },
+ "anomalyco/opencode#59289": {
+  "id": "anomalyco/opencode#59289",
+  "repo": "anomalyco/opencode",
+  "number": 59289,
+  "title": "Switching the composer agent while a turn is running reconfigures the running turn (plan turn gains write access)",
+  "url": "https://github.com/anomalyco/opencode/issues/59289",
+  "lane": "open",
+  "score": 2,
+  "class": "C",
+  "blockers": [],
+  "signals": {
+   "body_len": 2311,
+   "reactions": 0,
+   "labels": [],
+   "comments": 0,
+   "claim_signal": false,
+   "maintainer_confirm": false,
+   "duplicate_flag": false,
+   "billing_flag": false,
+   "bot_claim": false,
+   "cross_ref_pr": false,
+   "repro_signal": false,
+   "ai_grade_a": true
+  },
+  "created_at": "2026-10-26T13:45:14Z",
+  "discovered_at": "2026-10-26T21:55:49",
+  "status": "new",
+  "lease": null,
+  "source": "cloudflare-worker",
+  "body_excerpt": "### Description\n\nSubmitting a prompt while a turn is running reconfigures the **running** turn when the composer's agent differs from the turn's agent. A plan-mode turn that is mid-execution silently gains the new agent's tools, permissions, and system prompt, and the plan plugin tells the model it is no longer restricted.\n\n### Repro\n\n1. Set the composer agent to **plan** and submit a prompt (turn starts, runs for a while).\n2. While that turn is still running, switch the composer to **build** and submit the next prompt.\n3. Watch the running plan turn's next steps.\n\n### Actual\n\nThe still-running plan turn switches to build mid-flight:\n\n- build's permission rules and tool snapshot apply to the remaining steps (read-only plan work can write),\n- the system prompt is re-resolved for build,\n- the plan plugin injects a \"You are NO LONGER in Plan mode\" reminder into the running turn.\n\n### Expected\n\nThe running turn should keep the agent it started with, end to end. The composer's selection should apply to the next prompt's turn — never to a turn that is already executing.\n\n### Root cause\n\nPrompt admission does not carry an agent selection. Clients instead call `POST /api/session/:sessionID/agent` (`session.switchAgent`) eagerly on submit. `Session.switchAgent` publishes `session.agent.selected` unconditionally (no busy check), the projector persists `session.agent` immediately, and the runner re-reads the persisted agent at every step boundary (`prepareContext` → `SessionContext.select`), so the remainder of the in-flight turn runs under the new agent — including its permissions.\n\n### Related\n\n- #4156 — queued prompts picking up the running turn's mode (inverse direction)\n- #46111 — injected prompts without an agent silently switching session agent/model\n- PR #44683 — app-side queue/steer; its description notes that honoring a different selection per queued prompt \"needs per-prompt selection in the admission API (server change, out of scope here)\"\n\n### Proposed direction\n\nC",
+  "ai_grade": {
+   "grade": "A",
+   "score": 8,
+   "reason": "Clear reproducible, security-relevant bug with detailed root cause and no competing work, though the fix spans multiple components.",
+   "model": "deepseek-v4.1-flash"
+  }
+ },
+ "anomalyco/opencode#59293": {
+  "id": "anomalyco/opencode#59293",
+  "repo": "anomalyco/opencode",
+  "number": 59293,
+  "title": "subagent: sessionID continuation always fails with 'Subagent session not found: ses'",
+  "url": "https://github.com/anomalyco/opencode/issues/59293",
+  "lane": "open",
+  "score": 2,
+  "class": "C",
+  "blockers": [],
+  "signals": {
+   "body_len": 2178,
+   "reactions": 0,
+   "labels": [
+    "triaging"
+   ],
+   "comments": 1,
+   "claim_signal": false,
+   "maintainer_confirm": false,
+   "duplicate_flag": false,
+   "billing_flag": false,
+   "bot_claim": false,
+   "cross_ref_pr": false,
+   "repro_signal": false,
+   "ai_grade_a": true
+  },
+  "created_at": "2026-10-26T14:00:54Z",
+  "discovered_at": "2026-10-26T22:37:55",
+  "status": "new",
+  "lease": null,
+  "source": "cloudflare-worker",
+  "body_excerpt": "## Summary\n\nThe `subagent` tool's `sessionID` continuation is broken: no matter what value is passed for `sessionID`, the tool receives `\"ses\"` and returns `Subagent session not found: ses`. Spawning new subagents works, but continuing an existing subagent conversation via `sessionID` is impossible.\n\n## Environment\n\n- opencode version: 2.1.4\n- OS: Linux 7.2.8-9-omarchy (x86_64)\n- Terminal: xterm-256color (TERM_PROGRAM unset)\n- Shell: /usr/bin/bash\n- Install/channel: latest (mise)\n- Active plugins: @dietrichgebert/ponytail, superpowers@git+https://github.com/obra/superpowers.git\n\n## Reproduction\n\n1. Spawn a subagent and capture the returned `sessionID`, e.g. `ses_e8785b80dffeEX3nMsDZL6I0Zt`.\n2. Call the `subagent` tool again with that `sessionID` (and a new prompt), e.g.:\n\n   ```json\n   { \"agent\": \"explore\", \"description\": \"continue\", \"prompt\": \"Say hi.\", \"sessionID\": \"ses_e8785b80dffeEX3nMsDZL6I0Zt\" }\n   ```\n\n3. Observe the error: `Subagent session not found: ses`.\n\nThe same happens for any value passed as `sessionID` (valid child id, parent id, or arbitrary strings such as `totally-invalid-id`) — the error is always `Subagent session not found: ses`, indicating the parameter is not being forwarded and defaults to `\"ses\"`.\n\n## Expected Behavior\n\nPassing a valid child subagent `sessionID` should reuse that session (switching agent/model as needed) and prompt it with the new input, returning the subagent output.\n\n## Actual Behavior\n\nThe tool always receives `sessionID = \"ses\"` and fails with `Subagent session not found: ses`. The underlying session row exists in `session_v2` (correct `project_id`, not archived, `idle_outcome: succeeded`), so this is not a data issue.\n\n## Additional Context\n\n- Verified via binary inspection: the tool implementation correctly references `T.sessionID` (`let H = T.sessionID === void 0 ? void 0 : yield*a.get(T.sessionID)...`), so the bug is in parameter forwarding, not the lookup logic.\n- Spawning (foreground/background, with `model`) work",
+  "ai_grade": {
+   "grade": "A",
+   "score": 9,
+   "reason": "Clear reproducible parameter-forwarding bug with narrow scope and no indicated duplicate or competing work.",
+   "model": "deepseek-v4.1-flash"
+  }
+ },
+ "crewAIInc/crewAI#8621": {
+  "id": "crewAIInc/crewAI#8621",
+  "repo": "crewAIInc/crewAI",
+  "number": 8621,
+  "title": "[CRITICAL SECURITY] Missing Cryptographic Non-Repudiation in Agent Execution Loop (SOC2 Blocker)",
+  "url": "https://github.com/crewAIInc/crewAI/issues/8621",
+  "lane": "open",
+  "score": 6,
+  "class": "A",
+  "blockers": [],
+  "signals": {
+   "body_len": 4000,
+   "reactions": 0,
+   "labels": [
+    "bug"
+   ],
+   "comments": 0,
+   "claim_signal": false,
+   "maintainer_confirm": false,
+   "duplicate_flag": false,
+   "billing_flag": false,
+   "bot_claim": false,
+   "cross_ref_pr": false,
+   "repro_signal": true,
+   "ai_grade_a": false
+  },
+  "created_at": "2026-10-26T14:14:08Z",
+  "discovered_at": "2026-10-26T22:40:25",
+  "status": "new",
+  "lease": null,
+  "source": "cloudflare-worker",
+  "body_excerpt": "### Description\n\nContext: \nI filed a High-Severity private security advisory (GHSA-986m-m422-92xq) 48 hours ago respecting your SECURITY.md. I also reached out directly to the core team. Because there has been no response, I am escalating this publicly per standard responsible disclosure practices.\n\nThe Architectural Gap:\nCrewAI lacks cryptographic non-repudiation for agent tool calls and inter-agent handoffs. Specifically, in server/utils/agents/aibitat/index.js, the handleExecution and handleAsyncExecution functions execute actions (fn.handler(args)) without signing the payload or verifying the origin of the request cryptographically.\n\nThe Enterprise Impact:\nThis is a critical blocker for enterprise adoption. Because the conversation history and tool outputs are not hash-linked or signed (e.g., via Dilithium5), an attacker who achieves indirect prompt injection can execute unauthorized tool calls. Incident response teams will have no mathematically verifiable proof of which sub-agent authorized the action.\n\nWithout this, enterprise CISOs cannot deploy CrewAI in production. It fails SOC2, ISO 27001, and EU AI Act audits out of the box.\n\nThe Standard (W3C Context):\nAs a participant in the W3C AI Agent Protocol Community Group, we are currently defining the standards for preimage defense and trust leases. We are building the missing trust layer for the Agentic Web (Neutral Trust Infrastructure - NTI), and we built an open-source AST scanner to measure the industry against it.\n\n### Steps to Reproduce\n\n1. pip install nti-scanner\n2. git clone https://github.com/crewAIInc/crewAI\n3. nti-scanner scan ./crewAI\n\nResult: 1,462 findings related to missing cryptographic controls. \nThe live, cryptographically signed attestation of this scan and the AST findings are public on our compliance leaderboard: https://nti-leaderboard.vercel.app\n(CrewAI currently scores 0/100 on cryptographic safety).\n\nThe Fix:\nI have already built the solution to make CrewAI the hero of enterprise AI se",
+  "ai_grade": {
+   "grade": "C",
+   "score": 1,
+   "reason": "Broad security-architecture feature/standards demand, not a concrete reproducible bug or scoped fix; scanner promotion and auto-patcher request are not actionable.",
+   "model": "deepseek-v4.1-flash"
+  }
+ },
+ "deepset-ai/haystack#13446": {
+  "id": "deepset-ai/haystack#13446",
+  "repo": "deepset-ai/haystack",
+  "number": 13446,
+  "title": "ImageFileToImageContent fails the whole batch on a non-image file instead of skipping it",
+  "url": "https://github.com/deepset-ai/haystack/issues/13446",
+  "lane": "open",
+  "score": 2,
+  "class": "C",
+  "blockers": [],
+  "signals": {
+   "body_len": 1537,
+   "reactions": 0,
+   "labels": [],
+   "comments": 0,
+   "claim_signal": false,
+   "maintainer_confirm": false,
+   "duplicate_flag": false,
+   "billing_flag": false,
+   "bot_claim": false,
+   "cross_ref_pr": false,
+   "repro_signal": false,
+   "ai_grade_a": true
+  },
+  "created_at": "2026-10-26T14:16:05Z",
+  "discovered_at": "2026-10-26T22:40:47",
+  "status": "new",
+  "lease": null,
+  "source": "cloudflare-worker",
+  "body_excerpt": "**Describe the bug**\n\n`ImageFileToImageContent` catches errors from `_encode_image_to_base64` and skips the source with a warning, but it builds and validates the `ImageContent` *outside* that `try`. A source that exists and has a non-image MIME type (for example a `.txt` file passed in a mixed batch) gets through encoding, then `ImageContent.__post_init__` raises `ValueError: text/plain is not a valid image MIME type.` and the whole `run()` call fails.\n\nThis is inconsistent with the component's own handling of unreadable/nonexistent files, which are logged and skipped, and with `DocumentToImageContent`, which now reports per-document failures instead of dropping the batch.\n\n**To Reproduce**\n\n```python\nfrom haystack.components.converters.image import ImageFileToImageContent\n\nconverter = ImageFileToImageContent()\nconverter.run(sources=[\"test/test_files/images/apple.jpg\", \"test/test_files/txt/doc_1.txt\"])\n```\n\nActual result:\n\n```text\nValueError: text/plain is not a valid image MIME type.\n```\n\nA `ByteStream` with `mime_type=\"text/plain\"` produces the same error.\n\n**Expected behavior**\n\nThe non-image source is skipped with the existing `\"Could not convert file ... Skipping it.\"` warning, and `image_contents` contains only the successfully converted image. One bad source in a batch must not discard the valid ones.\n\n**System**\n\n- Haystack `main` at `e9aa11240a`\n- Python 3.12\n- Reproduced with the repository's test dependencies\n\nRequested labels: `bug`, `P3` (this account cannot set labels on the upstream repository).\n",
+  "ai_grade": {
+   "grade": "A",
+   "score": 9,
+   "reason": "Clear reproducible bug with narrow scope in error handling, expected behavior specified, and no competing work indicated.",
+   "model": "deepseek-v4.1-flash"
+  }
  }
 }

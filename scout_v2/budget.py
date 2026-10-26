@@ -40,9 +40,20 @@ class ModalCliBilling:
 
     @staticmethod
     def _run_cli(cmd: tuple[str, ...]) -> tuple[int, str]:
+        """执行 modal CLI。用 shutil.which 解析绝对路径——
+        uvicorn/systemd 启动的进程 PATH 常与交互式 shell 不同，
+        直接依赖 PATH 会让账单读取失败（页面显示"未知"）。"""
+        import os
+        import shutil
         import subprocess
-        p = subprocess.run(cmd, capture_output=True, text=True,
-                           encoding="utf-8", errors="replace", timeout=30)
+        exe = shutil.which(cmd[0]) or cmd[0]
+        env = dict(os.environ)
+        # 常见安装位置补进 PATH，覆盖 systemd/容器的最简环境
+        extra = ["/usr/local/bin", "/usr/bin", "/opt/venv/bin"]
+        env["PATH"] = os.pathsep.join(
+            [env.get("PATH", "")] + [d for d in extra if d not in env.get("PATH", "")])
+        p = subprocess.run([exe, *cmd[1:]], capture_output=True, text=True,
+                           encoding="utf-8", errors="replace", timeout=30, env=env)
         return p.returncode, p.stdout
 
     def healthy(self) -> bool:
