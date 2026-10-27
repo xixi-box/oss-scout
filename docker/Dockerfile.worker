@@ -1,28 +1,31 @@
 # 统一 worker 镜像（计划 §5）：同一份执行器代码跑 Modal / GitHub Actions。
-# P2 交付：含 git（按 SHA 拉仓）与 semgrep（Bug Hunter 扫描）。
+# 承载 scan（Semgrep）与 repair（OpenCode），内含 git / node / uv 以适配常见项目。
 FROM python:3.11-slim
 
 # 安全基线：非 root 运行；worker 内无任何 GitHub 写令牌
+# 依赖：git（拉仓）、curl+ca-certificates（装 opencode）、nodejs+npm（JS/TS 项目测试）
 RUN useradd -m worker \
     && apt-get update \
-    && apt-get install -y --no-install-recommends git \
+    && apt-get install -y --no-install-recommends \
+        git curl ca-certificates nodejs npm \
     && rm -rf /var/lib/apt/lists/* \
-    && pip install --no-cache-dir semgrep
+    && pip install --no-cache-dir semgrep uv
 
 WORKDIR /workspace
 
 COPY scout_v2 /workspace/scout_v2
 COPY configs.seed /workspace/configs
 
-# worker 用户需要写 artifacts；/workspace 默认归 root（P6-A 实测修复）
+# worker 需要写 artifacts / repo；/workspace 默认归 root
 RUN mkdir -p /workspace/artifacts /workspace/repo && chown -R worker:worker /workspace
 
-# OpenCode CLI（能力对称裁定 2026-10-25：Modal 也承载 repair）。版本锁定；
-# 安装脚本的 --version 支持未经实测，首次 Modal repair 冒烟时核对落点与版本。
-ARG OPENCODE_VERSION=1.18.27
-RUN curl -fsSL https://opencode.ai/install | bash || true \
-    && (find /root /usr/local /opt -name "opencode" -type f 2>/dev/null | head -1 | \
-        xargs -r ln -sf /usr/local/bin/opencode 2>/dev/null || true)
+# OpenCode CLI（repair 的执行 agent）。装完拷到系统路径并放开权限：
+# worker 以非 root 运行，默认装 /root 下会 Permission denied
+RUN curl -fsSL https://opencode.ai/install | bash \
+    && BIN=$(find /root /home/worker -type f -name opencode 2>/dev/null | head -1) \
+    && [ -n "$BIN" ] && cp "$BIN" /usr/local/bin/opencode \
+    && chmod 755 /usr/local/bin/opencode \
+    || echo "opencode install failed (repair falls back to API)"
 
 USER worker
 # --chmod：Windows 工作树不带 +x；sed 去掉 CRLF（git autocrlf 可能转换过）

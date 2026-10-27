@@ -86,7 +86,8 @@ def execute(job: Job, out_dir: Path, backend: str = "local",
                           unverified_items=["repair requires --repo-dir"])
         from .repair import run_repair
         return run_repair(job, repo_dir, out_dir, test_cmd=list(job.test_cmd),
-                          context=job.context)
+                          context=job.context,
+                          extra_test_files=dict(job.ai_test_files or {}))
     if job.mode in {"review", "ci"}:
         return _run_repair_like(job, out_dir, backend)
     return Result(job_id=job.job_id, backend=backend, outcome="blocked",

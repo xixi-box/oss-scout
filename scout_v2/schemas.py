@@ -77,6 +77,7 @@ class Job:
     test_cmd: list[str] = field(default_factory=list)   # reproduce/repair：验证命令
     ruleset: str = ""                                    # scan：semgrep 规则集
     context: str = ""                                    # repair：issue 上下文（截断后进 prompt）
+    ai_test_files: dict[str, str] = field(default_factory=dict)  # repair：AI 生成的回归测试 {路径: 内容}
 
     def to_dict(self) -> dict[str, Any]:
         return dataclasses.asdict(self)
