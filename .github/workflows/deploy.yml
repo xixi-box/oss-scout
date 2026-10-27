@@ -138,6 +138,10 @@ jobs:
                 - OPENCODE_API_KEY=\${OPENCODE_API_KEY}
                 - MODAL_TOKEN_ID=\${MODAL_TOKEN_ID}
                 - MODAL_TOKEN_SECRET=\${MODAL_TOKEN_SECRET}
+                # git/外网经宿主 sing-box（docker0 网桥入站）；国内直连域走 NO_PROXY
+                - HTTPS_PROXY=http://172.17.0.1:7890
+                - HTTP_PROXY=http://172.17.0.1:7890
+                - NO_PROXY=localhost,127.0.0.1,aliyuncs.com,.aliyuncs.com,crpi-.cn-shanghai.personal.cr.aliyuncs.com
               healthcheck:
                 test: ["CMD", "curl", "-sf", "http://127.0.0.1:8787/login"]
                 interval: 60s
