@@ -174,8 +174,12 @@ def candidate_pipeline(root: Path, entry: dict, *,
                 _r = _abort_release("no test_cmd and none inferable (AI generation failed)")
                 mark_candidate(root, key, "aborted_no_test")
                 return _r
+    ai_files = {}
+    if summary.get("_ai_test_file") and summary.get("_ai_test_code"):
+        ai_files[summary["_ai_test_file"]] = summary["_ai_test_code"]
     res = run_repair(job, clone, out, test_cmd=list(job.test_cmd),
-                     context=job.context, env_base=None)  # None=继承完整环境（脱敏在 sanitized_env 内做）
+                     context=job.context, env_base=None,
+                     extra_test_files=ai_files)  # None=继承完整环境（脱敏在 sanitized_env 内做）
 
     # ---- 6. 质量闸 ----
     report = verify_result(res, job)
@@ -258,12 +262,12 @@ def _ai_generate_test(job, clone: Path, out: Path, summary: dict) -> list[str]:
         code = code.strip()
         if code.startswith("```"):
             code = "\n".join(code.splitlines()[1:-1])
-        target_dir = clone / (tests_dir or ".")
-        tf = target_dir / "test_ai_regression_issue.py"
-        tf.parent.mkdir(parents=True, exist_ok=True)
-        tf.write_text(code, encoding="utf-8")
-        rel = str(tf.relative_to(clone)).replace("\\", "/")
+        # 不落盘到 clone：内容交给 run_repair 写进它自己的工作副本，
+        # 否则会污染 git 状态，且 run_repair 再 clone 时看不到这个文件
+        rel = (tests_dir + "/" if tests_dir else "") + "test_ai_regression_issue.py"
         summary["steps"].append(f"AI-generated regression test: {rel}")
+        summary["_ai_test_file"] = rel
+        summary["_ai_test_code"] = code
         return [sys.executable, "-m", "pytest", rel, "-q"]
     except Exception as e:  # noqa: BLE001 — 生成失败 → 返回 []，调用方 abort
         summary["steps"].append(f"AI test generation failed: {str(e)[:120]}")

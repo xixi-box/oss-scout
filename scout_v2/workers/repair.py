@@ -178,9 +178,13 @@ def opencode_patch_producer(job: Job, work_dir: Path, context: str,
 
     # 用 --cached 才能把模型新建的文件纳入补丁；普通 `git diff` 会静默丢新文件
     _git(["add", "-A"], work_dir)
-    # 运行时产物即使被 add 也要从暂存区剔除（opencode.json 在 finally 已还原内容，
-    # 但暂存区里可能还留着 add 时的旧快照）
-    _git(["reset", "-q", "--", "opencode.json", TASK_FILE], work_dir, check=False)
+    # 运行时产物与 AI 生成的回归测试都不能进补丁：
+    # - opencode.json 是我们的权限配置
+    # - test_ai_regression_issue.py 是验证用测试，不属于修复改动
+    _git(["reset", "-q", "--", "opencode.json", TASK_FILE,
+          "test_ai_regression_issue.py"], work_dir, check=False)
+    _git(["-c", "core.quotepath=false", "reset", "-q", "--",
+          "*test_ai_regression_issue.py"], work_dir, check=False)
     diff = _git(["diff", "--cached"], work_dir).stdout
     if not diff.strip():
         # notes 随异常带出，否则排查时丢线索（P5 演练教训）
@@ -201,7 +205,8 @@ def check_patch_content(patch: str) -> list[str]:
 
 def run_repair(job: Job, repo_dir: Path, out_dir: Path, *,
                test_cmd: list[str], context: str = "",
-               patch_producer=None, env_base: dict | None = None) -> Result:
+               patch_producer=None, env_base: dict | None = None,
+               extra_test_files: dict[str, str] | None = None) -> Result:
     """完整 repair 证据链。repo_dir 必须已 checkout 到 job.base_sha。"""
     out_dir.mkdir(parents=True, exist_ok=True)
     if not test_cmd:
@@ -234,6 +239,12 @@ def run_repair(job: Job, repo_dir: Path, out_dir: Path, *,
         work = Path(td) / "work"
         _git(["clone", "--quiet", str(repo_dir), str(work)], repo_dir)
         _git(["checkout", "--quiet", "--detach", job.base_sha], work, check=False)
+        # AI 生成的回归测试直接落到 work 目录：两次验证运行都要能看到它，
+        # 且它不属于修复补丁（下面 git diff 只取模型改动）
+        for rel_path, content in (extra_test_files or {}).items():
+            tf = work / rel_path
+            tf.parent.mkdir(parents=True, exist_ok=True)
+            tf.write_text(content, encoding="utf-8")
         try:
             if patch_producer is None:
                 patch, notes = opencode_patch_producer(job, work, context)
