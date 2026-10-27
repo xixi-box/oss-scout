@@ -215,6 +215,44 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
         _th.Thread(target=_loop, daemon=True).start()
 
     ds = D.DataSource(root, gh_runner=gh_runner, modal_runner=modal_runner)
+
+    def _reap_orphan_claim():
+        """启动时清理孤儿认领：容器若在上次 pipeline 执行中重启（如部署覆盖），
+        sqlite 里已提交的认领行没有对应的终态记录，会把当日额度占死
+        （2026-10-27 opencode#59317 事故）。判定：认领的候选 status 仍是
+        new/recheck_failed（无终态标记）→ 释放，自动线程 5 分钟内会重试。"""
+        try:
+            import datetime as _dt
+            import sqlite3
+            db = root / "state" / "scout_v2.sqlite3"
+            if not db.exists():
+                return
+            conn = sqlite3.connect(str(db), timeout=15)
+            try:
+                today = _dt.date.today().isoformat()
+                rows = conn.execute(
+                    "SELECT candidate_id FROM claim_days WHERE day=?", (today,)).fetchall()
+                if not rows:
+                    return
+                q = json.loads((root / "queue" / "candidates.json").read_text(encoding="utf-8"))
+                for (cid,) in rows:
+                    entry = q.get(cid)
+                    status = (entry or {}).get("status", "")
+                    if status in ("new", "queued", "queued_hist", "recheck_failed"):
+                        conn.execute("DELETE FROM claim_days WHERE day=? AND candidate_id=?",
+                                     (today, cid))
+                        _audit(root, "orphan_claim_reaped", cid,
+                               f"container restarted mid-pipeline (status={status}); released")
+                conn.commit()
+            finally:
+                conn.close()
+        except Exception as e:  # noqa: BLE001 — 清理失败不阻塞启动
+            try:
+                _audit(root, "orphan_claim_reap_error", "-", str(e)[:150])
+            except Exception:  # noqa: BLE001
+                pass
+
+    _reap_orphan_claim()
     _cf_poll_loop()   # 必须在 ds 创建后启动（依赖 ds 读配置）
     _auto_repair_loop()
     app.state.ds = ds
