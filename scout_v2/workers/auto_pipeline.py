@@ -233,8 +233,7 @@ def _ai_generate_test(job, clone: Path, out: Path, summary: dict) -> list[str]:
     try:
         import importlib
         from ..workers.issue_scorer import GoClient, load_scorer_config
-        eng_cfg_root = Path(__import__("os").environ.get("OSSCOUT_DASHBOARD_ROOT", str(clone)))
-        cfg = load_scorer_config(_data_root(Path("/app")) if Path("/app").is_dir() else clone)
+        cfg = load_scorer_config(_data_root(Path(__file__).resolve().parents[2]))
         if not cfg.get("api_key"):
             return []
         # 仓库结构摘要：顶层目录 + 常见测试目录

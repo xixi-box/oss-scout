@@ -73,16 +73,27 @@ def enforce_domain_b(work_dir: Path) -> str:
 
 
 def resolve_model() -> str:
-    """从 configs/model_policy.yaml 解析首选模型（fixed 模式取 primary_models[0]）。"""
+    """从 configs/model_policy.yaml 解析首选模型（fixed 模式取 primary_models[0]）。
+
+    容器部署时源码在 /app、配置在 /data/configs（卷），因此按顺序探测：
+    源码目录 → OSSCOUT_DASHBOARD_ROOT。都不存在时才报错。
+    """
+    import os
     import yaml
     from .model_fallback import ModelPolicy
-    root = Path(__file__).resolve().parents[2]
-    cfg_path = root / "configs" / "model_policy.yaml"
-    cfg = yaml.safe_load(cfg_path.read_text(encoding="utf-8")) if cfg_path.exists() else {}
-    models = ModelPolicy.from_yaml(cfg).models()
-    if not models:
-        raise RuntimeError("no model configured in configs/model_policy.yaml")
-    return models[0]
+    src_root = Path(__file__).resolve().parents[2]
+    candidates = [src_root / "configs" / "model_policy.yaml"]
+    data_root = Path(os.environ.get("OSSCOUT_DASHBOARD_ROOT", "/data"))
+    candidates.append(data_root / "configs" / "model_policy.yaml")
+    for cfg_path in candidates:
+        if not cfg_path.exists():
+            continue
+        cfg = yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {}
+        models = ModelPolicy.from_yaml(cfg).models()
+        if models:
+            return models[0]
+    raise RuntimeError(
+        "no model configured (looked in: " + ", ".join(str(c) for c in candidates) + ")")
 
 
 def repo_rules_block(repo: str, root: Path | None = None) -> str:
