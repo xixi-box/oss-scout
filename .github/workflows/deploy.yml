@@ -165,5 +165,9 @@ jobs:
           chown -R 1000:1000 /opt/oss-scout-data 2>/dev/null || true
           docker compose -f "$DEPLOY_DIR/compose.yaml" pull || true
           docker compose -f "$DEPLOY_DIR/compose.yaml" up -d --remove-orphans
+          # 清理同仓库旧镜像（保留本次 SHA 与 latest）。
+          # 只清 dangling 不够：带 tag 的历史版本会永久堆积（2026-10-27 磁盘打满事故）
+          KEEP_SHA="${{ github.sha }}"
+          docker images --format '{{.Repository}}:{{.Tag}}'             | grep "^$ALIYUN_ACR_REGISTRY/$ALIYUN_ACR_IMAGE_NAME:"             | grep -v ":$KEEP_SHA$" | grep -v ":latest$"             | xargs -r docker rmi -f > /dev/null 2>&1 || true
           docker image prune -f > /dev/null 2>&1 || true
           docker compose -f "$DEPLOY_DIR/compose.yaml" ps || docker ps --format '{{.Names}} {{.Status}}' | head -5
