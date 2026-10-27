@@ -102,12 +102,13 @@ def _probe_test_stack(repo: str, base_sha: str):
         return None
     names = set(entries)
     tests_dir = next((d for d in ("tests", "test", "spec") if d in names), None)
+    top = sorted(names)[:12]
     if {"pyproject.toml", "setup.py", "requirements.txt"} & names:
-        return "python", "python -m pytest {path} -q", tests_dir, sorted(names)[:25]
+        return "python", "python -m pytest {path} -q", tests_dir, top
     if "package.json" in names:
-        return "node", "npx --no-install bun test {path}", tests_dir, sorted(names)[:25]
+        return "node", "npx --no-install bun test {path}", tests_dir, top
     if "go.mod" in names:
-        return "go", "go test {path}", tests_dir, sorted(names)[:25]
+        return "go", "go test {path}", tests_dir, top
     return None
 
 
@@ -146,7 +147,11 @@ def _ai_generate_test_remote(job: Job, lang: str, tpl: str, tests_dir: str | Non
         client = GoClient(key=cfg["api_key"],
                           model=cfg.get("model", "deepseek-v4.1-flash"), timeout=180)
         ok, code = client.chat(prompt)
-        if not ok or marker not in str(code):
+        text = str(code or "")
+        ok_marker = marker in text or (lang == "node" and any(
+            m in text for m in ("test(", "it(", "describe("))) or (
+            lang == "python" and "def test" in text)
+        if not ok or not ok_marker:
             return None, None, None
         code = str(code).strip()
         if code.startswith("```"):
@@ -158,7 +163,8 @@ def _ai_generate_test_remote(job: Job, lang: str, tpl: str, tests_dir: str | Non
         else:
             cmd = tpl.format(path=rel).split()
         return cmd, rel, code
-    except Exception:  # noqa: BLE001
+    except Exception as e:  # noqa: BLE001
+        summary["steps"].append(f"AI gen error: {type(e).__name__}: {str(e)[:150]}")
         return None, None, None
 
 

@@ -127,15 +127,45 @@ class GoClient:
         return {"grade": grade, "score": score, "reason": reason, "model": self.model}
 
 
+def _config_candidates(root: Path, name: str) -> list[Path]:
+    """配置文件候选路径：源码目录 → 数据根（容器 /app vs /data 分离）。"""
+    root = Path(root)
+    dirs = [root, root.parent.parent if root.parent.name else root]
+    data_root = Path(os.environ.get("OSSCOUT_DASHBOARD_ROOT", "/data"))
+    dirs.append(data_root)
+    out, seen = [], set()
+    for d in dirs:
+        p = (d / "configs" / name).resolve()
+        if p not in seen:
+            seen.add(p)
+            out.append(p)
+    return out
+
+
 def load_scorer_config(root: Path) -> dict:
-    """configs/scorer.yaml：{model, api_key?}。key 缺省取 opencode auth.json 登录态。"""
-    p = root / "configs" / "scorer.yaml"
+    """读取模型配置。按候选路径探测，不假设单一目录结构。"""
     cfg: dict = {}
-    if p.exists():
-        try:
-            cfg = yaml_safe_load(p) or {}
-        except Exception:  # noqa: BLE001
-            cfg = {}
+    for p in _config_candidates(root, "scorer.yaml"):
+        if p.exists():
+            try:
+                cfg = yaml_safe_load(p) or {}
+                break
+            except Exception:  # noqa: BLE001
+                cfg = {}
+    # scorer.yaml 缺失时，从 model_policy.yaml 取首选模型与 key
+    if not cfg.get("model"):
+        for p in _config_candidates(root, "model_policy.yaml"):
+            if not p.exists():
+                continue
+            try:
+                mp = yaml_safe_load(p) or {}
+                models = (mp.get("primary_models") or []) + (mp.get("free_preferences") or [])
+                if models:
+                    cfg.setdefault("model", models[0])
+                cfg.setdefault("allow_paid_api", bool(mp.get("allow_paid_api", False)))
+                break
+            except Exception:  # noqa: BLE001
+                pass
     if not cfg.get("api_key"):
         # 1) 环境变量优先（容器/CI 里由 Secret 注入，不落盘）
         env_key = (os.environ.get("OPENCODE_API_KEY")
