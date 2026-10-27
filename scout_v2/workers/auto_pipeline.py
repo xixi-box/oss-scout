@@ -168,8 +168,13 @@ def candidate_pipeline(root: Path, entry: dict, *,
             job.test_cmd = [sys.executable, "-m", "pytest", tf, "-q"]
             summary["steps"].append(f"test_cmd inferred: pytest {tf}")
         else:
-            # AI 从 issue 描述生成最小回归测试（Playbook：原始版必须失败才算复现）
-            job.test_cmd = _ai_generate_test(job, clone, out, summary)
+            lang, tpl = _detect_test_setup(clone)
+            if lang == "unknown" or not tpl:
+                _r = _abort_release(f"unsupported test stack ({lang}); cannot verify fix")
+                mark_candidate(root, key, "aborted_no_test")
+                return _r
+            summary["steps"].append(f"test stack: {lang}")
+            job.test_cmd = _ai_generate_test(job, clone, out, summary, lang=lang, tpl=tpl)
             if not job.test_cmd:
                 _r = _abort_release("no test_cmd and none inferable (AI generation failed)")
                 mark_candidate(root, key, "aborted_no_test")
@@ -228,7 +233,39 @@ def candidate_pipeline(root: Path, entry: dict, *,
 
 
 
-def _ai_generate_test(job, clone: Path, out: Path, summary: dict) -> list[str]:
+
+def _detect_test_setup(clone: Path) -> tuple[str, str]:
+    """探测仓库测试栈，返回 (语言, 测试命令模板)。
+
+    自动修复只在能验证的仓库上有意义：没有可用测试框架时明确返回 unsupported，
+    由调用方 abort——不要用错误的测试命令制造"复现成功"的假象。
+    """
+    has = lambda name: (clone / name).exists()
+    # Python
+    if has("pyproject.toml") or has("setup.py") or has("requirements.txt"):
+        if has("pytest.ini") or has("pyproject.toml") or has("tests") or has("test"):
+            return "python", "python -m pytest {path} -q"
+    # Node/TypeScript（opencode 等）
+    if has("package.json"):
+        try:
+            import json as _json
+            pkg = _json.loads((clone / "package.json").read_text(encoding="utf-8"))
+            scripts = pkg.get("scripts") or {}
+            if "test" in scripts:
+                return "node", "npx --no-install bun test {path}"
+            if (clone / "bun.lock").exists() or (clone / "bun.lockb").exists():
+                return "node", "npx --no-install bun test {path}"
+        except Exception:  # noqa: BLE001
+            pass
+        return "node", ""
+    # Go
+    if has("go.mod"):
+        return "go", "go test {path}"
+    return "unknown", ""
+
+
+def _ai_generate_test(job, clone: Path, out: Path, summary: dict,
+                      lang: str = "python", tpl: str = "python -m pytest {path} -q") -> list[str]:
     """让 AI 依据 issue 描述 + 仓库结构生成最小回归测试。
 
     生成的测试写入 clone 的 tests/AI_JUDGE 前缀文件（唯一命名，避免覆盖项目测试）；
@@ -268,7 +305,8 @@ def _ai_generate_test(job, clone: Path, out: Path, summary: dict) -> list[str]:
         summary["steps"].append(f"AI-generated regression test: {rel}")
         summary["_ai_test_file"] = rel
         summary["_ai_test_code"] = code
-        return [sys.executable, "-m", "pytest", rel, "-q"]
+        cmd = tpl.format(path=rel)
+        return cmd.split() if lang != "python" else [sys.executable, "-m", "pytest", rel, "-q"]
     except Exception as e:  # noqa: BLE001 — 生成失败 → 返回 []，调用方 abort
         summary["steps"].append(f"AI test generation failed: {str(e)[:120]}")
         return []
