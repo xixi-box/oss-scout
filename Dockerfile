@@ -22,11 +22,15 @@ COPY docker ./docker
 COPY discover.py health_check.py AGENTS.md config.json ./
 COPY tests_v2 ./tests_v2
 COPY requirements.txt ./
-# OpenCode CLI（自动修复的执行 agent；单二进制，装到系统路径供 scout 用户调用）
-RUN pip install --no-cache-dir -r requirements.txt \
-    && curl -fsSL https://opencode.ai/install | bash \
-    && ln -sf /root/.opencode/bin/opencode /usr/local/bin/opencode \
-    || true
+RUN pip install --no-cache-dir -r requirements.txt
+
+# OpenCode CLI（自动修复执行 agent）。拷到系统路径并放开权限：
+# 容器以 scout 运行，装在 /root 下会 Permission denied
+RUN curl -fsSL https://opencode.ai/install | bash \
+    && BIN=$(find /root -type f -name opencode 2>/dev/null | head -1) \
+    && [ -n "$BIN" ] && cp "$BIN" /usr/local/bin/opencode \
+    && chmod 755 /usr/local/bin/opencode \
+    || echo "opencode install failed (repair falls back to API)"
 
 # Windows 工作区写出的文件权限是 644，必须显式 +x（否则 runc: permission denied）
 COPY --chmod=0755 docker/entrypoint-dashboard.sh /entrypoint.sh
