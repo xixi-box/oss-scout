@@ -93,8 +93,9 @@ def recheck_candidate(repo: str, number: int, *, my_login: str = "xixi-box",
         q = f"repo:{repo} is:pr is:open {kw}"
         res = gh_read([f"search/issues?q={q}&per_page=10"])
         if res is None:
-            r.complete = False
-            r.errors.append(f"pr search failed for {kw!r}")
+            # 关键词搜索是辅助信号：失败记录但不判整体不可用
+            # （rate limit 下 search API 比其他端点更容易被拒）
+            r.errors.append(f"pr search failed for {kw!r} (non-fatal)")
             continue
         for it in res.get("items", []):
             r.open_pr_hits.append(f"{repo}#{it['number']}: {it.get('title', '')[:80]}")

@@ -311,9 +311,12 @@ def candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6) -> dict:
     summary["steps"].append(f"lane={lane}")
 
     # ---- 实时复检（Playbook §0.2）----
-    keywords = [w for w in (entry.get("signals") or {}).get("labels", [])[:3]
-                if isinstance(w, str)] or None
-    recheck = recheck_candidate(repo, number, root_cause_keywords=keywords)
+    # 竞争 PR 搜索只用标题里的根因词；label（如 triaging）不是根因描述，
+    # 用它搜 PR 只会制造无意义查询并放大失败面（2026-10-27 实测）
+    title_words = [w for w in re.split(r"[^a-zA-Z0-9_.-]+",
+                                       str(entry.get("title", "")))
+                   if len(w) >= 5][:3]
+    recheck = recheck_candidate(repo, number, root_cause_keywords=title_words or None)
     if recheck is None or not recheck.complete:
         summary["abort"] = f"recheck incomplete: {recheck.errors if recheck else 'None'}"
         log(root, "abort", key, summary["abort"])
