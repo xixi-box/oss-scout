@@ -170,8 +170,10 @@ def candidate_pipeline(root: Path, entry: dict, *,
         else:
             # AI 从 issue 描述生成最小回归测试（Playbook：原始版必须失败才算复现）
             job.test_cmd = _ai_generate_test(job, clone, out, summary)
-            mark_candidate(root, key, "aborted_no_test")
-            return _r
+            if not job.test_cmd:
+                _r = _abort_release("no test_cmd and none inferable (AI generation failed)")
+                mark_candidate(root, key, "aborted_no_test")
+                return _r
     res = run_repair(job, clone, out, test_cmd=list(job.test_cmd),
                      context=job.context, env_base=None)  # None=继承完整环境（脱敏在 sanitized_env 内做）
 
@@ -292,5 +294,24 @@ def drain_ai_graded(root: Path, limit: int = 3, dry_run: bool = True) -> list[di
                  "rule": e.get("class"), "dry_run": True} for e in picked]
     out = []
     for e in picked:
-        out.append(candidate_pipeline(root, e))
+        try:
+            out.append(candidate_pipeline(root, e))
+        except Exception as ex:  # noqa: BLE001 — 崩溃不能吞掉当日认领额度
+            log(root, "crash", str(e.get("id", "")),
+                f"unhandled: {type(ex).__name__}: {str(ex)[:200]}; releasing day claim")
+            _emergency_release(root)
+            out.append({"id": e.get("id", ""), "crash": f"{type(ex).__name__}: {str(ex)[:150]}"})
     return out
+
+
+def _emergency_release(root: Path) -> None:
+    """pipeline 异常崩溃时的兜底：释放当日认领（否则额度被僵尸占死，
+    如 2026-10-27 opencode#59337 事故——崩溃后每 5 分钟的尝试全被卡住）。"""
+    try:
+        import datetime as _dt
+        from .state_store import ClaimLedger
+        ledger = ClaimLedger(root / "state" / "scout_v2.sqlite3")
+        ledger.release_day(_dt.date.today().isoformat())
+        ledger.close()
+    except Exception:  # noqa: BLE001
+        pass
