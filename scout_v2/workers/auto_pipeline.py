@@ -280,6 +280,17 @@ def _ai_generate_test(job, clone: Path, out: Path, summary: dict,
         # 仓库结构摘要：顶层目录 + 常见测试目录
         top = sorted(p.name for p in clone.iterdir() if not p.name.startswith("."))[:25]
         tests_dir = next((d for d in ("tests", "test", "spec") if (clone / d).is_dir()), None)
+        if lang == "python":
+            lang_rule = ("Output ONLY a single Python file content using pytest "
+                         "(no markdown fences, no explanations).")
+            marker = "def test"
+            ext = ".py"
+        else:  # node / typescript
+            lang_rule = ("Output ONLY a single TypeScript test file content using bun:test "
+                         "(import {test, expect} from 'bun:test'). "
+                         "No markdown fences, no explanations.")
+            marker = "test("
+            ext = ".test.ts"
         prompt = (
             "You are writing a MINIMAL regression test that must FAIL on the current code "
             "and PASS after the bug is fixed.\n"
@@ -287,21 +298,20 @@ def _ai_generate_test(job, clone: Path, out: Path, summary: dict,
             f"Issue context:\n{job.context[:2500]}\n\n"
             f"Top-level entries: {', '.join(top)}\n"
             f"Existing test dir: {tests_dir or 'none'}\n\n"
-            "Output ONLY a single Python file content using pytest (no markdown fences, "
-            "no explanations). It must import from the repo's own modules and assert the "
+            f"{lang_rule} It must import from the repo's own modules and assert the "
             "behaviour described in the issue."
         )
         client = GoClient(key=cfg["api_key"],
                           model=cfg.get("model", "deepseek-v4.1-flash"), timeout=180)
         ok, code = client.chat(prompt)
-        if not ok or "def test" not in code:
+        if not ok or marker not in code:
             return []
         code = code.strip()
         if code.startswith("```"):
             code = "\n".join(code.splitlines()[1:-1])
         # 不落盘到 clone：内容交给 run_repair 写进它自己的工作副本，
         # 否则会污染 git 状态，且 run_repair 再 clone 时看不到这个文件
-        rel = (tests_dir + "/" if tests_dir else "") + "test_ai_regression_issue.py"
+        rel = (tests_dir + "/" if tests_dir else "") + "test_ai_regression" + ext
         summary["steps"].append(f"AI-generated regression test: {rel}")
         summary["_ai_test_file"] = rel
         summary["_ai_test_code"] = code
