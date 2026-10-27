@@ -40,7 +40,10 @@ REASON: one line
 class GoClient:
     def __init__(self, key: str, model: str = DEFAULT_MODEL, timeout: int = 60):
         self.key = key
-        self.model = model
+        # API 端点是 /zen/go/v1，model 字段必须是裸模型名。
+        # "opencode-go/xxx" 这种 provider 前缀是 OpenCode CLI 的写法，
+        # 直调会 400 "Model is unavailable"（2026-10-28 实测）。
+        self.model = model.split("/", 1)[1] if "/" in model else model
         self.timeout = timeout
 
     def _headers(self) -> dict:
@@ -68,7 +71,9 @@ class GoClient:
                 return json.loads(r.read().decode())
         except urllib.error.HTTPError as e:
             detail = e.read().decode(errors="replace")[:200]
-            if e.code >= 500:
+            low = detail.lower()
+            # 上游模型临时不可用（容量/限流）与 5xx 同类：可换模型重试
+            if e.code >= 500 or "model is unavailable" in low or "unavailable" in low:
                 raise GoClient._Retryable(f"HTTP {e.code}: {detail}")
             return {"__http_error__": f"HTTP {e.code}: {detail}"}
         except Exception as e:  # noqa: BLE001 — TLS 抖动
@@ -125,6 +130,24 @@ class GoClient:
             elif line.upper().startswith("REASON:"):
                 reason = line.split(":", 1)[1].strip()[:200]
         return {"grade": grade, "score": score, "reason": reason, "model": self.model}
+
+
+    def chat_with_fallback(self, prompt: str, fallbacks: list[str] | None = None
+                           ) -> tuple[bool, str, str]:
+        """先试当前模型，失败则按 fallbacks 顺序降级。
+
+        返回 (ok, text_or_error, model_actually_used)。上游偶发 "Model is
+        unavailable"（容量/限流）时换模型比原地重试更有效。
+        """
+        chain = [self.model] + [m for m in (fallbacks or []) if m != self.model]
+        last = ""
+        for m in chain:
+            self.model = m
+            ok, detail = self.chat(prompt)
+            if ok:
+                return True, detail, m
+            last = f"{m}: {detail[:120]}"
+        return False, last, chain[-1] if chain else ""
 
 
 def _config_candidates(root: Path, name: str) -> list[Path]:

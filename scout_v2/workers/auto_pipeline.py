@@ -146,7 +146,9 @@ def _ai_generate_test_remote(job: Job, lang: str, tpl: str, tests_dir: str | Non
         )
         client = GoClient(key=cfg["api_key"],
                           model=cfg.get("model", "deepseek-v4.1-flash"), timeout=180)
-        ok, code = client.chat(prompt)
+        # 上游模型偶发 "Model is unavailable"：按序降级到其他可用模型
+        ok, code, used = client.chat_with_fallback(
+            prompt, fallbacks=["glm-5.3-flash", "glm-5.3", "deepseek-v4.1-flash"])
         text = str(code or "")
         ok_marker = marker in text or (lang == "node" and any(
             m in text for m in ("test(", "it(", "describe("))) or (
@@ -157,7 +159,7 @@ def _ai_generate_test_remote(job: Job, lang: str, tpl: str, tests_dir: str | Non
         if code.startswith("```"):
             code = "\n".join(code.splitlines()[1:-1])
         rel = (tests_dir + "/" if tests_dir else "") + "test_ai_regression" + ext
-        summary["steps"].append(f"AI-generated regression test: {rel}")
+        summary["steps"].append(f"AI-generated regression test: {rel} (model={used})")
         if lang == "python":
             cmd = [sys.executable, "-m", "pytest", rel, "-q"]
         else:
