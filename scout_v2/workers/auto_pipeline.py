@@ -516,17 +516,28 @@ def _redact_secret(text: str, secret: str) -> str:
     return (text or "").replace(secret, "***")
 
 
-def _git_retry(args: list[str], *, timeout: int = 180, attempts: int = 3):
+def _git_retry(args: list[str], *, timeout: int = 180, attempts: int = 3,
+               secret: str = ""):
     """带重试的 git 调用。
 
     2026-10-28 实测：VPS 经代理连 github.com 偶发整段不通（一次 clone 卡了
     129s 后报 "Could not connect"），而同一命令重跑只需 2s。这类抖动不该
     让一条已经验证通过的修复作废——补丁还在本地，重试即可。
+
+    TimeoutExpired 里的 cmd 含 URL（可能带 token），异常文本会直接进 traceback，
+    所以超时也转成普通失败结果返回，不在调用方抛出去。
     """
     last = None
     for attempt in range(attempts):
-        last = subprocess.run(["git"] + args, capture_output=True, text=True,
-                              timeout=timeout)
+        try:
+            last = subprocess.run(["git"] + args, capture_output=True, text=True,
+                                  timeout=timeout)
+        except subprocess.TimeoutExpired:
+            last = subprocess.CompletedProcess(
+                args, 124, "",
+                f"git {' '.join(args[:2])} timed out after {timeout}s")
+            if secret:
+                last.stderr = _redact_secret(last.stderr, secret)
         if last.returncode == 0:
             return last
         if attempt + 1 < attempts:
@@ -554,7 +565,7 @@ def _publish_pr(root: Path, entry: dict, base_sha: str, patch_file: Path,
         push_url = (f"https://x-access-token:{token}@github.com/{repo}.git" if token
                     else f"https://github.com/{repo}.git")
         cl = _git_retry(["clone", "--quiet", "--filter=blob:none", "--depth", "1",
-                         push_url, str(clone)], timeout=180)
+                         push_url, str(clone)], timeout=180, secret=token)
         if cl.returncode != 0:
             summary["abort"] = f"publish clone failed: {_redact_secret(cl.stderr, token)[:150]}"
             return None
@@ -577,8 +588,12 @@ def _publish_pr(root: Path, entry: dict, base_sha: str, patch_file: Path,
         # push 同样走网络，代理抖动会让它失败；重试而不是让验证过的修复作废
         push = None
         for attempt in range(3):
-            push = subprocess.run(["git", "push", "-q", push_url, branch], cwd=clone,
-                                  capture_output=True, text=True, timeout=300)
+            try:
+                push = subprocess.run(["git", "push", "-q", push_url, branch], cwd=clone,
+                                      capture_output=True, text=True, timeout=300)
+            except subprocess.TimeoutExpired:
+                push = subprocess.CompletedProcess(
+                    [], 124, "", f"git push timed out after 300s")
             if push.returncode == 0:
                 break
             time.sleep(5 * (attempt + 1))

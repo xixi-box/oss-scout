@@ -340,3 +340,48 @@ class TestPublishAuth:
                               "a" * 40, patch, summary) is None
         assert "ghp_SECRETTOKEN123" not in summary["abort"]
         assert "***" in summary["abort"]
+
+
+class TestNoTokenInTracebacks:
+    """令牌绝不允许出现在任何异常路径里。
+
+    2026-10-28 实录：clone 超时抛 subprocess.TimeoutExpired，其 cmd 字段带完整
+    URL（含 ghp_ 令牌），traceback 直接把它打进终端与日志。只重写 stderr 不够，
+    必须让超时走普通返回路径。
+    """
+
+    def test_clone_timeout_does_not_raise_or_leak(self, tmp_path, monkeypatch):
+        import subprocess as sp
+        from scout_v2.workers import auto_pipeline as ap
+
+        monkeypatch.setenv("GH_TOKEN", "ghp_SECRETLEAK")
+        calls = {"n": 0}
+
+        def fake_run(cmd, **kw):
+            calls["n"] += 1
+            raise sp.TimeoutExpired(cmd, kw.get("timeout", 180))
+
+        monkeypatch.setattr(ap.subprocess, "run", fake_run)
+        res = ap._git_retry(["clone", "https://x-access-token:ghp_SECRETLEAK@github.com/x/y.git",
+                             str(tmp_path)], timeout=1, attempts=2,
+                            secret="ghp_SECRETLEAK")
+        assert res.returncode != 0
+        assert "ghp_SECRETLEAK" not in (res.stderr or "")
+        assert calls["n"] == 2
+
+    def test_publish_clone_timeout_aborts_without_leak(self, tmp_path, monkeypatch):
+        import subprocess as sp
+        from scout_v2.workers import auto_pipeline as ap
+
+        monkeypatch.setenv("GH_TOKEN", "ghp_SECRETLEAK")
+
+        def fake_run(cmd, **kw):
+            raise sp.TimeoutExpired(cmd, kw.get("timeout", 180))
+
+        monkeypatch.setattr(ap.subprocess, "run", fake_run)
+        patch = tmp_path / "change.patch"
+        patch.write_text("--- a/x\n+++ b/x\n", encoding="utf-8")
+        summary: dict = {}
+        assert ap._publish_pr(tmp_path, {"repo": "me/t", "number": 8},
+                              "a" * 40, patch, summary) is None
+        assert "ghp_SECRETLEAK" not in json.dumps(summary)
