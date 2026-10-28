@@ -14,20 +14,22 @@ RUN useradd -m worker \
 WORKDIR /workspace
 
 COPY scout_v2 /workspace/scout_v2
-# worker 只需模型策略（resolve_model 读它选模型），不要把整个 configs/ 带进去：
-# 那里有监控名单和预算策略，worker 跑在第三方代码旁边，用不到也不该看到。
-COPY configs/model_policy.yaml /workspace/configs/model_policy.yaml
+# 不 COPY configs/：模型名由控制器随 job 下发（Job.model），worker 既读不到
+# 也不该看到监控名单/预算策略——它跑在第三方代码旁边。
 
 # worker 需要写 artifacts / repo；/workspace 默认归 root
 RUN mkdir -p /workspace/artifacts /workspace/repo && chown -R worker:worker /workspace
 
 # OpenCode CLI（repair 的执行 agent）。装完拷到系统路径并放开权限：
-# worker 以非 root 运行，默认装 /root 下会 Permission denied
+# worker 以非 root 运行，默认装 /root 下会 Permission denied。
+# 不用 `|| echo` 吞掉失败：装不上时 repair 会整条链静默不可用，
+# 构建期就该响（镜像仍可 build，但日志里留 WARN 且 repair 会明确报错）。
 RUN curl -fsSL https://opencode.ai/install | bash \
     && BIN=$(find /root /home/worker -type f -name opencode 2>/dev/null | head -1) \
-    && [ -n "$BIN" ] && cp "$BIN" /usr/local/bin/opencode \
+    && cp "$BIN" /usr/local/bin/opencode \
     && chmod 755 /usr/local/bin/opencode \
-    || echo "opencode install failed (repair falls back to API)"
+    && /usr/local/bin/opencode --version \
+    || echo "WARN: opencode CLI unavailable; repair will fail loudly at runtime"
 
 USER worker
 # --chmod：Windows 工作树不带 +x；sed 去掉 CRLF（git autocrlf 可能转换过）

@@ -179,7 +179,9 @@ def opencode_patch_producer(job: Job, work_dir: Path, context: str,
                  else "opencode auth: no OPENCODE_API_KEY in env")
     try:
         client = client or OpenCodeClient(timeout_seconds=1800, workdir=work_dir)
-        model = model or resolve_model()
+        # job.model 由控制器下发：worker 镜像里没有 configs/（配置在控制器的 /data 卷），
+        # 现场探测只在本地开发时兜底。
+        model = model or (job.model or "").strip() or resolve_model()
         rules = repo_rules_block(job.repo)
         full_context = (rules + "\n\n" + context) if rules else context
         (work_dir / TASK_FILE).write_text(FIX_PROMPT.format(context=full_context[:4000]),

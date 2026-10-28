@@ -441,6 +441,13 @@ def candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6) -> dict:
     job.test_cmd = cmd
     if rel and code:
         job.ai_test_files = {rel: code}
+    # 模型名由控制器解析后随 job 下发：worker 镜像里没有 configs/，
+    # 无法自己读 model_policy.yaml。
+    try:
+        from .repair import resolve_model
+        job.model = resolve_model()
+    except Exception as e:  # noqa: BLE001
+        return _abort_release(f"no model resolved: {str(e)[:160]}")
     try:
         backend, remote_id, extra = _submit_job(root, job, eng)
     except Exception as e:  # noqa: BLE001
