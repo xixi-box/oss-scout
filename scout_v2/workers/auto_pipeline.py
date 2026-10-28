@@ -285,6 +285,11 @@ def _submit_job(root: Path, job: Job, engine: PolicyEngine) -> tuple[str, str, d
         key = (os.environ.get("OPENCODE_API_KEY") or "").strip()
         if key:
             extra_env["OPENCODE_API_KEY"] = key
+        # 沙箱里跑的是目标仓库自己的测试代码，令牌等于交给它。只对我们自己的
+        # fixture 仓库（xixi-box/*，私有）开这个通道；生产目标全是公开仓库，匿名 clone。
+        tok = (os.environ.get("GH_TOKEN") or "").strip()
+        if tok and job.repo.split("/", 1)[0].lower() == "xixi-box":
+            extra_env["OSSCOUT_GIT_TOKEN"] = tok
         image_path = Path(__file__).resolve().parents[2] / "docker" / "Dockerfile.worker"
         be = ModalSandboxBackend(guard, dockerfile=image_path,
                                  max_task_minutes=int(mb.get("max_task_minutes", 30)),

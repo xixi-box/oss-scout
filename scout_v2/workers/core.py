@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import base64
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -29,13 +30,31 @@ RESULT_MARKER = "##OSSCOUT_RESULT##"   # 与 adapters.modal_backend 一致
 LOG_TAIL = 4000
 
 
+def _redact(text: str, secret: str) -> str:
+    return text.replace(secret, "***") if secret else text
+
+
 def ensure_repo(repo_dir: Path, repo: str, base_sha: str) -> Path:
-    """Sandbox 内按需拉取固定 SHA（公共 https 只读，无 token）。已有则直接复用。"""
+    """Sandbox 内按需拉取固定 SHA。已有则直接复用。
+
+    公开仓库走匿名 https；私有仓库（目前只有我们自己的 fixture 仓库）靠
+    OSSCOUT_GIT_TOKEN 通道。注意沙箱随后会执行目标仓库的测试代码，所以
+    clone 完必须立刻把令牌从 origin URL 里摘掉，否则等于把凭据交给代码。
+    """
     if repo_dir.exists() and (repo_dir / ".git").exists():
         return repo_dir
-    url = f"https://github.com/{repo}.git"
-    subprocess.run(["git", "clone", "--filter=blob:none", url, str(repo_dir)],
-                   check=True, capture_output=True, text=True, timeout=900)
+    token = (os.environ.get("OSSCOUT_GIT_TOKEN") or "").strip()
+    plain_url = f"https://github.com/{repo}.git"
+    url = (f"https://x-access-token:{token}@github.com/{repo}.git"
+           if token else plain_url)
+    cp = subprocess.run(["git", "clone", "--filter=blob:none", url, str(repo_dir)],
+                        capture_output=True, text=True, timeout=900)
+    if cp.returncode != 0:
+        raise RuntimeError("clone failed: "
+                           + _redact((cp.stderr or cp.stdout).strip()[-300:], token))
+    if token:
+        subprocess.run(["git", "-C", str(repo_dir), "remote", "set-url",
+                        "origin", plain_url], capture_output=True, timeout=60)
     # Modal Sandbox 以 root 跑，镜像内 /workspace 属于 worker → dubious ownership；
     # 本地 docker（worker 用户）同理可能有属主差。对当前用户加豁免（仅本沙箱内生效）。
     subprocess.run(["git", "config", "--global", "--add", "safe.directory",
