@@ -271,3 +271,72 @@ class TestPatchSurvivesWithoutArtifacts:
         assert got["test_report"] == {"ok": True}
         assert got["result"]["outcome"] == "succeeded"
         assert "patch" not in got["result"]
+
+
+class TestPublishAuth:
+    """控制器是唯一写者，push 必须带凭据。
+
+    2026-10-28 实录：容器里 GH_TOKEN 有效，但 git 没配 credential helper，
+    裸 `git push origin` 报 "could not read Username"，整条链停在最后一步。
+    同时令牌绝不允许出现在日志或摘要里。
+    """
+
+    def test_push_url_carries_token_and_origin_is_scrubbed(self, tmp_path, monkeypatch):
+        import subprocess as sp
+        from scout_v2.workers import auto_pipeline as ap
+
+        monkeypatch.setenv("GH_TOKEN", "ghp_SECRETTOKEN123")
+        seen: list[list[str]] = []
+
+        def fake_run(cmd, **kw):
+            seen.append(list(cmd))
+            class R:
+                returncode = 0
+                stdout = ""
+                stderr = ""
+            if cmd[:2] == ["git", "clone"]:
+                # 模拟真实 clone：建出目录，后续步骤才能在 cwd 里跑
+                target = cmd[-1]
+                import os
+                os.makedirs(target, exist_ok=True)
+                sp.run(["git", "init", "-q", target], check=True, capture_output=True)
+            return R()
+
+        monkeypatch.setattr(ap.subprocess, "run", fake_run)
+        patch = tmp_path / "change.patch"
+        patch.write_text("--- a/x\n+++ b/x\n", encoding="utf-8")
+        summary: dict = {}
+        ap._publish_pr(tmp_path, {"repo": "me/t", "number": 8, "title": "fix"},
+                       "a" * 40, patch, summary)
+
+        clone_cmd = next(c for c in seen if c[:2] == ["git", "clone"])
+        # clone 的 URL 是最后一个位置参数（倒数第二个是目标目录）
+        assert "ghp_SECRETTOKEN123" in clone_cmd[-2]
+        # clone 之后必须把带 token 的 remote 改回干净 URL
+        scrub = next(c for c in seen
+                     if c[:2] == ["git", "-C"] and "set-url" in c)
+        assert "ghp_SECRETTOKEN123" not in scrub[-1]
+        push_cmd = next(c for c in seen if "push" in c)
+        assert "ghp_SECRETTOKEN123" in push_cmd[-2]
+        assert "ghp_SECRETTOKEN123" not in str(summary.get("abort", ""))
+
+    def test_push_failure_never_leaks_token(self, tmp_path, monkeypatch):
+        from scout_v2.workers import auto_pipeline as ap
+
+        monkeypatch.setenv("GH_TOKEN", "ghp_SECRETTOKEN123")
+
+        def fake_run(cmd, **kw):
+            class R:
+                returncode = 1
+                stdout = ""
+                stderr = "fatal: could not push to https://x-access-token:ghp_SECRETTOKEN123@github.com"
+            return R()
+
+        monkeypatch.setattr(ap.subprocess, "run", fake_run)
+        patch = tmp_path / "change.patch"
+        patch.write_text("--- a/x\n+++ b/x\n", encoding="utf-8")
+        summary: dict = {}
+        assert ap._publish_pr(tmp_path, {"repo": "me/t", "number": 8},
+                              "a" * 40, patch, summary) is None
+        assert "ghp_SECRETTOKEN123" not in summary["abort"]
+        assert "***" in summary["abort"]

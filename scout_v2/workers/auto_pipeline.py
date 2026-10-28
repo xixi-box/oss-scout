@@ -505,6 +505,13 @@ def candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6) -> dict:
     return summary
 
 
+def _redact_secret(text: str, secret: str) -> str:
+    """运行日志/摘要里绝不能出现令牌原文。"""
+    if not secret:
+        return text or ""
+    return (text or "").replace(secret, "***")
+
+
 def _publish_pr(root: Path, entry: dict, base_sha: str, patch_file: Path,
                 summary: dict) -> str | None:
     """在 VPS 上把后端产出的 patch 应用到分支并开 PR。
@@ -517,12 +524,22 @@ def _publish_pr(root: Path, entry: dict, base_sha: str, patch_file: Path,
     tmp = Path(tempfile.mkdtemp(prefix="publish-"))
     try:
         clone = tmp / "repo"
+        # 控制器是唯一写者，push 必须带凭据。用 token 拼 URL 而不是 credential
+        # helper / .git-credentials：不落盘、不进 global config，进程结束即无痕。
+        # 2026-10-28 实测：容器里 GH_TOKEN 有效但 git 没配置 helper，
+        # 裸 git push 报 "could not read Username"，整条链就停在最后一步。
+        token = (os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN") or "").strip()
+        push_url = (f"https://x-access-token:{token}@github.com/{repo}.git" if token
+                    else f"https://github.com/{repo}.git")
         cl = subprocess.run(["git", "clone", "--quiet", "--filter=blob:none", "--depth", "1",
-                             f"https://github.com/{repo}.git", str(clone)],
+                             push_url, str(clone)],
                             capture_output=True, text=True, timeout=600)
         if cl.returncode != 0:
-            summary["abort"] = f"publish clone failed: {cl.stderr[:150]}"
+            summary["abort"] = f"publish clone failed: {_redact_secret(cl.stderr, token)[:150]}"
             return None
+        # clone 出来的 origin 带着 token；别让它留在仓库里
+        subprocess.run(["git", "-C", str(clone), "remote", "set-url", "origin",
+                        f"https://github.com/{repo}.git"], capture_output=True)
         branch = f"fix/issue-{number}-{base_sha[:7]}"
         subprocess.run(["git", "checkout", "-q", "-b", branch], cwd=clone, check=True)
         with patch_file.open("r", encoding="utf-8") as f:
@@ -536,10 +553,10 @@ def _publish_pr(root: Path, entry: dict, base_sha: str, patch_file: Path,
                         "-c", "user.email=wangshun-cn@qq.com",
                         "commit", "-qm", f"fix: {str(entry.get('title', ''))[:60]}"],
                        cwd=clone, check=True)
-        push = subprocess.run(["git", "push", "-q", "origin", branch], cwd=clone,
+        push = subprocess.run(["git", "push", "-q", push_url, branch], cwd=clone,
                               capture_output=True, text=True, timeout=300)
         if push.returncode != 0:
-            summary["abort"] = f"push failed: {push.stderr[:150]}"
+            summary["abort"] = f"push failed: {_redact_secret(push.stderr, token)[:150]}"
             return None
         body = (f"Fixes #{number}\n\n"
                 f"Root cause and fix produced by the oss-scout worker; verified by running the "
