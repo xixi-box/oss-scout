@@ -217,3 +217,64 @@ class TestVerifyOnCleanBase:
         assert res.outcome == "succeeded"
         assert res.reproduced_on_base is True and res.fixed_on_patch is True
 
+
+
+class TestModelPlumbing:
+    """2026-10-28 实测：worker 镜像里没有 configs/，resolve_model 在沙箱内必然失败。
+
+    模型名必须由控制器解析后随 job 下发，worker 不应依赖配置文件。
+    """
+
+    def test_job_model_takes_precedence_over_config_lookup(self, tmp_path, monkeypatch):
+        from scout_v2.workers import repair as rp
+        r, sha = make_repo(tmp_path)
+
+        def _boom():
+            raise AssertionError("resolve_model must not be called when job.model is set")
+
+        monkeypatch.setattr(rp, "resolve_model", _boom)
+        seen: list[str] = []
+
+        class Rec:
+            """在 work 目录里改代码并记录模型名（FakeClient 硬编码打补丁到固定路径，
+            这里必须落到 run_repair 传进来的 work 克隆上）。"""
+            def __init__(self, work: Path):
+                self.work = work
+
+            def run(self, model, prompt):
+                seen.append(model)
+                (self.work / "calc.py").write_text(
+                    "def div(a, b):\n    return a / b\n", encoding="utf-8")
+                return True, "fixed div"
+
+        j = job(sha)
+        j.model = "opencode-go/deepseek-v4.1-flash"
+        res = run_repair(j, r, tmp_path / "out",
+                         test_cmd=[sys.executable, "-m", "pytest", "test_div.py", "-q"],
+                         patch_producer=lambda jj, work, ctx: rp.opencode_patch_producer(
+                             jj, work, ctx, client=Rec(work)))
+        assert res.outcome == "succeeded"
+        assert seen == ["opencode-go/deepseek-v4.1-flash"]
+
+    def test_schema_carries_model(self):
+        j = Job(mode="repair", repo="a/b", base_sha="0" * 40,
+                idempotency_key="k", model="opencode-go/deepseek-v4.1-flash")
+        assert j.to_dict()["model"] == "opencode-go/deepseek-v4.1-flash"
+        assert Job.from_dict(j.to_dict()).model == "opencode-go/deepseek-v4.1-flash"
+
+
+class TestWorkerImageContract:
+    """worker 镜像不得依赖控制器的配置目录（构建上下文里没有 configs/）。"""
+
+    def test_dockerfile_does_not_copy_configs(self):
+        df = (Path(__file__).resolve().parents[1] / "docker" / "Dockerfile.worker").read_text(
+            encoding="utf-8")
+        copy_lines = [l for l in df.splitlines() if l.strip().upper().startswith("COPY ")]
+        for line in copy_lines:
+            assert "configs" not in line, f"worker image must not bundle configs: {line}"
+
+    def test_dockerfile_pyyaml_present(self):
+        """repair 的 resolve_model 兜底路径 import yaml；镜像缺 pyyaml 会 ModuleNotFoundError。"""
+        df = (Path(__file__).resolve().parents[1] / "docker" / "Dockerfile.worker").read_text(
+            encoding="utf-8")
+        assert "pyyaml" in df.lower()
