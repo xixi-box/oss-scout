@@ -83,7 +83,9 @@ def execute(job: Job, out_dir: Path, backend: str = "local",
     if errs:
         return Result(job_id=job.job_id, backend=backend, outcome="blocked",
                       base_sha=job.base_sha, unverified_items=errs)
-    if repo_dir is not None and job.mode in {"scan", "reproduce"}:
+    # repair 也要先把仓库检出到 base_sha：run_repair 以 repo_dir 为"基线仓库"
+    # 在工作副本里 clone 它再打补丁，repo_dir 为空时 git clone 直接 128。
+    if repo_dir is not None and job.mode in {"scan", "reproduce", "repair", "review", "ci"}:
         try:
             ensure_repo(repo_dir, job.repo, job.base_sha)
         except (subprocess.SubprocessError, OSError) as e:
