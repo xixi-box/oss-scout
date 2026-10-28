@@ -68,9 +68,15 @@ security:
   sanitize_logs: true
 
 routing:
-  # 用户裁定（2026-10-25 修订）：只有"找 Bug"（scan）由 Modal 承担，
-  # 其余全部由 GitHub Actions 承担（主选），Modal 作备选。
-  # 唯一保留的不对称：broad_scan 恒不上 Actions（GitHub ToS 硬约束，合规线非能力线）。
+  # 两条后端能力等价（同一份 worker 代码、同样的五个模式），只有优先级不同。
+  # 优先级依据"跑在谁的环境里"：
+  #   Actions = 目标仓库自己的 CI 环境（依赖/测试框架/版本都对），结果最可信，
+  #             但前提是目标仓库里有 .github/workflows/oss-scout-worker.yml
+  #             ——即"已决定要贡献并 fork 过"的项目。
+  #   Modal   = 我们自己的 worker 镜像，无需 fork、可跑任意第三方仓库，
+  #             适合探索期和尚未进入贡献流程的候选。
+  # 唯一硬约束：broad_scan 恒不上 Actions（GitHub ToS：公共 runner 不得用于
+  # 批量计算与所在仓库无关的第三方项目）。
   scan:      {primary: modal,   fallback: actions}
   reproduce: {primary: actions, fallback: modal}
   repair:    {primary: actions, fallback: modal}
