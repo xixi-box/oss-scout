@@ -204,14 +204,28 @@ def score(title: str, sig: dict, created_at: str, lane: str) -> tuple[int, str, 
         s += 2
     if "help wanted" in [lb.lower() for lb in sig["labels"]]:
         s += 2
+    # ready-for-dev：维护者已确认可以动手，不用等指派。实测这类 issue 的根因
+    # 描述通常已经定位到具体文件/行，比泛泛的 "[Bug] xxx 不工作" 好修得多。
+    if "ready-for-dev" in [lb.lower() for lb in sig["labels"]]:
+        s += 2
     if sig["repro_signal"]:
         s += 2
-    age_days = (dt.datetime.now(dt.timezone.utc)
-                - dt.datetime.fromisoformat(created_at.replace("Z", "+00:00"))).days
-    if age_days <= 7:
+    age_hours = (dt.datetime.now(dt.timezone.utc)
+                 - dt.datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+                 ).total_seconds() / 3600
+    # 机会窗口（2026-10-28 实测校准）：一行修复的 bug 在 issue 开出 1.5 分钟内
+    # 就有人提 PR，<2h 的抢不过内部人；龄太久的往往方案分歧大。2h–48h 是
+    # "热情期已过、还没人接手"的窗口，按这个加权而不是只看"是否 7 天内"。
+    if 2 <= age_hours <= 48:
+        s += 2
+    elif age_hours > 48:
         s += 1
     if sig["comments"] <= 3:
         s += 1
+    # priority:high / critical 通常有核心成员盯着，抢不过也不该抢
+    labels_lc = [lb.lower() for lb in sig["labels"]]
+    if any("priority:high" in lb or "priority: critical" in lb for lb in labels_lc):
+        s -= 2
 
     if sig["cross_ref_pr"]:
         blockers.append("cross_ref_pr")
@@ -240,7 +254,10 @@ def score(title: str, sig: dict, created_at: str, lane: str) -> tuple[int, str, 
 
     if blockers:
         return s, "C", blockers
-    return s, ("A" if s >= 6 else "B" if s >= 3 else "C"), []
+    # A 门槛从 6 降到 5（2026-10-28）：一行修复的 bug 在 issue 开出 1.5 分钟内
+    # 就有人提 PR，等攒到 6 分的往往已经被抢。5 分对应"bug + 机会窗口 + 讨论少"
+    # 这类根因清晰的中等难度 issue——正好是还没人接手的部分。
+    return s, ("A" if s >= 5 else "B" if s >= 3 else "C"), []
 
 
 def load_json(path: Path, default):

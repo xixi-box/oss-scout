@@ -146,3 +146,113 @@ class TestClosedPrIsNotCompetition:
     def test_merged_pr_does_not(self, monkeypatch):
         r = self._recheck(monkeypatch, "closed", merged="2026-01-01T00:00:00Z")
         assert r.has_cross_ref_pr is False
+
+
+class TestCompetingPrDetection:
+    """复检必须能发现"没关联 issue 就直接开的 PR"。
+
+    2026-10-28 实录：ansible#87799 的 timeline 里没有 cross-referenced（对方直接开
+    PR 没写 Fixes），因此 has_cross_ref_pr=False；只有按标题里的模块名搜 PR 才
+    能发现 #87459 "mount_facts: strip blkid UUID lookup output"。
+    """
+
+    def test_module_name_keyword_finds_unlinked_pr(self, monkeypatch):
+        from scout_v2 import git_host as gh
+
+        def fake_read(paths):
+            p = paths[0]
+            if "/comments" in p:
+                return []
+            if "/timeline" in p:
+                return []          # 没有 cross-ref
+            if "search/issues" in p:
+                return {"items": [{"number": 87459,
+                                   "title": "mount_facts: strip blkid UUID lookup output"}]}
+            return {"state": "open", "assignees": [], "title": "t", "body": "b"}
+
+        monkeypatch.setattr(gh, "gh_read", fake_read)
+        r = gh.recheck_candidate("ansible/ansible", 87799,
+                                 root_cause_keywords=["mount_facts"])
+        assert r.has_cross_ref_pr is False        # timeline 确实没有
+        assert r.open_pr_hits                     # 但搜索抓到了
+        assert "87459" in r.open_pr_hits[0]
+
+    def test_no_keywords_still_checks_by_issue_number(self, monkeypatch):
+        """不给关键词也不能完全不查竞争。"""
+        from scout_v2 import git_host as gh
+        seen: list[str] = []
+
+        def fake_read(paths):
+            p = paths[0]
+            seen.append(p)
+            if "/comments" in p:
+                return []
+            if "/timeline" in p:
+                return []
+            if "search/issues" in p:
+                return {"items": [{"number": 5, "title": "fixes it"}]}
+            return {"state": "open", "assignees": [], "title": "t", "body": "b"}
+
+        monkeypatch.setattr(gh, "gh_read", fake_read)
+        r = gh.recheck_candidate("o/r", 42)
+        assert any("search/issues" in s for s in seen), "must run a PR search even without keywords"
+        assert r.open_pr_hits
+
+
+class TestIdentifierFirstKeywords:
+    """标题里的标识符（含 _ 或 .）比普通单词更能定位模块。"""
+
+    def test_identifier_words_come_first(self):
+        import re
+        title = "mount_facts fails to match UUID based devices because of newline"
+        raw = [w for w in re.split(r"[^a-zA-Z0-9_.-]+", title)
+               if len(w) >= 5 and not w.isdigit()]
+        ident = [w for w in raw if "_" in w or "." in w]
+        ordered = (ident + [w for w in raw if w not in ident])[:3]
+        assert ordered[0] == "mount_facts"
+
+
+class TestRelevanceTwoTier:
+    """竞争 PR 的相关性判定：两档权衡的是两类错误的代价。
+
+    漏判（假阴性）→ 开重复 PR，伤账号声誉，比错过一次机会严重得多。
+    所以标识符类关键词严格匹配；普通词要求至少两个同时出现。
+    """
+
+    def _run(self, monkeypatch, keywords, pr_titles):
+        from scout_v2 import git_host as gh
+
+        def fake_read(paths):
+            p = paths[0]
+            if "/comments" in p:
+                return []
+            if "/timeline" in p:
+                return []
+            if "search/issues" in p:
+                return {"items": [{"number": i + 100, "title": t}
+                                  for i, t in enumerate(pr_titles)]}
+            return {"state": "open", "assignees": [], "title": "t", "body": "b"}
+
+        monkeypatch.setattr(gh, "gh_read", fake_read)
+        return gh.recheck_candidate("o/r", 1, root_cause_keywords=keywords)
+
+    def test_identifier_keyword_matches_title(self, monkeypatch):
+        r = self._run(monkeypatch, ["mount_facts"],
+                      ["mount_facts: strip blkid UUID lookup output"])
+        assert r.open_pr_hits
+
+    def test_identifier_does_not_match_unrelated(self, monkeypatch):
+        r = self._run(monkeypatch, ["mount_facts"],
+                      ["fix: unrelated thing in another module"])
+        assert not r.open_pr_hits
+
+    def test_single_generic_word_is_not_enough(self, monkeypatch):
+        """只共享一个泛词不算同一个问题。"""
+        r = self._run(monkeypatch, ["Spurious", "despite", "suppressing"],
+                      ["Stop --update-data from inserting spurious blank lines"])
+        assert not r.open_pr_hits
+
+    def test_two_generic_words_count(self, monkeypatch):
+        r = self._run(monkeypatch, ["spurious", "suppressing"],
+                      ["fix spurious notes when suppressing errors"])
+        assert r.open_pr_hits

@@ -391,10 +391,15 @@ def candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6) -> dict:
 
     # ---- 实时复检（Playbook §0.2）----
     # 竞争 PR 搜索只用标题里的根因词；label（如 triaging）不是根因描述，
-    # 用它搜 PR 只会制造无意义查询并放大失败面（2026-10-27 实测）
-    title_words = [w for w in re.split(r"[^a-zA-Z0-9_.-]+",
-                                       str(entry.get("title", "")))
-                   if len(w) >= 5][:3]
+    # 用它搜 PR 只会制造无意义查询并放大失败面（2026-10-27 实测）。
+    # 优先取标识符类词（含 _ / . 的模块名、函数名）：实测 ansible#87799 的竞争
+    # PR 标题是 "mount_facts: strip blkid UUID lookup output"，按普通词搜不到，
+    # 按模块名 mount_facts 才能命中。
+    raw_words = [w for w in re.split(r"[^a-zA-Z0-9_.-]+",
+                                     str(entry.get("title", "")))
+                 if len(w) >= 5 and not w.isdigit()]
+    ident = [w for w in raw_words if "_" in w or "." in w]
+    title_words = (ident + [w for w in raw_words if w not in ident])[:3]
     recheck = recheck_candidate(repo, number, root_cause_keywords=title_words or None)
     if recheck is None or not recheck.complete:
         summary["abort"] = f"recheck incomplete: {recheck.errors if recheck else 'None'}"

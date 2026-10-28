@@ -103,7 +103,27 @@ def recheck_candidate(repo: str, number: int, *, my_login: str = "xixi-box",
             r.has_cross_ref_pr = True
             break
     import urllib.parse as _up
-    for kw in root_cause_keywords or []:
+    # 只看 open PR：已关闭/已合并的历史尝试不算竞争（与 cross-ref 判定一致）。
+    #
+    # 命中判定分两档，权衡的是两类错误：
+    #   误判（假阳性）→ 白放弃一个可做的 issue，代价=错过一次机会；
+    #   漏判（假阴性）→ 开了重复 PR，代价=账号声誉，比错过机会严重得多。
+    # 所以对**标识符类**关键词（含 _ 或 .，几乎必然是模块/函数名）严格匹配标题；
+    # 对普通词则要求标题里**至少两个**关键词同时出现，才算同一个问题。
+    # （实测误判来源：mypy#22230 "Spurious note..." 撞上 "spurious blank lines"、
+    #  "Fix unanalyzed __getattr__..."——只共享一个泛词。）
+    kws = [k for k in (root_cause_keywords or []) if k]
+    strong = [k for k in kws if "_" in k or "." in k]
+    weak = [k for k in kws if k not in strong]
+
+    def _relevant(title: str) -> bool:
+        low = title.lower()
+        if strong:
+            return any(s.lower() in low for s in strong)
+        hits = sum(1 for w in weak if w.lower() in low)
+        return hits >= 2 if len(weak) >= 2 else hits >= 1
+
+    for kw in kws:
         q = f"repo:{repo} is:pr is:open {kw}"
         # 必须 URL 编码：关键词含空格时直接拼进 URL 会让 HTTP/2 请求被拆坏，
         # GitHub 返回 PROTOCOL_ERROR（2026-10-28 实测 5/5 失败）
@@ -114,5 +134,17 @@ def recheck_candidate(repo: str, number: int, *, my_login: str = "xixi-box",
             r.errors.append(f"pr search failed for {kw!r} (non-fatal)")
             continue
         for it in res.get("items", []):
-            r.open_pr_hits.append(f"{repo}#{it['number']}: {it.get('title', '')[:80]}")
+            title = str(it.get("title", ""))
+            if not _relevant(title):
+                continue
+            r.open_pr_hits.append(f"{repo}#{it['number']}: {title[:80]}")
+    if not kws:
+        # 没有关键词就等于没检查竞争，而这件事最贵的失败是"开了个重复 PR"。
+        # 至少用 issue 编号搜一次（不少 PR 标题会带 #N 或正文 Fixes #N）。
+        q = f"repo:{repo} is:pr is:open {number}"
+        res = gh_read([f"search/issues?q={_up.quote(q, safe='')}&per_page=10"])
+        if res is not None:
+            for it in res.get("items", []):
+                r.open_pr_hits.append(
+                    f"{repo}#{it['number']}: {it.get('title', '')[:80]}")
     return r

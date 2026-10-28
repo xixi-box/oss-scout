@@ -40,17 +40,23 @@ def _find(cid: str) -> dict | None:
 
 def main() -> int:
     cid = sys.argv[1] if len(sys.argv) > 1 else "xixi-box/oss-scout-v2-test#8"
-    if not cid.startswith("xixi-box/"):
-        print("refusing: probe may only run against own fixture repo")
+    # 默认只允许自有 fixture 仓库：探针会绕过每日认领闸，跑在真实仓库上就是
+    # 真实外发动作。要跑真实目标必须显式加 --real，避免手滑。
+    real = "--real" in sys.argv
+    if not real and not cid.startswith("xixi-box/"):
+        print("refusing: probe may only run against own fixture repo "
+              "(pass --real to target a real repo)")
         return 2
     entry = _find(cid)
     if entry is None:
         print(f"candidate not found: {cid}")
         return 2
 
-    # 日闸放行（仅本进程）+ 清掉本地占额，让 try_claim 能再占一次
-    rp.PolicyEngine.claim_slot_available = lambda self: True  # type: ignore[method-assign]
-    ClaimLedger(ROOT / "state" / "scout_v2.sqlite3").release_day()
+    # 日闸放行（仅本进程）+ 清掉本地占额，让 try_claim 能再占一次。
+    # 走 --real 时不绕过：真实仓库必须严格守每日 1 认领。
+    if not real:
+        rp.PolicyEngine.claim_slot_available = lambda self: True  # type: ignore[method-assign]
+        ClaimLedger(ROOT / "state" / "scout_v2.sqlite3").release_day()
 
     print("entry:", json.dumps({k: entry.get(k) for k in
                                 ("id", "repo", "number", "status", "lane")}, ensure_ascii=False))
