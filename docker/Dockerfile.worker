@@ -9,12 +9,14 @@ RUN useradd -m worker \
     && apt-get install -y --no-install-recommends \
         git curl ca-certificates nodejs npm \
     && rm -rf /var/lib/apt/lists/* \
-    && pip install --no-cache-dir semgrep uv
+    && pip install --no-cache-dir semgrep uv pyyaml
 
 WORKDIR /workspace
 
 COPY scout_v2 /workspace/scout_v2
-COPY configs.seed /workspace/configs
+# worker 只需模型策略（resolve_model 读它选模型），不要把整个 configs/ 带进去：
+# 那里有监控名单和预算策略，worker 跑在第三方代码旁边，用不到也不该看到。
+COPY configs/model_policy.yaml /workspace/configs/model_policy.yaml
 
 # worker 需要写 artifacts / repo；/workspace 默认归 root
 RUN mkdir -p /workspace/artifacts /workspace/repo && chown -R worker:worker /workspace
