@@ -244,6 +244,26 @@ def _repo_has_worker_workflow(repo: str) -> bool:
         return False
 
 
+def _no_proxy_context():
+    """Modal SDK 走 gRPC/WebSocket，经 HTTP 代理会 "Could not connect to the
+    Modal server"。提交 Sandbox / 读账单期间临时剥离代理变量。
+    用法：with _no_proxy_context(): ...
+    """
+    import contextlib
+
+    @contextlib.contextmanager
+    def _ctx():
+        keys = ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY",
+                "http_proxy", "https_proxy", "all_proxy")
+        saved = {k: os.environ.pop(k) for k in keys if k in os.environ}
+        try:
+            yield
+        finally:
+            os.environ.update(saved)
+
+    return _ctx()
+
+
 def _submit_job(root: Path, job: Job, engine: PolicyEngine) -> tuple[str, str, dict]:
     """按路由提交 job。返回 (backend, remote_id, extra)。"""
     router = _build_router(root, job, engine)
@@ -269,7 +289,9 @@ def _submit_job(root: Path, job: Job, engine: PolicyEngine) -> tuple[str, str, d
         be = ModalSandboxBackend(guard, dockerfile=image_path,
                                  max_task_minutes=int(mb.get("max_task_minutes", 30)),
                                  extra_env=extra_env)
-        return "modal", be.submit(job.to_dict()), {"backend_obj": be, "note": decision.reason}
+        with _no_proxy_context():   # Modal SDK 不能经 HTTP 代理
+            remote_id = be.submit(job.to_dict())
+        return "modal", remote_id, {"backend_obj": be, "note": decision.reason}
 
     be = ActionsBackend(enabled=True, repo=job.repo,
                         workflow=_actions_workflow_name(root), workflow_exists=True)
@@ -281,7 +303,8 @@ def _collect(root: Path, backend: str, remote_id: str, extra: dict, timeout_s: i
     be = extra["backend_obj"]
     t0 = time.time()
     while True:
-        st = be.poll(remote_id)
+        with _no_proxy_context():
+            st = be.poll(remote_id)
         state = st.get("state")
         if state != "running":
             break
@@ -293,7 +316,8 @@ def _collect(root: Path, backend: str, remote_id: str, extra: dict, timeout_s: i
             return {"outcome": "timed_out",
                     "unverified_items": [f"backend did not finish in {timeout_s}s"]}
         time.sleep(15)
-    env = be.collect(remote_id)
+    with _no_proxy_context():
+        env = be.collect(remote_id)
     # Modal 返回信封 {result, patch, test_report}；Actions 返回 result dict
     if isinstance(env, dict) and "result" in env:
         return {"result": env.get("result"), "patch": env.get("patch"),
