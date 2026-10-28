@@ -201,3 +201,59 @@ class TestInternalRepoDoesNotConsumeQuota:
         assert err is None, err
         eng._worklog = wl
         assert eng.claim_slot_available() is False, "真实认领必须守住每日 1 个"
+
+
+class TestPrInviteGate:
+    """开 PR 前必须确认仓库允许未受邀 PR。
+
+    2026-10-28 实录：sqlalchemy 的 sqla-tester bot 秒关了我们针对 #13731 的
+    PR #13736，理由是 issue 没有维护者加的 "open for pull requests" 标签。
+    光看 issue 无竞争不够——有些仓库要求先对齐方案。
+    """
+
+    def _eng(self, tmp_path, gates_yaml: str | None):
+        (tmp_path / "state").mkdir(parents=True, exist_ok=True)
+        (tmp_path / "configs").mkdir(exist_ok=True)
+        (tmp_path / "configs" / "repositories.yaml").write_text(
+            "repositories:\n  acme/real: {lane: open}\n", encoding="utf-8")
+        (tmp_path / "config.json").write_text(
+            '{"open_pool": [{"repo": "acme/real"}]}', encoding="utf-8")
+        (tmp_path / "configs" / "v2.yaml").write_text(
+            "budget: {}\nfeatures: {}\ntimezone: Asia/Shanghai\n", encoding="utf-8")
+        (tmp_path / "AGENTS.md").write_text("# playbook", encoding="utf-8")
+        if gates_yaml is not None:
+            (tmp_path / "configs" / "pr_gates.yaml").write_text(gates_yaml,
+                                                                encoding="utf-8")
+        from scout_v2.repo_policy import PolicyEngine
+        eng, err = PolicyEngine.load(tmp_path)
+        assert err is None, err
+        return eng
+
+    def test_missing_config_fails_closed(self, tmp_path):
+        """没有 pr_gates.yaml 时按"需要邀请"处理。"""
+        eng = self._eng(tmp_path, None)
+        assert eng.pr_invited("acme/real", {"bug"}) is False
+
+    def test_requires_invite_blocks_without_label(self, tmp_path):
+        eng = self._eng(tmp_path, """
+defaults: {requires_invite: true, invite_labels: ["open for pull requests"]}
+repositories:
+  acme/real: {requires_invite: true}
+""")
+        assert eng.pr_invited("acme/real", {"bug"}) is False
+        assert eng.pr_invited("acme/real", {"bug", "open for pull requests"}) is True
+
+    def test_explicitly_open_repo_allows_pr(self, tmp_path):
+        eng = self._eng(tmp_path, """
+defaults: {requires_invite: true}
+repositories:
+  acme/real: {requires_invite: false}
+""")
+        assert eng.pr_invited("acme/real", set()) is True
+
+    def test_undeclared_repo_under_open_default(self, tmp_path):
+        eng = self._eng(tmp_path, """
+defaults: {requires_invite: false}
+repositories: {}
+""")
+        assert eng.pr_invited("someone/else", set()) is True

@@ -1,0 +1,45 @@
+# 仓库 PR 门禁（2026-10-28 建立）。
+#
+# 背景：sqlalchemy 有 `sqla-tester` bot，只接受**维护者标记为
+# "open for pull requests"** 的 issue 对应的 PR，否则开出来几秒内自动关闭。
+# 我们照着"issue 干净 + 根因明确"就开 PR，结果 PR #13736 被秒关。
+#
+# 教训：判断"能不能开 PR"不能只看 issue 是否无竞争，还要看这个仓库**是否允许
+# 未经邀请的 PR**。config 里逐仓库声明，未声明的仓库按 requires_invite: true
+# 处理（fail-closed：宁可只评论对齐，不贸然开 PR）。
+#
+# requires_invite: true  → 必须在 issue 上拿到指定标签（或明确邀请）才开 PR
+# requires_invite: false → 可以直接开 PR（欢迎外部贡献者的仓库）
+
+defaults:
+  requires_invite: true
+  invite_labels:
+    - "open for pull requests"
+    - "help wanted"
+    - "good first issue"
+    - "ready-for-dev"
+    - "accepted"
+
+repositories:
+  # ---- 需要邀请/标签的仓库 ----
+  sqlalchemy/sqlalchemy:
+    requires_invite: true
+    invite_labels: ["open for pull requests"]
+    note: "sqla-tester bot 自动关闭未授权 PR（2026-10-28 实测 #13736 被秒关）"
+
+  # ---- 欢迎外部 PR 的仓库 ----
+  # 依据：这些仓库近期合并的 PR 大量来自外部贡献者，且无 bot 门禁
+  python/mypy:
+    requires_invite: false
+  astral-sh/uv:
+    requires_invite: false
+  astral-sh/ruff:
+    requires_invite: false
+  ansible/ansible:
+    requires_invite: false
+  pola-rs/polars:
+    requires_invite: false
+  pandas-dev/pandas:
+    requires_invite: false
+  npm/cli:
+    requires_invite: false

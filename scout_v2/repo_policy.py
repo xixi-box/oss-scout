@@ -118,7 +118,8 @@ class PolicyEngine:
                   assigned_to_me: bool = False,
                   maintainer_confirmed: bool = False,
                   blocker_registry=None,
-                  claim_check: bool = True) -> Decision:
+                  claim_check: bool = True,
+                  issue_labels: set[str] | None = None) -> Decision:
         """中央写动作授权（计划 §10：policy_authorize(action, repo, candidate)）。
 
         fail-closed：任何条件不满足都拒绝并给出原因；不满足即停，不做"尽量允许"。
@@ -147,6 +148,17 @@ class PolicyEngine:
         if action == "open_pr" and lane == "restricted" and not maintainer_confirmed:
             d.reason = "restricted repo: only maintainer-confirmed candidates"
             return d
+        if action == "open_pr" and not (
+                maintainer_confirmed or self.pr_invited(repo, issue_labels)):
+            # 2026-10-28 实录：sqlalchemy 的 sqla-tester bot 会秒关未被维护者标记
+            # "open for pull requests" 的 PR（我们的 #13736 就是这么被关的）。
+            # 未在 configs/pr_gates.yaml 声明的仓库默认按需要邀请处理——宁可先
+            # 评论对齐方案，也不要开一个必被关掉的 PR（AGENTS.md 第一约束）。
+            # maintainer_confirmed 是最强的邀请形式，直接放行（restricted 档的
+            # 既有语义就是"只做维护者确认过的"）。
+            d.reason = (f"{repo} requires an invite label before PRs "
+                        f"(labels={sorted(issue_labels or set()) or 'none'})")
+            return d
         if blocker_registry is not None and action in {"push", "open_pr", "comment_analysis"}:
             key = f"{repo}:{action}"
             if blocker_registry.is_blocked(key):
@@ -161,6 +173,46 @@ class PolicyEngine:
         d.allowed = True
         d.reason = "ok"
         return d
+
+    def _pr_gates(self) -> dict:
+        """读取 configs/pr_gates.yaml；读不到就用最保守默认（全部需要邀请）。"""
+        cached = getattr(self, "_pr_gates_cache", None)
+        if cached is not None:
+            return cached
+        import yaml
+        cfg = {"defaults": {"requires_invite": True,
+                            "invite_labels": ["open for pull requests",
+                                              "help wanted", "accepted"]},
+               "repositories": {}}
+        path = Path(self.root) / "configs" / "pr_gates.yaml"
+        if path.exists():
+            try:
+                loaded = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+                cfg["defaults"].update(loaded.get("defaults") or {})
+                cfg["repositories"] = loaded.get("repositories") or {}
+            except Exception:  # noqa: BLE001 — 解析失败即保留保守默认
+                pass
+        self._pr_gates_cache = cfg
+        return cfg
+
+    def pr_invited(self, repo: str, labels: set[str] | None) -> bool:
+        """该仓库是否允许我们直接开 PR。
+
+        2026-10-28：sqlalchemy 有 sqla-tester bot，只接受维护者标记
+        "open for pull requests" 的 issue 对应 PR，我们的 #13736 开出来几秒被关。
+        未声明的仓库按 requires_invite=true 处理（fail-closed）。
+        """
+        gates = self._pr_gates()
+        entry = (gates.get("repositories") or {}).get(repo) or {}
+        requires = entry.get("requires_invite",
+                             gates["defaults"].get("requires_invite", True))
+        if not requires:
+            return True
+        wanted = {str(x).lower() for x in
+                  (entry.get("invite_labels")
+                   or gates["defaults"].get("invite_labels") or [])}
+        have = {str(x).lower() for x in (labels or set())}
+        return bool(wanted & have)
 
     def _internal_test_targets(self) -> set[str]:
         """内部测试仓库的候选 id 前缀：演练不占真实每日额度。"""

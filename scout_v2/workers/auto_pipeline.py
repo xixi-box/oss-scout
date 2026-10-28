@@ -107,6 +107,14 @@ def _probe_test_stack(repo: str, base_sha: str):
     names = set(entries)
     tests_dir = next((d for d in ("tests", "test", "spec") if d in names), None)
     top = sorted(names)[:12]
+    # typing-only 仓库：测试是 mypy/pyright 的静态断言，不是运行期用例。
+    # AI 生成的 pytest 文件在这种仓库里收集不到任何用例（no tests ran），
+    # 防护会把整轮判为"环境不可用"并拒绝产出补丁——这是对的，但白烧一整个
+    # Actions run。这里直接返回 None，让调用方在派发前就放弃。
+    # 实测 2026-10-28：sqlalchemy#13731（declared_attr.cascading 的 typing 问题）
+    # 走 pytest 路径必然 no tests ran。
+    if "test/typing" in names or "typing" in names:
+        return None
     if {"pyproject.toml", "setup.py", "requirements.txt"} & names:
         return "python", "python -m pytest {path} -q", tests_dir, top
     if "package.json" in names:
@@ -414,6 +422,20 @@ def candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6) -> dict:
                             f"xref={recheck.has_cross_ref_pr} hits={recheck.open_pr_hits[:1]}")
         log(root, "abort", key, summary["abort"])
         mark_candidate(root, key, "aborted_competed")
+        return summary
+
+    # ---- PR 门禁（在认领/派发之前，避免白烧一轮 Actions）----
+    # 2026-10-28 实录：sqlalchemy 的 sqla-tester bot 只接受维护者标记
+    # "open for pull requests" 的 issue 对应 PR，我们的 #13736 开出来几秒被关。
+    # 判断"能否开 PR"不能只看 issue 是否无竞争，还要看仓库是否允许未受邀 PR。
+    issue_labels = {str(x) for x in (entry.get("labels") or [])}
+    if not eng.pr_invited(repo, issue_labels):
+        summary["abort"] = (
+            f"repo requires an invite label before PRs "
+            f"(labels={sorted(issue_labels) or 'none'}); "
+            f"comment-alignment only")
+        log(root, "abort", key, summary["abort"])
+        mark_candidate(root, key, "needs_invite")
         return summary
     summary["steps"].append("recheck ok")
 
