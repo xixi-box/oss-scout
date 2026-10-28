@@ -516,6 +516,24 @@ def _redact_secret(text: str, secret: str) -> str:
     return (text or "").replace(secret, "***")
 
 
+def _git_retry(args: list[str], *, timeout: int = 180, attempts: int = 3):
+    """带重试的 git 调用。
+
+    2026-10-28 实测：VPS 经代理连 github.com 偶发整段不通（一次 clone 卡了
+    129s 后报 "Could not connect"），而同一命令重跑只需 2s。这类抖动不该
+    让一条已经验证通过的修复作废——补丁还在本地，重试即可。
+    """
+    last = None
+    for attempt in range(attempts):
+        last = subprocess.run(["git"] + args, capture_output=True, text=True,
+                              timeout=timeout)
+        if last.returncode == 0:
+            return last
+        if attempt + 1 < attempts:
+            time.sleep(5 * (attempt + 1))
+    return last
+
+
 def _publish_pr(root: Path, entry: dict, base_sha: str, patch_file: Path,
                 summary: dict) -> str | None:
     """在 VPS 上把后端产出的 patch 应用到分支并开 PR。
@@ -535,9 +553,8 @@ def _publish_pr(root: Path, entry: dict, base_sha: str, patch_file: Path,
         token = (os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN") or "").strip()
         push_url = (f"https://x-access-token:{token}@github.com/{repo}.git" if token
                     else f"https://github.com/{repo}.git")
-        cl = subprocess.run(["git", "clone", "--quiet", "--filter=blob:none", "--depth", "1",
-                             push_url, str(clone)],
-                            capture_output=True, text=True, timeout=600)
+        cl = _git_retry(["clone", "--quiet", "--filter=blob:none", "--depth", "1",
+                         push_url, str(clone)], timeout=180)
         if cl.returncode != 0:
             summary["abort"] = f"publish clone failed: {_redact_secret(cl.stderr, token)[:150]}"
             return None
@@ -557,8 +574,14 @@ def _publish_pr(root: Path, entry: dict, base_sha: str, patch_file: Path,
                         "-c", "user.email=wangshun-cn@qq.com",
                         "commit", "-qm", f"fix: {str(entry.get('title', ''))[:60]}"],
                        cwd=clone, check=True)
-        push = subprocess.run(["git", "push", "-q", push_url, branch], cwd=clone,
-                              capture_output=True, text=True, timeout=300)
+        # push 同样走网络，代理抖动会让它失败；重试而不是让验证过的修复作废
+        push = None
+        for attempt in range(3):
+            push = subprocess.run(["git", "push", "-q", push_url, branch], cwd=clone,
+                                  capture_output=True, text=True, timeout=300)
+            if push.returncode == 0:
+                break
+            time.sleep(5 * (attempt + 1))
         if push.returncode != 0:
             summary["abort"] = f"push failed: {_redact_secret(push.stderr, token)[:150]}"
             return None
