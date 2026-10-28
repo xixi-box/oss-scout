@@ -106,3 +106,43 @@ class TestEnvKeyIsolation:
         # 骨架结果不含任何环境变量内容
         assert not any("PATH" in item or "KEY" in item
                        for item in r.unverified_items)
+
+
+class TestClosedPrIsNotCompetition:
+    """已关闭/已合并的关联 PR 不应阻止我们接手。
+
+    2026-10-28 实测：issue timeline 里的 cross-referenced 事件不会因为 PR 关闭
+    而消失；早期实现只看"存在关联 PR"就判定竞争，导致该 issue 被永久拒绝。
+    """
+
+    def _recheck(self, monkeypatch, pr_state, merged=None):
+        from scout_v2 import git_host as gh
+
+        timeline = [{
+            "event": "cross-referenced",
+            "source": {"issue": {"number": 9, "state": pr_state,
+                                 "pull_request": {"merged_at": merged}}},
+        }]
+
+        def fake_read(paths):
+            p = paths[0]
+            if "/comments" in p:
+                return []
+            if "/timeline" in p:
+                return timeline
+            return {"state": "open", "assignees": [], "title": "t", "body": "b"}
+
+        monkeypatch.setattr(gh, "gh_read", fake_read)
+        return gh.recheck_candidate("o/r", 1)
+
+    def test_open_pr_counts_as_competition(self, monkeypatch):
+        r = self._recheck(monkeypatch, "open")
+        assert r.has_cross_ref_pr is True
+
+    def test_closed_pr_does_not(self, monkeypatch):
+        r = self._recheck(monkeypatch, "closed")
+        assert r.has_cross_ref_pr is False
+
+    def test_merged_pr_does_not(self, monkeypatch):
+        r = self._recheck(monkeypatch, "closed", merged="2026-01-01T00:00:00Z")
+        assert r.has_cross_ref_pr is False

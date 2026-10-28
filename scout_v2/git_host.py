@@ -84,11 +84,24 @@ def recheck_candidate(repo: str, number: int, *, my_login: str = "xixi-box",
         r.errors.append("timeline fetch failed")
     else:
         for ev in timeline:
-            if isinstance(ev, dict) and ev.get("event") == "cross-referenced":
-                src = (ev.get("source") or {}).get("issue") or {}
-                if src.get("pull_request"):
-                    r.has_cross_ref_pr = True
-                    break
+            if not isinstance(ev, dict) or ev.get("event") != "cross-referenced":
+                continue
+            src = (ev.get("source") or {}).get("issue") or {}
+            pr = src.get("pull_request")
+            if not pr:
+                continue
+            # 只看仍可能落地的 PR：已关闭/已合并的引用不算竞争。
+            # timeline 里 PR 的 state 在 source.issue.state（不在 pull_request 内），
+            # 2026-10-28 实测返回 {"state":"closed"}。
+            # 自己关掉一个测试 PR 后，cross-referenced 事件仍在 timeline 里，
+            # 不复检这个字段会让该 issue 被永久拒绝。
+            state = str(src.get("state") or pr.get("state") or "").lower()
+            merged = (src.get("merged_at") or pr.get("merged_at")
+                      or pr.get("merged"))
+            if state == "closed" or merged:
+                continue
+            r.has_cross_ref_pr = True
+            break
     import urllib.parse as _up
     for kw in root_cause_keywords or []:
         q = f"repo:{repo} is:pr is:open {kw}"
