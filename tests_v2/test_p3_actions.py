@@ -310,15 +310,26 @@ class TestPublishAuth:
                        "a" * 40, patch, summary)
 
         clone_cmd = next(c for c in seen if c[:2] == ["git", "clone"])
-        # clone 的 URL 是最后一个位置参数（倒数第二个是目标目录）
-        assert "ghp_SECRETTOKEN123" in clone_cmd[-2]
-        # clone 之后必须把带 token 的 remote 改回干净 URL
-        scrub = next(c for c in seen
-                     if c[:2] == ["git", "-C"] and "set-url" in c)
-        assert "ghp_SECRETTOKEN123" not in scrub[-1]
+        # clone 上游用干净 URL（公共仓库匿名即可），token 不进 clone 命令
+        assert clone_cmd[-2] == "https://github.com/me/t.git"
+        assert "ghp_SECRETTOKEN123" not in clone_cmd[-2]
+        # token 只出现在 fork remote 的 URL 里（推送需要它）
+        fork = next(c for c in seen if "remote" in c and "add" in c)
+        assert "ghp_SECRETTOKEN123" in fork[-1]
+        assert "xixi-box/t.git" in fork[-1]
         push_cmd = next(c for c in seen if "push" in c)
-        assert "ghp_SECRETTOKEN123" in push_cmd[-2]
+        # push 走 fork remote（名字），URL 里才带凭据
+        assert "fork" in push_cmd
+        assert "ghp_SECRETTOKEN123" not in " ".join(push_cmd)
         assert "ghp_SECRETTOKEN123" not in str(summary.get("abort", ""))
+
+    def test_third_party_repo_pushes_to_fork_not_upstream(self):
+        """对第三方仓库没有 push 权限，分支必须推自己的 fork。"""
+        from scout_v2.workers.auto_pipeline import _fork_of
+        assert _fork_of("anomalyco/opencode") == "xixi-box/opencode"
+        assert _fork_of("microsoft/playwright") == "xixi-box/playwright"
+        # 自己名下的仓库不重复加前缀
+        assert _fork_of("xixi-box/oss-scout-v2-test") == "xixi-box/oss-scout-v2-test"
 
     def test_push_failure_never_leaks_token(self, tmp_path, monkeypatch):
         from scout_v2.workers import auto_pipeline as ap
