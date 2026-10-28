@@ -207,14 +207,16 @@ def _build_router(root: Path, job: Job, engine: PolicyEngine) -> JobRouter:
         except Exception:  # noqa: BLE001 — 无法确认预算即视为不可用（fail-closed）
             modal_budget_ok = False
 
-    # Actions：只有目标仓库存在我们的 worker 工作流时才 eligible
+    # Actions：在**我们自己的**仓库里跑（目标仓库只是只读输入）。
+    # 2026-10-28 修正：旧实现要求目标仓库里有我们的 workflow，不可行。
     actions_enabled = bool(feats.get("actions_backend"))
     actions_eligible = False
     if actions_enabled:
         try:
-            be = ActionsBackend(enabled=True, repo=job.repo,
+            be = ActionsBackend(enabled=True,
+                                runner_repo=_actions_runner_repo(root),
                                 workflow=_actions_workflow_name(root),
-                                workflow_exists=_repo_has_worker_workflow(job.repo))
+                                workflow_exists=True)
             actions_eligible = be.eligible(job.to_dict())
         except Exception:  # noqa: BLE001
             actions_eligible = False
@@ -229,19 +231,24 @@ def _build_router(root: Path, job: Job, engine: PolicyEngine) -> JobRouter:
 
 
 def _actions_workflow_name(root: Path) -> str:
-    return "oss-scout-worker.yml"
+    return "oss-scout-repair.yml"
 
 
-def _repo_has_worker_workflow(repo: str) -> bool:
-    """目标仓库（fork）里是否已有 oss-scout-worker.yml。"""
-    try:
-        out = subprocess.run(
-            ["gh", "api", f"repos/{repo}/contents/.github/workflows/{_actions_workflow_name(root)}",
-             "--jq", ".name"],
-            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60)
-        return out.returncode == 0 and bool(out.stdout.strip())
-    except Exception:  # noqa: BLE001
-        return False
+def _actions_runner_repo(root: Path) -> str:
+    """执行 repair 的仓库（我们自己的）：configs/v2.yaml 覆盖，默认 xixi-box/oss-scout。"""
+    import yaml
+    for cfg in (root / "configs" / "v2.yaml",
+                Path(os.environ.get("OSSCOUT_DASHBOARD_ROOT", "/data")) / "configs" / "v2.yaml"):
+        if not cfg.exists():
+            continue
+        try:
+            v2 = yaml.safe_load(cfg.read_text(encoding="utf-8")) or {}
+        except Exception:  # noqa: BLE001
+            continue
+        repo = ((v2.get("features") or {}).get("actions_runner_repo") or "").strip()
+        if repo:
+            return repo
+    return "xixi-box/oss-scout"
 
 
 def _no_proxy_context():
@@ -297,7 +304,7 @@ def _submit_job(root: Path, job: Job, engine: PolicyEngine) -> tuple[str, str, d
             remote_id = be.submit(job.to_dict())
         return "modal", remote_id, {"backend_obj": be, "note": decision.reason}
 
-    be = ActionsBackend(enabled=True, repo=job.repo,
+    be = ActionsBackend(enabled=True, runner_repo=_actions_runner_repo(root),
                         workflow=_actions_workflow_name(root), workflow_exists=True)
     return "github_actions", be.submit(job.to_dict()), {"backend_obj": be, "note": decision.reason}
 

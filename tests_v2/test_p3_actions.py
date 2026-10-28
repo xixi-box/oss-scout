@@ -136,3 +136,86 @@ class TestPollCollect:
         b.cancel("42")
         assert gh.calls[0][0] == "-X" and gh.calls[0][1] == "DELETE" \
             and "runs/42" in gh.calls[0][2]
+
+
+class TestRunnerRepoContract:
+    """2026-10-28 修正：repair 在**我们自己的**仓库的托管 runner 上跑。
+
+    旧实现把 workflow_dispatch 发到目标仓库，前提是第三方仓库里存在我们的
+    workflow 文件 —— 既不可行（不能往别人仓库塞 workflow）也违背最小侵入。
+    这组测试锁住新契约，防止回退。
+    """
+
+    def _job(self):
+        from scout_v2.schemas import Job
+        return Job(mode="repair", repo="someone/third-party-repo",
+                   base_sha="a" * 40, idempotency_key="k")
+
+    def test_dispatch_targets_runner_repo_not_target_repo(self):
+        calls: list[list[str]] = []
+
+        def gh(args):
+            calls.append(args)
+            if "dispatches" in " ".join(args):
+                return 0, ""
+            return 0, '{"workflow_runs": [{"id": 42, "event": "workflow_dispatch"}]}'
+
+        b = ab.ActionsBackend(enabled=True, runner_repo="me/runner", workflow_exists=True,
+                              gh_runner=gh)
+        rid = b.submit(self._job().to_dict())
+        assert rid == "42"
+        dispatch = next(c for c in calls if any("dispatches" in a for a in c))
+        joined = " ".join(dispatch)
+        assert "repos/me/runner/" in joined
+        assert "someone/third-party-repo" not in joined
+
+    def test_target_repo_travels_in_payload(self):
+        seen: dict = {}
+
+        def gh(args):
+            joined = " ".join(args)
+            if "dispatches" in joined:
+                for i, a in enumerate(args):
+                    if a.startswith("inputs[oss_job_b64]="):
+                        import base64 as b64
+                        seen.update(json.loads(
+                            b64.b64decode(a.split("=", 1)[1]).decode("utf-8")))
+                return 0, ""
+            return 0, '{"workflow_runs": [{"id": 7, "event": "workflow_dispatch"}]}'
+
+        b = ab.ActionsBackend(enabled=True, runner_repo="me/runner",
+                              workflow_exists=True, gh_runner=gh)
+        b.submit(self._job().to_dict())
+        assert seen["repo"] == "someone/third-party-repo"
+        assert seen["base_sha"] == "a" * 40
+
+    def test_ineligible_without_target_or_sha(self):
+        b = ab.ActionsBackend(enabled=True, runner_repo="me/runner", workflow_exists=True)
+        assert not b.eligible({"mode": "repair", "repo": "", "base_sha": "a" * 40})
+        assert not b.eligible({"mode": "repair", "repo": "a/b", "base_sha": ""})
+        assert not b.eligible({"mode": "repair", "repo": "a/b", "base_sha": "a" * 40,
+                               "execution_scope": "broad_scan"})
+
+    def test_collect_returns_patch_and_report(self, tmp_path):
+        run_dir = tmp_path / "run-9"
+        run_dir.mkdir()
+        (run_dir / "result.json").write_text(json.dumps(
+            {"job_id": "j", "outcome": "succeeded", "base_sha": "a" * 40}),
+            encoding="utf-8")
+        (run_dir / "change.patch").write_text("--- a/x\n+++ b/x\n", encoding="utf-8")
+        (run_dir / "test-report.json").write_text('{"ok": true}', encoding="utf-8")
+
+        def gh(args):
+            return 0, json.dumps({"artifacts": [{"name": "oss-result-j"}]})
+
+        def dl(args):
+            return 0, ""
+
+        b = ab.ActionsBackend(enabled=True, runner_repo="me/runner", workflow_exists=True,
+                              gh_runner=gh, download_runner=dl, artifact_dir=tmp_path)
+        # 让下载"成功"地指向已备好的目录：直接调用解析层
+        _p, data = b._load_result(run_dir)
+        assert data is not None
+        assert data["outcome"] == "succeeded"
+        assert "change.patch" not in data and data["patch"].startswith("--- a/x")
+        assert data["test_report"] == '{"ok": true}'

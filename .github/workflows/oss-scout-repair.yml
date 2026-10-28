@@ -1,0 +1,141 @@
+name: oss-scout repair worker
+
+# 由 oss-scout 控制器（VPS）workflow_dispatch 调用，在本仓库的托管 runner 上执行
+# repair：clone **目标仓库**到 base_sha → 按目标仓库自己的依赖跑测试 → opencode
+# 产出补丁 → 干净 base 上重放补丁再跑测试。
+#
+# 为什么用托管 runner 而不是自建沙箱（2026-10-28 重构）：
+#   opencode CLI 是交互式 TUI 工具，在无 tty 的瘦容器里会卡在 bootstrap
+#   （插件安装 / 权限询问 / models 端点探测，见上游 #44684 #14473 #47282 #44782）。
+#   GitHub 托管 runner 有完整的用户态、稳定网络、平台级超时与日志留存，
+#   目标仓库的依赖/测试框架也按它自己的方式装，证据链才可信。
+#
+# 安全边界：contents: read。本 job 不持有 GitHub 写权限，产出 patch + test report
+# 走 artifact 回传，由控制器（唯一的写者）决定是否 push 分支、开 PR。
+
+on:
+  workflow_dispatch:
+    inputs:
+      oss_job_b64:
+        description: "base64(JSON) job payload (target_repo/base_sha/mode/test_cmd/model/ai_test_files)"
+        required: true
+        type: string
+      job_id:
+        description: "job id (used in the artifact name)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Decode job payload
+        id: job
+        shell: bash
+        env:
+          OSS_JOB_B64: ${{ inputs.oss_job_b64 }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$OSS_JOB_B64" | base64 -d > "$RUNNER_TEMP/job.json"
+          python3 - <<'PY'
+          import json, os
+          j = json.load(open(os.environ["RUNNER_TEMP"] + "/job.json"))
+          print("mode:", j["mode"], "repo:", j["repo"], "sha:", j["base_sha"][:12])
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write(f"target_repo={j['repo']}\n")
+              f.write(f"base_sha={j['base_sha']}\n")
+          PY
+
+      - name: Checkout target repo at base_sha
+        shell: bash
+        env:
+          TARGET_REPO: ${{ steps.job.outputs.target_repo }}
+          BASE_SHA: ${{ steps.job.outputs.base_sha }}
+        run: |
+          set -euo pipefail
+          git init -q "$RUNNER_TEMP/repo"
+          git -C "$RUNNER_TEMP/repo" remote add origin "https://github.com/${TARGET_REPO}.git"
+          git -C "$RUNNER_TEMP/repo" fetch --depth 1 origin "$BASE_SHA"
+          git -C "$RUNNER_TEMP/repo" checkout --detach FETCH_HEAD
+          echo "checked out $(git -C "$RUNNER_TEMP/repo" rev-parse HEAD)"
+
+      - name: Get oss-scout worker
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --depth 1 "https://github.com/${{ github.repository }}.git" "$RUNNER_TEMP/worker"
+          python3 -m pip install --quiet -r "$RUNNER_TEMP/worker/requirements.txt"
+
+      - name: Install target repo dependencies
+        shell: bash
+        # 证据链要在**目标仓库自己的依赖环境**里跑才有意义。这里有声明文件就装；
+        # 失败不直接判死（很多项目靠 uv/poetry/自有脚本），但会记在日志里，
+        # 后续测试跑不起来时能看出是环境问题而不是"bug 修不好"。
+        run: |
+          set -uo pipefail
+          cd "$RUNNER_TEMP/repo"
+          if [ -f uv.lock ]; then
+            pip install --quiet uv && uv sync --quiet || echo "WARN: uv sync failed"
+          elif [ -f poetry.lock ]; then
+            pip install --quiet poetry && poetry install --quiet || echo "WARN: poetry install failed"
+          elif [ -f requirements.txt ]; then
+            pip install --quiet -r requirements.txt || echo "WARN: requirements install failed"
+          elif [ -f pyproject.toml ]; then
+            pip install --quiet -e . || echo "WARN: pip install -e . failed"
+          else
+            echo "no Python dependency manifest; relying on stdlib + pytest"
+          fi
+
+      - name: Install OpenCode CLI
+        shell: bash
+        # runner 上 opencode 装到 ~/.opencode/bin；用 --no-modify-path 避免改 shell 配置。
+        # 不用 `|| true`：装不上就让 job 明确失败，而不是跑到一半报奇怪的错。
+        run: |
+          set -euo pipefail
+          curl -fsSL https://opencode.ai/install | bash -s -- --no-modify-path
+          echo "$HOME/.opencode/bin" >> "$GITHUB_PATH"
+          "$HOME/.opencode/bin/opencode" --version
+
+      - name: Write opencode auth
+        shell: bash
+        env:
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.local/share/opencode"
+          python3 - <<'PY'
+          import json, os
+          p = os.path.expanduser("~/.local/share/opencode/auth.json")
+          os.makedirs(os.path.dirname(p), exist_ok=True)
+          with open(p, "w") as f:
+              json.dump({"opencode-go": {"type": "api",
+                                         "key": os.environ["OPENCODE_API_KEY"]}}, f)
+          os.chmod(p, 0o600)
+          PY
+
+      - name: Run worker
+        shell: bash
+        env:
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/worker"
+          PYTHONPATH="$RUNNER_TEMP/worker" python3 -m scout_v2.workers.core \
+            --job "$RUNNER_TEMP/job.json" \
+            --out "$RUNNER_TEMP/artifacts" \
+            --repo-dir "$RUNNER_TEMP/repo" \
+            --backend github_actions \
+            --emit-envelope
+
+      - name: Upload artifacts
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: oss-result-${{ inputs.job_id }}
+          path: ${{ runner.temp }}/artifacts/
+          retention-days: 3

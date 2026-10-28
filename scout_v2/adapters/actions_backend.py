@@ -24,6 +24,11 @@ from ..schemas import Job, Result
 GH = Callable[[list[str]], tuple[int, str]]     # gh api runner：runner(args) -> (rc, stdout)
 DL = Callable[[list[str]], tuple[int, str]]     # gh run runner：runner(args) -> (rc, output)
 
+# 执行 job 的仓库（我们自己的）。目标仓库写在 job payload 里。
+DEFAULT_RUNNER_REPO = "xixi-box/oss-scout"
+# artifact / result.json 的固定名字（与 workers/core.py 一致）
+RESULT_FILE = "result.json"
+
 
 def _default_gh(args: list[str], retries: int = 4) -> tuple[int, str]:
     last = ""
@@ -53,9 +58,14 @@ class ActionsBackend:
                  workflow: str = "worker-smoke.yml", ref: str = "main",
                  workflow_exists: bool = False, gh_runner: GH | None = None,
                  download_runner: DL | None = None,
-                 artifact_dir: Path | None = None):
+                 artifact_dir: Path | None = None,
+                 runner_repo: str = DEFAULT_RUNNER_REPO):
         self.enabled = enabled
-        self.repo = repo
+        # runner_repo = 执行 job 的仓库（我们自己的）；repo 仅作历史兼容参数保留。
+        # 2026-10-28 修正：dispatch 必须发到自己仓库，不能要求第三方仓库里有我们的
+        # workflow（既不可行也违背最小侵入）。
+        self.runner_repo = runner_repo or repo or DEFAULT_RUNNER_REPO
+        self.repo = self.runner_repo
         self.workflow = workflow
         self.ref = ref
         self.workflow_exists = workflow_exists
@@ -67,13 +77,14 @@ class ActionsBackend:
     #      broad_scan 恒拒——ToS 禁止公共 runner 批量计算无关第三方项目）----
 
     def eligible(self, job: dict) -> bool:
-        if not self.enabled or not self.repo or not self.workflow_exists:
+        if not self.enabled or not self.runner_repo or not self.workflow_exists:
             return False
         if job.get("execution_scope") == "broad_scan":
             return False
         if job.get("mode") not in {"repair", "review", "ci", "scan", "reproduce"}:
             return False
-        return True
+        # 目标仓库与固定 SHA 由 job payload 携带，缺了 runner 无从 checkout
+        return bool(job.get("repo") and job.get("base_sha"))
 
     # ---- 协议 ----
 
@@ -111,22 +122,48 @@ class ActionsBackend:
         self.gh(["-X", "DELETE", f"repos/{self.repo}/actions/runs/{remote_job_id}"])
 
     def collect(self, remote_job_id: str) -> dict:
-        rc, out = self.gh([f"repos/{self.repo}/actions/runs/{remote_job_id}/artifacts"])
+        rc, out = self.gh([f"repos/{self.runner_repo}/actions/runs/{remote_job_id}/artifacts"])
         if rc != 0:
-            return {"outcome": "inconclusive", "unverified_items": [f"artifact list failed: {out[:200]}"]}
+            return {"outcome": "inconclusive",
+                    "unverified_items": [f"artifact list failed: {out[:200]}"]}
         artifacts = json.loads(out).get("artifacts", [])
         if artifacts:
             dest = self.artifact_dir / f"run-{remote_job_id}"
             rc, err = self.download(["run", "download", remote_job_id,
-                                     "--repo", self.repo, "--dir", str(dest)])
+                                     "--repo", self.runner_repo, "--dir", str(dest)])
             if rc == 0:
-                results = sorted(dest.rglob("result.json"))
-                if results:
-                    return json.loads(results[0].read_text(encoding="utf-8"))
+                found, data = self._load_result(dest)
+                if data is not None:
+                    return data
+                return {"outcome": "inconclusive",
+                        "unverified_items": [f"artifact has no usable {RESULT_FILE}"]}
             return {"outcome": "inconclusive",
                     "unverified_items": [f"artifact download failed: {err[:200]}"]}
         # 无 artifact（如存储配额满）：降级走 stdout 信封（与 Modal 同协议）
         return self._collect_from_log(remote_job_id)
+
+    @staticmethod
+    def _load_result(dest: Path) -> tuple[Path | None, dict | None]:
+        """artifact 里找 result.json，并把同目录的补丁与测试报告一并带出。
+
+        runner 是一次性文件系统：patch 只能靠 artifact 回传，控制器拿到才能开 PR。
+        """
+        results = sorted(dest.rglob(RESULT_FILE))
+        if not results:
+            return None, None
+        p = results[0]
+        try:
+            data = json.loads(p.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return p, None
+        if not isinstance(data, dict):
+            return p, None
+        for name, key in (("change.patch", "patch"),
+                          ("test-report.json", "test_report")):
+            f = p.parent / name
+            if f.exists():
+                data[key] = f.read_text(encoding="utf-8", errors="replace")
+        return p, data
 
     def _collect_from_log(self, remote_job_id: str) -> dict:
         from ..adapters.modal_backend import parse_envelope
