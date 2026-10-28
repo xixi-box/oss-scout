@@ -3258,5 +3258,69 @@
  "anomalyco/opencode#58176": {
   "first_seen": "2026-10-26T23:24:21",
   "status": "queued"
+ },
+ "OpenHands/OpenHands#19040": {
+  "first_seen": "2026-10-28T10:01:30",
+  "status": "queued"
+ },
+ "OpenHands/OpenHands#18882": {
+  "first_seen": "2026-10-28T10:01:30",
+  "status": "blocked"
+ },
+ "anomalyco/opencode#59802": {
+  "first_seen": "2026-10-28T10:01:30",
+  "status": "lowscore"
+ },
+ "anomalyco/opencode#59801": {
+  "first_seen": "2026-10-28T10:01:30",
+  "status": "lowscore"
+ },
+ "anomalyco/opencode#59800": {
+  "first_seen": "2026-10-28T10:01:30",
+  "status": "lowscore"
+ },
+ "anomalyco/opencode#59799": {
+  "first_seen": "2026-10-28T10:01:30",
+  "status": "lowscore"
+ },
+ "anomalyco/opencode#59798": {
+  "first_seen": "2026-10-28T10:01:30",
+  "status": "lowscore"
+ },
+ "anomalyco/opencode#59797": {
+  "first_seen": "2026-10-28T10:01:30",
+  "status": "lowscore"
+ },
+ "anomalyco/opencode#59794": {
+  "first_seen": "2026-10-28T10:01:30",
+  "status": "lowscore"
+ },
+ "anomalyco/opencode#59792": {
+  "first_seen": "2026-10-28T10:01:30",
+  "status": "queued"
+ },
+ "anomalyco/opencode#59791": {
+  "first_seen": "2026-10-28T10:01:30",
+  "status": "queued"
+ },
+ "anomalyco/opencode#59789": {
+  "first_seen": "2026-10-28T10:01:30",
+  "status": "queued"
+ },
+ "anomalyco/opencode#59788": {
+  "first_seen": "2026-10-28T10:01:30",
+  "status": "lowscore"
+ },
+ "anomalyco/opencode#59387": {
+  "first_seen": "2026-10-28T10:01:30",
+  "status": "queued"
+ },
+ "anomalyco/opencode#52178": {
+  "first_seen": "2026-10-28T10:01:30",
+  "status": "queued"
+ },
+ "infiniflow/ragflow#21537": {
+  "first_seen": "2026-10-28T10:01:30",
+  "status": "lowscore"
  }
 }

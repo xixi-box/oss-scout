@@ -89,9 +89,12 @@ def recheck_candidate(repo: str, number: int, *, my_login: str = "xixi-box",
                 if src.get("pull_request"):
                     r.has_cross_ref_pr = True
                     break
+    import urllib.parse as _up
     for kw in root_cause_keywords or []:
         q = f"repo:{repo} is:pr is:open {kw}"
-        res = gh_read([f"search/issues?q={q}&per_page=10"])
+        # 必须 URL 编码：关键词含空格时直接拼进 URL 会让 HTTP/2 请求被拆坏，
+        # GitHub 返回 PROTOCOL_ERROR（2026-10-28 实测 5/5 失败）
+        res = gh_read([f"search/issues?q={_up.quote(q, safe='')}&per_page=10"])
         if res is None:
             # 关键词搜索是辅助信号：失败记录但不判整体不可用
             # （rate limit 下 search API 比其他端点更容易被拒）

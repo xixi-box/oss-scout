@@ -1352,7 +1352,7 @@
   },
   "created_at": "2026-10-25T06:26:30Z",
   "discovered_at": "2026-10-25T14:26:56",
-  "status": "new",
+  "status": "aborted_competed",
   "lease": null,
   "source": "cloudflare-worker",
   "ai_grade": {
@@ -1427,7 +1427,7 @@
   },
   "created_at": "2026-10-25T00:37:51Z",
   "discovered_at": "2026-10-25T15:18:03",
-  "status": "new",
+  "status": "aborted_competed",
   "lease": null,
   "source": "cloudflare-worker",
   "ai_grade": {
@@ -1435,7 +1435,8 @@
    "score": 8,
    "reason": "Clear reproducible ingestion-pipeline bug with concrete steps and exact error, likely a small fix to avoid sending empty inputs to embeddings; no duplicate/feature signal.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "updated_at": "2026-10-28T10:02:04"
  },
  "crewAIInc/crewAI#8556": {
   "id": "crewAIInc/crewAI#8556",
@@ -4305,6 +4306,45 @@
    "grade": "A",
    "score": 9,
    "reason": "Clear, reproducible transient-auth misclassification bug with detailed event timeline, concrete expected behavior, and a small retry/error-classification scope; related issues are distinct.",
+   "model": "deepseek-v4.1-flash"
+  }
+ },
+ "anomalyco/opencode#58176": {
+  "id": "anomalyco/opencode#58176",
+  "repo": "anomalyco/opencode",
+  "number": 58176,
+  "title": "session: titles never generated in v2 (no auto trigger + free-tier rejection)",
+  "url": "https://github.com/anomalyco/opencode/issues/58176",
+  "lane": "open",
+  "score": 1,
+  "class": "C",
+  "blockers": [],
+  "signals": {
+   "body_len": 2424,
+   "reactions": 0,
+   "labels": [
+    "reproduced"
+   ],
+   "comments": 5,
+   "claim_signal": false,
+   "maintainer_confirm": false,
+   "duplicate_flag": false,
+   "billing_flag": false,
+   "bot_claim": false,
+   "cross_ref_pr": false,
+   "repro_signal": false,
+   "ai_grade_a": true
+  },
+  "created_at": "2026-10-22T16:51:33Z",
+  "discovered_at": "2026-10-26T23:24:21",
+  "status": "new",
+  "lease": null,
+  "source": "cloudflare-worker",
+  "body_excerpt": "## Summary\n\nV2 never generates session titles. New sessions keep `title = NULL` (\"Untitled session\"), while v1.18.x auto-titled the same setup with the same model.\n\n## Environment\n\n- opencode version: 2.1.3\n- OS: macOS 26.5 (Darwin 25.5.0, arm64)\n- Terminal: Apple_Terminal, TERM=xterm-256color, COLORTERM=truecolor\n- Shell: /bin/zsh\n- Install/channel: Homebrew `anomalyco/tap/opencode-v2` 2.1.3, latest\n- Plugins: none\n\n## Reproduction\n\nGlobal config exposes only the free `opencode` provider (no entries in `opencode auth list`):\n\n```jsonc\n{ \"model\": \"opencode/big-pickle\", \"small_model\": \"opencode/big-pickle\" }\n```\n\n1. `opencode run \"reply with exactly: hi\"`\n2. `opencode session list` → new session shows `Untitled session`; `session_v2.title` is NULL.\n3. Force generation: `opencode api patch /api/session/<id> --data '{\"title\":\"\"}'` → title stays NULL; no output, no log line.\n\nReproduces with a fresh data dir and `--standalone`, so it is not migration or DB related.\n\n## Expected Behavior\n\nThe session gets a generated title after the first user message, as in v1 (which logged `agent=title small=true`).\n\n## Actual Behavior\n\nTwo separate defects:\n\n**1. The title request is rejected by the free-tier gate.**\n\n```sh\nopencode run --standalone --agent title \"say ok\"\n# Error: OpenCode's free tier can only be used from within OpenCode. Download it at https://opencode.ai and keep building.\nopencode run --standalone --agent summary \"say ok\"    # same error\nopencode run --standalone --agent build \"say ok\"      # works\nopencode run --standalone --agent compaction \"say ok\" # works\n```\n\nSame for every `opencode/*` model, so it is the maintenance request shape, not the model. `SessionTitle.attempt` swallows provider errors and returns `undefined` without logging, so the failure is invisible.\n\n**2. No automatic trigger.**\n\nInspecting the 2.1.3 binary, the only caller of title generation is the `session.update` handler when `title` is an empty string, and the only UI caller of that is `/re",
+  "ai_grade": {
+   "grade": "A",
+   "score": 9,
+   "reason": "Reproduced v2 regression with clear repro steps and two focused defects (missing auto-trigger and internal title requests blocked by free-tier gate); actionable and worth fixing.",
    "model": "deepseek-v4.1-flash"
   }
  }

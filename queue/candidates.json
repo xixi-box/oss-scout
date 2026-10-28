@@ -4346,5 +4346,241 @@
    "reason": "Reproduced v2 regression with clear repro steps and two focused defects (missing auto-trigger and internal title requests blocked by free-tier gate); actionable and worth fixing.",
    "model": "deepseek-v4.1-flash"
   }
+ },
+ "OpenHands/OpenHands#19040": {
+  "id": "OpenHands/OpenHands#19040",
+  "repo": "OpenHands/OpenHands",
+  "number": 19040,
+  "title": "[Bug]: Scrolling up skips main-conversation history once the planner has events older than the loaded tail",
+  "url": "https://github.com/OpenHands/OpenHands/issues/19040",
+  "lane": "open",
+  "score": 6,
+  "class": "A",
+  "blockers": [],
+  "signals": {
+   "body_len": 4000,
+   "reactions": 0,
+   "labels": [
+    "bug",
+    "priority:medium",
+    "ready-for-dev"
+   ],
+   "comments": 0,
+   "claim_signal": false,
+   "maintainer_confirm": false,
+   "duplicate_flag": false,
+   "billing_flag": false,
+   "bot_claim": false,
+   "cross_ref_pr": false,
+   "repro_signal": true,
+   "ai_grade_a": true
+  },
+  "created_at": "2026-10-28T01:33:14Z",
+  "discovered_at": "2026-10-28T10:01:30",
+  "status": "new",
+  "lease": null,
+  "source": "cloudflare-worker",
+  "body_excerpt": "### Operating System\n\nWindows\n\n### Installation Method\n\nFrom source (`npm run dev` / `npm run dev:minimal`)\n\n### Agent Canvas Version\n\nmain @ 6354932 (1.34.0)\n\n### Bug Description\n\nIn a conversation that has used Plan mode, scrolling up to load older history can permanently skip a stretch of the main conversation.\n\n`useLoadOlderEvents` anchors `timestamp__lt` on `useEventStore.getState().events[0]`, the oldest event in the store. The store is shared with the planner sub-conversation, whose socket replays its whole log (`after_seq=-1`), while the main conversation only has its 50-event REST tail. When the planner started before that tail, `events[0]` is a planner event, so the older-page request asks for main events older than the planner's first event. Every main event between that point and the oldest loaded main event is never requested. The returned page is usually short, so `hasMore` flips to false and nothing retries.\n\n### Steps to Reproduce\n\nRun method: from a source checkout, `npm run dev:mock` (MSW mock mode; the same code path runs under `npm run dev`).\n\n1. `npm ci && npm run dev:mock`, open http://127.0.0.1:3001/conversations/pagination-local (the built-in 100-event pagination fixture). The REST tail loads messages 51-100.\n2. In the devtools console, add two planner events the way the planning socket handler does (`addEvent` with `isFromPlanningAgent: true`), timestamped between messages 10 and 12:\n   ```js\n   const s = window.__OH_EVENT_STORE__.getState();\n   const mk = (id, ts, text) => ({ id, timestamp: ts, source: \"agent\", isFromPlanningAgent: true,\n     llm_message: { role: \"assistant\", content: [{ type: \"text\", text }] }, activated_skills: [], extended_content: [] });\n   s.addEvent(mk(\"planner-1\", \"2026-05-13T00:10:30.000Z\", \"[Planner] Drafting PLAN.md\"));\n   s.addEvent(mk(\"planner-2\", \"2026-05-13T00:11:30.000Z\", \"[Planner] Plan ready\"));\n   ```\n3. Scroll the chat to the top.\n\nIn real use the same store state comes from reopening a long conversation ",
+  "ai_grade": {
+   "grade": "A",
+   "score": 9,
+   "reason": "Clear, reproducible pagination bug with identified root cause and small likely fix scope; no duplicate or competing work indicated.",
+   "model": "deepseek-v4.1-flash"
+  }
+ },
+ "anomalyco/opencode#59792": {
+  "id": "anomalyco/opencode#59792",
+  "repo": "anomalyco/opencode",
+  "number": 59792,
+  "title": "ACP: attachment filenames stay URL-encoded",
+  "url": "https://github.com/anomalyco/opencode/issues/59792",
+  "lane": "open",
+  "score": 4,
+  "class": "B",
+  "blockers": [],
+  "signals": {
+   "body_len": 1358,
+   "reactions": 0,
+   "labels": [
+    "reproduced"
+   ],
+   "comments": 1,
+   "claim_signal": false,
+   "maintainer_confirm": false,
+   "duplicate_flag": false,
+   "billing_flag": false,
+   "bot_claim": false,
+   "cross_ref_pr": false,
+   "repro_signal": true,
+   "ai_grade_a": true
+  },
+  "created_at": "2026-10-28T01:35:57Z",
+  "discovered_at": "2026-10-28T10:01:30",
+  "status": "new",
+  "lease": null,
+  "source": "cloudflare-worker",
+  "body_excerpt": "### Description\n\nAttachment names that come in over ACP keep their URL encoding. If an image is sent with `uri: \"file:///tmp/photo%201.png\"`, the part ends up with `filename: \"photo%201.png\"` instead of `photo 1.png`. Same for names with spaces, accented letters, `#` or `%`.\n\nEmbedded attachments get it twice. On replay the URI is rebuilt with `pathToFileURL(filename)` from the already encoded name, so `photo%201.png` turns into `photo%25201.png` in the URI.\n\n### Plugins\n\nNone\n\n### OpenCode version\n\n2.2.0 (dev at 76e1f5b)\n\n### Steps to reproduce\n\nFrom the repo root, run this with Bun:\n\n```ts\nimport { promptContentToParts } from \"./packages/cli/src/acp/content\"\nconsole.log(promptContentToParts([\n  { type: \"image\", data: \"\", mimeType: \"image/png\", uri: \"file:///tmp/photo%201.png\" },\n]))\n```\n\nIt prints `filename: \"photo%201.png\"`.\n\nYou can also see it in the prompt wire test (`packages/cli/test/acp/prompt.test.ts`) by renaming its local image to `local #1 100% café.png`: the URI that reaches the server is fine, but the name is `local%20%231%20100%25%20caf%C3%A9.png`.\n\nExpected: `photo 1.png`. One thing to keep in mind for a fix: Zed's `?path=` query paths are already decoded, so those shouldn't be decoded again.\n\n### Screenshot\n\nN/A, protocol only.\n\n### Operating System\n\nmacOS 26.6.2 (arm64), Bun 1.4.4\n\n### Terminal\n\nN/A, not a TUI issue.\n",
+  "ai_grade": {
+   "grade": "A",
+   "score": 9,
+   "reason": "Clear reproducible URL-decoding bug with a small scoped fix and test guidance, no competing work indicated.",
+   "model": "deepseek-v4.1-flash"
+  }
+ },
+ "anomalyco/opencode#59791": {
+  "id": "anomalyco/opencode#59791",
+  "repo": "anomalyco/opencode",
+  "number": 59791,
+  "title": "web: side-panel \"Open file\" is a silent no-op on insecure HTTP origins (v2.2.0 regression)",
+  "url": "https://github.com/anomalyco/opencode/issues/59791",
+  "lane": "open",
+  "score": 4,
+  "class": "B",
+  "blockers": [],
+  "signals": {
+   "body_len": 3851,
+   "reactions": 0,
+   "labels": [
+    "reproduced"
+   ],
+   "comments": 1,
+   "claim_signal": false,
+   "maintainer_confirm": false,
+   "duplicate_flag": false,
+   "billing_flag": false,
+   "bot_claim": false,
+   "cross_ref_pr": false,
+   "repro_signal": true,
+   "ai_grade_a": true
+  },
+  "created_at": "2026-10-28T01:35:53Z",
+  "discovered_at": "2026-10-28T10:01:30",
+  "status": "new",
+  "lease": null,
+  "source": "cloudflare-worker",
+  "body_excerpt": "### Description\n\nOn the Web UI served over **plain HTTP from a non-localhost origin** (LAN IP / hostname / Tailscale), clicking **Open file** in the side panel's new-tab view does nothing: no tab opens, no toast, no request. The console shows:\n\n```\nUncaught TypeError: crypto.randomUUID is not a function\n```\n\nReview and Terminal launchers in the same panel work. The same server and session work over `http://127.0.0.1:<port>`.\n\nRoot cause: `packages/gui-plugins/src/file/renderer.tsx` opens a new launcher tab with an unguarded `crypto.randomUUID()`:\n\nhttps://github.com/anomalyco/opencode/blob/v2.2.0/packages/gui-plugins/src/file/renderer.tsx#L170\n\n```ts\nif (selected || layout.narrow())\n  layout.open(`file:${selected ?? OPEN}`, session, { tab: \"preview\", background: options?.background })\nelse layout.open(`file:${OPEN}:${crypto.randomUUID()}`, session, { tab: \"select\" })\n```\n\n`crypto.randomUUID` exists only in secure contexts, so on an insecure origin the call throws inside the click handler before `layout.open`, and the click is silently lost. Both the `+` → “Open file” launcher and `Ctrl+Alt+P` reach this branch; narrow layouts (<768px) take the other branch and are unaffected.\n\n### Steps to reproduce\n\n1. Start the Web UI (`opencode serve`, or the background service) and open it from a non-localhost HTTP origin, e.g. `http://<LAN-IP>:<port>/` (Chrome shows “Not secure”).\n2. Open any session and open the side panel (Toggle review).\n3. Click `+` (Add tab), then **Open file**.\n4. Nothing happens; devtools shows `TypeError: crypto.randomUUID is not a function`.\n\nExpected: the file browser tab opens on any origin (id generation should not require a secure context).\n\n### Regression / history\n\n- `v2.1.4` used a fixed key (`file:open`) in `openPicker` and worked on insecure origins.\n- `#57182` (`879479b467`, “allow multiple open file tabs”) introduced `file:${OPEN}:${crypto.randomUUID()}`; `#55246` moved it to `packages/gui-plugins/src/file/renderer.tsx`. First release contai",
+  "ai_grade": {
+   "grade": "A",
+   "score": 9,
+   "reason": "Clear reproducible v2.2.0 regression with root cause and a small fix using an existing guarded uuid helper; no competing work noted.",
+   "model": "deepseek-v4.1-flash"
+  }
+ },
+ "anomalyco/opencode#59789": {
+  "id": "anomalyco/opencode#59789",
+  "repo": "anomalyco/opencode",
+  "number": 59789,
+  "title": "ACP: a failed model or agent switch still changes the selection",
+  "url": "https://github.com/anomalyco/opencode/issues/59789",
+  "lane": "open",
+  "score": 4,
+  "class": "B",
+  "blockers": [],
+  "signals": {
+   "body_len": 1436,
+   "reactions": 0,
+   "labels": [
+    "reproduced"
+   ],
+   "comments": 1,
+   "claim_signal": false,
+   "maintainer_confirm": false,
+   "duplicate_flag": false,
+   "billing_flag": false,
+   "bot_claim": false,
+   "cross_ref_pr": false,
+   "repro_signal": true,
+   "ai_grade_a": true
+  },
+  "created_at": "2026-10-28T01:35:45Z",
+  "discovered_at": "2026-10-28T10:01:30",
+  "status": "new",
+  "lease": null,
+  "source": "cloudflare-worker",
+  "body_excerpt": "### Description\n\nWhen a model or agent switch over ACP fails, the adapter keeps the new value as the current selection anyway. The server is still on the old one, so ACP and the server disagree from then on.\n\nYou see it on the next config change. After a failed switch from a model with `high` effort to one that only has `low` and `medium`, setting effort to `high` fails with `effort not found: high`, even though the session never left the original model. A failed agent switch does the same thing: the next config response shows the rejected agent as the current mode.\n\n### Plugins\n\nNone\n\n### OpenCode version\n\n2.2.0 (dev at 76e1f5b)\n\n### Steps to reproduce\n\nUsing the ACP wire test fixture in `packages/cli/test/acp`:\n\n1. Start a session on `test/test-model`, which has `high` effort. `test/second-model` only has `low` and `medium`.\n2. Make the first `POST /api/session/<id>/model` return a 503.\n3. Switch the model to `test/second-model` with `session/set_config_option`. It returns an error, which is right.\n4. Set effort to `high`. It fails with `-32602`, `effort not found: high`.\n\nThe agent version: fail a switch from `build` to `plan`, then change effort. The response reports `plan` as the mode.\n\nExpected: a failed switch leaves the selection as it was, and later valid changes keep working.\n\n### Screenshot\n\nN/A, protocol only.\n\n### Operating System\n\nmacOS 26.6.2 (arm64), Bun 1.4.4\n\n### Terminal\n\nN/A, not a TUI issue.\n",
+  "ai_grade": {
+   "grade": "A",
+   "score": 9,
+   "reason": "Clear reproducible state-desync bug with steps, expected behavior, and small scoped fix.",
+   "model": "deepseek-v4.1-flash"
+  }
+ },
+ "anomalyco/opencode#59387": {
+  "id": "anomalyco/opencode#59387",
+  "repo": "anomalyco/opencode",
+  "number": 59387,
+  "title": "Free tier issues: read this first, then post your report here",
+  "url": "https://github.com/anomalyco/opencode/issues/59387",
+  "lane": "open",
+  "score": 4,
+  "class": "B",
+  "blockers": [],
+  "signals": {
+   "body_len": 3591,
+   "reactions": 7,
+   "labels": [
+    "zen"
+   ],
+   "comments": 36,
+   "claim_signal": false,
+   "maintainer_confirm": false,
+   "duplicate_flag": false,
+   "billing_flag": false,
+   "bot_claim": false,
+   "cross_ref_pr": false,
+   "repro_signal": false,
+   "ai_grade_a": false
+  },
+  "created_at": "2026-10-26T20:02:23Z",
+  "discovered_at": "2026-10-28T10:01:30",
+  "status": "new",
+  "lease": null,
+  "source": "cloudflare-worker",
+  "body_excerpt": "This is the **main issue for free tier problems**. If you see any of these, you're in the right place:\n\n- `Free usage exceeded, subscribe to Go`\n- `Free usage limit reached`\n- `You've used today's free messages. They reset at ...` and the reset never happens\n- `This version of OpenCode Desktop no longer supports free models`\n- `OpenCode's free tier can only be used from within OpenCode`\n- `OpenCode 1.18.0 or newer is required to use the free tier`\n\n**Please comment here instead of opening a new issue.** We're closing duplicates and pointing them here so everything is in one place.\n\n## 1. Make sure you're on the latest OpenCode v2\n\nMost free tier reports come from **OpenCode v1** (versions `0.x` and `1.x`, for example Desktop or CLI `1.19.4`). v1 no longer supports free models and only gets fixes for critical bugs. Updating to v2 has fixed this for many people.\n\nCheck your version:\n\n- **Terminal:** `opencode --version`\n- **Desktop:** Settings → About\n\nThe latest v2 release is **2.1.4**.\n\n> [!IMPORTANT]\n> The v1 Desktop app's built-in updater keeps you on `1.x`. Download v2 manually from **https://opencode.ai/v2/docs**.\n\n### Desktop\n\nDownload v2 Desktop for macOS, Windows or Linux from **https://opencode.ai/v2/docs**, or on macOS:\n\n```sh\nbrew install --cask opencode-desktop\n```\n\n### Terminal (TUI / CLI)\n\nAll install options are listed at **https://opencode.ai/v2/docs**. The quickest on macOS and Linux:\n\n```sh\ncurl -fsSL https://opencode.ai/v2/install | bash\n```\n\nOr use a package manager:\n\n```sh\nnpm install -g @opencode/cli\nbun install -g --trust @opencode/cli\nbrew install anomalyco/tap/opencode-v2\nparu -S opencode-beta\n```\n\nv1 and v2 both use the `opencode` command. If you installed v1 with a package manager, remove it first, for example `npm uninstall -g opencode-ai`. Windows package managers (Chocolatey, Scoop) don't support v2. On Windows, use the Desktop app, npm, or a [standalone binary](https://opencode.ai/v2/docs/).\n\n### Useful docs\n\n- [Install OpenCode v2](htt",
+  "ai_grade": {
+   "grade": "C",
+   "score": 1,
+   "reason": "Meta support/tracking issue for free-tier quota and versioning complaints, not a reproducible code bug; billing/quota and duplicate consolidation are C.",
+   "model": "deepseek-v4.1-flash"
+  }
+ },
+ "anomalyco/opencode#52178": {
+  "id": "anomalyco/opencode#52178",
+  "repo": "anomalyco/opencode",
+  "number": 52178,
+  "title": "Zen API: CORS headers only served on /zen/v1/models, all inference endpoints fail preflight (404)",
+  "url": "https://github.com/anomalyco/opencode/issues/52178",
+  "lane": "open",
+  "score": 2,
+  "class": "C",
+  "blockers": [],
+  "signals": {
+   "body_len": 1955,
+   "reactions": 0,
+   "labels": [
+    "reproduced"
+   ],
+   "comments": 4,
+   "claim_signal": false,
+   "maintainer_confirm": false,
+   "duplicate_flag": false,
+   "billing_flag": false,
+   "bot_claim": false,
+   "cross_ref_pr": false,
+   "repro_signal": true,
+   "ai_grade_a": true
+  },
+  "created_at": "2026-09-29T22:13:01Z",
+  "discovered_at": "2026-10-28T10:01:30",
+  "status": "new",
+  "lease": null,
+  "source": "cloudflare-worker",
+  "body_excerpt": "**Description**\n\nZen only serves CORS headers on `/zen/v1/models`. None of the inference endpoints return `Access-Control-Allow-Origin` on preflight, so no third-party browser client can call any Zen model - paid or free.\n\n**Steps to reproduce**\n\n```\n$ curl -i -X OPTIONS https://opencode.ai/zen/v1/models \\\n    -H 'Origin: https://example.com' \\\n    -H 'Access-Control-Request-Method: POST' \\\n    -H 'Access-Control-Request-Headers: accept,content-type,authorization'\nHTTP/2 200\naccess-control-allow-origin: *\naccess-control-allow-headers: Content-Type, Authorization\naccess-control-allow-methods: GET, POST, OPTIONS\n```\n\n```\n$ curl -i -X OPTIONS https://opencode.ai/zen/v1/chat/completions \\\n    -H 'Origin: https://example.com' \\\n    -H 'Access-Control-Request-Method: POST' \\\n    -H 'Access-Control-Request-Headers: accept,content-type,authorization'\nHTTP/2 404\n(no Access-Control-Allow-Origin)\n```\n\nSame 404-with-no-CORS-headers result for every inference path:\n\n```\n/zen/v1/chat/completions          404   gpt-*, qwen3.8-max, deepseek-v4*, kimi-*, glm-*, minimax-*, big-pickle, space-bunny-free\n/zen/v1/responses                 404   grok-*, gpt-*, muse-spark-1.3-contributor-free\n/zen/v1/messages                  404   claude-*, qwen3.5-3.7\n/zen/v1/models/{gemini-*}         404\n/zen/v1/systemone                 404\n```\n\nThe browser fails the preflight and never issues the POST, so the client reports a generic connection/CORS error. Meanwhile `GET /zen/v1/models` succeeds, which makes it look like the base URL and API key are correct.\n\n**Expected**\n\nAll `/zen/v1/*` endpoints behind the gateway should return the same CORS headers as `/zen/v1/models`, so third-party web clients can use Zen.\n\n**Note (separate issue)**\n\nFree-tier models return `403 FreeTierError: \"OpenCode's free tier can only be used from within OpenCode\"`, which is not documented. Paid models are unaffected. Reporting the CORS gap here, which also affects paid models.\n",
+  "ai_grade": {
+   "grade": "A",
+   "score": 9,
+   "reason": "Reproduced, clearly scoped CORS/preflight bug affecting all inference endpoints with concrete curl evidence and a confined gateway fix.",
+   "model": "deepseek-v4.1-flash"
+  }
  }
 }
