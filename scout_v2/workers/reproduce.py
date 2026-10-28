@@ -25,11 +25,36 @@ def sanitized_env(base: dict | None = None, home: str | Path | None = None) -> d
     历史教训（2026-10-25）：早期用白名单重建环境，剥掉的非敏感系统变量让
     Windows Winsock 初始化随机失败（WinError 10106，pytest 全灭）。改为
     继承完整环境、只剥敏感关键字项 + HOME/TMP 重定向——既保隔离又保可跑。
+
+    历史教训（2026-10-28，GitHub runner）：重定向 HOME 会连带改变 Python 的
+    user site-packages 位置（~/.local/lib/pythonX.Y/site-packages）。runner 上依赖
+    （含 pytest）由 pip --user 装进真实 HOME，HOME 一改就找不到，于是 base 与
+    patched 两次运行都以 "No module named pytest" rc=1 结束；而 rc=1 又被当作
+    "复现成功"，造出 reproduced_on_base 的假阳性。重定向 HOME 时必须显式保留
+    原有的 site-packages 搜索路径。
     """
-    base = base if base is not None else dict(__import__("os").environ)
+    import os
+    import site
+    base = base if base is not None else dict(os.environ)
     env = {k: v for k, v in base.items()
            if not any(m in k.upper() for m in DENY_MARKERS)}
     if home is not None:
+        extra: list[str] = []
+        try:
+            extra.extend(site.getsitepackages())
+        except Exception:  # noqa: BLE001 — 某些解释器没有该 API
+            pass
+        try:
+            usp = site.getusersitepackages()
+            if usp:
+                extra.append(usp)
+        except Exception:  # noqa: BLE001
+            pass
+        if env.get("PYTHONPATH"):
+            extra.append(env["PYTHONPATH"])
+        keep = sorted({p for p in extra if p})
+        if keep:
+            env["PYTHONPATH"] = os.pathsep.join(keep)
         env["HOME"] = str(home)
         env["TMP"] = env["TEMP"] = str(home)
     env.setdefault("PYTHONIOENCODING", "utf-8")

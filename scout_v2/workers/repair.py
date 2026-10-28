@@ -169,8 +169,14 @@ def _ensure_opencode_auth() -> str | None:
 
 def opencode_patch_producer(job: Job, work_dir: Path, context: str,
                             client: OpenCodeClient | None = None,
-                            model: str | None = None) -> tuple[str, list[str]]:
-    """域 B：OpenCode 在 work_dir 内产出补丁。返回 (patch_text, notes)。"""
+                            model: str | None = None,
+                            ai_test_paths: list[str] | None = None) -> tuple[str, list[str]]:
+    """域 B：OpenCode 在 work_dir 内产出补丁。返回 (patch_text, notes)。
+
+    ai_test_paths：我们预先放进工作区的回归测试路径，必须排除在补丁之外
+    （它们是验证手段，不是修复内容）。按实际路径排除而不是猜文件名。
+    """
+    ai_test_paths = list(ai_test_paths or [])
     cfg_path = work_dir / "opencode.json"
     original_cfg = cfg_path.read_bytes() if cfg_path.exists() else None
     notes = [enforce_domain_b(work_dir)]
@@ -210,16 +216,67 @@ def opencode_patch_producer(job: Job, work_dir: Path, context: str,
     _git(["add", "-A"], work_dir)
     # 运行时产物与 AI 生成的回归测试都不能进补丁：
     # - opencode.json 是我们的权限配置
-    # - test_ai_regression_issue.py 是验证用测试，不属于修复改动
-    _git(["reset", "-q", "--", "opencode.json", TASK_FILE,
-          "test_ai_regression_issue.py"], work_dir, check=False)
-    _git(["-c", "core.quotepath=false", "reset", "-q", "--",
-          "*test_ai_regression_issue.py"], work_dir, check=False)
+    # - AI 回归测试是我们喂进去的验证用例，不属于修复改动
+    # 测试文件名由 job.ai_test_files 的 key 决定（不一定是 issue 后缀那种），
+    # 因此按实际路径排除；2026-10-28 实测 test_ai_regression.py 曾漏进补丁。
+    excludes = ["opencode.json", TASK_FILE, *ai_test_paths]
+    _git(["reset", "-q", "--", *excludes], work_dir, check=False)
+    for p in ai_test_paths:
+        _git(["-c", "core.quotepath=false", "reset", "-q", "--", p], work_dir, check=False)
     diff = _git(["diff", "--cached"], work_dir).stdout
     if not diff.strip():
         # notes 随异常带出，否则排查时丢线索（P5 演练教训）
         raise RuntimeError("opencode produced no changes (empty git diff); " + " | ".join(notes))
     return diff, notes
+
+
+# 测试框架"根本没跑起来"的特征串。命中任何一个都说明退出码反映的是环境缺失，
+# 而不是被测代码的行为——此时既不能声称复现，也不能声称修好。
+_BROKEN_ENV_MARKERS = (
+    "no module named pytest",
+    "no module named 'pytest'",
+    "no module named pytest'",
+    "pytest: command not found",
+    "pytest: not found",
+    "module not found",          # node
+    "cannot find module",        # node
+    "command not found",
+    "no such file or directory: 'pytest'",
+    "is not recognized as an internal or external command",   # windows
+    "error: externally-managed-environment",    # PEP 668 拦截安装
+    "no testable syntax",        # go vet 级错误
+)
+
+
+def _test_env_broken(stdout: str, stderr: str) -> str | None:
+    """判断退出码是否只是"测试环境不可用"。返回命中的特征串，未命中返回 None。"""
+    text = ((stderr or "") + "\n" + (stdout or "")).lower()
+    for marker in _BROKEN_ENV_MARKERS:
+        if marker in text:
+            return marker
+    return None
+
+
+def _strip_test_files_from_patch(patch: str, paths: list[str]) -> str:
+    """从 unified diff 中剔除指定文件的整段改动。
+
+    按 `diff --git a/<path> b/<path>` 分段；只保留不涉及这些路径的段。
+    路径比较用纯 posix 形式，兼容 a/ b/ 前缀。
+    """
+    want = {p.replace("\\", "/").lstrip("./") for p in paths if p}
+    if not want:
+        return patch
+    out: list[str] = []
+    keep = True
+    for line in patch.splitlines(keepends=True):
+        if line.startswith("diff --git "):
+            parts = line.split()
+            # 形如 diff --git a/x b/x
+            cand = {p[2:] for p in parts[2:4] if p[:2] in ("a/", "b/")}
+            keep = not (cand & want)
+        if keep:
+            out.append(line)
+    return "".join(out)
 
 
 def check_patch_content(patch: str) -> list[str]:
@@ -247,8 +304,13 @@ def run_repair(job: Job, repo_dir: Path, out_dir: Path, *,
     env = sanitized_env(env_base, home=out_dir / "sandbox_home")
 
     # ---- 证据 1：base 上测试必须失败 ----
-    base_rc, _, _ = _run_cmd(test_cmd, repo_dir, env)
-    reproduced = base_rc not in (0, 127, 9009)
+    base_rc, base_out, base_err = _run_cmd(test_cmd, repo_dir, env)
+    # 退出码非 0 不等于"bug 复现了"：测试框架没装、模块导入失败、语法错都会给 rc=1。
+    # 2026-10-28 实测（GitHub runner）：pytest 不可导入时 base 与 patched 都是 rc=1，
+    # 前者被误判成 reproduced_on_base=true（假阳性），正是这类错误最危险的形态——
+    # 它会让我们带着"证据"去开一个什么都没验证过的 PR。
+    broken = _test_env_broken(base_out, base_err)
+    reproduced = base_rc not in (0, 127, 9009) and broken is None
     if base_rc == 0:
         (out_dir / "worker.log").write_text("base test passed; nothing to fix\n", encoding="utf-8")
         return Result(job_id=job.job_id, backend="local", outcome="blocked",
@@ -262,6 +324,16 @@ def run_repair(job: Job, repo_dir: Path, out_dir: Path, *,
                       base_sha=job.base_sha, reproduced_on_base=False,
                       logs_path=f"artifacts/{job.job_id}/worker.log",
                       unverified_items=[f"exit {base_rc}: command likely not runnable"])
+    if broken is not None:
+        # 环境问题：既不能声称复现，也不能声称修好。如实上报，不产出补丁。
+        (out_dir / "worker.log").write_text(
+            f"test environment unusable: {broken}\n\n"
+            f"--- stdout ---\n{base_out[-2000:]}\n--- stderr ---\n{base_err[-2000:]}",
+            encoding="utf-8")
+        return Result(job_id=job.job_id, backend="local", outcome="failed",
+                      base_sha=job.base_sha, reproduced_on_base=False,
+                      logs_path=f"artifacts/{job.job_id}/worker.log",
+                      unverified_items=[f"test environment unusable: {broken}"])
 
     # ---- 域 B：在 base 的克隆里产补丁 ----
     patch = ""
@@ -275,9 +347,11 @@ def run_repair(job: Job, repo_dir: Path, out_dir: Path, *,
             tf = work / rel_path
             tf.parent.mkdir(parents=True, exist_ok=True)
             tf.write_text(content, encoding="utf-8")
+        test_paths = list((extra_test_files or {}).keys())
         try:
             if patch_producer is None:
-                patch, notes = opencode_patch_producer(job, work, context)
+                patch, notes = opencode_patch_producer(
+                    job, work, context, ai_test_paths=test_paths)
             else:
                 patch, notes = patch_producer(job, work, context)
             unverified.extend(notes)
@@ -294,14 +368,28 @@ def run_repair(job: Job, repo_dir: Path, out_dir: Path, *,
                           base_sha=job.base_sha, reproduced_on_base=reproduced,
                           logs_path=f"artifacts/{job.job_id}/worker.log",
                           unverified_items=errs)
+        # 兜底：无论 producer 是谁，AI 测试文件都不该出现在**交付**的补丁里。
+        # producer 内部已有排除（按 job.ai_test_files 的实际路径），这里再做一次
+        # 后置过滤，防止自定义 producer 或未来改动把验证用例混进修复内容。
+        #
+        # 但**验证**必须用完整改动（含测试文件）：把测试剔掉再 apply，测试文件
+        # 根本不存在，验证必然 "file or directory not found"（2026-10-28 实测）。
+        fix_patch = (_strip_test_files_from_patch(patch, test_paths)
+                     if test_paths else patch)
 
         # ---- 证据 2：干净 base + 补丁后测试必须通过 ----
         # producer 已在 work 里留下模型改动（可能已 staged），必须回到干净 base 再 apply，
         # 否则补丁重复应用必然失败（P5 演练暴露）。
         _git(["reset", "--hard", "--quiet", job.base_sha], work)
         _git(["clean", "-fdxq"], work)
+        # 验证用完整补丁；测试文件若被 producer 排除掉了，就按 job 里的内容补回，
+        # 否则 patched 阶段看不到它。
+        for rel_path, content in (extra_test_files or {}).items():
+            tf = work / rel_path
+            tf.parent.mkdir(parents=True, exist_ok=True)
+            tf.write_text(content, encoding="utf-8")
         ap = subprocess.run(["git", "apply", "--whitespace=nowarn", "-"], cwd=work,
-                            input=patch, capture_output=True, text=True,
+                            input=fix_patch, capture_output=True, text=True,
                             encoding="utf-8", errors="replace")
         if ap.returncode != 0:
             (out_dir / "worker.log").write_text(
@@ -312,7 +400,8 @@ def run_repair(job: Job, repo_dir: Path, out_dir: Path, *,
                           unverified_items=["patch failed to apply on base"])
         fixed_rc, out, err = _run_cmd(test_cmd, work, env)
         fixed = fixed_rc == 0
-        (out_dir / "change.patch").write_text(patch, encoding="utf-8")
+        # 落盘的是交付补丁（纯修复），测试文件已经单独写回工作区
+        (out_dir / "change.patch").write_text(fix_patch, encoding="utf-8")
         (out_dir / "test-report.json").write_text(json.dumps({
             "schema_version": 1, "job_id": job.job_id, "base_sha": job.base_sha,
             "test_cmd": test_cmd, "base_returncode": base_rc, "patched_returncode": fixed_rc,

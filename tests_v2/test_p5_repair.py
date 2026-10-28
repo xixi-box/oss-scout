@@ -278,3 +278,66 @@ class TestWorkerImageContract:
         df = (Path(__file__).resolve().parents[1] / "docker" / "Dockerfile.worker").read_text(
             encoding="utf-8")
         assert "pyyaml" in df.lower()
+
+
+class TestEnvironmentNotMistakenForBug:
+    """2026-10-28 实录（GitHub runner）：pytest 不可导入时 base 与 patched 两次
+    运行都是 rc=1，前者被当成 reproduced_on_base=true —— 假阳性。
+
+    带着这种"证据"去开 PR，等于提交一个什么都没验证过的改动。环境坏必须与
+    "bug 复现"严格区分。
+    """
+
+    def test_broken_env_markers_are_recognised(self):
+        from scout_v2.workers.repair import _test_env_broken
+        assert _test_env_broken("", "/usr/bin/python3: No module named pytest\n")
+        assert _test_env_broken("", "bash: pytest: command not found")
+        assert _test_env_broken("", "Error: Cannot find module 'vitest'")
+        assert _test_env_broken("", "'pytest' is not recognized as an internal or external command")
+        # 真实断言失败不能被误判成环境问题
+        assert _test_env_broken(
+            "FAILED test_div.py::test_div - assert 3.0 == 3.5", "") is None
+        assert _test_env_broken("", "E   AssertionError: assert 3 == 3.5") is None
+
+    def test_missing_test_runner_is_not_reported_as_reproduced(self, tmp_path):
+        r, sha = make_repo(tmp_path)
+        res = run_repair(job(sha), r, tmp_path / "out",
+                         test_cmd=["definitely-not-a-real-runner-xyz", "test_div.py"])
+        assert res.reproduced_on_base is False
+        assert res.fixed_on_patch is False
+        assert res.outcome == "failed"
+
+
+class TestAiTestFilesExcludedFromPatch:
+    """AI 回归测试是验证手段，不是修复内容，绝不能进补丁。
+
+    2026-10-28 实录：排除列表硬编码 test_ai_regression_issue.py，而实际路径是
+    由 job.ai_test_files 决定的（这次是 test_ai_regression.py），于是测试文件
+    连同修复一起进了 patch。
+    """
+
+    def test_arbitrary_test_path_is_excluded(self, tmp_path):
+        import subprocess
+        r, sha = make_repo(tmp_path)
+
+        def producer(j, work, ctx, **_kw):
+            # 模拟 opencode：改源码 + 保留我们预置的测试文件
+            (work / "calc.py").write_text("def div(a, b):\n    return a / b\n",
+                                          encoding="utf-8")
+            subprocess.run(["git", "add", "-A"], cwd=work, check=True,
+                           capture_output=True)
+            diff = subprocess.run(["git", "diff", "--cached"], cwd=work, check=True,
+                                  capture_output=True, text=True).stdout
+            return diff, []
+
+        j = job(sha)
+        res = run_repair(j, r, tmp_path / "out",
+                         test_cmd=[sys.executable, "-m", "pytest", "test_custom_name.py", "-q"],
+                         patch_producer=producer,
+                         extra_test_files={"test_custom_name.py":
+                                           "from calc import div\n\ndef test_x():\n"
+                                           "    assert div(7, 2) == 3.5\n"})
+        assert res.outcome == "succeeded"
+        patch = (tmp_path / "out" / "change.patch").read_text(encoding="utf-8")
+        assert "calc.py" in patch
+        assert "test_custom_name.py" not in patch

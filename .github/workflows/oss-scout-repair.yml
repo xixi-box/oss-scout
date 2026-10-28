@@ -74,9 +74,14 @@ jobs:
 
       - name: Install worker requirements
         shell: bash
+        # 装到系统 site-packages：worker 跑测试时会把 HOME 重定向到临时沙箱目录，
+        # --user 装进 ~/.local 的包在重定向后就找不到了（2026-10-28 实测：
+        # base 与 patched 都以 "No module named pytest" rc=1 结束）。
         run: |
           set -euo pipefail
-          python3 -m pip install --quiet -r "$GITHUB_WORKSPACE/worker/requirements.txt"
+          python3 -m pip install --quiet --break-system-packages \
+            -r "$GITHUB_WORKSPACE/worker/requirements.txt"
+          python3 -c "import pytest, yaml; print('worker deps ok', pytest.__version__)"
 
       - name: Install target repo dependencies
         shell: bash
@@ -86,14 +91,15 @@ jobs:
         run: |
           set -uo pipefail
           cd "$RUNNER_TEMP/repo"
+          PIP="python3 -m pip install --quiet --break-system-packages"
           if [ -f uv.lock ]; then
-            pip install --quiet uv && uv sync --quiet || echo "WARN: uv sync failed"
+            python3 -m pip install --quiet --break-system-packages uv && uv sync --quiet || echo "WARN: uv sync failed"
           elif [ -f poetry.lock ]; then
-            pip install --quiet poetry && poetry install --quiet || echo "WARN: poetry install failed"
+            python3 -m pip install --quiet --break-system-packages poetry && poetry install --quiet || echo "WARN: poetry install failed"
           elif [ -f requirements.txt ]; then
-            pip install --quiet -r requirements.txt || echo "WARN: requirements install failed"
+            $PIP -r requirements.txt || echo "WARN: requirements install failed"
           elif [ -f pyproject.toml ]; then
-            pip install --quiet -e . || echo "WARN: pip install -e . failed"
+            $PIP -e . || echo "WARN: pip install -e . failed"
           else
             echo "no Python dependency manifest; relying on stdlib + pytest"
           fi
@@ -140,10 +146,14 @@ jobs:
             --emit-envelope
 
       - name: Upload artifacts
+        # artifact 存储有账号级配额，撞上时整包丢失（2026-10-28 实录）。
+        # 因此 result/patch 的主通道是 stdout 信封（后端优先读 artifact，
+        # 读不到会回退解析日志）。artifact 只是有额度时的便利备份，失败不致命。
         if: always()
         continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: oss-result-${{ inputs.job_id }}
           path: ${{ runner.temp }}/artifacts/
-          retention-days: 3
+          retention-days: 2
+          if-no-files-found: warn
