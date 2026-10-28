@@ -142,10 +142,13 @@ def _ai_generate_test_remote(job: Job, lang: str, tpl: str, tests_dir: str | Non
             f"Top-level entries: {', '.join(top_entries)}\n"
             f"Existing test dir: {tests_dir or 'none'}\n\n"
             f"{lang_rule} It must import from the repo's own modules and assert the "
-            "behaviour described in the issue."
+            "behaviour described in the issue.\n\n"
+            "IMPORTANT: This is a plain-text completion, NOT an agent session. You have no "
+            "tools and cannot run commands. Do NOT emit tool-call syntax (no DSML, no "
+            "function calls, no XML tags). Reply with the test file source only."
         )
         client = GoClient(key=cfg["api_key"],
-                          model=cfg.get("model", "deepseek-v4.1-flash"), timeout=180)
+                          model=cfg.get("model", "deepseek-v4.1-flash"), timeout=90)
         # 上游模型偶发 "Model is unavailable"：按序降级到其他可用模型
         ok, code, used = client.chat_with_fallback(
             prompt, fallbacks=["glm-5.3-flash", "glm-5.3", "deepseek-v4.1-flash"])
@@ -153,7 +156,15 @@ def _ai_generate_test_remote(job: Job, lang: str, tpl: str, tests_dir: str | Non
         ok_marker = marker in text or (lang == "node" and any(
             m in text for m in ("test(", "it(", "describe("))) or (
             lang == "python" and "def test" in text)
-        if not ok or not ok_marker:
+        if not ok:
+            summary["steps"].append(f"AI gen failed: {text[:160]}")
+            return None, None, None
+        if not ok_marker:
+            looks_toolcall = any(t in text for t in (
+                "DSML", "invoke name=", "tool_call", "<function", "parameter name="))
+            summary["steps"].append(
+                "AI returned tool-call syntax instead of a test file"
+                if looks_toolcall else f"AI output lacks test marker: {text[:120]}")
             return None, None, None
         code = str(code).strip()
         if code.startswith("```"):

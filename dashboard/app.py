@@ -169,6 +169,8 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
         import time as _t
 
         def _loop():
+            if os.environ.get("OSSCOUT_DISABLE_AUTO_REPAIR") == "1":
+                return   # 运维/验收模式：手动触发 pipeline
             _t.sleep(30)   # 启动后先等容器就绪
             while True:
                 try:
