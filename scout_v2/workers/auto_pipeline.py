@@ -175,7 +175,11 @@ def _ai_generate_test_remote(job: Job, lang: str, tpl: str, tests_dir: str | Non
         rel = (tests_dir + "/" if tests_dir else "") + "test_ai_regression" + ext
         summary["steps"].append(f"AI-generated regression test: {rel} (model={used})")
         if lang == "python":
-            cmd = [sys.executable, "-m", "pytest", rel, "-q"]
+            # 不能用 sys.executable：那是**控制器**的 Python 绝对路径，
+            # 发到 Modal/Actions 上根本不存在，base 测试直接 exit 127
+            # "command likely not runnable"（2026-10-28 实测）。用 PATH 里的名字，
+            # 由执行环境自己解析。
+            cmd = ["python3", "-m", "pytest", rel, "-q"]
         else:
             cmd = tpl.format(path=rel).split()
         return cmd, rel, code

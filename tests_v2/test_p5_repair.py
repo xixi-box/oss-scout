@@ -392,3 +392,58 @@ class TestReproductionMustBeReal:
         assert (r / "test_div.py").read_text(encoding="utf-8") == original
         _unseed_test_files(r, created)
         assert (r / "test_div.py").exists()
+
+
+def monkeypatch_(module, name, value):
+    """极简 setattr 补丁（测试内联用，避免依赖 pytest fixture 传递）。"""
+    old = getattr(module, name)
+    setattr(module, name, value)
+
+    def undo():
+        setattr(module, name, old)
+    return undo
+
+
+class TestRemoteCommandPortability:
+    """test_cmd 会跨机器下发，绝不能带控制器本机的绝对路径。
+
+    2026-10-28 实录：cmd 用 sys.executable（/usr/local/bin/python，VPS 容器里的
+    路径），发到 GitHub runner 上找不到这个文件，base 阶段直接 exit 127
+    "command likely not runnable"，整条证据链判定失败。
+    """
+
+    def test_python_cmd_uses_path_name_not_absolute_interpreter(self):
+        import sys as _sys
+        from scout_v2.workers import auto_pipeline as ap
+        import scout_v2.workers.issue_scorer as isc
+
+        # 只替换最底层的单次请求：chat_with_fallback 本身就带降级链与 tenacity
+        # 重试，整体替换 FakeClient 会撞上它内部依赖的 _Retryable。
+        test_src = "\n".join([
+            "from calc import div",
+            "",
+            "def test_x():",
+            "    assert div(7, 2) == 3.5",
+            "",
+        ])
+        payload = {"choices": [{"message": {"content": test_src}}]}
+
+        undo_client = monkeypatch_(isc.GoClient, "_chat_once",
+                                   lambda self, body: payload)
+        undo_cfg = monkeypatch_(ap, "load_scorer_config",
+                                lambda *_a, **_k: {"api_key": "k", "model": "m"})
+        try:
+            job = Job(mode="repair", repo="a/b", base_sha="a" * 40,
+                      idempotency_key="k", context="ctx")
+            cmd, rel, code = ap._ai_generate_test_remote(
+                job, "python", "python -m pytest {path} -q", "tests",
+                ["calc.py"], {"steps": []})
+        finally:
+            undo_client()
+            undo_cfg()
+
+        assert cmd is not None
+        assert cmd[0] != _sys.executable
+        assert cmd[:3] == ["python3", "-m", "pytest"]
+
+
