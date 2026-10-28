@@ -57,14 +57,18 @@ def _native_exe_from_shim(shim: Path) -> Path | None:
 
 
 def _child_env() -> dict[str, str]:
-    """子进程环境：去掉 OPENCODE_* 标记。
+    """子进程环境：去掉 OPENCODE_* 会话标记，但保留凭据。
 
     实测（2026-10-25）：在 opencode 会话内（OPENCODE=1/OPENCODE_PID 存在）调用 CLI，
     它会附着到父会话的项目，**忽略 cwd 与 --dir**（模型读写了错误的仓库）。清掉
     这些标记后 worker 才会在最初指定的目录里独立运行。
+
+    注意 OPENCODE_API_KEY 同样以 OPENCODE 开头，但它是凭据不是会话标记：
+    一并剥掉会让沙箱里的 CLI 无法认证（repair 直接失败）。
     """
+    keep = {"OPENCODE_API_KEY"}
     return {k: v for k, v in os.environ.items()
-            if not k.startswith("OPENCODE") and k != "PWD"}
+            if (not k.startswith("OPENCODE") or k in keep) and k != "PWD"}
 
 
 class OpenCodeClient:
