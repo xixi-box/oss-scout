@@ -26,6 +26,7 @@ def main() -> int:
               context="calc.div(7,2) returns 3.0 but should return 3.5.",
               max_estimated_compute_usd=0.5,
               test_cmd=["python", "-m", "pytest", "test_ai_regression.py", "-q"],
+              model="opencode-go/deepseek-v4.1-flash",
               ai_test_files={"test_ai_regression.py":
                              "from calc import div\n\ndef test_x():\n    assert div(7,2)==3.5\n"})
 

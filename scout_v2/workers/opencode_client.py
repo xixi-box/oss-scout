@@ -20,6 +20,13 @@ _STATUS_MARKERS = ("statusCode", "status_code")
 # npm 生成的 .cmd shim 形如 `"%dp0%\node_modules\<pkg>\bin\<name>.exe" %*`
 _SHIM_EXE_RE = re.compile(r'"([^"]+\.exe)"', re.IGNORECASE)
 
+# CLI 文本模式会输出 ANSI 颜色；转成日志/detail 前清掉
+_ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[a-zA-Z]")
+
+
+def _strip_ansi(text: str) -> str:
+    return _ANSI_RE.sub("", text)
+
 
 def resolve_binary(binary: str) -> str:
     """解析出真正可执行的原生路径。
@@ -73,10 +80,11 @@ def _child_env() -> dict[str, str]:
 
 class OpenCodeClient:
     def __init__(self, binary: str = "opencode", timeout_seconds: int = 600,
-                 workdir: Path | None = None):
+                 workdir: Path | None = None, json_events: bool = False):
         self.binary = resolve_binary(binary)
         self.timeout = timeout_seconds
         self.workdir = workdir
+        self.json_events = json_events
         if Path(self.binary).suffix.lower() in {".cmd", ".bat"}:
             raise RuntimeError(
                 f"{self.binary} is a shell shim with no native .exe beside it; "
@@ -87,8 +95,14 @@ class OpenCodeClient:
 
         ok=True 时 detail 为模型输出文本；ok=False 时 detail 含可分类的错误
         串（包含 "401"/"403"/"429"/状态码与消息），由调用方决定停链还是换挡。
+
+        实测（2026-10-28，Modal Sandbox）：`--format json` 在容器里会静默挂死
+        （240s 零输出，rc=124），而默认文本模式 180s 内正常返回并直接改文件。
+        因此默认走文本模式；json 事件流只在显式要求时使用（本地调试）。
         """
-        cmd = [self.binary, "run", "-m", model, "--format", "json"]
+        cmd = [self.binary, "run", "-m", model]
+        if self.json_events:
+            cmd += ["--format", "json"]
         if self.workdir is not None:
             cmd += ["--dir", str(self.workdir)]
         cmd.append(prompt)
@@ -98,6 +112,7 @@ class OpenCodeClient:
                 p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
                                    errors="replace", timeout=self.timeout,
                                    cwd=str(self.workdir) if self.workdir else None,
+                                   stdin=subprocess.DEVNULL,
                                    env=_child_env())
             except FileNotFoundError:
                 return False, "opencode binary not found"
@@ -143,7 +158,12 @@ class OpenCodeClient:
             tail = (stderr or "").strip()[-300:]
             return False, f"exit {rc}: {tail}" if tail else f"exit {rc}"
         out = "\n".join(t for t in texts if t).strip()
-        return (True, out) if out else (False, "empty response (no text events)")
+        if not out:
+            # 文本模式（默认）：stdout 就是模型回复，可能有 ANSI 与会话横幅行。
+            # 修复场景的关键产物是文件改动，caller 会以 git diff 为准；
+            # 这里只要拿到非空文本即视为成功，避免把好结果误判成 empty。
+            out = _strip_ansi(stdout or "").strip()
+        return (True, out[:4000]) if out else (False, "empty response (no text events)")
 
     @staticmethod
     def _format_error(ev: dict) -> str:

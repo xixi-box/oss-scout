@@ -178,7 +178,9 @@ def opencode_patch_producer(job: Job, work_dir: Path, context: str,
     notes.append(f"opencode auth: {provider}" if provider
                  else "opencode auth: no OPENCODE_API_KEY in env")
     try:
-        client = client or OpenCodeClient(timeout_seconds=1800, workdir=work_dir)
+        # 600s：沙箱实测一次修复（文本模式）在 2-4 分钟内完成；
+        # 留 600s 给大仓库，超时即判失败而不是把 Sandbox 占满 30 分钟。
+        client = client or OpenCodeClient(timeout_seconds=600, workdir=work_dir)
         # job.model 由控制器下发：worker 镜像里没有 configs/（配置在控制器的 /data 卷），
         # 现场探测只在本地开发时兜底。
         model = model or (job.model or "").strip() or resolve_model()
