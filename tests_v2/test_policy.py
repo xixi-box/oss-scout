@@ -143,3 +143,61 @@ class TestPolicySnapshot:
         eng1 = make_engine(tmp_path, agents_md="rule v1")
         eng2 = make_engine(tmp_path, agents_md="rule v2")
         assert eng1.snapshot_id() != eng2.snapshot_id()
+
+
+class TestInternalRepoDoesNotConsumeQuota:
+    """内部测试仓库的演练不应占用真实仓库每天 1 个的认领额度。
+
+    2026-10-28 实录：在 fixture 上跑了 6 次闭环演练，当天真实 issue 被日闸拦下
+    （"day 2026-10-28 already claimed by xixi-box/oss-scout-v2-test#8"）。
+    演练是为了验证机制，不该把它当成一次对外承诺。
+    """
+
+    def _engine(self, tmp_path, internal: bool):
+        import json as _json
+        root = tmp_path
+        (root / "state").mkdir(parents=True, exist_ok=True)
+        repos = {"repositories": {
+            "acme/real": {"lane": "open"},
+            "me/fixture": {"lane": "open", "internal_test_repo": internal},
+        }}
+        (root / "configs").mkdir(exist_ok=True)
+        (root / "configs" / "repositories.yaml").write_text(
+            "repositories:\n"
+            '  acme/real: {lane: open}\n'
+            f'  me/fixture: {{lane: open, internal_test_repo: {str(internal).lower()}}}\n',
+            encoding="utf-8")
+        (root / "config.json").write_text(_json.dumps({"open_pool": [
+            {"repo": "acme/real"}, {"repo": "me/fixture"}]}), encoding="utf-8")
+        (root / "configs" / "v2.yaml").write_text(
+            "budget: {}\nfeatures: {}\ntimezone: Asia/Shanghai\n", encoding="utf-8")
+        (root / "AGENTS.md").write_text("# playbook", encoding="utf-8")
+        return repos
+
+    def test_fixture_claim_is_ignored(self, tmp_path, monkeypatch):
+        from scout_v2.repo_policy import PolicyEngine
+        from scout_v2.state_store import Worklog
+        import datetime as dt
+
+        self._engine(tmp_path, internal=True)
+        wl = Worklog(tmp_path / "state" / "worklog.jsonl")
+        wl.append({"ts": dt.datetime.now().isoformat(timespec="seconds"),
+                   "action": "claim", "target": "me/fixture#1"})
+        eng, err = PolicyEngine.load(tmp_path)
+        assert err is None, err
+        eng._worklog = wl
+        assert eng.claim_slot_available() is True, "演练不该吃掉真实额度"
+
+    def test_real_claim_still_blocks(self, tmp_path):
+        from scout_v2.repo_policy import PolicyEngine
+        from scout_v2.state_store import Worklog
+        import datetime as dt
+
+        self._engine(tmp_path, internal=True)
+        wl = Worklog(tmp_path / "state" / "worklog.jsonl")
+        wl.append({"ts": dt.datetime.now().isoformat(timespec="seconds"),
+                   "action": "claim", "target": "acme/real#7"})
+        eng, err = PolicyEngine.load(tmp_path)
+        assert err is None, err
+        eng._worklog = wl
+        assert eng.claim_slot_available() is False, "真实认领必须守住每日 1 个"

@@ -96,14 +96,24 @@ class Worklog:
                 continue  # 历史账本容错：坏行跳过但保留在文件里
         return out
 
-    def claimed_today(self, tz_name: str, now: dt.datetime | None = None) -> list[dict]:
-        """当日（业务时区）已有 claim / awaiting_assignment 动作的记录。"""
+    def claimed_today(self, tz_name: str, now: dt.datetime | None = None,
+                      skip_targets: set[str] | None = None) -> list[dict]:
+        """当日（业务时区）已有 claim / awaiting_assignment 动作的记录。
+
+        skip_targets：不计入配额的目标（如内部测试仓库）。P5 闭环演练会在自有
+        fixture 上反复认领，那些不该占用真实仓库每天 1 个的额度——否则演练几次
+        就把当天真实机会挤掉了（2026-10-28 实测：fixture 演练 6 次，真实 issue
+        被日闸拦下）。
+        """
         now = now or dt.datetime.now()
         today = business_day(now, tz_name)
+        skip = skip_targets or set()
         hits = []
         for rec in self.read_all():
             ts_raw = rec.get("ts")
             if not ts_raw:
+                continue
+            if rec.get("target") in skip:
                 continue
             try:
                 ts = dt.datetime.fromisoformat(ts_raw)

@@ -50,5 +50,9 @@ repositories:
   # ---- 仅观测 ----
   google-gemini/gemini-cli:    {lane: observe}
 
+  # ---- 放宽扫描后新增（2026-10-28，wide_hunt 找到的可修目标）----
+  # sqlalchemy：欢迎小 PR（近期合并的都是几行改动），有 typing 测试体系
+  sqlalchemy/sqlalchemy:       {lane: open, verify_before_first_pr: true}
+
   # ---- 内部测试仓库（P5 闭环演练用；不承载真实开源贡献）----
   xixi-box/oss-scout-v2-test:  {lane: open, internal_test_repo: true}

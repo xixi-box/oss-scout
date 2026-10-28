@@ -162,17 +162,31 @@ class PolicyEngine:
         d.reason = "ok"
         return d
 
+    def _internal_test_targets(self) -> set[str]:
+        """内部测试仓库的候选 id 前缀：演练不占真实每日额度。"""
+        out: set[str] = set()
+        for repo, entry in (self.repos_cfg.get("repositories") or {}).items():
+            if isinstance(entry, dict) and entry.get("internal_test_repo"):
+                out.add(repo)
+        return out
+
     def claim_slot_available(self) -> bool:
         """双闸：worklog 当日已有 claim/awaiting_assignment，或 SQLite 当日已占额 → 不可用。"""
+        internal = self._internal_test_targets()
         if self._worklog is not None:
-            if self._worklog.claimed_today(self.tz_name):
+            # 内部测试仓库的演练记录不占用真实额度
+            hits = self._worklog.claimed_today(self.tz_name)
+            real = [h for h in hits
+                    if not any(str(h.get("target", "")).startswith(p) for p in internal)]
+            if real:
                 return False
         if self._db is not None:
             from .state_store import business_day
             day = business_day(dt.datetime.now(), self.tz_name)
             row = self._db._conn.execute(
                 "SELECT candidate_id FROM claim_days WHERE day=?", (day,)).fetchone()
-            if row is not None:
+            if row is not None and not any(
+                    str(row[0]).startswith(p) for p in internal):
                 return False
         return True
 
