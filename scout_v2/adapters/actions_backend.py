@@ -122,24 +122,26 @@ class ActionsBackend:
         self.gh(["-X", "DELETE", f"repos/{self.repo}/actions/runs/{remote_job_id}"])
 
     def collect(self, remote_job_id: str) -> dict:
+        """收集结果。artifact 优先，任何失败都回退到 stdout 信封。
+
+        artifact 存储有账号级配额，撞上就整包失败（2026-10-28 实录），
+        因此这里不能把 artifact 失败当作终局——日志里的信封同样带 patch。
+        """
         rc, out = self.gh([f"repos/{self.runner_repo}/actions/runs/{remote_job_id}/artifacts"])
-        if rc != 0:
-            return {"outcome": "inconclusive",
-                    "unverified_items": [f"artifact list failed: {out[:200]}"]}
-        artifacts = json.loads(out).get("artifacts", [])
-        if artifacts:
-            dest = self.artifact_dir / f"run-{remote_job_id}"
-            rc, err = self.download(["run", "download", remote_job_id,
-                                     "--repo", self.runner_repo, "--dir", str(dest)])
-            if rc == 0:
-                found, data = self._load_result(dest)
-                if data is not None:
-                    return data
-                return {"outcome": "inconclusive",
-                        "unverified_items": [f"artifact has no usable {RESULT_FILE}"]}
-            return {"outcome": "inconclusive",
-                    "unverified_items": [f"artifact download failed: {err[:200]}"]}
-        # 无 artifact（如存储配额满）：降级走 stdout 信封（与 Modal 同协议）
+        if rc == 0:
+            try:
+                artifacts = json.loads(out).get("artifacts", [])
+            except json.JSONDecodeError:
+                artifacts = []
+            if artifacts:
+                dest = self.artifact_dir / f"run-{remote_job_id}"
+                rc2, _err = self.download(["run", "download", remote_job_id,
+                                           "--repo", self.runner_repo, "--dir", str(dest)])
+                if rc2 == 0:
+                    _found, data = self._load_result(dest)
+                    if data is not None:
+                        return data
+        # artifact 不可用（不存在 / 配额满 / 下载失败 / 无 result.json）→ 读日志信封
         return self._collect_from_log(remote_job_id)
 
     @staticmethod
@@ -166,6 +168,12 @@ class ActionsBackend:
         return p, data
 
     def _collect_from_log(self, remote_job_id: str) -> dict:
+        """无 artifact 时的主通道：从 run 日志里解析 stdout 信封。
+
+        artifact 存储有账号级配额，撞上就整包丢失（2026-10-28 实录）。信封里
+        已带 patch 与 test_report，必须原样返回——早期实现只摊平了 result 和
+        test_report，把 patch 丢了，于是配额一满就拿不到补丁，无法开 PR。
+        """
         from ..adapters.modal_backend import parse_envelope
         text = self._logs_text(remote_job_id)
         if text is None:
@@ -175,10 +183,11 @@ class ActionsBackend:
         if env is None:
             return {"outcome": "inconclusive",
                     "unverified_items": ["no result envelope in run logs"]}
-        result = dict(env["result"])
-        if "test_report" in env:
-            result["test_report"] = env["test_report"]
-        return result
+        out: dict = dict(env.get("result") or {})
+        for key in ("patch", "test_report", "findings"):
+            if env.get(key) is not None:
+                out[key] = env[key]
+        return out
 
     def _logs_text(self, remote_job_id: str) -> str | None:
         """拉取 run 日志全文。gh api logs 端点返回 zip；`gh run view --log` 在管道下

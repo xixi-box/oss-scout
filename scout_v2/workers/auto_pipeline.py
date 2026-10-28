@@ -329,11 +329,21 @@ def _collect(root: Path, backend: str, remote_id: str, extra: dict, timeout_s: i
         time.sleep(15)
     with _no_proxy_context():
         env = be.collect(remote_id)
-    # Modal 返回信封 {result, patch, test_report}；Actions 返回 result dict
-    if isinstance(env, dict) and "result" in env:
+    if not isinstance(env, dict):
+        return {"result": None, "patch": None, "test_report": None, "raw": env}
+    # 两个后端回来的形状不同：
+    #   Modal  -> {"result": {...}, "patch": "...", "test_report": {...}}
+    #   Actions-> 摊平的 result dict（含 job_id/outcome/...），patch 与 test_report
+    #             作为同级键一起回来（无 artifact 时从 stdout 信封解析）。
+    # 早期实现只认 "result" 键，Actions 的 patch 因此被当成 None 丢掉，配额一满就
+    # 无法开 PR（2026-10-28 实测）。
+    if "result" in env:
         return {"result": env.get("result"), "patch": env.get("patch"),
                 "test_report": env.get("test_report"), "raw": env}
-    return {"result": env, "patch": None, "test_report": None, "raw": env}
+    patch = env.get("patch")
+    report = env.get("test_report")
+    result = {k: v for k, v in env.items() if k not in ("patch", "test_report", "raw")}
+    return {"result": result, "patch": patch, "test_report": report, "raw": env}
 
 
 def _stage_patch_from_backend(root: Path, out_dir: Path, collected: dict) -> Path | None:

@@ -219,3 +219,55 @@ class TestRunnerRepoContract:
         assert data["outcome"] == "succeeded"
         assert "change.patch" not in data and data["patch"].startswith("--- a/x")
         assert data["test_report"] == '{"ok": true}'
+
+
+class TestPatchSurvivesWithoutArtifacts:
+    """artifact 配额满时必须仍能拿到补丁。
+
+    2026-10-28 实录：账号 artifact 配额耗尽，upload 整包失败。补丁本来还能从
+    stdout 信封取回，但有两处把 patch 丢掉了，于是流程停在"patch=no"，
+    检测到真 bug 也开不出 PR。
+    """
+
+    def test_log_fallback_keeps_patch_and_report(self, monkeypatch):
+        import base64 as b64
+        envelope = {
+            "result": {"job_id": "j1", "outcome": "succeeded",
+                       "reproduced_on_base": True, "fixed_on_patch": True,
+                       "regression_tests_passed": True,
+                       "base_sha": "a" * 40, "unverified_items": []},
+            "patch": "--- a/calc.py\n+++ b/calc.py\n@@ -1 +1 @@\n-a // b\n+a / b\n",
+            "test_report": {"base_returncode": 1, "patched_returncode": 0},
+        }
+        text = "##OSSCOUT_RESULT##" + json.dumps(envelope)
+
+        b = ab.ActionsBackend(enabled=True, runner_repo="me/runner", workflow_exists=True,
+                              gh_runner=lambda a: (1, ""),  # 强制走日志回退
+                              download_runner=lambda a: (1, ""))
+        monkeypatch.setattr(b, "_logs_text", lambda _rid: text)
+        out = b.collect("123")
+        assert out["patch"].startswith("--- a/calc.py")
+        assert out["test_report"]["base_returncode"] == 1
+        assert out["outcome"] == "succeeded"
+
+    def test_pipeline_collect_unpacks_actions_shape(self):
+        """Actions 返回摊平 dict；_collect 必须把 patch/test_report 提取出来。"""
+        from pathlib import Path
+        from scout_v2.workers import auto_pipeline as ap
+
+        flat = {"job_id": "j1", "outcome": "succeeded", "base_sha": "a" * 40,
+                "patch": "PATCHTEXT", "test_report": {"ok": True}}
+
+        class FakeBackend:
+            def poll(self, _rid):
+                return {"state": "succeeded"}
+
+            def collect(self, _rid):
+                return flat
+
+        got = ap._collect(Path("."), "github_actions", "1", {"backend_obj": FakeBackend()},
+                          timeout_s=5)
+        assert got["patch"] == "PATCHTEXT"
+        assert got["test_report"] == {"ok": True}
+        assert got["result"]["outcome"] == "succeeded"
+        assert "patch" not in got["result"]
