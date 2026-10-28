@@ -9,7 +9,9 @@ RUN useradd -m worker \
     && apt-get install -y --no-install-recommends \
         git curl ca-certificates nodejs npm \
     && rm -rf /var/lib/apt/lists/* \
-    && pip install --no-cache-dir semgrep uv pyyaml
+    # pytest：证据链必须在沙箱里真跑测试（base 失败 → 补丁后通过），没有测试
+    # 运行器整条 repair 链都无法成立。用户项目的依赖由 uv/pip 在 job 内另装。
+    && pip install --no-cache-dir semgrep uv pyyaml pytest
 
 WORKDIR /workspace
 
