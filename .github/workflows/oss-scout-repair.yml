@@ -65,16 +65,18 @@ jobs:
 
       - name: Get oss-scout worker
         # oss-scout 是私有仓库，匿名 https clone 会 "could not read Username" (rc=128)。
-        # checkout 用内置 GITHUB_TOKEN 拉取本次 commit 的 worker 源码。
+        # actions/checkout 用内置 GITHUB_TOKEN 拉取本次 commit 的 worker 源码。
+        # 注意：checkout 的 path 必须在 workspace 内，传 $RUNNER_TEMP 会被拒绝
+        # （"Repository path ... is not under ..."），因此落到 workspace 下的 worker/。
         uses: actions/checkout@v4
         with:
-          path: ${{ runner.temp }}/worker
+          path: worker
 
       - name: Install worker requirements
         shell: bash
         run: |
           set -euo pipefail
-          python3 -m pip install --quiet -r "$RUNNER_TEMP/worker/requirements.txt"
+          python3 -m pip install --quiet -r "$GITHUB_WORKSPACE/worker/requirements.txt"
 
       - name: Install target repo dependencies
         shell: bash
@@ -129,8 +131,8 @@ jobs:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
         run: |
           set -euo pipefail
-          cd "$RUNNER_TEMP/worker"
-          PYTHONPATH="$RUNNER_TEMP/worker" python3 -m scout_v2.workers.core \
+          cd "$GITHUB_WORKSPACE/worker"
+          PYTHONPATH="$GITHUB_WORKSPACE/worker" python3 -m scout_v2.workers.core \
             --job "$RUNNER_TEMP/job.json" \
             --out "$RUNNER_TEMP/artifacts" \
             --repo-dir "$RUNNER_TEMP/repo" \
