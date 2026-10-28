@@ -47,8 +47,11 @@ class ModalCliBilling:
         import shutil
         import subprocess
         exe = shutil.which(cmd[0]) or cmd[0]
-        env = dict(os.environ)
-        # 常见安装位置补进 PATH，覆盖 systemd/容器的最简环境
+        env = {k: v for k, v in os.environ.items()
+               if k.upper() not in {"HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY",
+                                    "http_proxy", "https_proxy", "all_proxy"}}
+        # Modal CLI 走 gRPC/WebSocket，经 HTTP 代理连不上（2026-10-28 实测
+        # "Could not connect to the Modal server"）；必须直连，故剥掉代理变量。
         extra = ["/usr/local/bin", "/usr/bin", "/opt/venv/bin"]
         env["PATH"] = os.pathsep.join(
             [env.get("PATH", "")] + [d for d in extra if d not in env.get("PATH", "")])
