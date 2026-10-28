@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import time
 import tempfile
@@ -144,6 +145,28 @@ def repo_rules_block(repo: str, root: Path | None = None) -> str:
         return ""
 
 
+def _ensure_opencode_auth() -> str | None:
+    """沙箱内没有 ~/.local/share/opencode/auth.json，CLI 因此无法认证。
+
+    控制器只把 OPENCODE_API_KEY 注入到 Sandbox 进程环境（不落盘、不进 job）。
+    这里在 CLI 启动前用它写一份等价的一次性 auth.json；Sandbox 结束后连同
+    整个文件系统一起销毁，不留凭据。返回 provider 名（供日志），无 key 则 None。
+    """
+    key = (os.environ.get("OPENCODE_API_KEY") or "").strip()
+    if not key:
+        return None
+    provider = (os.environ.get("OSSCOUT_OPENCODE_PROVIDER") or "opencode-go").strip()
+    auth = Path.home() / ".local" / "share" / "opencode" / "auth.json"
+    try:
+        auth.parent.mkdir(parents=True, exist_ok=True)
+        auth.write_text(json.dumps({provider: {"type": "api", "key": key}}),
+                        encoding="utf-8")
+        auth.chmod(0o600)
+    except OSError:
+        return None
+    return provider
+
+
 def opencode_patch_producer(job: Job, work_dir: Path, context: str,
                             client: OpenCodeClient | None = None,
                             model: str | None = None) -> tuple[str, list[str]]:
@@ -151,6 +174,9 @@ def opencode_patch_producer(job: Job, work_dir: Path, context: str,
     cfg_path = work_dir / "opencode.json"
     original_cfg = cfg_path.read_bytes() if cfg_path.exists() else None
     notes = [enforce_domain_b(work_dir)]
+    provider = _ensure_opencode_auth()
+    notes.append(f"opencode auth: {provider}" if provider
+                 else "opencode auth: no OPENCODE_API_KEY in env")
     try:
         client = client or OpenCodeClient(timeout_seconds=1800, workdir=work_dir)
         model = model or resolve_model()
