@@ -285,11 +285,10 @@ def _submit_job(root: Path, job: Job, engine: PolicyEngine) -> tuple[str, str, d
         key = (os.environ.get("OPENCODE_API_KEY") or "").strip()
         if key:
             extra_env["OPENCODE_API_KEY"] = key
-        # 沙箱里跑的是目标仓库自己的测试代码，令牌等于交给它。只对我们自己的
-        # fixture 仓库（xixi-box/*，私有）开这个通道；生产目标全是公开仓库，匿名 clone。
-        tok = (os.environ.get("GH_TOKEN") or "").strip()
-        if tok and job.repo.split("/", 1)[0].lower() == "xixi-box":
-            extra_env["OSSCOUT_GIT_TOKEN"] = tok
+        # 沙箱会执行目标仓库自己的测试代码，所以绝不向它注入任何 GitHub 凭据。
+        # 生产目标（config.json 全部 19 个仓库）与 fixture 仓库都是公开的，
+        # 匿名 https clone 即可；私有仓库请显式设 OSSCOUT_GIT_TOKEN 并在
+        # core.ensure_repo 里走 strip-after-clone 通道，不要复活 GH_TOKEN 回落。
         image_path = Path(__file__).resolve().parents[2] / "docker" / "Dockerfile.worker"
         be = ModalSandboxBackend(guard, dockerfile=image_path,
                                  max_task_minutes=int(mb.get("max_task_minutes", 30)),
