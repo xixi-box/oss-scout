@@ -341,3 +341,54 @@ class TestAiTestFilesExcludedFromPatch:
         patch = (tmp_path / "out" / "change.patch").read_text(encoding="utf-8")
         assert "calc.py" in patch
         assert "test_custom_name.py" not in patch
+
+
+class TestReproductionMustBeReal:
+    """2026-10-28 第二个假阳性：base 阶段测试文件还没落盘，pytest 以 usage error(4)
+    退出，rc!=0 被当成"复现成功"。结果任何"补丁后测试能过"的改动都拿到伪造证据。
+
+    真正的标准是：测试**在 base 上确实跑了并且失败**（断言失败），而不是
+    pytest 报"文件不存在 / 没收集到测试 / 参数不认识"。
+    """
+
+    def test_seeded_test_runs_on_base_and_genuinely_fails(self, tmp_path):
+        """base 上必须真的执行了这个用例并断言失败，而不是文件缺失。"""
+        r, sha = make_repo(tmp_path)
+        # 仓库自带 test_div.py 断言 div(7,2)==3.5，但 calc.py 用整除 → 真实失败
+        res = run_repair(job(sha), r, tmp_path / "out",
+                         test_cmd=[sys.executable, "-m", "pytest", "test_div.py", "-q"])
+        assert res.outcome == "succeeded"
+        assert res.reproduced_on_base is True
+        assert res.fixed_on_patch is True
+
+    def test_missing_test_file_is_not_a_reproduction(self, tmp_path):
+        """测试文件不存在 → 环境/调用问题，绝不能记成复现。"""
+        r, sha = make_repo(tmp_path)
+        res = run_repair(job(sha), r, tmp_path / "out",
+                         test_cmd=[sys.executable, "-m", "pytest",
+                                   "no_such_test_file.py", "-q"])
+        assert res.reproduced_on_base is False
+        assert res.outcome != "succeeded"
+
+    def test_seeded_file_is_written_for_base_then_removed(self, tmp_path):
+        """AI 测试文件要能被 base 阶段看到，但跑完必须清理，不污染工作区。"""
+        from scout_v2.workers.repair import (_seed_test_files,
+                                             _unseed_test_files)
+        r, sha = make_repo(tmp_path)
+        assert not (r / "test_generated.py").exists()
+        created = _seed_test_files(r, {"test_generated.py": "def test_x():\n    pass\n"})
+        assert (r / "test_generated.py").exists()
+        assert created == [r / "test_generated.py"]
+        _unseed_test_files(r, created)
+        assert not (r / "test_generated.py").exists()
+
+    def test_existing_file_is_never_overwritten_or_deleted(self, tmp_path):
+        from scout_v2.workers.repair import (_seed_test_files,
+                                             _unseed_test_files)
+        r, sha = make_repo(tmp_path)
+        original = (r / "test_div.py").read_text(encoding="utf-8")
+        created = _seed_test_files(r, {"test_div.py": "SHOULD NOT WIN\n"})
+        assert created == []
+        assert (r / "test_div.py").read_text(encoding="utf-8") == original
+        _unseed_test_files(r, created)
+        assert (r / "test_div.py").exists()

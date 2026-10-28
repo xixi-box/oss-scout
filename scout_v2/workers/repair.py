@@ -245,6 +245,14 @@ _BROKEN_ENV_MARKERS = (
     "is not recognized as an internal or external command",   # windows
     "error: externally-managed-environment",    # PEP 668 拦截安装
     "no testable syntax",        # go vet 级错误
+    # 用例本身不存在 / 压根没收集到测试：退出码反映的是调用方式错，不是代码行为。
+    # 2026-10-28 实测：base 阶段测试文件还没落盘，pytest 以 usage error(4) 退出，
+    # 曾被记成 reproduced=true。
+    "file or directory not found",
+    "no tests ran",
+    "error: not found:",
+    "unrecognized arguments",
+    "no such option",
 )
 
 
@@ -255,6 +263,41 @@ def _test_env_broken(stdout: str, stderr: str) -> str | None:
         if marker in text:
             return marker
     return None
+
+
+def _seed_test_files(repo_dir: Path,
+                     files: dict[str, str] | None) -> list[Path]:
+    """把 AI 回归测试临时写进 base 树，供 base 阶段的测试运行使用。
+
+    返回实际新建的文件列表（原本就存在的文件不覆盖、也不回删），
+    由 _unseed_test_files 负责清理，避免污染工作区。
+    """
+    created: list[Path] = []
+    for rel, content in (files or {}).items():
+        target = repo_dir / rel
+        if target.exists():
+            continue
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content, encoding="utf-8")
+        created.append(target)
+    return created
+
+
+def _unseed_test_files(repo_dir: Path, created: list[Path]) -> None:
+    """删除 _seed_test_files 新建的文件，并清理因此变空的目录。"""
+    for p in reversed(created):
+        try:
+            p.unlink(missing_ok=True)
+        except OSError:
+            continue
+        # 只在目录确实空了时向上删，避免动到仓库原有结构
+        parent = p.parent
+        while parent != repo_dir and parent.is_dir():
+            try:
+                parent.rmdir()
+            except OSError:
+                break
+            parent = parent.parent
 
 
 def _strip_test_files_from_patch(patch: str, paths: list[str]) -> str:
@@ -304,11 +347,17 @@ def run_repair(job: Job, repo_dir: Path, out_dir: Path, *,
     env = sanitized_env(env_base, home=out_dir / "sandbox_home")
 
     # ---- 证据 1：base 上测试必须失败 ----
-    base_rc, base_out, base_err = _run_cmd(test_cmd, repo_dir, env)
-    # 退出码非 0 不等于"bug 复现了"：测试框架没装、模块导入失败、语法错都会给 rc=1。
-    # 2026-10-28 实测（GitHub runner）：pytest 不可导入时 base 与 patched 都是 rc=1，
-    # 前者被误判成 reproduced_on_base=true（假阳性），正是这类错误最危险的形态——
-    # 它会让我们带着"证据"去开一个什么都没验证过的 PR。
+    # AI 回归测试必须先落进 base 树，否则 base 阶段跑的是"文件不存在"，
+    # pytest 以 usage error（rc=4）退出，而 rc!=0 会被当成"bug 复现"——
+    # 2026-10-28 实测：base_returncode=4、patched=0，被记成 reproduced=true，
+    # 于是任何"补丁后测试能过"的改动都会拿到一份伪造的复现证据。
+    seeded = _seed_test_files(repo_dir, extra_test_files)
+    try:
+        base_rc, base_out, base_err = _run_cmd(test_cmd, repo_dir, env)
+    finally:
+        _unseed_test_files(repo_dir, seeded)
+    # 退出码非 0 不等于"bug 复现了"：测试框架没装、模块导入失败、用例根本不存在
+    # 都会给非 0。只有"测试确实跑了并且失败"才算复现。
     broken = _test_env_broken(base_out, base_err)
     reproduced = base_rc not in (0, 127, 9009) and broken is None
     if base_rc == 0:
@@ -405,10 +454,14 @@ def run_repair(job: Job, repo_dir: Path, out_dir: Path, *,
         (out_dir / "test-report.json").write_text(json.dumps({
             "schema_version": 1, "job_id": job.job_id, "base_sha": job.base_sha,
             "test_cmd": test_cmd, "base_returncode": base_rc, "patched_returncode": fixed_rc,
+            # base 输出必须留存：否则"复现证据"无法审计，假阳性也无从发现
+            "base_stdout_tail": base_out[-3000:], "base_stderr_tail": base_err[-3000:],
             "patched_stdout_tail": out[-3000:], "patched_stderr_tail": err[-3000:],
         }, ensure_ascii=False, indent=1), encoding="utf-8")
         (out_dir / "worker.log").write_text(
-            out[-4000:] + "\n" + err[-4000:], encoding="utf-8")
+            f"=== base (rc={base_rc}) ===\n{base_out[-2000:]}\n{base_err[-2000:]}\n"
+            f"=== patched (rc={fixed_rc}) ===\n{out[-4000:]}\n{err[-4000:]}",
+            encoding="utf-8")
 
     if fixed and not reproduced:
         unverified.append("patched test passed but base evidence missing — do not claim fixed")
