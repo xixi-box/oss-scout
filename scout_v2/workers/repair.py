@@ -336,11 +336,15 @@ def check_patch_content(patch: str) -> list[str]:
 def run_repair(job: Job, repo_dir: Path, out_dir: Path, *,
                test_cmd: list[str], context: str = "",
                patch_producer=None, env_base: dict | None = None,
-               extra_test_files: dict[str, str] | None = None) -> Result:
-    """完整 repair 证据链。repo_dir 必须已 checkout 到 job.base_sha。"""
+               extra_test_files: dict[str, str] | None = None,
+               backend_name: str = "local") -> Result:
+    """完整 repair 证据链。repo_dir 必须已 checkout 到 job.base_sha。
+
+    backend_name 只用于结果标签：worker 跑在 Modal / Actions 时不该谎称 local。
+    """
     out_dir.mkdir(parents=True, exist_ok=True)
     if not test_cmd:
-        return Result(job_id=job.job_id, backend="local", outcome="blocked",
+        return Result(job_id=job.job_id, backend=backend_name, outcome="blocked",
                       base_sha=job.base_sha,
                       unverified_items=["no test_cmd — cannot verify fix"])
     unverified: list[str] = []
@@ -362,14 +366,14 @@ def run_repair(job: Job, repo_dir: Path, out_dir: Path, *,
     reproduced = base_rc not in (0, 127, 9009) and broken is None
     if base_rc == 0:
         (out_dir / "worker.log").write_text("base test passed; nothing to fix\n", encoding="utf-8")
-        return Result(job_id=job.job_id, backend="local", outcome="blocked",
+        return Result(job_id=job.job_id, backend=backend_name, outcome="blocked",
                       base_sha=job.base_sha, reproduced_on_base=False,
                       logs_path=f"artifacts/{job.job_id}/worker.log",
                       unverified_items=["bug does not reproduce on base — refusing to fix blind"])
     if base_rc in (127, 9009):
         (out_dir / "worker.log").write_text(
             "base test command could not be run\n", encoding="utf-8")
-        return Result(job_id=job.job_id, backend="local", outcome="failed",
+        return Result(job_id=job.job_id, backend=backend_name, outcome="failed",
                       base_sha=job.base_sha, reproduced_on_base=False,
                       logs_path=f"artifacts/{job.job_id}/worker.log",
                       unverified_items=[f"exit {base_rc}: command likely not runnable"])
@@ -379,7 +383,7 @@ def run_repair(job: Job, repo_dir: Path, out_dir: Path, *,
             f"test environment unusable: {broken}\n\n"
             f"--- stdout ---\n{base_out[-2000:]}\n--- stderr ---\n{base_err[-2000:]}",
             encoding="utf-8")
-        return Result(job_id=job.job_id, backend="local", outcome="failed",
+        return Result(job_id=job.job_id, backend=backend_name, outcome="failed",
                       base_sha=job.base_sha, reproduced_on_base=False,
                       logs_path=f"artifacts/{job.job_id}/worker.log",
                       unverified_items=[f"test environment unusable: {broken}"])
@@ -406,14 +410,14 @@ def run_repair(job: Job, repo_dir: Path, out_dir: Path, *,
             unverified.extend(notes)
         except RuntimeError as e:
             (out_dir / "worker.log").write_text(str(e), encoding="utf-8")
-            return Result(job_id=job.job_id, backend="local", outcome="failed",
+            return Result(job_id=job.job_id, backend=backend_name, outcome="failed",
                           base_sha=job.base_sha, reproduced_on_base=reproduced,
                           logs_path=f"artifacts/{job.job_id}/worker.log",
                           unverified_items=[str(e)[:300]])
         errs = check_patch_content(patch)
         if errs:
             (out_dir / "worker.log").write_text(patch[:2000], encoding="utf-8")
-            return Result(job_id=job.job_id, backend="local", outcome="blocked",
+            return Result(job_id=job.job_id, backend=backend_name, outcome="blocked",
                           base_sha=job.base_sha, reproduced_on_base=reproduced,
                           logs_path=f"artifacts/{job.job_id}/worker.log",
                           unverified_items=errs)
@@ -443,7 +447,7 @@ def run_repair(job: Job, repo_dir: Path, out_dir: Path, *,
         if ap.returncode != 0:
             (out_dir / "worker.log").write_text(
                 "base fail evidence kept; patch apply failed:\n" + ap.stderr, encoding="utf-8")
-            return Result(job_id=job.job_id, backend="local", outcome="failed",
+            return Result(job_id=job.job_id, backend=backend_name, outcome="failed",
                           base_sha=job.base_sha, reproduced_on_base=reproduced,
                           logs_path=f"artifacts/{job.job_id}/worker.log",
                           unverified_items=["patch failed to apply on base"])
@@ -465,7 +469,7 @@ def run_repair(job: Job, repo_dir: Path, out_dir: Path, *,
 
     if fixed and not reproduced:
         unverified.append("patched test passed but base evidence missing — do not claim fixed")
-    return Result(job_id=job.job_id, backend="local",
+    return Result(job_id=job.job_id, backend=backend_name,
                   outcome="succeeded" if fixed else "failed",
                   base_sha=job.base_sha,
                   reproduced_on_base=reproduced,
