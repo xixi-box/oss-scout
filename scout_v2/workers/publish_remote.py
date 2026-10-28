@@ -1,0 +1,103 @@
+"""在 Actions runner 内完成 push + PR（2026-10-28 架构调整）。
+
+为什么把写操作放到 runner：
+VPS 到 github.com 只有一条代理线路，那几分钟不通就让整条已验证的修复作废
+（实测两次 129s 超时）。runner 自带稳定的 GitHub 网络与内置 GITHUB_TOKEN，
+写操作放在那里就不再有出网单点。
+
+安全边界不变：
+- 写权限只存在于**这一条 workflow**里，且仅在 job payload 显式带 publish 配置时启用；
+- 修复与验证阶段仍以只读方式 clone 目标仓库，写发生在验证通过之后；
+- 控制器（VPS）依旧决定是否发布——它把 publish 配置放进 payload，不放就不写。
+
+fork 模型：对第三方仓库没有 push 权限，分支推到自己的 fork，再向原仓库开 PR。
+"""
+from __future__ import annotations
+
+import json
+import os
+import subprocess
+from pathlib import Path
+
+
+def _run(args: list[str], cwd: Path | None = None) -> subprocess.CompletedProcess:
+    return subprocess.run(args, cwd=str(cwd) if cwd else None, capture_output=True,
+                          text=True, encoding="utf-8", errors="replace", timeout=300)
+
+
+def publish(repo_dir: Path, patch_file: Path, publish_cfg: dict) -> dict:
+    """把补丁推到 fork 并向上游开 PR。返回 {ok, pr, error, branch}。
+
+    repo_dir 是已经 checkout 在 base_sha 上的目标仓库工作树（只读阶段用的那个
+    副本的独立 clone）。这里绝不在它上面直接改——另建一个分支来放补丁，避免
+    污染验证阶段留下的证据。
+    """
+    push_repo = (publish_cfg.get("push_repo") or "").strip()
+    upstream = (publish_cfg.get("upstream") or "").strip()
+    branch = (publish_cfg.get("branch") or "").strip()
+    title = (publish_cfg.get("title") or "").strip()
+    body = (publish_cfg.get("body") or "").strip()
+    if not (push_repo and upstream and branch and title):
+        return {"ok": False, "error": "publish config incomplete "
+                                      "(need push_repo/upstream/branch/title)"}
+    if not patch_file.is_file() or not patch_file.read_text(encoding="utf-8").strip():
+        return {"ok": False, "error": "no patch to publish"}
+
+    token = (os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN") or "").strip()
+
+    # 1) 在验证用的仓库里建分支并应用补丁
+    co = _run(["git", "checkout", "-q", "-B", branch], cwd=repo_dir)
+    if co.returncode != 0:
+        return {"ok": False, "error": f"checkout branch failed: {co.stderr[-200:]}"}
+    with patch_file.open("r", encoding="utf-8") as f:
+        ap = subprocess.run(["git", "apply", "--whitespace=nowarn", "-"], cwd=str(repo_dir),
+                            stdin=f, capture_output=True, text=True,
+                            encoding="utf-8", errors="replace", timeout=120)
+    if ap.returncode != 0:
+        return {"ok": False, "error": f"patch apply failed: {ap.stderr[-200:]}"}
+    _run(["git", "add", "-A"], cwd=repo_dir)
+    ci = _run(["git", "-c", "user.name=oss-scout",
+               "-c", "user.email=oss-scout@users.noreply.github.com",
+               "commit", "-qm", title[:72]], cwd=repo_dir)
+    if ci.returncode != 0:
+        return {"ok": False, "error": f"commit failed: {ci.stderr[-200:]}"}
+
+    # 2) 推到 fork（跨仓库，显式给 URL；token 只在进程参数里，不落 remote 配置）
+    if token:
+        push_url = f"https://x-access-token:{token}@github.com/{push_repo}.git"
+    else:
+        push_url = f"https://github.com/{push_repo}.git"
+    pu = _run(["git", "push", "-q", push_url, f"HEAD:refs/heads/{branch}"], cwd=repo_dir)
+    if pu.returncode != 0:
+        # stderr 可能含 token 的 URL，回传前脱敏
+        msg = (pu.stderr or "").replace(token, "***") if token else (pu.stderr or "")
+        return {"ok": False, "error": f"push failed: {msg[-250:]}"}
+
+    # 3) 向原仓库开 PR（gh 读 GH_TOKEN；runner 的 GITHUB_TOKEN 对上游有 issue 写权）
+    head = f"{push_repo.split('/')[0]}:{branch}"
+    pr = _run(["gh", "pr", "create", "--repo", upstream, "--head", head,
+               "--title", title, "--body", body])
+    if pr.returncode != 0:
+        err = (pr.stderr or "").strip()
+        # PR 已存在不是失败：幂等重跑时常见
+        if "already exists" in err.lower():
+            existing = _run(["gh", "pr", "list", "--repo", upstream, "--head", head,
+                             "--json", "url", "--jq", ".[0].url"])
+            url = (existing.stdout or "").strip()
+            if url:
+                return {"ok": True, "pr": url, "branch": branch, "note": "already existed"}
+        return {"ok": False, "error": f"pr create failed: {err[-250:]}"}
+    return {"ok": True, "pr": (pr.stdout or "").strip(), "branch": branch}
+
+
+def publish_from_env(job_dict: dict, repo_dir: Path, out_dir: Path) -> dict | None:
+    """workflow 调用入口：payload 里没有 publish 配置时返回 None（不发布）。"""
+    cfg = job_dict.get("publish") or {}
+    if not cfg:
+        return None
+    patch = out_dir / "change.patch"
+    result = publish(repo_dir, patch, cfg)
+    (out_dir / "publish.json").write_text(json.dumps(result, ensure_ascii=False, indent=1),
+                                          encoding="utf-8")
+    print("##OSSCOUT_PUBLISH##" + json.dumps(result, ensure_ascii=False))
+    return result

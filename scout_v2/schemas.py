@@ -79,6 +79,12 @@ class Job:
     context: str = ""                                    # repair：issue 上下文（截断后进 prompt）
     ai_test_files: dict[str, str] = field(default_factory=dict)  # repair：AI 生成的回归测试 {路径: 内容}
     model: str = ""                                      # repair：控制器解析好的模型名（如 opencode-go/xxx）
+    # repair 在 Actions 上跑完并自证通过后，同一次 job 内继续 push + PR。
+    # 空 dict = 不发布（控制器自己发布）。非空时由 runner 用 GITHUB_TOKEN 完成写操作：
+    #   {"push_repo": "xixi-box/opencode", "upstream": "anomalyco/opencode",
+    #    "branch": "fix/issue-123-abc1234", "issue_number": 123,
+    #    "title": "fix: ...", "body": "..."}
+    publish: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return dataclasses.asdict(self)

@@ -145,6 +145,49 @@ jobs:
             --backend github_actions \
             --emit-envelope
 
+      - name: Publish (push branch + open PR)
+        # 只有 job payload 里显式带了 publish 配置才执行，且必须在 worker 自证
+        # 通过之后（outcome=succeeded + patch 存在）。写权限只在这一步出现。
+        # 放在 runner 上而非 VPS：VPS 到 github.com 只有一条代理线路，断几分钟
+        # 就会让已验证的修复作废（2026-10-28 实录）。
+        #
+        # 用 PAT（GH_TOKEN）而不是内置 GITHUB_TOKEN：内置令牌只能访问本仓库，
+        # 推不了 fork（xixi-box/<upstream>），也开不了上游仓库的 PR。
+        id: publish
+        if: success()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE/worker"
+          PYTHONPATH="$GITHUB_WORKSPACE/worker" python3 - <<'PY'
+          import json, os, pathlib, sys
+          sys.path.insert(0, os.environ["GITHUB_WORKSPACE"] + "/worker")
+          from scout_v2.workers.publish_remote import publish_from_env
+
+          tmp = pathlib.Path(os.environ["RUNNER_TEMP"])
+          job = json.loads((tmp / "job.json").read_text())
+          if not (job.get("publish") or {}):
+              print("no publish config in payload; skipping")
+              sys.exit(0)
+
+          res_file = tmp / "artifacts" / "result.json"
+          if not res_file.is_file():
+              print("no result.json; refusing to publish"); sys.exit(0)
+          res = json.loads(res_file.read_text())
+          ok = (res.get("outcome") == "succeeded"
+                and res.get("reproduced_on_base") and res.get("fixed_on_patch"))
+          if not ok:
+              print(f"evidence chain not satisfied ({res.get('outcome')}); refusing to publish")
+              sys.exit(0)
+
+          out = publish_from_env(job, tmp / "repo", tmp / "artifacts")
+          if out and not out.get("ok"):
+              print(f"publish failed: {out.get('error')}")
+              sys.exit(1)
+          PY
+
       - name: Upload artifacts
         # artifact 存储有账号级配额，撞上时整包丢失（2026-10-28 实录）。
         # 因此 result/patch 的主通道是 stdout 信封（后端优先读 artifact，

@@ -187,6 +187,10 @@ class ActionsBackend:
         for key in ("patch", "test_report", "findings"):
             if env.get(key) is not None:
                 out[key] = env[key]
+        # runner 侧发布结果（2026-10-28 起写操作在 runner 完成）
+        pub = _parse_publish_marker(text)
+        if pub is not None:
+            out["publish"] = pub
         return out
 
     def _logs_text(self, remote_job_id: str) -> str | None:
@@ -215,6 +219,20 @@ class ActionsBackend:
                         return run["id"]
             time.sleep(5)
         return None
+
+
+def _parse_publish_marker(text: str) -> dict | None:
+    """从 run 日志里取 runner 侧发布结果（publish_remote 打印的单行标记）。"""
+    marker = "##OSSCOUT_PUBLISH##"
+    for line in (text or "").splitlines():
+        idx = line.rfind(marker)
+        if idx < 0:
+            continue
+        try:
+            return json.loads(line[idx + len(marker):])
+        except json.JSONDecodeError:
+            continue
+    return None
 
 
 def verify_collected(collected: dict, job: Job) -> list[str]:

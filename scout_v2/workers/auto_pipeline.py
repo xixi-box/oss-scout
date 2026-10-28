@@ -350,8 +350,11 @@ def _collect(root: Path, backend: str, remote_id: str, extra: dict, timeout_s: i
                 "test_report": env.get("test_report"), "raw": env}
     patch = env.get("patch")
     report = env.get("test_report")
-    result = {k: v for k, v in env.items() if k not in ("patch", "test_report", "raw")}
-    return {"result": result, "patch": patch, "test_report": report, "raw": env}
+    publish = env.get("publish")
+    result = {k: v for k, v in env.items()
+              if k not in ("patch", "test_report", "raw", "publish")}
+    return {"result": result, "patch": patch, "test_report": report,
+            "publish": publish, "raw": env}
 
 
 def _stage_patch_from_backend(root: Path, out_dir: Path, collected: dict) -> Path | None:
@@ -473,6 +476,14 @@ def candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6) -> dict:
         job.model = resolve_model()
     except Exception as e:  # noqa: BLE001
         return _abort_release(f"no model resolved: {str(e)[:160]}")
+    # 路由器会选后端；只有 Actions 能自己写回（runner 有稳定出网 + PAT），
+    # Modal 产出的补丁仍由控制器发布。这里先按路由结论决定要不要带 publish 配置。
+    try:
+        decision = _build_router(root, job, eng).route(job.to_dict())
+    except Exception as e:  # noqa: BLE001
+        return _abort_release(f"routing failed: {str(e)[:160]}")
+    if decision.backend == "github_actions":
+        job.publish = _build_publish_cfg(repo, number, base_sha, entry)
     try:
         backend, remote_id, extra = _submit_job(root, job, eng)
     except Exception as e:  # noqa: BLE001
@@ -502,15 +513,40 @@ def candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6) -> dict:
         return _r
     summary["steps"].append("repair + quality gate ok")
 
-    # ---- push 分支 + PR（VPS 是唯一写者）----
-    pr_url = _publish_pr(root, entry, base_sha, patch_file, summary)
-    if pr_url is None:
-        return _abort_release(summary.get("abort", "publish failed"))
+    # ---- 发布：优先用 runner 侧已完成的推送 ----
+    # Actions 后端在 payload 带 publish 配置时会自己 push+PR，并把结果放进信封。
+    # 这样 VPS 完全不碰 GitHub 写接口，也就没有出网单点。Modal 后端仍由控制器发布。
+    runner_pr = _runner_published(collected)
+    if runner_pr is not None:
+        if runner_pr.get("ok"):
+            pr_url = runner_pr.get("pr") or ""
+            summary["steps"].append("published on runner")
+        else:
+            summary["abort"] = f"runner publish failed: {runner_pr.get('error', '')[:180]}"
+            return _abort_release(summary["abort"])
+    else:
+        # ---- 控制器侧发布（Modal 后端 / runner 未配置 publish）----
+        pr_url = _publish_pr(root, entry, base_sha, patch_file, summary)
+        if pr_url is None:
+            return _abort_release(summary.get("abort", "publish failed"))
+    if not pr_url:
+        return _abort_release("publish reported success but no PR url")
     summary["pr"] = pr_url
     log(root, "pr_open", key, f"{pr_url} (auto pipeline, backend={backend})")
     mark_candidate(root, key, "pr_open")
     ledger.close()
     return summary
+
+
+def _runner_published(collected: dict) -> dict | None:
+    """从后端回传里取出 runner 侧发布结果；没配 publish 时返回 None。"""
+    pub = collected.get("publish")
+    if isinstance(pub, dict):
+        return pub
+    raw = collected.get("raw")
+    if isinstance(raw, dict) and isinstance(raw.get("publish"), dict):
+        return raw["publish"]
+    return None
 
 
 def _redact_secret(text: str, secret: str) -> str:
@@ -560,6 +596,36 @@ def _fork_of(repo: str) -> str:
     if owner.lower() == FORK_OWNER:
         return repo
     return f"{FORK_OWNER}/{name}"
+
+
+def _build_publish_cfg(repo: str, number: int, base_sha: str,
+                       entry: dict) -> dict:
+    """构造 runner 侧发布配置。
+
+    PR 文案由控制器定稿而不是让 worker 自由发挥：AGENTS.md §6 要求对外文字
+    精炼、就事论事、不写 AI 长文（opencode 等仓库会直接忽略长描述）。这里只给
+    事实：修了什么、怎么验证的。
+    """
+    push_repo = _fork_of(repo)
+    title = str(entry.get("title") or "").strip()
+    # 仓库普遍用 conventional commits；我们没有足够信息判定 type，用最中性的 fix
+    pr_title = f"fix: {title[:70]}" if title else f"fix: resolves #{number}"
+    body_lines = [
+        f"Fixes #{number}",
+        "",
+        f"Root cause: {title}" if title else "",
+        "",
+        f"Verified by running the failing test at `{base_sha[:12]}` (fails) and "
+        f"again with this patch applied (passes).",
+    ]
+    return {
+        "push_repo": push_repo,
+        "upstream": repo,
+        "branch": f"fix/issue-{number}-{base_sha[:7]}",
+        "issue_number": number,
+        "title": pr_title,
+        "body": "\n".join(x for x in body_lines if x is not None).strip(),
+    }
 
 
 def _publish_pr(root: Path, entry: dict, base_sha: str, patch_file: Path,
