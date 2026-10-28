@@ -109,6 +109,9 @@ def _probe_test_stack(repo: str, base_sha: str):
         return "node", "npx --no-install bun test {path}", tests_dir, top
     if "go.mod" in names:
         return "go", "go test {path}", tests_dir, top
+    # 兜底：无标准清单文件但根目录有 Python 测试 → 仍按 Python 处理
+    if any(str(n).startswith("test_") and str(n).endswith(".py") for n in names):
+        return "python", "python -m pytest {path} -q", (tests_dir or "."), top
     return None
 
 
