@@ -325,7 +325,7 @@ def _submit_job(root: Path, job: Job, engine: PolicyEngine) -> tuple[str, str, d
     return "github_actions", be.submit(job.to_dict()), {"backend_obj": be, "note": decision.reason}
 
 
-def _collect(root: Path, backend: str, remote_id: str, extra: dict, timeout_s: int = 1800) -> dict:
+def _collect(root: Path, backend: str, remote_id: str, extra: dict, timeout_s: int = 5400) -> dict:
     """轮询并收集后端结果。"""
     be = extra["backend_obj"]
     t0 = time.time()

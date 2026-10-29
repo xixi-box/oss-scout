@@ -31,7 +31,10 @@ permissions:
 jobs:
   repair:
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    # 90 分钟：agent 最多 20 分钟 + base/patched 两轮测试各最多 30 分钟，
+    # 再加装依赖与编译（Rust 项目首次 cargo build 就 10 分钟以上）。
+    # 原来的 40 分钟会在验证中途把 run 杀掉，前面全白做。
+    timeout-minutes: 90
     steps:
       - name: Decode job payload
         id: job
