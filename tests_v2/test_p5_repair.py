@@ -102,7 +102,9 @@ class TestRepairEvidenceChain:
     def test_no_test_cmd_blocked(self, tmp_path):
         """没有测试命令就无法验证——agent 也没报命令时直接失败。"""
         r, sha = make_repo(tmp_path)
-        res = run_repair(job(sha), r, tmp_path / "out", test_cmd=[])
+        res = run_repair(job(sha), r, tmp_path / "out", test_cmd=[],
+                         patch_producer=lambda j, w, c: {"patch": GOOD_PATCH,
+                                                         "notes": []})
         assert res.outcome in ("blocked", "failed")
         assert not res.fixed_on_patch
 
@@ -313,9 +315,16 @@ class TestEnvironmentNotMistakenForBug:
         assert _test_env_broken("", "E   AssertionError: assert 3 == 3.5") is None
 
     def test_missing_test_runner_is_not_reported_as_reproduced(self, tmp_path):
+        """测试运行器不存在 → 环境问题，不是复现。
+
+        用 producer 注入补丁，避免依赖外部 opencode 服务（否则这条测试会因为
+        模型服务临时不可用而随机失败）。
+        """
         r, sha = make_repo(tmp_path)
         res = run_repair(job(sha), r, tmp_path / "out",
-                         test_cmd=["definitely-not-a-real-runner-xyz", "test_div.py"])
+                         test_cmd=["definitely-not-a-real-runner-xyz", "test_div.py"],
+                         patch_producer=lambda j, w, c: {"patch": GOOD_PATCH,
+                                                         "notes": []})
         assert res.reproduced_on_base is False
         assert res.fixed_on_patch is False
         assert res.outcome == "failed"

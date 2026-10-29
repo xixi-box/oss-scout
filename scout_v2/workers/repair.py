@@ -298,8 +298,12 @@ def opencode_patch_producer(job: Job, work_dir: Path, context: str,
         _git(["reset", "-q", "--", *excludes], work_dir, check=False)
     patch = _git(["diff", "--cached"], work_dir).stdout
     if not patch.strip():
+        # 诊断信息必须带出 agent 自己说了什么、动了哪些文件——否则"没改源码"
+        # 这句话无法区分"它没找到地方"和"它改了但我们的分类把它当测试剔掉了"。
         raise RuntimeError(
-            "agent produced no source change (only tests); " + " | ".join(notes[:2]))
+            "agent produced no source change "
+            f"(changed={changed or 'nothing'}, tests={sorted(test_files) or 'none'}); "
+            f"agent said: {(detail or '')[:400]}")
 
     cmd_str = markers.get("test_cmd", "").strip()
     return {
@@ -309,6 +313,11 @@ def opencode_patch_producer(job: Job, work_dir: Path, context: str,
         "root_cause": markers.get("root_cause", "")[:300],
         "notes": notes,
         "baseline": baseline,
+        # 保留 agent 的收尾输出与它改动过的文件清单：失败时这是唯一能判断
+        # "它到底理解到哪一步"的线索
+        "agent_output": (detail or "")[:4000],
+        "changed_files": changed,
+        "markers_found": bool(markers),
     }
 
 
@@ -524,6 +533,17 @@ def run_repair(job: Job, repo_dir: Path, out_dir: Path, *,
             test_files.update(produced.get("test_files") or {})
             root_cause = produced.get("root_cause") or ""
             unverified.extend(produced.get("notes") or [])
+            # agent 的收尾输出单独落盘：失败时据此判断它理解到哪一步，
+            # 而不是只看到"没改源码"这一句。
+            agent_out = produced.get("agent_output") or ""
+            if agent_out:
+                (out_dir / "agent-output.txt").write_text(agent_out, encoding="utf-8")
+            if produced.get("changed_files") is not None:
+                (out_dir / "agent-changed.json").write_text(
+                    json.dumps({"changed": produced.get("changed_files"),
+                                "tests": sorted(produced.get("test_files") or {}),
+                                "markers_found": produced.get("markers_found")},
+                               ensure_ascii=False, indent=1), encoding="utf-8")
         else:                      # 兼容旧 producer：(patch, notes)
             patch, notes = produced
             unverified.extend(notes or [])
