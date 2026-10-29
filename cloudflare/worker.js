@@ -66,7 +66,9 @@ async function pollOnce(env) {
           created_at: it.created_at, updated_at: it.updated_at,
           labels, reactions: (it.reactions && it.reactions.total_count) || 0,
           comments: it.comments || 0,
-          body_excerpt: (it.body || "").slice(0, 4000),
+          // 8000：AI 评分要判断"这个 issue 能不能自动修"，依据是复现步骤、预期行为、
+          // 环境说明。4000 常常在代码块中间截断，把可修的 issue 判成"信息不足"。
+          body_excerpt: (it.body || "").slice(0, 8000),
         });
       }
     } catch (e) {

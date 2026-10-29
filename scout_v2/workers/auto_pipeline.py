@@ -481,21 +481,16 @@ def candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6) -> dict:
               idempotency_key=f"repair:{repo}:{base_sha}:{number}",
               execution_scope="project_contribution",
               policy_snapshot_id=eng.snapshot_id(),
-              context=f"{entry.get('title', '')}\n\n{(entry.get('body_excerpt') or '')[:3000]}",
+              # 给的上下文要足够 agent 自己判断：完整标题 + 正文（截到 6000，
+              # 之前 3000 会砍掉复现步骤和预期行为）
+              context=(f"{entry.get('title', '')}\n\n"
+                       f"URL: https://github.com/{repo}/issues/{number}\n\n"
+                       f"{(entry.get('body_excerpt') or '')[:6000]}"),
               max_estimated_compute_usd=0.5)
-    # 回归测试由 AI 生成后随 job 下发（后端执行时才落盘）：
-    # 仓库结构用 GitHub tree API 探测，VPS 不 clone
-    test_stack = _probe_test_stack(repo, base_sha)
-    if not test_stack:
-        return _abort_release("unsupported/unreachable test stack; cannot verify fix")
-    lang, tpl, tests_dir, top_entries = test_stack
-    summary["steps"].append(f"test stack: {lang}")
-    cmd, rel, code = _ai_generate_test_remote(job, lang, tpl, tests_dir, top_entries, summary)
-    if not cmd:
-        return _abort_release("no test_cmd and none inferable (AI generation failed)")
-    job.test_cmd = cmd
-    if rel and code:
-        job.ai_test_files = {rel: code}
+    # 测试框架由 agent 现场判断（2026-10-28）：控制器不再预设 pytest。
+    # 之前在这里硬编码探测，"探测不到就放弃"，等于把能力锁死在 Python+pytest。
+    # 现在只把 issue 交给 agent，它自己看 Cargo.toml / package.json / 测试目录。
+    summary["steps"].append("agent decides test framework (no preset)")
     # 模型名由控制器解析后随 job 下发：worker 镜像里没有 configs/，
     # 无法自己读 model_policy.yaml。
     try:

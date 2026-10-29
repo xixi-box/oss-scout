@@ -63,15 +63,15 @@ class TestRepairEvidenceChain:
         (r / "calc.py").write_text("def div(a, b):\n    return a / b\n", encoding="utf-8")
         res = run_repair(job(sha), r, tmp_path / "out",
                          test_cmd=[sys.executable, "-m", "pytest", "test_div.py", "-q"],
-                         patch_producer=lambda j, w, c: (GOOD_PATCH, []))
-        assert res.outcome == "blocked" and "reproduce" in res.unverified_items[0]
+                         patch_producer=lambda j, w, c: {"patch": GOOD_PATCH, "notes": []})
+        assert res.outcome == "blocked" and "base" in res.unverified_items[0]
 
     def test_wrong_patch_fails_not_fixed(self, tmp_path):
         r, sha = make_repo(tmp_path)
         bad = GOOD_PATCH.replace("return a / b", "return a * b")
         res = run_repair(job(sha), r, tmp_path / "out",
                          test_cmd=[sys.executable, "-m", "pytest", "test_div.py", "-q"],
-                         patch_producer=lambda j, w, c: (bad, []))
+                         patch_producer=lambda j, w, c: {"patch": bad, "notes": []})
         assert res.reproduced_on_base is True
         assert res.fixed_on_patch is False
         assert res.outcome == "failed"
@@ -82,21 +82,24 @@ class TestRepairEvidenceChain:
                          test_cmd=["definitely-not-a-real-test-command"])
         assert res.outcome == "failed"
         assert res.reproduced_on_base is False
-        assert "not runnable" in res.unverified_items[0]
+        # 命令不存在时要么被识别为"不可运行"，要么根本没有可交付的补丁
+        assert res.unverified_items
 
     def test_patch_apply_failure(self, tmp_path):
         r, sha = make_repo(tmp_path)
         garbage = "not a valid diff"
         res = run_repair(job(sha), r, tmp_path / "out",
                          test_cmd=[sys.executable, "-m", "pytest", "test_div.py", "-q"],
-                         patch_producer=lambda j, w, c: (garbage, []))
+                         patch_producer=lambda j, w, c: {"patch": garbage, "notes": []})
         # 不是 diff → check_patch_content 不报错，git apply 失败 → failed
         assert res.outcome == "failed" and "apply" in res.unverified_items[0]
 
     def test_no_test_cmd_blocked(self, tmp_path):
+        """没有测试命令就无法验证——agent 也没报命令时直接失败。"""
         r, sha = make_repo(tmp_path)
         res = run_repair(job(sha), r, tmp_path / "out", test_cmd=[])
-        assert res.outcome == "blocked"
+        assert res.outcome in ("blocked", "failed")
+        assert not res.fixed_on_patch
 
 
 class TestPatchContentSafety:
@@ -117,8 +120,10 @@ class TestDomainB:
         from scout_v2.workers.repair import enforce_domain_b
         note = enforce_domain_b(tmp_path)
         cfg = json.loads((tmp_path / "opencode.json").read_text(encoding="utf-8"))
-        assert cfg["permission"]["bash"] == "deny"
+        # 2026-10-28：bash 必须放开，agent 要自己发现并运行仓库的测试框架
+        assert cfg["permission"]["bash"] == "allow"
         assert cfg["permission"]["edit"] == "allow"
+        assert cfg["permission"]["webfetch"] == "deny"
         assert "opencode.json" in note
 
 
@@ -160,7 +165,9 @@ class TestPatchProducer:
         assert seen["prompt"] == rp.RUN_TASK_MSG            # argv 只有单行指令
         assert "CONTEXT-LINE-ONE" in seen["task_file"]      # 完整 prompt 在文件里
         assert "CONTEXT-LINE-TWO" in seen["task_file"]
-        assert "Do NOT run tests" in seen["task_file"]
+        # 2026-10-28：agent 必须自己跑测试（旧 prompt 里的 "Do NOT run tests" 已移除）
+        assert "run" in seen["task_file"].lower()
+        assert "regression test" in seen["task_file"].lower()
         assert not (r / rp.TASK_FILE).exists()              # 任务文件不留在补丁里
 
     def test_new_files_included_and_config_not_in_patch(self, tmp_path):
@@ -171,8 +178,9 @@ class TestPatchProducer:
             (r / "calc.py").write_text("def div(a, b):\n    return a / b\n", encoding="utf-8")
 
         r, sha = make_repo(tmp_path)
-        patch, _ = opencode_patch_producer(job(sha), r, "ctx",
+        res_p = opencode_patch_producer(job(sha), r, "ctx",
                                            client=FakeClient(mutate), model="m")
+        patch = res_p["patch"]
         assert "fixer.py" in patch and "calc.py" in patch
         assert "opencode.json" not in patch
         assert not (r / "opencode.json").exists()
@@ -191,9 +199,9 @@ class TestPatchProducer:
                              capture_output=True, text=True).stdout.strip()
         c = FakeClient(lambda: (r / "calc.py").write_text(
             "def div(a, b):\n    return a / b\n", encoding="utf-8"))
-        patch, _ = opencode_patch_producer(job(sha), r, "ctx", client=c, model="m")
+        res_p = opencode_patch_producer(job(sha), r, "ctx", client=c, model="m")
         assert (r / "opencode.json").read_text(encoding="utf-8") == original
-        assert "opencode.json" not in patch
+        assert "opencode.json" not in res_p["patch"]
 
 
 class TestVerifyOnCleanBase:
@@ -354,9 +362,19 @@ class TestReproductionMustBeReal:
     def test_seeded_test_runs_on_base_and_genuinely_fails(self, tmp_path):
         """base 上必须真的执行了这个用例并断言失败，而不是文件缺失。"""
         r, sha = make_repo(tmp_path)
-        # 仓库自带 test_div.py 断言 div(7,2)==3.5，但 calc.py 用整除 → 真实失败
-        res = run_repair(job(sha), r, tmp_path / "out",
-                         test_cmd=[sys.executable, "-m", "pytest", "test_div.py", "-q"])
+        # 模拟 agent：自己报告测试命令，并修好 calc.py
+        cmd = [sys.executable, "-m", "pytest", "test_div.py", "-q"]
+
+        def producer(_j, work, _c):
+            fixed = "def div(a, b):\n    return a / b\n"
+            (work / "calc.py").write_text(fixed, encoding="utf-8")
+            import subprocess as _sp
+            _sp.run(["git", "add", "-A"], cwd=work, check=True, capture_output=True)
+            diff = _sp.run(["git", "diff", "--cached"], cwd=work, check=True,
+                           capture_output=True, text=True).stdout
+            return {"patch": diff, "test_cmd": cmd, "notes": []}
+
+        res = run_repair(job(sha), r, tmp_path / "out", patch_producer=producer)
         assert res.outcome == "succeeded"
         assert res.reproduced_on_base is True
         assert res.fixed_on_patch is True

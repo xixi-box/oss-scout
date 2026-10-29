@@ -21,25 +21,48 @@ from ..schemas import Job, Result
 from .opencode_client import OpenCodeClient
 from .reproduce import sanitized_env
 
-FIX_PROMPT = """You are fixing a bug in this repository.
+FIX_PROMPT = """You are fixing a bug in this repository. Work autonomously.
 
-Context (bug report / failing behavior):
+Bug report:
 {context}
 
-Rules:
-1. Explore the code read-only, then make the MINIMAL correct edit to fix the bug.
-2. Do NOT run tests, do NOT install dependencies, do NOT run shell commands.
-3. Do NOT modify test files. Do NOT reformat unrelated code.
-4. When done editing, stop. Output one short line summarizing the root cause.
+Repo notes (contributed rules for this project, may be empty):
+{rules}
+
+Do this, in order:
+
+1. EXPLORE. Read the issue above, then find the code responsible. Look at how this
+   repo is built and tested (pyproject.toml / Cargo.toml / package.json /
+   test dirs / CI config). Do not assume a framework.
+
+2. WRITE A REGRESSION TEST in the repo's OWN style and location, following its
+   existing conventions. It must fail on the current code for the reason described
+   in the bug report. Run it. If it does not fail, your test does not capture the
+   bug — fix the test, not the source.
+
+3. FIX the bug with the smallest correct change. Re-run your test until it passes.
+
+4. CHECK that you did not break things: run the narrowest relevant existing test
+   suite for the file(s) you touched.
+
+You have a shell. Use it: install what you need, run the test runner this project
+actually uses. You may modify test files (you are adding a regression test) but do
+NOT reformat unrelated code and do NOT touch CI config.
+
+When finished, print exactly these lines (nothing else after them):
+
+OSSCOUT_TEST_CMD: <the exact command you ran, one line>
+OSSCOUT_TEST_FILE: <repo-relative path of the regression test you added>
+OSSCOUT_ROOT_CAUSE: <one sentence>
 """
 
 # Windows 教训（P5 演练实测）：多行 prompt 经 argv 传给 opencode.CMD（批处理 shim）
 # 会挂起或解析异常；Bash shell 下手动执行正常。长 prompt 写入工作目录文件，
 # argv 只传单行指令。
 TASK_FILE = "OSSCOUT_TASK.md"
-RUN_TASK_MSG = ("Fix the bug described in OSSCOUT_TASK.md in this repository NOW: read it, "
-                "then immediately make the minimal edit to the source file. Do not ask "
-                "questions. When done editing, stop.")
+RUN_TASK_MSG = ("Read OSSCOUT_TASK.md in this repository and carry out the task it "
+                "describes, end to end. You are autonomous: explore, write the "
+                "regression test, run it, fix the bug, verify. Do not ask questions.")
 
 
 def _git(args: list[str], cwd: Path, check: bool = True) -> subprocess.CompletedProcess:
@@ -67,10 +90,17 @@ def _run_cmd(cmd: list[str], cwd: Path, env: dict) -> tuple[int, str, str]:
 
 
 def enforce_domain_b(work_dir: Path) -> str:
-    """写入 opencode 权限配置：禁 shell 与网络，只允许文件编辑。返回声明字符串。"""
-    cfg = {"permission": {"bash": "deny", "webfetch": "deny", "edit": "allow"}}
+    """写入 opencode 权限配置。
+
+    bash 必须放开（2026-10-28 结构性修正）：修复 agent 要发现这个仓库用的是什么
+    测试框架、跑自己的回归测试、看真实报错再改。禁掉 shell 等于让它闭着眼改文件，
+    结果是它只能处理"我们预先猜到怎么测"的项目（实际只有 pytest 一格）。
+    网络仍然禁掉：修复不需要外网，而 webfetch 会把不可信的页面内容带进上下文。
+    隔离靠沙箱本身：runner/沙箱一次性、contents:read、无额外凭据。
+    """
+    cfg = {"permission": {"bash": "allow", "webfetch": "deny", "edit": "allow"}}
     (work_dir / "opencode.json").write_text(json.dumps(cfg), encoding="utf-8")
-    return "opencode.json permission {bash:deny, webfetch:deny, edit:allow} written"
+    return "opencode.json permission {bash:allow, webfetch:deny, edit:allow} written"
 
 
 def resolve_model() -> str:
@@ -167,67 +197,132 @@ def _ensure_opencode_auth() -> str | None:
     return provider
 
 
+def _parse_markers(text: str) -> dict:
+    """从 agent 的最终输出里取 OSSCOUT_* 标记。缺失的键不出现。"""
+    out: dict = {}
+    for line in (text or "").splitlines():
+        s = line.strip().lstrip("> ").strip()
+        for key, name in (("OSSCOUT_TEST_CMD:", "test_cmd"),
+                          ("OSSCOUT_TEST_FILE:", "test_file"),
+                          ("OSSCOUT_ROOT_CAUSE:", "root_cause")):
+            if s.startswith(key):
+                val = s[len(key):].strip().strip("`\"'")
+                if val:
+                    out[name] = val
+    return out
+
+
+def _split_cmd(cmd: str) -> list[str]:
+    """把 agent 报的命令行拆成 argv。引号交给 shlex。"""
+    import shlex
+    try:
+        return shlex.split(cmd)
+    except ValueError:
+        return cmd.split()
+
+
 def opencode_patch_producer(job: Job, work_dir: Path, context: str,
                             client: OpenCodeClient | None = None,
                             model: str | None = None,
-                            ai_test_paths: list[str] | None = None) -> tuple[str, list[str]]:
-    """域 B：OpenCode 在 work_dir 内产出补丁。返回 (patch_text, notes)。
+                            ai_test_paths: list[str] | None = None) -> dict:
+    """让 OpenCode 在 work_dir 里自主完成"探索→写测试→修→验证"。
 
-    ai_test_paths：我们预先放进工作区的回归测试路径，必须排除在补丁之外
-    （它们是验证手段，不是修复内容）。按实际路径排除而不是猜文件名。
+    返回 dict：
+        patch       修复补丁（不含回归测试文件）
+        test_cmd    agent 实际用过的测试命令（argv）
+        test_files  {仓库相对路径: 内容}，agent 新写的回归测试
+        root_cause  一句话归因
+        notes       过程声明
+
+    设计变更（2026-10-28）：以前是控制器先猜测试框架、让 API 生成测试文件、
+    再叫 agent 只改源码。那样 agent 拿不到 shell、看不到真实报错，实际只能
+    处理"我们预先猜到怎么测"的仓库。现在测试由 agent 自己写、自己跑——我们只在
+    出口做结果验证（干净 base 上失败 → 打补丁后通过）。
     """
     ai_test_paths = list(ai_test_paths or [])
     cfg_path = work_dir / "opencode.json"
     original_cfg = cfg_path.read_bytes() if cfg_path.exists() else None
+    baseline = _git(["rev-parse", "HEAD"], work_dir).stdout.strip()
     notes = [enforce_domain_b(work_dir)]
     provider = _ensure_opencode_auth()
     notes.append(f"opencode auth: {provider}" if provider
                  else "opencode auth: no OPENCODE_API_KEY in env")
+    detail = ""
     try:
-        # 600s：沙箱实测一次修复（文本模式）在 2-4 分钟内完成；
-        # 留 600s 给大仓库，超时即判失败而不是把 Sandbox 占满 30 分钟。
-        client = client or OpenCodeClient(timeout_seconds=600, workdir=work_dir)
-        # job.model 由控制器下发：worker 镜像里没有 configs/（配置在控制器的 /data 卷），
-        # 现场探测只在本地开发时兜底。
+        # 1200s：agent 现在要装依赖、跑测试、迭代，比只改文件慢得多。
+        client = client or OpenCodeClient(timeout_seconds=1200, workdir=work_dir)
         model = model or (job.model or "").strip() or resolve_model()
         rules = repo_rules_block(job.repo)
-        full_context = (rules + "\n\n" + context) if rules else context
-        (work_dir / TASK_FILE).write_text(FIX_PROMPT.format(context=full_context[:4000]),
-                                          encoding="utf-8")
+        (work_dir / TASK_FILE).write_text(
+            FIX_PROMPT.format(context=context[:6000], rules=rules or "(none)"),
+            encoding="utf-8")
         ok, detail = client.run(model, RUN_TASK_MSG)
-        if not ok:
-            # 模型 edit 后直接停（无 text 事件）不罕见——看 diff 是否非空再定论
-            probe = _git(["diff", "--cached"], work_dir).stdout if False else None
-            diff_early = _git(["diff"], work_dir).stdout
-            if diff_early.strip():
-                ok, detail = True, "(no text events; changes present)"
-            else:
-                raise RuntimeError(f"opencode repair run failed: {detail[:300]}")
+        diff_early = _git(["diff"], work_dir).stdout
+        if not ok and not diff_early.strip():
+            raise RuntimeError(f"opencode repair run failed: {detail[:300]}")
         notes.append(f"model({model}) said: {detail[:200]}")
     finally:
-        # 权限配置/任务文件是我们的运行时产物，绝不能混进补丁
         if original_cfg is None:
             cfg_path.unlink(missing_ok=True)
         else:
             cfg_path.write_bytes(original_cfg)
         (work_dir / TASK_FILE).unlink(missing_ok=True)
 
-    # 用 --cached 才能把模型新建的文件纳入补丁；普通 `git diff` 会静默丢新文件
+    markers = _parse_markers(detail)
+
+    # agent 新增/修改过的文件（含测试）。用 --cached 才能把新文件纳入。
     _git(["add", "-A"], work_dir)
-    # 运行时产物与 AI 生成的回归测试都不能进补丁：
-    # - opencode.json 是我们的权限配置
-    # - AI 回归测试是我们喂进去的验证用例，不属于修复改动
-    # 测试文件名由 job.ai_test_files 的 key 决定（不一定是 issue 后缀那种），
-    # 因此按实际路径排除；2026-10-28 实测 test_ai_regression.py 曾漏进补丁。
-    excludes = ["opencode.json", TASK_FILE, *ai_test_paths]
-    _git(["reset", "-q", "--", *excludes], work_dir, check=False)
-    for p in ai_test_paths:
-        _git(["-c", "core.quotepath=false", "reset", "-q", "--", p], work_dir, check=False)
-    diff = _git(["diff", "--cached"], work_dir).stdout
-    if not diff.strip():
-        # notes 随异常带出，否则排查时丢线索（P5 演练教训）
-        raise RuntimeError("opencode produced no changes (empty git diff); " + " | ".join(notes))
-    return diff, notes
+    changed = [p for p in _git(["diff", "--cached", "--name-only"], work_dir)
+               .stdout.splitlines() if p.strip()]
+    excludes = [p for p in ("opencode.json", TASK_FILE) if p in changed]
+
+    # 分清"回归测试"和"修复"：
+    # - agent 报的 OSSCOUT_TEST_FILE 一定是测试
+    # - 其余路径里，明显新增的测试文件也归到测试（避免测试混进 PR）
+    test_file = markers.get("test_file", "")
+    test_files: dict[str, str] = {}
+    for path in changed:
+        is_test = (path == test_file) or _looks_like_test(path)
+        if not is_test:
+            continue
+        full = work_dir / path
+        if full.is_file():
+            try:
+                test_files[path] = full.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                pass
+        excludes.append(path)
+    excludes.extend(ai_test_paths)
+
+    if excludes:
+        _git(["reset", "-q", "--", *excludes], work_dir, check=False)
+    patch = _git(["diff", "--cached"], work_dir).stdout
+    if not patch.strip():
+        raise RuntimeError(
+            "agent produced no source change (only tests); " + " | ".join(notes[:2]))
+
+    cmd_str = markers.get("test_cmd", "").strip()
+    return {
+        "patch": patch,
+        "test_cmd": _split_cmd(cmd_str) if cmd_str else [],
+        "test_files": test_files,
+        "root_cause": markers.get("root_cause", "")[:300],
+        "notes": notes,
+        "baseline": baseline,
+    }
+
+
+def _looks_like_test(path: str) -> bool:
+    """路径像测试文件吗？只用于把 agent 新增的测试从 PR 补丁里剔出来。"""
+    p = path.replace("\\", "/").lower()
+    name = p.rsplit("/", 1)[-1]
+    if "/tests/" in p or "/test/" in p or p.startswith("tests/") or p.startswith("test/"):
+        return True
+    if name.startswith("test_") or name.endswith("_test.py") or name.endswith("_test.go"):
+        return True
+    if ".test." in name or ".spec." in name or name.endswith("_test.rs"):
+        return True
+    return False
 
 
 # 测试框架"根本没跑起来"的特征串。命中任何一个都说明退出码反映的是环境缺失，
@@ -334,115 +429,120 @@ def check_patch_content(patch: str) -> list[str]:
 
 
 def run_repair(job: Job, repo_dir: Path, out_dir: Path, *,
-               test_cmd: list[str], context: str = "",
+               test_cmd: list[str] | None = None, context: str = "",
                patch_producer=None, env_base: dict | None = None,
                extra_test_files: dict[str, str] | None = None,
                backend_name: str = "local") -> Result:
     """完整 repair 证据链。repo_dir 必须已 checkout 到 job.base_sha。
 
-    backend_name 只用于结果标签：worker 跑在 Modal / Actions 时不该谎称 local。
+    顺序（2026-10-28 结构性调整）：
+      1. 让 agent 自己探索仓库、写回归测试、跑、修、再跑。我们不再预先规定
+         测试框架——那正是之前只能覆盖 pytest 项目的原因。
+      2. 我们做**结果验证**：把 agent 写的测试放回干净 base，它必须失败；
+         打上 agent 的修复补丁后，它必须通过。
+    证据标准没有放松，只是把"怎么测"的决定权交给了 agent。
+
+    test_cmd：可选。给了就用作兜底（agent 没报命令时）。
     """
     out_dir.mkdir(parents=True, exist_ok=True)
-    if not test_cmd:
-        return Result(job_id=job.job_id, backend=backend_name, outcome="blocked",
-                      base_sha=job.base_sha,
-                      unverified_items=["no test_cmd — cannot verify fix"])
     unverified: list[str] = []
     env = sanitized_env(env_base, home=out_dir / "sandbox_home")
 
-    # ---- 证据 1：base 上测试必须失败 ----
-    # AI 回归测试必须先落进 base 树，否则 base 阶段跑的是"文件不存在"，
-    # pytest 以 usage error（rc=4）退出，而 rc!=0 会被当成"bug 复现"——
-    # 2026-10-28 实测：base_returncode=4、patched=0，被记成 reproduced=true，
-    # 于是任何"补丁后测试能过"的改动都会拿到一份伪造的复现证据。
-    seeded = _seed_test_files(repo_dir, extra_test_files)
-    try:
-        base_rc, base_out, base_err = _run_cmd(test_cmd, repo_dir, env)
-    finally:
-        _unseed_test_files(repo_dir, seeded)
-    # 退出码非 0 不等于"bug 复现了"：测试框架没装、模块导入失败、用例根本不存在
-    # 都会给非 0。只有"测试确实跑了并且失败"才算复现。
-    broken = _test_env_broken(base_out, base_err)
-    reproduced = base_rc not in (0, 127, 9009) and broken is None
-    if base_rc == 0:
-        (out_dir / "worker.log").write_text("base test passed; nothing to fix\n", encoding="utf-8")
-        return Result(job_id=job.job_id, backend=backend_name, outcome="blocked",
-                      base_sha=job.base_sha, reproduced_on_base=False,
-                      logs_path=f"artifacts/{job.job_id}/worker.log",
-                      unverified_items=["bug does not reproduce on base — refusing to fix blind"])
-    if base_rc in (127, 9009):
-        (out_dir / "worker.log").write_text(
-            "base test command could not be run\n", encoding="utf-8")
-        return Result(job_id=job.job_id, backend=backend_name, outcome="failed",
-                      base_sha=job.base_sha, reproduced_on_base=False,
-                      logs_path=f"artifacts/{job.job_id}/worker.log",
-                      unverified_items=[f"exit {base_rc}: command likely not runnable"])
-    if broken is not None:
-        # 环境问题：既不能声称复现，也不能声称修好。如实上报，不产出补丁。
-        (out_dir / "worker.log").write_text(
-            f"test environment unusable: {broken}\n\n"
-            f"--- stdout ---\n{base_out[-2000:]}\n--- stderr ---\n{base_err[-2000:]}",
-            encoding="utf-8")
-        return Result(job_id=job.job_id, backend=backend_name, outcome="failed",
-                      base_sha=job.base_sha, reproduced_on_base=False,
-                      logs_path=f"artifacts/{job.job_id}/worker.log",
-                      unverified_items=[f"test environment unusable: {broken}"])
-
-    # ---- 域 B：在 base 的克隆里产补丁 ----
+    # ---- 阶段 1：agent 自主修复 ----
     patch = ""
+    ai_cmd: list[str] = []
+    test_files: dict[str, str] = dict(extra_test_files or {})
+    root_cause = ""
     with tempfile.TemporaryDirectory() as td:
         work = Path(td) / "work"
         _git(["clone", "--quiet", str(repo_dir), str(work)], repo_dir)
         _git(["checkout", "--quiet", "--detach", job.base_sha], work, check=False)
-        # AI 生成的回归测试直接落到 work 目录：两次验证运行都要能看到它，
-        # 且它不属于修复补丁（下面 git diff 只取模型改动）
+        # 控制器若已备好测试文件（旧路径/兜底），先放进去让 agent 看得到
         for rel_path, content in (extra_test_files or {}).items():
             tf = work / rel_path
             tf.parent.mkdir(parents=True, exist_ok=True)
             tf.write_text(content, encoding="utf-8")
-        test_paths = list((extra_test_files or {}).keys())
         try:
             if patch_producer is None:
-                patch, notes = opencode_patch_producer(
-                    job, work, context, ai_test_paths=test_paths)
+                produced = opencode_patch_producer(
+                    job, work, context,
+                    ai_test_paths=list((extra_test_files or {}).keys()))
             else:
-                patch, notes = patch_producer(job, work, context)
-            unverified.extend(notes)
+                produced = patch_producer(job, work, context)
         except RuntimeError as e:
             (out_dir / "worker.log").write_text(str(e), encoding="utf-8")
             return Result(job_id=job.job_id, backend=backend_name, outcome="failed",
-                          base_sha=job.base_sha, reproduced_on_base=reproduced,
+                          base_sha=job.base_sha,
                           logs_path=f"artifacts/{job.job_id}/worker.log",
                           unverified_items=[str(e)[:300]])
+
+        if isinstance(produced, dict):
+            patch = produced.get("patch") or ""
+            ai_cmd = list(produced.get("test_cmd") or [])
+            test_files.update(produced.get("test_files") or {})
+            root_cause = produced.get("root_cause") or ""
+            unverified.extend(produced.get("notes") or [])
+        else:                      # 兼容旧 producer：(patch, notes)
+            patch, notes = produced
+            unverified.extend(notes or [])
+
+        cmd = ai_cmd or list(test_cmd or [])
+        if not cmd:
+            raise_no_cmd = ("agent did not report a test command and none was supplied; "
+                            "cannot verify the fix")
+            (out_dir / "worker.log").write_text(raise_no_cmd, encoding="utf-8")
+            return Result(job_id=job.job_id, backend=backend_name, outcome="failed",
+                          base_sha=job.base_sha,
+                          logs_path=f"artifacts/{job.job_id}/worker.log",
+                          unverified_items=[raise_no_cmd])
+
         errs = check_patch_content(patch)
         if errs:
             (out_dir / "worker.log").write_text(patch[:2000], encoding="utf-8")
             return Result(job_id=job.job_id, backend=backend_name, outcome="blocked",
-                          base_sha=job.base_sha, reproduced_on_base=reproduced,
+                          base_sha=job.base_sha,
                           logs_path=f"artifacts/{job.job_id}/worker.log",
                           unverified_items=errs)
-        # 兜底：无论 producer 是谁，AI 测试文件都不该出现在**交付**的补丁里。
-        # producer 内部已有排除（按 job.ai_test_files 的实际路径），这里再做一次
-        # 后置过滤，防止自定义 producer 或未来改动把验证用例混进修复内容。
-        #
-        # 但**验证**必须用完整改动（含测试文件）：把测试剔掉再 apply，测试文件
-        # 根本不存在，验证必然 "file or directory not found"（2026-10-28 实测）。
-        fix_patch = (_strip_test_files_from_patch(patch, test_paths)
-                     if test_paths else patch)
 
-        # ---- 证据 2：干净 base + 补丁后测试必须通过 ----
-        # producer 已在 work 里留下模型改动（可能已 staged），必须回到干净 base 再 apply，
-        # 否则补丁重复应用必然失败（P5 演练暴露）。
+        # 交付的补丁必须只含源码：把测试文件的整段 diff 剔掉（双重保险——
+        # producer 已经按路径排除过一次，这里防自定义 producer 或未来改动漏掉）
+        patch = _strip_test_files_from_patch(patch, list(test_files.keys()))
+
+        # ---- 阶段 2：独立验证（干净 base 上必须失败）----
+        seeded = _seed_test_files(repo_dir, test_files)
+        try:
+            base_rc, base_out, base_err = _run_cmd(cmd, repo_dir, env)
+        finally:
+            _unseed_test_files(repo_dir, seeded)
+        broken = _test_env_broken(base_out, base_err)
+        reproduced = base_rc not in (0, 127, 9009) and broken is None
+
+        if base_rc == 0:
+            (out_dir / "worker.log").write_text(
+                "the reported test passes on base; nothing to fix or the test does "
+                "not capture the bug\n", encoding="utf-8")
+            return Result(job_id=job.job_id, backend=backend_name, outcome="blocked",
+                          base_sha=job.base_sha, reproduced_on_base=False,
+                          logs_path=f"artifacts/{job.job_id}/worker.log",
+                          unverified_items=["test does not fail on base — refusing to claim a fix"])
+        if broken is not None:
+            (out_dir / "worker.log").write_text(
+                f"test command could not run on base: {broken}\n\n"
+                f"--- stdout ---\n{base_out[-2000:]}\n--- stderr ---\n{base_err[-2000:]}",
+                encoding="utf-8")
+            return Result(job_id=job.job_id, backend=backend_name, outcome="failed",
+                          base_sha=job.base_sha, reproduced_on_base=False,
+                          logs_path=f"artifacts/{job.job_id}/worker.log",
+                          unverified_items=[f"test environment unusable on base: {broken}"])
+
+        # ---- 阶段 3：补丁后必须通过 ----
         _git(["reset", "--hard", "--quiet", job.base_sha], work)
         _git(["clean", "-fdxq"], work)
-        # 验证用完整补丁；测试文件若被 producer 排除掉了，就按 job 里的内容补回，
-        # 否则 patched 阶段看不到它。
-        for rel_path, content in (extra_test_files or {}).items():
-            tf = work / rel_path
-            tf.parent.mkdir(parents=True, exist_ok=True)
-            tf.write_text(content, encoding="utf-8")
+        # 顺序很重要：先 apply 补丁，再写回测试文件。
+        # 反过来会让"补丁里新建的测试文件"与已存在的同名文件冲突
+        # （实测：error: test_x.py already exists in working directory）。
         ap = subprocess.run(["git", "apply", "--whitespace=nowarn", "-"], cwd=work,
-                            input=fix_patch, capture_output=True, text=True,
+                            input=patch, capture_output=True, text=True,
                             encoding="utf-8", errors="replace")
         if ap.returncode != 0:
             (out_dir / "worker.log").write_text(
@@ -451,16 +551,24 @@ def run_repair(job: Job, repo_dir: Path, out_dir: Path, *,
                           base_sha=job.base_sha, reproduced_on_base=reproduced,
                           logs_path=f"artifacts/{job.job_id}/worker.log",
                           unverified_items=["patch failed to apply on base"])
-        fixed_rc, out, err = _run_cmd(test_cmd, work, env)
+        # 补丁落下之后再写回归测试：补丁只含源码，测试不在里面
+        for rel_path, content in test_files.items():
+            tf = work / rel_path
+            tf.parent.mkdir(parents=True, exist_ok=True)
+            tf.write_text(content, encoding="utf-8")
+        fixed_rc, out, err = _run_cmd(cmd, work, env)
         fixed = fixed_rc == 0
-        # 落盘的是交付补丁（纯修复），测试文件已经单独写回工作区
-        (out_dir / "change.patch").write_text(fix_patch, encoding="utf-8")
+        if root_cause:
+            unverified.append(f"agent root cause: {root_cause[:200]}")
+        # 交付补丁只含源码改动；回归测试单独记录（PR 里不带我们的验证用例）
+        (out_dir / "change.patch").write_text(patch, encoding="utf-8")
         (out_dir / "test-report.json").write_text(json.dumps({
             "schema_version": 1, "job_id": job.job_id, "base_sha": job.base_sha,
-            "test_cmd": test_cmd, "base_returncode": base_rc, "patched_returncode": fixed_rc,
+            "test_cmd": cmd, "base_returncode": base_rc, "patched_returncode": fixed_rc,
             # base 输出必须留存：否则"复现证据"无法审计，假阳性也无从发现
             "base_stdout_tail": base_out[-3000:], "base_stderr_tail": base_err[-3000:],
             "patched_stdout_tail": out[-3000:], "patched_stderr_tail": err[-3000:],
+            "regression_test_files": sorted(test_files),
         }, ensure_ascii=False, indent=1), encoding="utf-8")
         (out_dir / "worker.log").write_text(
             f"=== base (rc={base_rc}) ===\n{base_out[-2000:]}\n{base_err[-2000:]}\n"

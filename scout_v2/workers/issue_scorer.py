@@ -20,17 +20,33 @@ from pathlib import Path
 BASE = "https://opencode.ai/zen/go/v1"
 DEFAULT_MODEL = "deepseek-v4.1-flash"
 
-SCORE_PROMPT = """You are triaging a GitHub issue for an open-source contribution program.
-Grade it: "A" = clear, reproducible bug worth fixing, small scope, no competing work;
-"B" = plausible bug worth a look; "C" = question/feature/docs/duplicate/billing — not actionable.
+SCORE_PROMPT = """You are triaging a GitHub issue for an autonomous contribution agent.
+The agent will read the repo, write a regression test, fix the defect, and open a PR
+with no human in the loop. Grade whether THIS issue is a good target for that.
 
-Issue from {repo}#{number} (labels: {labels}, reactions: {reactions}, comments: {comments}):
+A = attempt it. All of these hold:
+    - it is a real defect, not a question / feature request / docs / billing complaint
+    - the report describes concrete, observable wrong behaviour
+    - a competent contributor could locate the cause and fix it in a few files
+    - nothing suggests a fix is already in flight, or that maintainers want to
+      agree on a design first
+B = plausible, but risky for an unattended attempt: vague report, wide blast radius,
+    needs a design decision, or too thin to act on
+C = do not attempt: not a bug / already answered / needs maintainer design input /
+    only reproducible in an environment the agent cannot reach / security-sensitive
+
+Judge scope from what the report implies, not from how long it is. A short report can
+be precise; a long one can still be vague.
+
+Issue from {repo}#{number}
+Labels: {labels}
+Reactions: {reactions} | Comments: {comments}
 Title: {title}
-Body (truncated):
+
+Body:
 {body}
 
-Rules: reproducible bug > feature; small scope preferred; billing/quota complaints are C;
-documentation-only is C. Answer in EXACTLY this format, nothing else:
+Answer in EXACTLY this format, nothing else:
 GRADE: A|B|C
 SCORE: 0-10
 REASON: one line
@@ -112,7 +128,7 @@ class GoClient:
             labels=", ".join(issue.get("labels") or []) or "none",
             reactions=issue.get("reactions", 0), comments=issue.get("comments", 0),
             title=str(issue.get("title", ""))[:200],
-            body=str(issue.get("body_excerpt", ""))[:2500])
+            body=str(issue.get("body_excerpt", ""))[:4000])
         ok, text = self.chat(prompt)
         if not ok:
             return {"grade": "error", "score": None, "reason": text[:200], "model": self.model}
