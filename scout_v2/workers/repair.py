@@ -545,7 +545,14 @@ def run_repair(job: Job, repo_dir: Path, out_dir: Path, *,
     """
     out_dir.mkdir(parents=True, exist_ok=True)
     unverified: list[str] = []
-    env = sanitized_env(env_base, home=out_dir / "sandbox_home")
+    # 验证环境必须和 agent 用过的**同一个**环境。
+    # 2026-10-29 实测：agent 在真实 HOME 里装了 uv（报出的命令是 ~/.local/bin/uv），
+    # 而验证时把 HOME 重定向到 sandbox_home，那条命令立刻 127 "not found"，
+    # 于是一个完全正确的补丁被判成"未复现"。
+    # 隔离的理由是"跑不可信代码"，但 agent 阶段已经在跑同一份代码了，
+    # 再在验证阶段换一个干净的 HOME 只会让装好的依赖消失。
+    # 仍保留：敏感变量剥离（令牌/密钥不进子进程）。
+    env = sanitized_env(env_base, home=None)
 
     # ---- 阶段 1：agent 自主修复 ----
     patch = ""
