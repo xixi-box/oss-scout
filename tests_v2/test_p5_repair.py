@@ -77,12 +77,17 @@ class TestRepairEvidenceChain:
         assert res.outcome == "failed"
 
     def test_missing_test_command_is_failed(self, tmp_path):
+        """命令跑不起来时必须如实失败，不能声称修复。
+
+        用 producer 注入补丁，避免依赖外部 opencode 服务。
+        """
         r, sha = make_repo(tmp_path)
         res = run_repair(job(sha), r, tmp_path / "out",
-                         test_cmd=["definitely-not-a-real-test-command"])
+                         test_cmd=["definitely-not-a-real-test-command"],
+                         patch_producer=lambda j, w, c: {"patch": GOOD_PATCH,
+                                                         "notes": []})
         assert res.outcome == "failed"
-        assert res.reproduced_on_base is False
-        # 命令不存在时要么被识别为"不可运行"，要么根本没有可交付的补丁
+        assert res.fixed_on_patch is False
         assert res.unverified_items
 
     def test_patch_apply_failure(self, tmp_path):
@@ -384,7 +389,9 @@ class TestReproductionMustBeReal:
         r, sha = make_repo(tmp_path)
         res = run_repair(job(sha), r, tmp_path / "out",
                          test_cmd=[sys.executable, "-m", "pytest",
-                                   "no_such_test_file.py", "-q"])
+                                   "no_such_test_file.py", "-q"],
+                         patch_producer=lambda j, w, c: {"patch": GOOD_PATCH,
+                                                         "notes": []})
         assert res.reproduced_on_base is False
         assert res.outcome != "succeeded"
 

@@ -718,7 +718,7 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
                 "labels": [str(x)[:60] for x in (it.get("labels") or [])][:20],
                 "reactions": int(it.get("reactions") or 0),
                 "comments": int(it.get("comments") or 0),
-                "body_excerpt": str(it.get("body_excerpt", ""))[:4000],
+                "body_excerpt": str(it.get("body_excerpt", ""))[:8000],
             })
         queued = D.ingest_cloudflare_issues(ds, clean)
         _audit(root, "ingest_issues", f"{len(clean)} items",

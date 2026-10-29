@@ -764,7 +764,8 @@ def ingest_cloudflare_issues(ds, items: list[dict]) -> int:
                  "signals": {**sig, "labels": labels}, "created_at": it.get("created_at", ""),
                  "discovered_at": now_iso, "status": "new", "lease": None,
                  "source": "cloudflare-worker",
-                 "body_excerpt": body[:2000]}
+                 # 8000 而非 2000：AI 要判断"能否自动修"，需要看完整的复现步骤和预期行为
+                 "body_excerpt": body[:8000]}
         if ai_grade is not None:
             entry["ai_grade"] = ai_grade
         q[key] = entry

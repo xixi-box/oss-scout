@@ -417,6 +417,48 @@ def _strip_test_files_from_patch(patch: str, paths: list[str]) -> str:
     return "".join(out)
 
 
+# 这些命令的退出码只反映"某个字符串/文件在不在"，跟被测代码的行为无关。
+# 允许它们出现在复合命令里（如 `cmd && pytest`），但整条命令不能只有它们。
+_NON_VERIFYING_BINARIES = {
+    "grep", "egrep", "fgrep", "rg", "ag", "test", "[", "true", "false",
+    "ls", "dir", "cat", "head", "tail", "wc", "stat", "find", "git", "echo",
+    "printf", "sleep", "curl", "wget", "diff", "cmp",
+}
+
+
+def _implausible_verification(cmd: list[str], patch: str,
+                              test_files: dict[str, str]) -> str | None:
+    """拒绝不可能真正验证这次改动的测试命令。
+
+    只拦两种可证明无效的情形，不做风格审查：
+    1) 命令行里没有任何测试运行器（全是 grep/ls/git 这类），退出码只反映文件或
+       字符串是否存在；
+    2) agent 没写任何回归测试，补丁却凭空"修好"了某个行为——没有测试就无从验证。
+    """
+    if not patch.strip():
+        return "empty patch"
+    if not test_files:
+        return "no regression test was produced"
+    import os as _os
+    # 只看命令的"程序名"位置：首词，以及 `&&` / `;` / `|` 之后的词。
+    # 中间参数常是文件名（`grep -c foo x.py` 里 x.py 不是程序），不能算 runner。
+    progs: list[str] = []
+    expect_prog = True
+    for token in cmd:
+        if token in ("&&", "||", ";", "|"):
+            expect_prog = True
+            continue
+        if expect_prog:
+            progs.append(token)
+            expect_prog = False
+    names = {_os.path.basename(p).lower() for p in progs if p and not p.startswith("-")}
+    runners = names - _NON_VERIFYING_BINARIES
+    if not runners:
+        return (f"command cannot verify code behaviour: {cmd} "
+                f"(only uses {sorted(names)})")
+    return None
+
+
 def check_patch_content(patch: str) -> list[str]:
     """补丁内容安全检查：只允许仓库内相对路径（防 traversal/绝对路径注入）。"""
     errs = []
@@ -496,6 +538,7 @@ def run_repair(job: Job, repo_dir: Path, out_dir: Path, *,
                           logs_path=f"artifacts/{job.job_id}/worker.log",
                           unverified_items=[raise_no_cmd])
 
+        raw_patch = patch          # 剔除测试文件之前的完整改动（供完整性检查）
         errs = check_patch_content(patch)
         if errs:
             (out_dir / "worker.log").write_text(patch[:2000], encoding="utf-8")
@@ -503,6 +546,24 @@ def run_repair(job: Job, repo_dir: Path, out_dir: Path, *,
                           base_sha=job.base_sha,
                           logs_path=f"artifacts/{job.job_id}/worker.log",
                           unverified_items=errs)
+
+        # 最小完整性检查（2026-10-28 审计）：结果闸只比较退出码，所以像
+        # `grep -q <补丁新增的字符串> file` 这类命令能让"什么都没修"的补丁
+        # 通过验证（base 失败 → 打了补丁后 grep 命中）。不是要审查 agent 的
+        # 每个决定，只排除"验证根本不可能反映这个 bug"的几种形态。
+        #
+        # 只对真实 agent 产物生效：自定义 producer 是测试/运维注入，它自己负责
+        # 证据语义（很多用例故意只给补丁不给测试文件）。
+        if patch_producer is None:
+            bad = _implausible_verification(cmd, raw_patch, test_files)
+            if bad:
+                (out_dir / "worker.log").write_text(
+                    f"verification rejected: {bad}\n\ncmd: {cmd}\n"
+                    f"test files: {sorted(test_files)}\n", encoding="utf-8")
+                return Result(job_id=job.job_id, backend=backend_name, outcome="failed",
+                              base_sha=job.base_sha,
+                              logs_path=f"artifacts/{job.job_id}/worker.log",
+                              unverified_items=[f"verification rejected: {bad}"])
 
         # 交付的补丁必须只含源码：把测试文件的整段 diff 剔掉（双重保险——
         # producer 已经按路径排除过一次，这里防自定义 producer 或未来改动漏掉）
@@ -536,8 +597,15 @@ def run_repair(job: Job, repo_dir: Path, out_dir: Path, *,
                           unverified_items=[f"test environment unusable on base: {broken}"])
 
         # ---- 阶段 3：补丁后必须通过 ----
-        _git(["reset", "--hard", "--quiet", job.base_sha], work)
-        _git(["clean", "-fdxq"], work)
+        # 回到干净 base，但保留 ignored 目录（.venv / node_modules / target）：
+        # 那是 agent 为验证装的依赖，删掉后 patched 阶段会因为自己的环境被清空而
+        # 失败（2026-10-28 审计）。用 -fd（不带 -x）清未跟踪文件，依赖留下。
+        # 先 unstage 再 hard reset：agent 可能把改动 add 进索引，单靠 reset --hard
+        # 在部分场景下会让后续 apply 撞上残留（实测 patch failed to apply）。
+        _git(["reset", "--quiet"], work, check=False)
+        _git(["checkout", "--quiet", "--force", job.base_sha, "--", "."], work, check=False)
+        _git(["reset", "--hard", "--quiet", job.base_sha], work, check=False)
+        _git(["clean", "-fdq"], work, check=False)
         # 顺序很重要：先 apply 补丁，再写回测试文件。
         # 反过来会让"补丁里新建的测试文件"与已存在的同名文件冲突
         # （实测：error: test_x.py already exists in working directory）。
