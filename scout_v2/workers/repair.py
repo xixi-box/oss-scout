@@ -60,9 +60,13 @@ OSSCOUT_ROOT_CAUSE: <one sentence>
 # 会挂起或解析异常；Bash shell 下手动执行正常。长 prompt 写入工作目录文件，
 # argv 只传单行指令。
 TASK_FILE = "OSSCOUT_TASK.md"
-RUN_TASK_MSG = ("Read OSSCOUT_TASK.md in this repository and carry out the task it "
-                "describes, end to end. You are autonomous: explore, write the "
-                "regression test, run it, fix the bug, verify. Do not ask questions.")
+RUN_TASK_MSG = (
+    "Carry out the task in OSSCOUT_TASK.md now. Do not reply with a plan, an "
+    "acknowledgement, or a progress statement - start calling tools immediately "
+    "(read files, run commands, edit code) and keep working until the fix is "
+    "implemented and your regression test passes. Only when you are completely "
+    "finished, print the OSSCOUT_TEST_CMD / OSSCOUT_TEST_FILE / "
+    "OSSCOUT_ROOT_CAUSE lines.")
 
 
 def _git(args: list[str], cwd: Path, check: bool = True) -> subprocess.CompletedProcess:
@@ -258,6 +262,15 @@ def opencode_patch_producer(job: Job, work_dir: Path, context: str,
             encoding="utf-8")
         ok, detail = client.run(model, RUN_TASK_MSG)
         diff_early = _git(["diff"], work_dir).stdout
+        # 2026-10-29 实测：模型有时只回一句"I'll start by reading the task file"
+        # 就以 rc=0 退出，什么都没做（langchain#41448 那次只跑了 36 秒）。
+        # 这不是失败也不是成功——重试一次，用更直接的指令逼它动手。
+        if not diff_early.strip() and "I'll start" in (detail or "").lower()[:200]:
+            notes.append("agent replied with a progress line and exited; retrying once")
+            nudge = (RUN_TASK_MSG + " You already said you would start - actually do it "
+                     "now. No narration.")
+            ok, detail = client.run(model, nudge)
+            diff_early = _git(["diff"], work_dir).stdout
         if not ok and not diff_early.strip():
             raise RuntimeError(f"opencode repair run failed: {detail[:300]}")
         notes.append(f"model({model}) said: {detail[:200]}")

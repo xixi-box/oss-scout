@@ -43,3 +43,8 @@ repositories:
     requires_invite: false
   npm/cli:
     requires_invite: false
+  langchain-ai/langchain:
+    requires_invite: false
+    note: "外部贡献活跃（richardscarrott/eliornl 等近期有合并 PR），无 bot 门禁"
+  langchain-ai/langgraph:
+    requires_invite: false
