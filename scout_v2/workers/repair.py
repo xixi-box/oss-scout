@@ -217,12 +217,33 @@ def _parse_markers(text: str) -> dict:
 
 
 def _split_cmd(cmd: str) -> list[str]:
-    """把 agent 报的命令行拆成 argv。引号交给 shlex。"""
+    """把 agent 报的命令行转成可执行的 argv。
+
+    agent 常常报一整条 shell 语句，例如
+    ``cd libs/partners/huggingface && python -m pytest tests/unit_tests -q``。
+    直接 shlex 拆开再 exec 会让 "cd" 被当成可执行文件
+    （实测 2026-10-29：base_rc=127, "[Errno 2] No such file or directory: 'cd'"）。
+    含 shell 语法时交给 sh -c，其余仍按 argv 执行（保留不经 shell 的好处）。
+    """
+    text = (cmd or "").strip()
+    if not text:
+        return []
+    if _needs_shell(text):
+        return ["/bin/sh", "-c", text] if os.name != "nt" else ["cmd", "/c", text]
     import shlex
     try:
-        return shlex.split(cmd)
+        return shlex.split(text)
     except ValueError:
-        return cmd.split()
+        return text.split()
+
+
+_SHELL_TOKENS = ("&&", "||", "|", ";", ">", "<", "$(", "`", "\n",
+                 " 2>&1", " & ", "cd ")
+
+
+def _needs_shell(text: str) -> bool:
+    """这条命令需要 shell 解释吗（管道、重定向、串接、命令替换）。"""
+    return any(tok in text for tok in _SHELL_TOKENS)
 
 
 def opencode_patch_producer(job: Job, work_dir: Path, context: str,
@@ -445,6 +466,8 @@ _NON_VERIFYING_BINARIES = {
     "grep", "egrep", "fgrep", "rg", "ag", "test", "[", "true", "false",
     "ls", "dir", "cat", "head", "tail", "wc", "stat", "find", "git", "echo",
     "printf", "sleep", "curl", "wget", "diff", "cmp",
+    # 目录切换本身不验证任何行为：`cd sub && grep -q x f` 的退出码仍只反映 grep
+    "cd", "export", "source", ".", "set", "pushd", "popd",
 }
 
 
@@ -462,11 +485,23 @@ def _implausible_verification(cmd: list[str], patch: str,
     if not test_files:
         return "no regression test was produced"
     import os as _os
+    import shlex
+    # shell 包装（["/bin/sh","-c","cd x && pytest ..."] 或 ["cmd","/c","..."]）
+    # 要拆回去再判断，否则 sh 被当成 runner，grep-only 的命令就能蒙混过关。
+    tokens = list(cmd)
+    if len(tokens) >= 3 and _os.path.basename(tokens[0]).lower() in (
+            "sh", "bash", "dash", "cmd"):
+        # 第 2 个 token 是 -c 或 /c
+        payload = " ".join(tokens[2:])
+        try:
+            tokens = shlex.split(payload)
+        except ValueError:
+            tokens = payload.split()
     # 只看命令的"程序名"位置：首词，以及 `&&` / `;` / `|` 之后的词。
     # 中间参数常是文件名（`grep -c foo x.py` 里 x.py 不是程序），不能算 runner。
     progs: list[str] = []
     expect_prog = True
-    for token in cmd:
+    for token in tokens:
         if token in ("&&", "||", ";", "|"):
             expect_prog = True
             continue
