@@ -101,6 +101,15 @@ class OpenCodeClient:
         因此默认走文本模式；json 事件流只在显式要求时使用（本地调试）。
         """
         cmd = [self.binary, "run", "-m", model]
+        # --auto：必须加，否则 agent 一碰到需要确认的动作就无声退出。
+        # 2026-10-30 实测 build agent 的权限表里有
+        #   {"permission":"external_directory","action":"ask","pattern":"*"}
+        # 而修复 agent 必然要访问工作目录之外的东西（~/.local/bin/uv、/tmp、
+        # HOME 下的缓存）。headless 下没人回答 ask，opencode 直接结束——
+        # 表现为"说一句话就退出"，我们白跑一整轮 Actions。
+        # opencode run 本身就是多轮 agent loop（read/edit/bash 连续调用直到完成），
+        # 加上 --auto 才真正能跑到"完成"而不是卡在第一次确认。
+        cmd.append("--auto")
         if self.json_events:
             cmd += ["--format", "json"]
         if self.workdir is not None:

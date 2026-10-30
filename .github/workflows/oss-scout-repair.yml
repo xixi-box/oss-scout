@@ -88,23 +88,36 @@ jobs:
 
       - name: Install target repo dependencies
         shell: bash
-        # 证据链要在**目标仓库自己的依赖环境**里跑才有意义。这里有声明文件就装；
-        # 失败不直接判死（很多项目靠 uv/poetry/自有脚本），但会记在日志里，
-        # 后续测试跑不起来时能看出是环境问题而不是"bug 修不好"。
+        # 目标仓库的依赖由 agent 自己装（它有 shell、会读项目文档、知道 workspace
+        # 布局）。这里只做两件事：给出常用包管理器，以及在根目录确实有清单时
+        # 提前装好省它一点时间。
+        #
+        # 2026-10-30 实测教训：langchain 这类 monorepo 的 uv.lock 在
+        # libs/partners/<pkg>/ 下，根目录一个清单都没有。旧版脚本据此打印
+        # "no Python dependency manifest" 就结束，**一个依赖都没装**，而日志
+        # 看起来像成功。agent 只好自己现场装，装完的环境又和验证阶段对不上。
         run: |
           set -uo pipefail
+          # 预置常用工具，让 agent 不必每个都现装
+          python3 -m pip install --quiet --break-system-packages uv poetry || true
           cd "$RUNNER_TEMP/repo"
           PIP="python3 -m pip install --quiet --break-system-packages"
           if [ -f uv.lock ]; then
-            python3 -m pip install --quiet --break-system-packages uv && uv sync --quiet || echo "WARN: uv sync failed"
+            uv sync --quiet || echo "WARN: uv sync failed"
           elif [ -f poetry.lock ]; then
-            python3 -m pip install --quiet --break-system-packages poetry && poetry install --quiet || echo "WARN: poetry install failed"
+            poetry install --quiet || echo "WARN: poetry install failed"
+          elif [ -f package.json ]; then
+            (command -v npm >/dev/null && npm install --silent) || echo "WARN: npm install failed"
           elif [ -f requirements.txt ]; then
             $PIP -r requirements.txt || echo "WARN: requirements install failed"
           elif [ -f pyproject.toml ]; then
             $PIP -e . || echo "WARN: pip install -e . failed"
           else
-            echo "no Python dependency manifest; relying on stdlib + pytest"
+            echo "no root manifest; the agent will resolve dependencies itself"
+            # 提示 agent 常见布局，避免它在大仓库里瞎找
+            find . -maxdepth 3 \( -name uv.lock -o -name poetry.lock \
+                 -o -name requirements.txt -o -name package.json \
+                 -o -name Cargo.toml \) -not -path "*/node_modules/*" 2>/dev/null | head -20
           fi
 
       - name: Install OpenCode CLI
