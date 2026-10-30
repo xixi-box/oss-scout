@@ -58,9 +58,20 @@ class TestRepairEvidenceChain:
         assert (tmp_path / "out" / "change.patch").is_file()
 
     def test_base_passing_refuses_fix(self, tmp_path):
+        """base 上测试本来就通过 → 拒绝"修"一个不存在的问题。
+
+        验证现在严格按 base_sha 检出（2026-10-30），所以要把"已修好的代码"
+        提交进 base，而不是只改工作区。
+        """
+        import subprocess
         r, sha = make_repo(tmp_path)
-        # 覆盖 calc.py 为正确实现 → base 测试通过 → 拒绝盲修
         (r / "calc.py").write_text("def div(a, b):\n    return a / b\n", encoding="utf-8")
+        subprocess.run(["git", "add", "-A"], cwd=r, check=True, capture_output=True)
+        subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t",
+                        "commit", "-qm", "already fixed"], cwd=r, check=True,
+                       capture_output=True)
+        sha = subprocess.run(["git", "rev-parse", "HEAD"], cwd=r, check=True,
+                             capture_output=True, text=True).stdout.strip()
         res = run_repair(job(sha), r, tmp_path / "out",
                          test_cmd=[sys.executable, "-m", "pytest", "test_div.py", "-q"],
                          patch_producer=lambda j, w, c: {"patch": GOOD_PATCH, "notes": []})

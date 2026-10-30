@@ -49,11 +49,14 @@ You have a shell. Use it: install what you need, run the test runner this projec
 actually uses. You may modify test files (you are adding a regression test) but do
 NOT reformat unrelated code and do NOT touch CI config.
 
-When finished, print exactly these lines (nothing else after them):
+When finished, write a file named OSSCOUT_RESULT.json in the repository root:
 
-OSSCOUT_TEST_CMD: <the exact command you ran, one line>
-OSSCOUT_TEST_FILE: <repo-relative path of the regression test you added>
-OSSCOUT_ROOT_CAUSE: <one sentence>
+{{"test_cmd": "<the exact single command that runs your regression test, run from the repo root>",
+ "test_file": "<repo-relative path of the regression test you added>",
+ "root_cause": "<one sentence>"}}
+
+Write it as real JSON - no code fences, no comments. This file is how your work is
+picked up; if it is missing or unparseable the run is discarded.
 """
 
 # Windows 教训（P5 演练实测）：多行 prompt 经 argv 传给 opencode.CMD（批处理 shim）
@@ -201,6 +204,9 @@ def _ensure_opencode_auth() -> str | None:
     return provider
 
 
+RESULT_FILE = "OSSCOUT_RESULT.json"
+
+
 def _parse_markers(text: str) -> dict:
     """从 agent 的最终输出里取 OSSCOUT_* 标记。缺失的键不出现。"""
     out: dict = {}
@@ -214,6 +220,40 @@ def _parse_markers(text: str) -> dict:
                 if val:
                     out[name] = val
     return out
+
+
+def _read_result_file(work_dir: Path) -> dict:
+    """读 agent 写的 OSSCOUT_RESULT.json（比解析 stdout 可靠）。
+
+    2026-10-30：靠正则从模型输出里抓标记太脆——它会加粗、加列表符号、
+    把整行包在代码块里，或者干脆忘了写。prompt 里现在要求优先落盘，
+    这里优先读文件，读不到再退回正则。
+    """
+    import json as _json
+    for name in (RESULT_FILE, ".oss-scout-result.json"):
+        p = work_dir / name
+        if not p.is_file():
+            continue
+        try:
+            data = _json.loads(p.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if not isinstance(data, dict):
+            continue
+        out: dict = {}
+        cmd = data.get("test_cmd") or data.get("command")
+        if isinstance(cmd, list):
+            cmd = " ".join(str(x) for x in cmd)
+        if isinstance(cmd, str) and cmd.strip():
+            out["test_cmd"] = cmd.strip()
+        tf = data.get("test_file") or data.get("test_path")
+        if isinstance(tf, str) and tf.strip():
+            out["test_file"] = tf.strip()
+        rc = data.get("root_cause") or data.get("cause")
+        if isinstance(rc, str) and rc.strip():
+            out["root_cause"] = rc.strip()[:300]
+        return out
+    return {}
 
 
 def _split_cmd(cmd: str) -> list[str]:
@@ -302,13 +342,15 @@ def opencode_patch_producer(job: Job, work_dir: Path, context: str,
             cfg_path.write_bytes(original_cfg)
         (work_dir / TASK_FILE).unlink(missing_ok=True)
 
-    markers = _parse_markers(detail)
+    # 优先读 agent 落盘的结果文件，读不到再退回解析 stdout
+    markers = _read_result_file(work_dir) or _parse_markers(detail)
 
     # agent 新增/修改过的文件（含测试）。用 --cached 才能把新文件纳入。
     _git(["add", "-A"], work_dir)
     changed = [p for p in _git(["diff", "--cached", "--name-only"], work_dir)
                .stdout.splitlines() if p.strip()]
-    excludes = [p for p in ("opencode.json", TASK_FILE) if p in changed]
+    excludes = [p for p in ("opencode.json", TASK_FILE, RESULT_FILE,
+                            ".oss-scout-result.json") if p in changed]
 
     # 分清"回归测试"和"修复"：
     # - agent 报的 OSSCOUT_TEST_FILE 一定是测试
@@ -401,6 +443,36 @@ def _test_env_broken(stdout: str, stderr: str) -> str | None:
         if marker in text:
             return marker
     return None
+
+
+def _snapshot_worktree(work: Path) -> str:
+    """把 agent 的改动做成一个 patch 存着，供验证后恢复。
+
+    只记 tracked 文件的改动；agent 装的依赖（ignored 文件）不会被 reset 影响，
+    因为下面用的是 `git checkout -- .`（不动 ignored/untracked）。
+    """
+    _git(["add", "-A"], work, check=False)
+    return _git(["diff", "--cached", "HEAD"], work, check=False).stdout
+
+
+def _restore_sources_to_base(work: Path, base_sha: str) -> None:
+    """只把 tracked 源码退回 base，保留 agent 装的依赖。
+
+    不能用 `git reset --hard` + `git clean -fdx`：那会把 .venv / node_modules
+    一起删掉，导致随后同一命令因为自己的环境被清空而失败（2026-10-29 实测）。
+    `checkout <sha> -- .` 只改 tracked 文件的内容。
+    """
+    _git(["checkout", "--quiet", "--force", base_sha, "--", "."], work, check=False)
+
+
+def _restore_worktree(work: Path, snapshot: str) -> None:
+    """把 agent 的改动恢复回来（验证完 base 状态之后）。"""
+    if not snapshot.strip():
+        return
+    _git(["reset", "--quiet"], work, check=False)
+    subprocess.run(["git", "apply", "--whitespace=nowarn", "-"], cwd=str(work),
+                   input=snapshot, capture_output=True, text=True,
+                   encoding="utf-8", errors="replace", timeout=120)
 
 
 def _seed_test_files(repo_dir: Path,
@@ -644,12 +716,19 @@ def run_repair(job: Job, repo_dir: Path, out_dir: Path, *,
         # producer 已经按路径排除过一次，这里防自定义 producer 或未来改动漏掉）
         patch = _strip_test_files_from_patch(patch, list(test_files.keys()))
 
-        # ---- 阶段 2：独立验证（干净 base 上必须失败）----
-        seeded = _seed_test_files(repo_dir, test_files)
+        # ---- 阶段 2：独立验证（在 agent 自己的环境里，回到 base 代码）----
+        # 2026-10-29 教训：在 repo_dir 上验证是错的。agent 把依赖装在 work/
+        # （.venv、~/.local/bin/uv、node_modules），repo_dir 里什么都没有，
+        # 于是同一份代码在"能跑的环境"外被验证，必然 127。
+        # 现在：在 work 里把源码退回 base、只保留 agent 装的依赖，再跑同一条命令。
+        work_snapshot = _snapshot_worktree(work)
+        _restore_sources_to_base(work, job.base_sha)
+        seeded = _seed_test_files(work, test_files)
         try:
-            base_rc, base_out, base_err = _run_cmd(cmd, repo_dir, env)
+            base_rc, base_out, base_err = _run_cmd(cmd, work, env)
         finally:
-            _unseed_test_files(repo_dir, seeded)
+            _unseed_test_files(work, seeded)
+            _restore_worktree(work, work_snapshot)
         broken = _test_env_broken(base_out, base_err)
         reproduced = base_rc not in (0, 127, 9009) and broken is None
 
@@ -672,18 +751,9 @@ def run_repair(job: Job, repo_dir: Path, out_dir: Path, *,
                           unverified_items=[f"test environment unusable on base: {broken}"])
 
         # ---- 阶段 3：补丁后必须通过 ----
-        # 回到干净 base，但保留 ignored 目录（.venv / node_modules / target）：
-        # 那是 agent 为验证装的依赖，删掉后 patched 阶段会因为自己的环境被清空而
-        # 失败（2026-10-28 审计）。用 -fd（不带 -x）清未跟踪文件，依赖留下。
-        # 先 unstage 再 hard reset：agent 可能把改动 add 进索引，单靠 reset --hard
-        # 在部分场景下会让后续 apply 撞上残留（实测 patch failed to apply）。
-        _git(["reset", "--quiet"], work, check=False)
-        _git(["checkout", "--quiet", "--force", job.base_sha, "--", "."], work, check=False)
-        _git(["reset", "--hard", "--quiet", job.base_sha], work, check=False)
-        _git(["clean", "-fdq"], work, check=False)
-        # 顺序很重要：先 apply 补丁，再写回测试文件。
-        # 反过来会让"补丁里新建的测试文件"与已存在的同名文件冲突
-        # （实测：error: test_x.py already exists in working directory）。
+        # work 里已经是 agent 的改动（阶段 2 结束时已恢复），但只保留 tracked
+        # 源码；测试文件单独写回，保证"验证用的测试"和"交付的补丁"分离。
+        _restore_sources_to_base(work, job.base_sha)
         ap = subprocess.run(["git", "apply", "--whitespace=nowarn", "-"], cwd=work,
                             input=patch, capture_output=True, text=True,
                             encoding="utf-8", errors="replace")
