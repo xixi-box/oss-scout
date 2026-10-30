@@ -588,12 +588,13 @@ def test_ingest_with_ai_score(fixture_root, monkeypatch):
     monkeypatch.setattr(isc, "GoClient", FakeScorer)
     from dashboard.data import DataSource, ingest_cloudflare_issues
     ds = DataSource(fixture_root)
-    queued = ingest_cloudflare_issues(ds, [{
+    queued, added = ingest_cloudflare_issues(ds, [{
         "repo": "aaif-goose/goose", "number": 42,
         "title": "Crash on empty config", "url": "u", "created_at": "2026-10-25T00:00:00Z",
         "labels": ["bug"], "reactions": 5, "comments": 0,
         "body_excerpt": "Steps to reproduce: run. Expected x, actual crash. " * 5}])
     assert queued == 1
+    assert added == ["aaif-goose/goose#42"]   # 供 ingest 立即派发使用
     q = json.loads((fixture_root / "queue" / "candidates.json").read_text(encoding="utf-8"))
     entry = q["aaif-goose/goose#42"]
     # 2026-10-30：判定改成 AI 二元结论，规则打分表已删除

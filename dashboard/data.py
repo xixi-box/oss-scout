@@ -686,13 +686,18 @@ def cloudflare_cfg(ds) -> dict:
         return {}
 
 
-def ingest_cloudflare_issues(ds, items: list[dict]) -> int:
-    """Cloudflare Worker 回传的原始 issue → discover 层同款评分 → 入队。
+def ingest_cloudflare_issues(ds, items: list[dict]) -> tuple[int, list[str]]:
+    """Cloudflare Worker 回传的原始 issue → 客观否决 + AI 二元判定 → 入队。
 
-    规则对齐 Playbook：只入队已知监控仓库；C 级/未知仓库记 seen 不入队；
+    返回 (入队条数, 新入队的 id 列表)。后者让调用方可以**立即派发**修复，
+    而不用等下一轮轮询——Worker 每分钟送来新 issue，让 AI 刚判定可用的候选
+    再排 60 秒队是白等。
+
+    规则：只入队已知监控仓库；有 blockers 或 AI 判 NO 的记录进 seen 不入队；
     去重与 discover.py 共用 state/seen.json。写路径走 atomic_json_write。
     """
     from scout_v2.state_store import atomic_json_write
+    added: list[str] = []      # 本次新入队的候选 id，供调用方立即派发
     # 不 import discover.py：它在模块顶层硬读 config.json，容器里没有该文件会崩。
     # 只复用它的评分实现（纯函数 + 正则），通过 _discover_score() 取得。
     discover = _discover_score()
@@ -784,10 +789,11 @@ def ingest_cloudflare_issues(ds, items: list[dict]) -> int:
         q[key] = entry
         seen[key] = {"first_seen": now_iso, "status": "queued"}
         queued += 1
+        added.append(key)
     if queued:
         atomic_json_write(ds.root / "queue" / "candidates.json", q)
         atomic_json_write(seen_path, seen)
-    return queued
+    return queued, added
 
 
 def _read_json(path: Path, default):

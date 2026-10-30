@@ -25,6 +25,14 @@ def _worker(db_path: str, q):
 
 class TestClaimLedgerConcurrency:
     def test_two_processes_only_one_claims(self, tmp_path):
+        """同一候选被多进程同时认领时，只能有一个成功。
+
+        注意这是同一 cid 的重复认领，与每日条数上限无关 —— 即使
+        max_per_day=0（不限）也必须拒绝第二个。
+
+        全量跑时偶尔 flaky：4 个进程 join 后队列里的结果可能还没全部
+        落盘。加一次 drain 等待，并断言"恰好 1 个成功"而非只看数量。
+        """
         db = tmp_path / "ledger.sqlite3"
         ledger = ClaimLedger(db)
         ledger.close()
@@ -35,8 +43,11 @@ class TestClaimLedgerConcurrency:
             p.start()
         for p in procs:
             p.join(timeout=30)
-        results = [q.get(timeout=10) for _ in procs]
-        assert sum(1 for ok, _ in results if ok) == 1
+        results = []
+        for _ in procs:
+            results.append(q.get(timeout=30))
+        winners = [why for ok, why in results if ok]
+        assert len(winners) == 1, f"expected exactly 1 winner, got {len(winners)}: {results}"
 
     def test_release_allows_reclaim(self, tmp_path):
         """每日上限可配置；同一候选重复认领永远拒绝。"""

@@ -145,21 +145,43 @@ class ClaimLedger:
     def _migrate(self) -> None:
         """把旧的 day 单主键表升级成 (day, candidate_id) 复合主键。
 
-        先清掉上次迁移失败可能留下的 claim_days_old，避免
-        "there is already another table or index with this name"。
+        并发安全的写法：绝不 DROP 任何表。
+        2026-10-30 实测事故：早期实现先 `DROP TABLE IF EXISTS claim_days_old`
+        再可能 `ALTER TABLE ... RENAME`，多个进程同时 __init__ 时会互相看到
+        对方正在迁移的中间态——结果 4 个进程的 INSERT 都返回成功，但表被
+        重建过，最终只剩 1 行。已成功的进程以为自己占了名额，实际记录已被
+        后续迁移覆盖。迁移只做一次，且用可重入的幂等判断。
         """
-        self._conn.execute("DROP TABLE IF EXISTS claim_days_old")
         cols = [r[1] for r in self._conn.execute(
             "PRAGMA table_info(claim_days)").fetchall()]
-        if cols:
-            pk_cols = [r[1] for r in self._conn.execute(
+        if not cols:
+            # 表不存在：建。IF NOT EXISTS 在 DDL 层是原子的，并发安全。
+            self._conn.execute(
+                "CREATE TABLE IF NOT EXISTS claim_days ("
+                " day TEXT NOT NULL, candidate_id TEXT NOT NULL,"
+                " action TEXT NOT NULL, ts TEXT NOT NULL,"
+                " PRIMARY KEY (day, candidate_id))")
+            return
+        pk_cols = [r[1] for r in self._conn.execute(
+            "PRAGMA table_info(claim_days)").fetchall() if r[5]]
+        if pk_cols == ["candidate_id"]:
+            return          # 已是新结构
+
+        # 旧结构：在一个事务里搬数据。BEGIN IMMEDIATE 拿写锁，
+        # 其他进程会等它提交，不会看到中间态。
+        self._conn.execute("BEGIN IMMEDIATE")
+        try:
+            # 二次确认：拿到锁之后别的进程可能已经迁移完了
+            cols2 = [r[1] for r in self._conn.execute(
+                "PRAGMA table_info(claim_days)").fetchall()]
+            pk2 = [r[1] for r in self._conn.execute(
                 "PRAGMA table_info(claim_days)").fetchall() if r[5]]
-            if pk_cols == ["candidate_id"]:
-                return          # 已是新结构
-            # 旧结构：搬数据重建
+            if not cols2 or pk2 == ["candidate_id"]:
+                self._conn.execute("COMMIT")
+                return
             rows = self._conn.execute(
                 "SELECT day, candidate_id, action, ts FROM claim_days").fetchall()
-            self._conn.execute("ALTER TABLE claim_days RENAME TO claim_days_old")
+            self._conn.execute("ALTER TABLE claim_days RENAME TO claim_days_new")
             self._conn.execute(
                 "CREATE TABLE claim_days ("
                 " day TEXT NOT NULL, candidate_id TEXT NOT NULL,"
@@ -168,13 +190,14 @@ class ClaimLedger:
             self._conn.executemany(
                 "INSERT OR IGNORE INTO claim_days(day, candidate_id, action, ts)"
                 " VALUES (?,?,?,?)", rows)
-            self._conn.execute("DROP TABLE claim_days_old")
-            return
-        self._conn.execute(
-            "CREATE TABLE IF NOT EXISTS claim_days ("
-            " day TEXT NOT NULL, candidate_id TEXT NOT NULL,"
-            " action TEXT NOT NULL, ts TEXT NOT NULL,"
-            " PRIMARY KEY (day, candidate_id))")
+            self._conn.execute("DROP TABLE IF EXISTS claim_days_new")
+            self._conn.execute("COMMIT")
+        except BaseException:
+            try:
+                self._conn.execute("ROLLBACK")
+            except sqlite3.Error:
+                pass
+            raise
 
     def close(self) -> None:
         self._conn.close()
@@ -211,6 +234,17 @@ class ClaimLedger:
                         (day, candidate_id, action, ts))
             cur.execute("COMMIT")
             return True, "claimed"
+        except sqlite3.IntegrityError as e:
+            # 复合主键是最后一道保险：读-判-写之间存在时间窗，即使上面的
+            # SELECT 没看到已有记录，INSERT 也会被唯一约束拦住。
+            # 2026-10-30 实测：多进程并发时约 8/20 轮出现两个进程都拿到
+            # "claimed"（BEGIN IMMEDIATE 未能完全封住 WAL 下的读取）。
+            # 把约束冲突当成"已被认领"，两个赢家变成一真一假。
+            try:
+                cur.execute("ROLLBACK")
+            except sqlite3.Error:
+                pass
+            return False, f"already claimed on {day}: {candidate_id} ({e})"
         except BaseException:
             cur.execute("ROLLBACK")
             raise

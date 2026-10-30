@@ -172,37 +172,79 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
             pass
         return None
 
-    def _auto_repair_loop():
-        """自动修复：周期性扫描候选池，A 级（AI=A 且规则 A/B）即触发 pipeline。
+    # ---- 修复派发器（ingest 与轮询共用）----
+    # pipeline 是长任务（几十分钟），不能让 HTTP 请求或轮询等它：
+    # 每条候选一个 daemon 线程，inflight 表 + 锁防重复派发。
+    import threading as _thr
+    _inflight: dict[str, object] = {}
+    _inflight_lock = _thr.Lock()
+    _MAX_CONCURRENT = 3   # 同时最多 3 条，避免 VPS（2 核 1.6G）被打满
 
-        受 Playbook 硬约束：每日 1 条新认领（ClaimLedger 内建，超了自动跳过）。
+    def _run_one(entry: dict) -> None:
+        key = str(entry.get("id", ""))
+        try:
+            from scout_v2.workers.auto_pipeline import candidate_pipeline
+            out = candidate_pipeline(root, entry)
+            _audit(root, "auto_repair", key, json.dumps(out, ensure_ascii=False)[:400])
+        except Exception as e:  # noqa: BLE001
+            try:
+                _audit(root, "auto_repair_error", key, str(e)[:200])
+            except Exception:  # noqa: BLE001
+                pass
+        finally:
+            with _inflight_lock:
+                _inflight.pop(key, None)
+
+    def _dispatch(keys: list[str] | None = None, limit: int = 8) -> list[str]:
+        """派发候选去修复。keys 为空时从队列按 AI 判定挑。
+
+        返回本次新派发的 key 列表。不阻塞：线程启动即返回。
+        """
+        started: list[str] = []
+        if os.environ.get("OSSCOUT_DISABLE_AUTO_REPAIR") == "1":
+            return started
+        try:
+            with _inflight_lock:
+                room = _MAX_CONCURRENT - len(_inflight)
+            if room <= 0:
+                return started
+            if keys is None:
+                from scout_v2.workers.auto_pipeline import drain_ai_graded
+                cands = [c["id"] for c in
+                         drain_ai_graded(root, limit=room + len(_inflight),
+                                         dry_run=True)]
+            else:
+                cands = list(keys)
+            for key in cands:
+                with _inflight_lock:
+                    if len(_inflight) >= _MAX_CONCURRENT:
+                        break
+                    if key in _inflight:
+                        continue
+                    ent = _load_candidate(root, key)
+                    if ent is None:
+                        continue
+                    th = _thr.Thread(target=_run_one, args=(ent,), daemon=True,
+                                     name=f"repair-{key}")
+                    _inflight[key] = th
+                th.start()
+                started.append(key)
+        except Exception as e:  # noqa: BLE001 — 派发失败不影响主流程
+            try:
+                _audit(root, "dispatch_error", "-", str(e)[:200])
+            except Exception:  # noqa: BLE001
+                pass
+        return started
+
+    def _auto_repair_loop():
+        """兜底轮询：定时扫候选池，AI 判定可用的就派发去修复。
+
+        正常情况下候选在 ingest 时就已经立即派发了（见 api_ingest_issues），
+        这个轮询只处理"上次因并发已满没派出去"的漏网之鱼，以及人工在界面上
+        改状态后需要重新拾起的情况。
         间隔可配（configs/dashboard.yaml: auto_repair_seconds，0=关闭）。
         """
-        import threading as _th
         import time as _t
-
-        # 正在跑的候选（key → thread）。pipeline 是长任务（几十分钟），
-        # 不能让它阻塞轮询：否则 60 秒的发现节奏会被一条慢修复拖成几小时。
-        # 每条候选一个线程，循环本身只负责"发现可跑的、派出去、不重复派"。
-        inflight: dict[str, object] = {}
-        inflight_lock = _th.Lock()
-        MAX_CONCURRENT = 3   # 同时最多 3 条，避免 VPS（2 核 1.6G）被打满
-
-        def _run_one(entry: dict) -> None:
-            key = str(entry.get("id", ""))
-            try:
-                from scout_v2.workers.auto_pipeline import candidate_pipeline
-                out = candidate_pipeline(root, entry)
-                _audit(root, "auto_repair", key,
-                       json.dumps(out, ensure_ascii=False)[:400])
-            except Exception as e:  # noqa: BLE001
-                try:
-                    _audit(root, "auto_repair_error", key, str(e)[:200])
-                except Exception:  # noqa: BLE001
-                    pass
-            finally:
-                with inflight_lock:
-                    inflight.pop(key, None)
 
         def _loop():
             if os.environ.get("OSSCOUT_DISABLE_AUTO_REPAIR") == "1":
@@ -215,30 +257,7 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
                     if interval <= 0:
                         _t.sleep(60)
                         continue
-                    from scout_v2.workers.auto_pipeline import drain_ai_graded
-                    with inflight_lock:
-                        busy = set(inflight)
-                        room = MAX_CONCURRENT - len(busy)
-                    if room > 0:
-                        # dry_run 只取候选清单，实际执行交给线程池
-                        ready = drain_ai_graded(root, limit=room + len(busy),
-                                                dry_run=True)
-                        for e in ready:
-                            key = str(e.get("id", ""))
-                            if key in busy:
-                                continue
-                            with inflight_lock:
-                                if len(inflight) >= MAX_CONCURRENT:
-                                    break
-                                if key in inflight:
-                                    continue
-                                ent = _load_candidate(root, key)
-                                if ent is None:
-                                    continue
-                                th = _th.Thread(target=_run_one, args=(ent,),
-                                                daemon=True, name=f"repair-{key}")
-                                inflight[key] = th
-                                th.start()
+                    _dispatch(keys=None)
                     _t.sleep(interval)
                 except Exception as e:  # noqa: BLE001 — 永不因单次异常停摆
                     try:
@@ -247,7 +266,7 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
                         pass
                     _t.sleep(120)
 
-        _th.Thread(target=_loop, daemon=True).start()
+        _thr.Thread(target=_loop, daemon=True).start()
 
     def _cf_poll_loop():
         """按配置间隔（默认 20s）从 CF KV 拉取 Worker 发现（失败静默，下轮重试）。"""
@@ -773,10 +792,15 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
                 "comments": int(it.get("comments") or 0),
                 "body_excerpt": str(it.get("body_excerpt", ""))[:8000],
             })
-        queued = D.ingest_cloudflare_issues(ds, clean)
+        queued, added = D.ingest_cloudflare_issues(ds, clean)
+        # 立即派发：AI 刚判定可用的候选不该再排 60 秒的队。_dispatch 只启动
+        # 线程就返回，不阻塞 Worker 的 HTTP 请求（它有超时）。
+        dispatched = _dispatch(keys=added) if added else []
         _audit(root, "ingest_issues", f"{len(clean)} items",
-               f"queued={queued} repos={body.get('repos_scanned', '?')}")
-        return JSONResponse({"queued": queued, "received": len(clean)})
+               f"queued={queued} dispatched={len(dispatched)} "
+               f"repos={body.get('repos_scanned', '?')}")
+        return JSONResponse({"queued": queued, "received": len(clean),
+                             "dispatched": dispatched})
 
     @app.post("/api/dashboard/settings")
     def api_dashboard_settings(request: Request,
