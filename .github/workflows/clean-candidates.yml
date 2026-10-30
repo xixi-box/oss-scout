@@ -1,0 +1,22 @@
+name: Clean stale candidates
+
+# 池子换过之后，生产 /data 里会留下已移出池的仓库候选。它们状态是 new/queued
+# 但 drain 永远不会派发（AI 判定 usable 不是 True），只是污染看板计数和每轮扫描。
+# 这里在容器内跑清理脚本，不碰宿主机文件。
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Only report what would be dropped
+        type: boolean
+        default: true
+jobs:
+  clean:
+    runs-on: [self-hosted, aliyun]
+    steps:
+      - name: Run cleanup inside the container
+        run: |
+          set -euo pipefail
+          FLAG=""
+          if [ "${{ inputs.dry_run }}" = "true" ]; then FLAG="--dry-run"; fi
+          docker exec oss-scout python /app/scripts/cleanup_stale_candidates.py $FLAG

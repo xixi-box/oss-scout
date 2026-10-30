@@ -1,0 +1,78 @@
+"""清掉候选池里永远不会被派发的条目。
+
+2026-10-30 实录：池子从 173 换成 40 之后，/data 里还留着 127 条老仓库的候选。
+它们的状态是 new/queued，但 drain_ai_graded 只派发 ai_verdict.usable is True 的
+条目，而这些是 AI 细筛接上之前入队的（usable 全 None），于是永久滞留在池子里
+当噪声：看板上的计数、每轮 drain 的扫描都被它们污染。
+
+只删「仓库已不在池内」，以及在池内但压根没有 AI 判定、且已超过保留期的条目。
+在池内且判定为 usable=True 的一律保留——那是待修复的真候选。
+
+用法（容器内）：python scripts/cleanup_stale_candidates.py [--dry-run]
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import sys
+import tempfile
+from pathlib import Path
+
+import yaml
+
+
+def _pool(root: Path) -> set[str]:
+    path = root / "configs" / "repositories.yaml"
+    if not path.exists():
+        path = root / "configs.seed" / "repositories.yaml"
+    cfg = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    return set((cfg.get("repositories") or {}).keys())
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--root", default=os.environ.get("OSSCOUT_DASHBOARD_ROOT", "/data"))
+    ap.add_argument("--dry-run", action="store_true")
+    args = ap.parse_args()
+
+    root = Path(args.root)
+    qpath = root / "queue" / "candidates.json"
+    if not qpath.exists():
+        print(f"no candidates at {qpath}", file=sys.stderr)
+        return 1
+    pool = _pool(root)
+    q = json.loads(qpath.read_text(encoding="utf-8"))
+    before = len(q)
+
+    ACTIVE = ("new", "queued", "queued_hist", "recheck_failed")
+    drop_out_of_pool = [k for k, v in q.items()
+                        if v.get("status") in ACTIVE and v.get("repo") not in pool]
+    drop_no_verdict = [k for k, v in q.items()
+                       if v.get("status") in ACTIVE
+                       and v.get("repo") in pool
+                       and (v.get("ai_verdict") or {}).get("usable") is None
+                       and (v.get("ai_grade") or {}).get("grade") is None]
+
+    print(f"pool={len(pool)} candidates={before}")
+    print(f"drop (repo not in pool): {len(drop_out_of_pool)}")
+    print(f"drop (in pool, never AI-judged): {len(drop_no_verdict)}")
+    for k in (drop_out_of_pool + drop_no_verdict)[:10]:
+        print(f"  - {k}")
+
+    if args.dry_run:
+        print("dry run, nothing written")
+        return 0
+
+    for k in drop_out_of_pool + drop_no_verdict:
+        q.pop(k, None)
+    fd, tmp = tempfile.mkstemp(dir=str(qpath.parent), suffix=".tmp")
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        json.dump(q, f, ensure_ascii=False, indent=1)
+    os.replace(tmp, qpath)
+    print(f"wrote {qpath}: {before} -> {len(q)}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
