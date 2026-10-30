@@ -1,13 +1,11 @@
 # 仓库策略（计划 §6）。
-# 优先级：AGENTS.md 及人工批准的例外 > 官方 CONTRIBUTING 最新规则 > 本文件 > LLM 提取建议。
-# lane 取值：open | gated（assignment_gate） | restricted | observe
 #
-# 2026-10-30：扫描池（configs/scan_pool_wide.txt，173 个仓库）全部纳入本文件，
-# lane 统一 open。仓库本身不做评级——能不能做由 AI 对**单条 issue**的判断决定，
-# 而不是预先给仓库贴标签。
+# 2026-10-30 重建：从 173 个扫描池仓库里筛出 38 个**真正方便贡献**的。
+# 筛选依据见 docs/best_repos.md：外部贡献者合并率 ≥55%、语言为 Python/Go
+# （自动化验证成本最低）、无 PR 门禁。
 #
-# 唯一的分档依据是 PR 门禁：会关闭未受邀 PR 的仓库标 gated，避免白跑一轮修复
-# 再被 bot 关掉（详见 configs/pr_gates.yaml）。
+# 仓库本身不做"难度评级"——能不能做由 AI 对单条 issue 的判断决定。
+# 这里只记录车道（open/gated）和个别仓库的项目特殊规则。
 
 defaults:
   unknown_repo_action: hold_for_review
@@ -19,199 +17,50 @@ defaults:
   allow_merge_upstream: false
 
 repositories:
+  # ---- Python (19) ----
+  PrefectHQ/prefect: {lane: open}
+  aio-libs/aiohttp: {lane: open}
+  ansible/ansible-lint: {lane: open}
+  apache/airflow: {lane: open}
+  deepset-ai/haystack: {lane: open}
+  fivetran/great_expectations: {lane: open}
+  googleapis/python-genai: {lane: open}
+  microsoft/playwright-python: {lane: open}
+  numpy/numpy: {lane: open}
+  openai/openai-python: {lane: open}
+  pandas-dev/pandas: {lane: open}
+  psf/black: {lane: open}
+  pypa/pip-tools: {lane: open}
+  pypa/virtualenv: {lane: open}
+  python-poetry/poetry: {lane: open}
+  scipy/scipy: {lane: open}
+  tox-dev/tox: {lane: open}
+  unionai-oss/pandera: {lane: open}
 
-  # ---- C (4) ----
-  nginx/nginx: {lane: open}
-  pgvector/pgvector: {lane: open}
-  redis/redis: {lane: open}
-  valkey-io/valkey: {lane: open}
-
-  # ---- C# (1) ----
-  microsoft/semantic-kernel: {lane: open}
-
-  # ---- C++ (2) ----
-  apache/arrow: {lane: open}
-  envoyproxy/envoy: {lane: open}
-
-  # ---- Go (35) ----
+  # ---- Go (19) ----
   argoproj/argo-cd: {lane: open}
   argoproj/argo-workflows: {lane: open}
-  caddyserver/caddy: {lane: open}
-  containerd/containerd: {lane: open}
   crossplane/crossplane: {lane: open}
   docker/compose: {lane: open}
-  ent/ent: {lane: open}
   etcd-io/etcd: {lane: open}
-  evanw/esbuild: {lane: open}
   fluxcd/flux2: {lane: open}
-  gin-contrib/cors: {lane: open}
-  gin-gonic/gin: {lane: open}
-  go-gorm/gorm: {lane: open}
   gofiber/fiber: {lane: open}
   hashicorp/consul: {lane: open}
   hashicorp/terraform: {lane: open}
-  hashicorp/vault: {lane: open}
-  helm/helm: {lane: open}
-  istio/istio: {lane: open}
   jackc/pgx: {lane: open}
   k3s-io/k3s: {lane: open}
-  kubernetes-sigs/kustomize: {lane: open}
-  kubernetes/kubernetes: {lane: open}
-  labstack/echo: {lane: open}
   linkerd/linkerd2: {lane: open}
-  microsoft/TypeScript: {lane: open}
   moby/moby: {lane: open}
   prometheus/prometheus: {lane: open}
   pulumi/pulumi: {lane: open}
   rancher/rancher: {lane: open}
   redis/go-redis: {lane: open}
-  spf13/cobra: {lane: open}
-  spf13/viper: {lane: open}
   traefik/traefik: {lane: open}
   urfave/cli: {lane: open}
 
-  # ---- Java (3) ----
-  SeleniumHQ/selenium: {lane: open}
-  elastic/elasticsearch: {lane: open}
-  opensearch-project/OpenSearch: {lane: open}
-
-  # ---- JavaScript (12) ----
-  eslint/eslint: {lane: open}
-  expressjs/express: {lane: open}
-  fastify/fastify: {lane: open}
-  mochajs/mocha: {lane: open}
-  nodejs/node: {lane: open}
-  npm/cli: {lane: open}
-  prettier/prettier: {lane: open}
-  react/react: {lane: open}
-  rollup/rollup: {lane: open}
-  sveltejs/svelte: {lane: open}
-  vercel/next.js: {lane: open}
-  webpack/webpack: {lane: open}
-
-  # ---- Jupyter Notebook (1) ----
-  guidance-ai/guidance: {lane: open}
-
-  # ---- Python (60) ----
-  567-labs/instructor: {lane: open}
-  BerriAI/litellm: {lane: open}
-  FoundationAgents/MetaGPT: {lane: open}
-  Kludex/starlette: {lane: open}
-  MagicStack/asyncpg: {lane: open}
-  PrefectHQ/prefect: {lane: open}
-  PyCQA/flake8: {lane: open}
-  Significant-Gravitas/AutoGPT: {lane: open}
-  Textualize/rich: {lane: open}
-  Textualize/textual: {lane: open}
-  aio-libs/aiohttp: {lane: open}
-  ansible/ansible: {lane: open}
-  ansible/ansible-lint: {lane: open}
-  apache/airflow: {lane: open}
-  benjaminp/six: {lane: open}
-  cohere-ai/cohere-python: {lane: open}
-  dagster-io/dagster: {lane: open}
-  dask/dask: {lane: open}
-  dateutil/dateutil: {lane: open}
-  deepset-ai/haystack: {lane: open}
-  dottxt-ai/outlines: {lane: open}
-  encode/httpx: {lane: open}
-  fastapi/fastapi: {lane: open}
-  fastapi/sqlmodel: {lane: open}
-  fivetran/great_expectations: {lane: open}
-  frictionlessdata/frictionless-py: {lane: open}
-  googleapis/python-genai: {lane: open}
-  langchain-ai/langchain: {lane: gated}
-  langchain-ai/langgraph: {lane: gated}
-  microsoft/autogen: {lane: open}
-  microsoft/playwright-python: {lane: open}
-  mistralai/client-python: {lane: open}
-  numpy/numpy: {lane: open}
-  openai/openai-python: {lane: open}
-  pallets/flask: {lane: open}
-  pandas-dev/pandas: {lane: open}
-  pre-commit/pre-commit: {lane: open}
-  psf/black: {lane: open}
-  pydantic/pydantic: {lane: gated}
-  pypa/pip: {lane: open}
-  pypa/pip-tools: {lane: open}
-  pypa/setuptools: {lane: open}
-  pypa/virtualenv: {lane: open}
-  pytest-dev/pytest: {lane: open}
-  python-arq/arq: {lane: open}
-  python-attrs/attrs: {lane: open}
-  python-poetry/poetry: {lane: open}
-  python/mypy: {lane: open}
-  qdrant/qdrant-client: {lane: open}
-  run-llama/llama_index: {lane: open}
-  scikit-learn/scikit-learn: {lane: open}
-  scipy/scipy: {lane: open}
-  scrapy/scrapy: {lane: open}
-  sqlalchemy/sqlalchemy: {lane: gated}
-  stanfordnlp/dspy: {lane: open}
-  tox-dev/tox: {lane: open}
-  tqdm/tqdm: {lane: open}
-  treeverse/dvc: {lane: open}
-  unionai-oss/pandera: {lane: open}
-  weaviate/weaviate-python-client: {lane: open}
-
-  # ---- Rust (30) ----
-  BurntSushi/ripgrep: {lane: open}
-  actix/actix-web: {lane: open}
-  ajeetdsouza/zoxide: {lane: open}
-  alacritty/alacritty: {lane: open}
-  astral-sh/ruff: {lane: open}
-  astral-sh/uv: {lane: open}
-  biomejs/biome: {lane: open}
-  chroma-core/chroma: {lane: open}
-  clap-rs/clap: {lane: open}
-  dandavison/delta: {lane: open}
-  denoland/deno: {lane: open}
-  dtolnay/anyhow: {lane: open}
-  helix-editor/helix: {lane: open}
-  nushell/nushell: {lane: open}
-  oven-sh/bun: {lane: open}
-  pnpm/pnpm: {lane: open}
-  pola-rs/polars: {lane: open}
-  rust-lang/cargo: {lane: open}
-  rust-lang/rust: {lane: open}
-  rust-lang/rust-clippy: {lane: open}
-  serde-rs/serde: {lane: open}
-  sharkdp/bat: {lane: open}
-  sharkdp/fd: {lane: open}
-  starship/starship: {lane: open}
-  swc-project/swc: {lane: open}
-  tauri-apps/tauri: {lane: open}
-  tokio-rs/axum: {lane: open}
-  tokio-rs/tokio: {lane: open}
-  wezterm/wezterm: {lane: open}
-  zellij-org/zellij: {lane: open}
-
-  # ---- TypeScript (25) ----
-  Portkey-AI/gateway: {lane: open}
-  TanStack/query: {lane: open}
-  TanStack/router: {lane: open}
-  TanStack/table: {lane: open}
-  angular/angular: {lane: open}
-  babel/babel: {lane: open}
-  colinhacks/zod: {lane: open}
-  drizzle-team/drizzle-orm: {lane: open}
-  grafana/grafana: {lane: open}
-  honojs/hono: {lane: open}
-  jestjs/jest: {lane: open}
-  kysely-org/kysely: {lane: open}
-  mikro-orm/mikro-orm: {lane: open}
-  nestjs/nest: {lane: open}
-  prisma/orm: {lane: open}
-  puppeteer/puppeteer: {lane: open}
-  remix-run/remix: {lane: open}
-  sequelize/sequelize: {lane: open}
-  trpc/trpc: {lane: open}
-  typeorm/typeorm: {lane: open}
-  vercel/vercel: {lane: open}
-  vitejs/vite: {lane: open}
-  vitest-dev/vitest: {lane: open}
-  vuejs/core: {lane: open}
-  yarnpkg/berry: {lane: open}
+  # ---- 特殊规则 ----
+  # litellm 只做维护者确认过的 issue，且 PR 必须带测试
+  BerriAI/litellm: {lane: restricted, only: maintainer_confirmed, pr_rules: [tests_required]}
 
   # ---- 内部测试仓库（不承载真实开源贡献）----
-  xixi-box/oss-scout-v2-test:  {lane: open, internal_test_repo: true}
+  xixi-box/oss-scout-v2-test: {lane: open, internal_test_repo: true}

@@ -1,0 +1,1370 @@
+[
+ {
+  "repo": "fastapi/fastapi",
+  "sampled": 60,
+  "ext": 45,
+  "ext_merged": 16,
+  "ext_merge_rate": 0.356,
+  "ext_share_of_merges": 0.533
+ },
+ {
+  "repo": "fastapi/sqlmodel",
+  "sampled": 60,
+  "ext": 35,
+  "ext_merged": 19,
+  "ext_merge_rate": 0.543,
+  "ext_share_of_merges": 0.442
+ },
+ {
+  "repo": "encode/httpx",
+  "sampled": 60,
+  "ext": 50,
+  "ext_merged": 7,
+  "ext_merge_rate": 0.14,
+  "ext_share_of_merges": 0.438
+ },
+ {
+  "repo": "Kludex/starlette",
+  "sampled": 60,
+  "ext": 46,
+  "ext_merged": 8,
+  "ext_merge_rate": 0.174,
+  "ext_share_of_merges": 0.364
+ },
+ {
+  "repo": "pallets/flask",
+  "sampled": 60,
+  "ext": 58,
+  "ext_merged": 2,
+  "ext_merge_rate": 0.034,
+  "ext_share_of_merges": 0.5
+ },
+ {
+  "repo": "sqlalchemy/sqlalchemy",
+  "sampled": 60,
+  "ext": 58,
+  "ext_merged": 7,
+  "ext_merge_rate": 0.121,
+  "ext_share_of_merges": 0.875
+ },
+ {
+  "repo": "pydantic/pydantic",
+  "sampled": 60,
+  "ext": 40,
+  "ext_merged": 16,
+  "ext_merge_rate": 0.4,
+  "ext_share_of_merges": 0.457
+ },
+ {
+  "repo": "python-arq/arq",
+  "sampled": 60,
+  "ext": 43,
+  "ext_merged": 26,
+  "ext_merge_rate": 0.605,
+  "ext_share_of_merges": 0.619
+ },
+ {
+  "repo": "aio-libs/aiohttp",
+  "sampled": 60,
+  "ext": 50,
+  "ext_merged": 44,
+  "ext_merge_rate": 0.88,
+  "ext_share_of_merges": 0.815
+ },
+ {
+  "repo": "MagicStack/asyncpg",
+  "sampled": 60,
+  "ext": 34,
+  "ext_merged": 23,
+  "ext_merge_rate": 0.676,
+  "ext_share_of_merges": 0.479
+ },
+ {
+  "repo": "python-poetry/poetry",
+  "sampled": 60,
+  "ext": 37,
+  "ext_merged": 26,
+  "ext_merge_rate": 0.703,
+  "ext_share_of_merges": 0.531
+ },
+ {
+  "repo": "pypa/pip",
+  "sampled": 60,
+  "ext": 39,
+  "ext_merged": 7,
+  "ext_merge_rate": 0.179,
+  "ext_share_of_merges": 0.25
+ },
+ {
+  "repo": "pypa/virtualenv",
+  "sampled": 60,
+  "ext": 60,
+  "ext_merged": 56,
+  "ext_merge_rate": 0.933,
+  "ext_share_of_merges": 1.0
+ },
+ {
+  "repo": "pypa/setuptools",
+  "sampled": 60,
+  "ext": 47,
+  "ext_merged": 18,
+  "ext_merge_rate": 0.383,
+  "ext_share_of_merges": 0.6
+ },
+ {
+  "repo": "psf/black",
+  "sampled": 60,
+  "ext": 56,
+  "ext_merged": 49,
+  "ext_merge_rate": 0.875,
+  "ext_share_of_merges": 0.925
+ },
+ {
+  "repo": "astral-sh/ruff",
+  "sampled": 60,
+  "ext": 33,
+  "ext_merged": 21,
+  "ext_merge_rate": 0.636,
+  "ext_share_of_merges": 0.477
+ },
+ {
+  "repo": "astral-sh/uv",
+  "sampled": 60,
+  "ext": 37,
+  "ext_merged": 29,
+  "ext_merge_rate": 0.784,
+  "ext_share_of_merges": 0.63
+ },
+ {
+  "repo": "python/mypy",
+  "sampled": 60,
+  "ext": 24,
+  "ext_merged": 6,
+  "ext_merge_rate": 0.25,
+  "ext_share_of_merges": 0.146
+ },
+ {
+  "repo": "PyCQA/flake8",
+  "sampled": 60,
+  "ext": 38,
+  "ext_merged": 19,
+  "ext_merge_rate": 0.5,
+  "ext_share_of_merges": 0.463
+ },
+ {
+  "repo": "pytest-dev/pytest",
+  "sampled": 60,
+  "ext": 52,
+  "ext_merged": 17,
+  "ext_merge_rate": 0.327,
+  "ext_share_of_merges": 0.708
+ },
+ {
+  "repo": "tox-dev/tox",
+  "sampled": 60,
+  "ext": 21,
+  "ext_merged": 19,
+  "ext_merge_rate": 0.905,
+  "ext_share_of_merges": 0.333
+ },
+ {
+  "repo": "pre-commit/pre-commit",
+  "sampled": 60,
+  "ext": 49,
+  "ext_merged": 8,
+  "ext_merge_rate": 0.163,
+  "ext_share_of_merges": 0.444
+ },
+ {
+  "repo": "pypa/pip-tools",
+  "sampled": 60,
+  "ext": 58,
+  "ext_merged": 54,
+  "ext_merge_rate": 0.931,
+  "ext_share_of_merges": 0.964
+ },
+ {
+  "repo": "python-attrs/attrs",
+  "sampled": 60,
+  "ext": 41,
+  "ext_merged": 19,
+  "ext_merge_rate": 0.463,
+  "ext_share_of_merges": 0.514
+ },
+ {
+  "repo": "dateutil/dateutil",
+  "sampled": 60,
+  "ext": 34,
+  "ext_merged": 4,
+  "ext_merge_rate": 0.118,
+  "ext_share_of_merges": 0.143
+ },
+ {
+  "repo": "benjaminp/six",
+  "sampled": 60,
+  "ext": 45,
+  "ext_merged": 21,
+  "ext_merge_rate": 0.467,
+  "ext_share_of_merges": 0.6
+ },
+ {
+  "repo": "Textualize/rich",
+  "sampled": 60,
+  "ext": 49,
+  "ext_merged": 7,
+  "ext_merge_rate": 0.143,
+  "ext_share_of_merges": 0.389
+ },
+ {
+  "repo": "Textualize/textual",
+  "sampled": 60,
+  "ext": 45,
+  "ext_merged": 1,
+  "ext_merge_rate": 0.022,
+  "ext_share_of_merges": 0.071
+ },
+ {
+  "repo": "tqdm/tqdm",
+  "sampled": 60,
+  "ext": 56,
+  "ext_merged": 23,
+  "ext_merge_rate": 0.411,
+  "ext_share_of_merges": 0.852
+ },
+ {
+  "repo": "pandas-dev/pandas",
+  "sampled": 60,
+  "ext": 18,
+  "ext_merged": 11,
+  "ext_merge_rate": 0.611,
+  "ext_share_of_merges": 0.22
+ },
+ {
+  "repo": "pola-rs/polars",
+  "sampled": 60,
+  "ext": 9,
+  "ext_merged": 4,
+  "ext_merge_rate": 0.444,
+  "ext_share_of_merges": 0.077
+ },
+ {
+  "repo": "numpy/numpy",
+  "sampled": 60,
+  "ext": 23,
+  "ext_merged": 15,
+  "ext_merge_rate": 0.652,
+  "ext_share_of_merges": 0.3
+ },
+ {
+  "repo": "scipy/scipy",
+  "sampled": 60,
+  "ext": 45,
+  "ext_merged": 30,
+  "ext_merge_rate": 0.667,
+  "ext_share_of_merges": 0.682
+ },
+ {
+  "repo": "scikit-learn/scikit-learn",
+  "sampled": 60,
+  "ext": 49,
+  "ext_merged": 15,
+  "ext_merge_rate": 0.306,
+  "ext_share_of_merges": 0.652
+ },
+ {
+  "repo": "dask/dask",
+  "sampled": 60,
+  "ext": 40,
+  "ext_merged": 13,
+  "ext_merge_rate": 0.325,
+  "ext_share_of_merges": 0.394
+ },
+ {
+  "repo": "apache/arrow",
+  "sampled": 60,
+  "ext": 23,
+  "ext_merged": 14,
+  "ext_merge_rate": 0.609,
+  "ext_share_of_merges": 0.304
+ },
+ {
+  "repo": "apache/airflow",
+  "sampled": 60,
+  "ext": 42,
+  "ext_merged": 32,
+  "ext_merge_rate": 0.762,
+  "ext_share_of_merges": 0.653
+ },
+ {
+  "repo": "PrefectHQ/prefect",
+  "sampled": 60,
+  "ext": 55,
+  "ext_merged": 45,
+  "ext_merge_rate": 0.818,
+  "ext_share_of_merges": 0.918
+ },
+ {
+  "repo": "dagster-io/dagster",
+  "sampled": 60,
+  "ext": 58,
+  "ext_merged": 5,
+  "ext_merge_rate": 0.086,
+  "ext_share_of_merges": 0.833
+ },
+ {
+  "repo": "treeverse/dvc",
+  "sampled": 60,
+  "ext": 57,
+  "ext_merged": 21,
+  "ext_merge_rate": 0.368,
+  "ext_share_of_merges": 0.875
+ },
+ {
+  "repo": "fivetran/great_expectations",
+  "sampled": 60,
+  "ext": 42,
+  "ext_merged": 30,
+  "ext_merge_rate": 0.714,
+  "ext_share_of_merges": 0.667
+ },
+ {
+  "repo": "unionai-oss/pandera",
+  "sampled": 60,
+  "ext": 39,
+  "ext_merged": 35,
+  "ext_merge_rate": 0.897,
+  "ext_share_of_merges": 0.636
+ },
+ {
+  "repo": "frictionlessdata/frictionless-py",
+  "sampled": 60,
+  "ext": 25,
+  "ext_merged": 20,
+  "ext_merge_rate": 0.8,
+  "ext_share_of_merges": 0.392
+ },
+ {
+  "repo": "langchain-ai/langchain",
+  "sampled": 60,
+  "ext": 47,
+  "ext_merged": 12,
+  "ext_merge_rate": 0.255,
+  "ext_share_of_merges": 0.48
+ },
+ {
+  "repo": "langchain-ai/langgraph",
+  "sampled": 60,
+  "ext": 55,
+  "ext_merged": 35,
+  "ext_merge_rate": 0.636,
+  "ext_share_of_merges": 0.897
+ },
+ {
+  "repo": "run-llama/llama_index",
+  "sampled": 60,
+  "ext": 60,
+  "ext_merged": 0,
+  "ext_merge_rate": 0.0,
+  "ext_share_of_merges": null
+ },
+ {
+  "repo": "deepset-ai/haystack",
+  "sampled": 60,
+  "ext": 58,
+  "ext_merged": 36,
+  "ext_merge_rate": 0.621,
+  "ext_share_of_merges": 0.947
+ },
+ {
+  "repo": "chroma-core/chroma",
+  "sampled": 60,
+  "ext": 60,
+  "ext_merged": 28,
+  "ext_merge_rate": 0.467,
+  "ext_share_of_merges": 1.0
+ },
+ {
+  "repo": "qdrant/qdrant-client",
+  "sampled": 60,
+  "ext": 53,
+  "ext_merged": 13,
+  "ext_merge_rate": 0.245,
+  "ext_share_of_merges": 0.765
+ },
+ {
+  "repo": "weaviate/weaviate-python-client",
+  "sampled": 60,
+  "ext": 38,
+  "ext_merged": 22,
+  "ext_merge_rate": 0.579,
+  "ext_share_of_merges": 0.55
+ },
+ {
+  "repo": "pgvector/pgvector",
+  "sampled": 60,
+  "ext": 60,
+  "ext_merged": 8,
+  "ext_merge_rate": 0.133,
+  "ext_share_of_merges": 1.0
+ },
+ {
+  "repo": "567-labs/instructor",
+  "sampled": 60,
+  "ext": 43,
+  "ext_merged": 0,
+  "ext_merge_rate": 0.0,
+  "ext_share_of_merges": 0.0
+ },
+ {
+  "repo": "guidance-ai/guidance",
+  "sampled": 60,
+  "ext": 14,
+  "ext_merged": 3,
+  "ext_merge_rate": 0.214,
+  "ext_share_of_merges": 0.068
+ },
+ {
+  "repo": "dottxt-ai/outlines",
+  "sampled": 60,
+  "ext": 60,
+  "ext_merged": 31,
+  "ext_merge_rate": 0.517,
+  "ext_share_of_merges": 1.0
+ },
+ {
+  "repo": "stanfordnlp/dspy",
+  "sampled": 60,
+  "ext": 52,
+  "ext_merged": 0,
+  "ext_merge_rate": 0.0,
+  "ext_share_of_merges": 0.0
+ },
+ {
+  "repo": "microsoft/autogen",
+  "sampled": 60,
+  "ext": 60,
+  "ext_merged": 2,
+  "ext_merge_rate": 0.033,
+  "ext_share_of_merges": 1.0
+ },
+ {
+  "repo": "microsoft/semantic-kernel",
+  "sampled": 60,
+  "ext": 50,
+  "ext_merged": 44,
+  "ext_merge_rate": 0.88,
+  "ext_share_of_merges": 0.815
+ },
+ {
+  "repo": "FoundationAgents/MetaGPT",
+  "sampled": 60,
+  "ext": 58,
+  "ext_merged": 3,
+  "ext_merge_rate": 0.052,
+  "ext_share_of_merges": 0.6
+ },
+ {
+  "repo": "Significant-Gravitas/AutoGPT",
+  "sampled": 60,
+  "ext": 25,
+  "ext_merged": 17,
+  "ext_merge_rate": 0.68,
+  "ext_share_of_merges": 0.354
+ },
+ {
+  "repo": "BerriAI/litellm",
+  "sampled": 60,
+  "ext": 60,
+  "ext_merged": 36,
+  "ext_merge_rate": 0.6,
+  "ext_share_of_merges": 1.0
+ },
+ {
+  "repo": "Portkey-AI/gateway",
+  "sampled": 60,
+  "ext": 56,
+  "ext_merged": 2,
+  "ext_merge_rate": 0.036,
+  "ext_share_of_merges": 0.5
+ },
+ {
+  "repo": "openai/openai-python",
+  "sampled": 60,
+  "ext": 60,
+  "ext_merged": 44,
+  "ext_merge_rate": 0.733,
+  "ext_share_of_merges": 1.0
+ },
+ {
+  "repo": "mistralai/client-python",
+  "sampled": 60,
+  "ext": 30,
+  "ext_merged": 23,
+  "ext_merge_rate": 0.767,
+  "ext_share_of_merges": 0.511
+ },
+ {
+  "repo": "cohere-ai/cohere-python",
+  "sampled": 60,
+  "ext": 54,
+  "ext_merged": 32,
+  "ext_merge_rate": 0.593,
+  "ext_share_of_merges": 0.889
+ },
+ {
+  "repo": "googleapis/python-genai",
+  "sampled": 60,
+  "ext": 60,
+  "ext_merged": 39,
+  "ext_merge_rate": 0.65,
+  "ext_share_of_merges": 1.0
+ },
+ {
+  "repo": "scrapy/scrapy",
+  "sampled": 60,
+  "ext": 36,
+  "ext_merged": 15,
+  "ext_merge_rate": 0.417,
+  "ext_share_of_merges": 0.385
+ },
+ {
+  "repo": "microsoft/playwright-python",
+  "sampled": 60,
+  "ext": 23,
+  "ext_merged": 18,
+  "ext_merge_rate": 0.783,
+  "ext_share_of_merges": 0.367
+ },
+ {
+  "repo": "SeleniumHQ/selenium",
+  "sampled": 60,
+  "ext": 13,
+  "ext_merged": 9,
+  "ext_merge_rate": 0.692,
+  "ext_share_of_merges": 0.214
+ },
+ {
+  "repo": "puppeteer/puppeteer",
+  "sampled": 60,
+  "ext": 35,
+  "ext_merged": 29,
+  "ext_merge_rate": 0.829,
+  "ext_share_of_merges": 0.547
+ },
+ {
+  "repo": "vercel/next.js",
+  "sampled": 60,
+  "ext": 42,
+  "ext_merged": 10,
+  "ext_merge_rate": 0.238,
+  "ext_share_of_merges": 0.385
+ },
+ {
+  "repo": "vuejs/core",
+  "sampled": 60,
+  "ext": 28,
+  "ext_merged": 10,
+  "ext_merge_rate": 0.357,
+  "ext_share_of_merges": 0.244
+ },
+ {
+  "repo": "sveltejs/svelte",
+  "sampled": 60,
+  "ext": 14,
+  "ext_merged": 9,
+  "ext_merge_rate": 0.643,
+  "ext_share_of_merges": 0.176
+ },
+ {
+  "repo": "angular/angular",
+  "sampled": 60,
+  "ext": 48,
+  "ext_merged": 28,
+  "ext_merge_rate": 0.583,
+  "ext_share_of_merges": 0.737
+ },
+ {
+  "repo": "remix-run/remix",
+  "sampled": 60,
+  "ext": 51,
+  "ext_merged": 43,
+  "ext_merge_rate": 0.843,
+  "ext_share_of_merges": 0.843
+ },
+ {
+  "repo": "nestjs/nest",
+  "sampled": 60,
+  "ext": 52,
+  "ext_merged": 42,
+  "ext_merge_rate": 0.808,
+  "ext_share_of_merges": 0.84
+ },
+ {
+  "repo": "expressjs/express",
+  "sampled": 60,
+  "ext": 56,
+  "ext_merged": 16,
+  "ext_merge_rate": 0.286,
+  "ext_share_of_merges": 0.8
+ },
+ {
+  "repo": "fastify/fastify",
+  "sampled": 60,
+  "ext": 46,
+  "ext_merged": 27,
+  "ext_merge_rate": 0.587,
+  "ext_share_of_merges": 0.675
+ },
+ {
+  "repo": "honojs/hono",
+  "sampled": 60,
+  "ext": 35,
+  "ext_merged": 16,
+  "ext_merge_rate": 0.457,
+  "ext_share_of_merges": 0.444
+ },
+ {
+  "repo": "prisma/orm",
+  "sampled": 60,
+  "ext": 58,
+  "ext_merged": 48,
+  "ext_merge_rate": 0.828,
+  "ext_share_of_merges": 0.96
+ },
+ {
+  "repo": "drizzle-team/drizzle-orm",
+  "sampled": 60,
+  "ext": 58,
+  "ext_merged": 0,
+  "ext_merge_rate": 0.0,
+  "ext_share_of_merges": 0.0
+ },
+ {
+  "repo": "typeorm/typeorm",
+  "sampled": 60,
+  "ext": 37,
+  "ext_merged": 18,
+  "ext_merge_rate": 0.486,
+  "ext_share_of_merges": 0.621
+ },
+ {
+  "repo": "sequelize/sequelize",
+  "sampled": 60,
+  "ext": 58,
+  "ext_merged": 52,
+  "ext_merge_rate": 0.897,
+  "ext_share_of_merges": 0.981
+ },
+ {
+  "repo": "mikro-orm/mikro-orm",
+  "sampled": 60,
+  "ext": 46,
+  "ext_merged": 37,
+  "ext_merge_rate": 0.804,
+  "ext_share_of_merges": 0.725
+ },
+ {
+  "repo": "kysely-org/kysely",
+  "sampled": 60,
+  "ext": 25,
+  "ext_merged": 3,
+  "ext_merge_rate": 0.12,
+  "ext_share_of_merges": 0.091
+ },
+ {
+  "repo": "colinhacks/zod",
+  "sampled": 60,
+  "ext": 24,
+  "ext_merged": 11,
+  "ext_merge_rate": 0.458,
+  "ext_share_of_merges": 0.262
+ },
+ {
+  "repo": "trpc/trpc",
+  "sampled": 60,
+  "ext": 38,
+  "ext_merged": 12,
+  "ext_merge_rate": 0.316,
+  "ext_share_of_merges": 0.522
+ },
+ {
+  "repo": "TanStack/query",
+  "sampled": 60,
+  "ext": 12,
+  "ext_merged": 2,
+  "ext_merge_rate": 0.167,
+  "ext_share_of_merges": 0.042
+ },
+ {
+  "repo": "TanStack/table",
+  "sampled": 60,
+  "ext": 40,
+  "ext_merged": 16,
+  "ext_merge_rate": 0.4,
+  "ext_share_of_merges": 0.444
+ },
+ {
+  "repo": "TanStack/router",
+  "sampled": 60,
+  "ext": 38,
+  "ext_merged": 13,
+  "ext_merge_rate": 0.342,
+  "ext_share_of_merges": 0.382
+ },
+ {
+  "repo": "vitejs/vite",
+  "sampled": 60,
+  "ext": 43,
+  "ext_merged": 18,
+  "ext_merge_rate": 0.419,
+  "ext_share_of_merges": 0.529
+ },
+ {
+  "repo": "rollup/rollup",
+  "sampled": 60,
+  "ext": 39,
+  "ext_merged": 35,
+  "ext_merge_rate": 0.897,
+  "ext_share_of_merges": 0.625
+ },
+ {
+  "repo": "evanw/esbuild",
+  "sampled": 60,
+  "ext": 57,
+  "ext_merged": 19,
+  "ext_merge_rate": 0.333,
+  "ext_share_of_merges": 0.864
+ },
+ {
+  "repo": "swc-project/swc",
+  "sampled": 60,
+  "ext": 12,
+  "ext_merged": 12,
+  "ext_merge_rate": 1.0,
+  "ext_share_of_merges": 0.207
+ },
+ {
+  "repo": "webpack/webpack",
+  "sampled": 60,
+  "ext": 13,
+  "ext_merged": 5,
+  "ext_merge_rate": 0.385,
+  "ext_share_of_merges": 0.102
+ },
+ {
+  "repo": "babel/babel",
+  "sampled": 60,
+  "ext": 35,
+  "ext_merged": 32,
+  "ext_merge_rate": 0.914,
+  "ext_share_of_merges": 0.571
+ },
+ {
+  "repo": "eslint/eslint",
+  "sampled": 60,
+  "ext": 48,
+  "ext_merged": 25,
+  "ext_merge_rate": 0.521,
+  "ext_share_of_merges": 0.694
+ },
+ {
+  "repo": "prettier/prettier",
+  "sampled": 60,
+  "ext": 45,
+  "ext_merged": 22,
+  "ext_merge_rate": 0.489,
+  "ext_share_of_merges": 0.595
+ },
+ {
+  "repo": "biomejs/biome",
+  "sampled": 60,
+  "ext": 51,
+  "ext_merged": 46,
+  "ext_merge_rate": 0.902,
+  "ext_share_of_merges": 0.852
+ },
+ {
+  "repo": "vitest-dev/vitest",
+  "sampled": 60,
+  "ext": 18,
+  "ext_merged": 11,
+  "ext_merge_rate": 0.611,
+  "ext_share_of_merges": 0.22
+ },
+ {
+  "repo": "jestjs/jest",
+  "sampled": 60,
+  "ext": 42,
+  "ext_merged": 18,
+  "ext_merge_rate": 0.429,
+  "ext_share_of_merges": 0.5
+ },
+ {
+  "repo": "mochajs/mocha",
+  "sampled": 60,
+  "ext": 55,
+  "ext_merged": 30,
+  "ext_merge_rate": 0.545,
+  "ext_share_of_merges": 0.857
+ },
+ {
+  "repo": "microsoft/TypeScript",
+  "sampled": 60,
+  "ext": 37,
+  "ext_merged": 19,
+  "ext_merge_rate": 0.514,
+  "ext_share_of_merges": 0.514
+ },
+ {
+  "repo": "denoland/deno",
+  "sampled": 60,
+  "ext": 27,
+  "ext_merged": 5,
+  "ext_merge_rate": 0.185,
+  "ext_share_of_merges": 0.385
+ },
+ {
+  "repo": "oven-sh/bun",
+  "sampled": 60,
+  "ext": 0,
+  "ext_merged": 0,
+  "ext_merge_rate": null,
+  "ext_share_of_merges": 0.0
+ },
+ {
+  "repo": "nodejs/node",
+  "sampled": 60,
+  "ext": 36,
+  "ext_merged": 27,
+  "ext_merge_rate": 0.75,
+  "ext_share_of_merges": 0.692
+ },
+ {
+  "repo": "pnpm/pnpm",
+  "sampled": 60,
+  "ext": 24,
+  "ext_merged": 18,
+  "ext_merge_rate": 0.75,
+  "ext_share_of_merges": 0.34
+ },
+ {
+  "repo": "yarnpkg/berry",
+  "sampled": 60,
+  "ext": 48,
+  "ext_merged": 26,
+  "ext_merge_rate": 0.542,
+  "ext_share_of_merges": 0.684
+ },
+ {
+  "repo": "npm/cli",
+  "sampled": 60,
+  "ext": 60,
+  "ext_merged": 34,
+  "ext_merge_rate": 0.567,
+  "ext_share_of_merges": 1.0
+ },
+ {
+  "repo": "gin-gonic/gin",
+  "sampled": 60,
+  "ext": 59,
+  "ext_merged": 21,
+  "ext_merge_rate": 0.356,
+  "ext_share_of_merges": 0.955
+ },
+ {
+  "repo": "labstack/echo",
+  "sampled": 60,
+  "ext": 15,
+  "ext_merged": 7,
+  "ext_merge_rate": 0.467,
+  "ext_share_of_merges": 0.146
+ },
+ {
+  "repo": "gofiber/fiber",
+  "sampled": 60,
+  "ext": 44,
+  "ext_merged": 39,
+  "ext_merge_rate": 0.886,
+  "ext_share_of_merges": 0.722
+ },
+ {
+  "repo": "spf13/cobra",
+  "sampled": 60,
+  "ext": 57,
+  "ext_merged": 12,
+  "ext_merge_rate": 0.211,
+  "ext_share_of_merges": 0.8
+ },
+ {
+  "repo": "spf13/viper",
+  "sampled": 60,
+  "ext": 60,
+  "ext_merged": 13,
+  "ext_merge_rate": 0.217,
+  "ext_share_of_merges": 1.0
+ },
+ {
+  "repo": "urfave/cli",
+  "sampled": 60,
+  "ext": 57,
+  "ext_merged": 46,
+  "ext_merge_rate": 0.807,
+  "ext_share_of_merges": 0.939
+ },
+ {
+  "repo": "go-gorm/gorm",
+  "sampled": 60,
+  "ext": 52,
+  "ext_merged": 24,
+  "ext_merge_rate": 0.462,
+  "ext_share_of_merges": 0.857
+ },
+ {
+  "repo": "ent/ent",
+  "sampled": 60,
+  "ext": 39,
+  "ext_merged": 13,
+  "ext_merge_rate": 0.333,
+  "ext_share_of_merges": 0.394
+ },
+ {
+  "repo": "jackc/pgx",
+  "sampled": 60,
+  "ext": 59,
+  "ext_merged": 41,
+  "ext_merge_rate": 0.695,
+  "ext_share_of_merges": 0.976
+ },
+ {
+  "repo": "redis/go-redis",
+  "sampled": 60,
+  "ext": 44,
+  "ext_merged": 42,
+  "ext_merge_rate": 0.955,
+  "ext_share_of_merges": 0.737
+ },
+ {
+  "repo": "prometheus/prometheus",
+  "sampled": 60,
+  "ext": 25,
+  "ext_merged": 18,
+  "ext_merge_rate": 0.72,
+  "ext_share_of_merges": 0.375
+ },
+ {
+  "repo": "grafana/grafana",
+  "sampled": 60,
+  "ext": 59,
+  "ext_merged": 31,
+  "ext_merge_rate": 0.525,
+  "ext_share_of_merges": 0.969
+ },
+ {
+  "repo": "hashicorp/vault",
+  "sampled": 60,
+  "ext": 32,
+  "ext_merged": 1,
+  "ext_merge_rate": 0.031,
+  "ext_share_of_merges": 0.083
+ },
+ {
+  "repo": "hashicorp/terraform",
+  "sampled": 60,
+  "ext": 29,
+  "ext_merged": 22,
+  "ext_merge_rate": 0.759,
+  "ext_share_of_merges": 0.44
+ },
+ {
+  "repo": "hashicorp/consul",
+  "sampled": 60,
+  "ext": 19,
+  "ext_merged": 16,
+  "ext_merge_rate": 0.842,
+  "ext_share_of_merges": 0.356
+ },
+ {
+  "repo": "etcd-io/etcd",
+  "sampled": 60,
+  "ext": 54,
+  "ext_merged": 35,
+  "ext_merge_rate": 0.648,
+  "ext_share_of_merges": 0.854
+ },
+ {
+  "repo": "kubernetes/kubernetes",
+  "sampled": 60,
+  "ext": 8,
+  "ext_merged": 6,
+  "ext_merge_rate": 0.75,
+  "ext_share_of_merges": 0.162
+ },
+ {
+  "repo": "kubernetes-sigs/kustomize",
+  "sampled": 60,
+  "ext": 43,
+  "ext_merged": 10,
+  "ext_merge_rate": 0.233,
+  "ext_share_of_merges": 0.385
+ },
+ {
+  "repo": "helm/helm",
+  "sampled": 60,
+  "ext": 57,
+  "ext_merged": 28,
+  "ext_merge_rate": 0.491,
+  "ext_share_of_merges": 0.903
+ },
+ {
+  "repo": "docker/compose",
+  "sampled": 60,
+  "ext": 55,
+  "ext_merged": 39,
+  "ext_merge_rate": 0.709,
+  "ext_share_of_merges": 0.929
+ },
+ {
+  "repo": "moby/moby",
+  "sampled": 60,
+  "ext": 48,
+  "ext_merged": 40,
+  "ext_merge_rate": 0.833,
+  "ext_share_of_merges": 0.8
+ },
+ {
+  "repo": "containerd/containerd",
+  "sampled": 60,
+  "ext": 39,
+  "ext_merged": 21,
+  "ext_merge_rate": 0.538,
+  "ext_share_of_merges": 0.538
+ },
+ {
+  "repo": "traefik/traefik",
+  "sampled": 60,
+  "ext": 20,
+  "ext_merged": 14,
+  "ext_merge_rate": 0.7,
+  "ext_share_of_merges": 0.269
+ },
+ {
+  "repo": "caddyserver/caddy",
+  "sampled": 60,
+  "ext": 51,
+  "ext_merged": 27,
+  "ext_merge_rate": 0.529,
+  "ext_share_of_merges": 0.75
+ },
+ {
+  "repo": "gin-contrib/cors",
+  "sampled": 60,
+  "ext": 53,
+  "ext_merged": 9,
+  "ext_merge_rate": 0.17,
+  "ext_share_of_merges": 0.562
+ },
+ {
+  "repo": "rust-lang/rust",
+  "sampled": 60,
+  "ext": 29,
+  "ext_merged": 19,
+  "ext_merge_rate": 0.655,
+  "ext_share_of_merges": 0.514
+ },
+ {
+  "repo": "rust-lang/cargo",
+  "sampled": 60,
+  "ext": 40,
+  "ext_merged": 29,
+  "ext_merge_rate": 0.725,
+  "ext_share_of_merges": 0.592
+ },
+ {
+  "repo": "rust-lang/rust-clippy",
+  "sampled": 60,
+  "ext": 46,
+  "ext_merged": 20,
+  "ext_merge_rate": 0.435,
+  "ext_share_of_merges": 0.625
+ },
+ {
+  "repo": "tokio-rs/tokio",
+  "sampled": 60,
+  "ext": 48,
+  "ext_merged": 27,
+  "ext_merge_rate": 0.562,
+  "ext_share_of_merges": 0.711
+ },
+ {
+  "repo": "tokio-rs/axum",
+  "sampled": 60,
+  "ext": 50,
+  "ext_merged": 37,
+  "ext_merge_rate": 0.74,
+  "ext_share_of_merges": 0.804
+ },
+ {
+  "repo": "actix/actix-web",
+  "sampled": 60,
+  "ext": 37,
+  "ext_merged": 30,
+  "ext_merge_rate": 0.811,
+  "ext_share_of_merges": 0.588
+ },
+ {
+  "repo": "serde-rs/serde",
+  "sampled": 60,
+  "ext": 37,
+  "ext_merged": 15,
+  "ext_merge_rate": 0.405,
+  "ext_share_of_merges": 0.405
+ },
+ {
+  "repo": "dtolnay/anyhow",
+  "sampled": 60,
+  "ext": 20,
+  "ext_merged": 6,
+  "ext_merge_rate": 0.3,
+  "ext_share_of_merges": 0.136
+ },
+ {
+  "repo": "clap-rs/clap",
+  "sampled": 60,
+  "ext": 57,
+  "ext_merged": 19,
+  "ext_merge_rate": 0.333,
+  "ext_share_of_merges": 0.864
+ },
+ {
+  "repo": "BurntSushi/ripgrep",
+  "sampled": 60,
+  "ext": 49,
+  "ext_merged": 17,
+  "ext_merge_rate": 0.347,
+  "ext_share_of_merges": 0.607
+ },
+ {
+  "repo": "sharkdp/fd",
+  "sampled": 60,
+  "ext": 51,
+  "ext_merged": 35,
+  "ext_merge_rate": 0.686,
+  "ext_share_of_merges": 0.795
+ },
+ {
+  "repo": "sharkdp/bat",
+  "sampled": 60,
+  "ext": 60,
+  "ext_merged": 39,
+  "ext_merge_rate": 0.65,
+  "ext_share_of_merges": 1.0
+ },
+ {
+  "repo": "dandavison/delta",
+  "sampled": 60,
+  "ext": 31,
+  "ext_merged": 12,
+  "ext_merge_rate": 0.387,
+  "ext_share_of_merges": 0.293
+ },
+ {
+  "repo": "ajeetdsouza/zoxide",
+  "sampled": 60,
+  "ext": 56,
+  "ext_merged": 30,
+  "ext_merge_rate": 0.536,
+  "ext_share_of_merges": 0.882
+ },
+ {
+  "repo": "starship/starship",
+  "sampled": 60,
+  "ext": 57,
+  "ext_merged": 41,
+  "ext_merge_rate": 0.719,
+  "ext_share_of_merges": 0.932
+ },
+ {
+  "repo": "alacritty/alacritty",
+  "sampled": 60,
+  "ext": 56,
+  "ext_merged": 10,
+  "ext_merge_rate": 0.179,
+  "ext_share_of_merges": 0.769
+ },
+ {
+  "repo": "wezterm/wezterm",
+  "sampled": 60,
+  "ext": 59,
+  "ext_merged": 36,
+  "ext_merge_rate": 0.61,
+  "ext_share_of_merges": 0.973
+ },
+ {
+  "repo": "nushell/nushell",
+  "sampled": 60,
+  "ext": 60,
+  "ext_merged": 56,
+  "ext_merge_rate": 0.933,
+  "ext_share_of_merges": 1.0
+ },
+ {
+  "repo": "zellij-org/zellij",
+  "sampled": 60,
+  "ext": 33,
+  "ext_merged": 12,
+  "ext_merge_rate": 0.364,
+  "ext_share_of_merges": 0.308
+ },
+ {
+  "repo": "helix-editor/helix",
+  "sampled": 60,
+  "ext": 60,
+  "ext_merged": 7,
+  "ext_merge_rate": 0.117,
+  "ext_share_of_merges": 1.0
+ },
+ {
+  "repo": "tauri-apps/tauri",
+  "sampled": 60,
+  "ext": 50,
+  "ext_merged": 37,
+  "ext_merge_rate": 0.74,
+  "ext_share_of_merges": 0.86
+ },
+ {
+  "repo": "ansible/ansible",
+  "sampled": 60,
+  "ext": 32,
+  "ext_merged": 12,
+  "ext_merge_rate": 0.375,
+  "ext_share_of_merges": 0.324
+ },
+ {
+  "repo": "ansible/ansible-lint",
+  "sampled": 60,
+  "ext": 59,
+  "ext_merged": 35,
+  "ext_merge_rate": 0.593,
+  "ext_share_of_merges": 0.972
+ },
+ {
+  "repo": "pulumi/pulumi",
+  "sampled": 60,
+  "ext": 50,
+  "ext_merged": 37,
+  "ext_merge_rate": 0.74,
+  "ext_share_of_merges": 0.787
+ },
+ {
+  "repo": "crossplane/crossplane",
+  "sampled": 60,
+  "ext": 54,
+  "ext_merged": 49,
+  "ext_merge_rate": 0.907,
+  "ext_share_of_merges": 0.891
+ },
+ {
+  "repo": "argoproj/argo-cd",
+  "sampled": 60,
+  "ext": 45,
+  "ext_merged": 34,
+  "ext_merge_rate": 0.756,
+  "ext_share_of_merges": 0.708
+ },
+ {
+  "repo": "argoproj/argo-workflows",
+  "sampled": 60,
+  "ext": 55,
+  "ext_merged": 53,
+  "ext_merge_rate": 0.964,
+  "ext_share_of_merges": 0.914
+ },
+ {
+  "repo": "fluxcd/flux2",
+  "sampled": 60,
+  "ext": 26,
+  "ext_merged": 19,
+  "ext_merge_rate": 0.731,
+  "ext_share_of_merges": 0.365
+ },
+ {
+  "repo": "k3s-io/k3s",
+  "sampled": 60,
+  "ext": 38,
+  "ext_merged": 30,
+  "ext_merge_rate": 0.789,
+  "ext_share_of_merges": 0.588
+ },
+ {
+  "repo": "rancher/rancher",
+  "sampled": 60,
+  "ext": 59,
+  "ext_merged": 57,
+  "ext_merge_rate": 0.966,
+  "ext_share_of_merges": 0.983
+ },
+ {
+  "repo": "istio/istio",
+  "sampled": 60,
+  "ext": 23,
+  "ext_merged": 16,
+  "ext_merge_rate": 0.696,
+  "ext_share_of_merges": 0.308
+ },
+ {
+  "repo": "linkerd/linkerd2",
+  "sampled": 60,
+  "ext": 48,
+  "ext_merged": 40,
+  "ext_merge_rate": 0.833,
+  "ext_share_of_merges": 0.8
+ },
+ {
+  "repo": "envoyproxy/envoy",
+  "sampled": 60,
+  "ext": 37,
+  "ext_merged": 34,
+  "ext_merge_rate": 0.919,
+  "ext_share_of_merges": 0.654
+ },
+ {
+  "repo": "nginx/nginx",
+  "sampled": 60,
+  "ext": 53,
+  "ext_merged": 29,
+  "ext_merge_rate": 0.547,
+  "ext_share_of_merges": 0.853
+ },
+ {
+  "repo": "redis/redis",
+  "sampled": 60,
+  "ext": 26,
+  "ext_merged": 13,
+  "ext_merge_rate": 0.5,
+  "ext_share_of_merges": 0.317
+ },
+ {
+  "repo": "valkey-io/valkey",
+  "sampled": 60,
+  "ext": 19,
+  "ext_merged": 11,
+  "ext_merge_rate": 0.579,
+  "ext_share_of_merges": 0.216
+ },
+ {
+  "repo": "elastic/elasticsearch",
+  "sampled": 60,
+  "ext": 49,
+  "ext_merged": 47,
+  "ext_merge_rate": 0.959,
+  "ext_share_of_merges": 0.825
+ },
+ {
+  "repo": "opensearch-project/OpenSearch",
+  "sampled": 60,
+  "ext": 47,
+  "ext_merged": 37,
+  "ext_merge_rate": 0.787,
+  "ext_share_of_merges": 0.771
+ }
+]

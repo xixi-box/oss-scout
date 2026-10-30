@@ -1,16 +1,18 @@
-# 仓库 PR 门禁（2026-10-30 全量核查后重建）。
+# 仓库 PR 门禁（2026-10-30，基于核实过的 workflow 实际行为）。
 #
-# 判据只认一件事：**这个仓库会不会自动关闭未受邀/未指派的 PR**。
-# 不看「外部贡献多不多」——那与门禁无关（langchain 就是按此误判过一次）。
+# 判据只认一件事：**会不会自动关闭未受邀/未指派的 PR**。
+# 不看"外部贡献多不多"——那与门禁无关（langchain 就是按此误判过）。
 #
-# 核查方式：读每个仓库 .github/workflows 下的实际脚本，确认是否调
-# pulls.update(state=closed) 或同类逻辑。已排除两类误判：
-#   - 「PR 合并后关闭关联 issue」（oven-sh/bun close-linked-issues.yml）
-#   - 「给 PR 分配里程碑/项目」（typeorm assign-milestone.yml）
+# 待核查记录（曾判定为门禁、核实后确认开放）：
+#   oven-sh/bun     close-linked-issues.yml 是 PR 合并后关 issue，不是关 PR
+#   typeorm/typeorm assign-milestone.yml 里的 closed 是查里程碑状态
+#   astral-sh/uv    promote-pull-request.yml 是发版晋升
+#   pnpm/pnpm       只打标签 + 自动指派作者
+#   argoproj/argo-cd 只把 PR 作者设为 assignee
 #
-# requires_invite: true  → 必须先拿到 invite_labels 里的标签才开 PR
-# requires_invite: false → 直接开 PR
-# 未声明的仓库走 defaults（true，fail-closed）。
+# 已剔除出池（确有硬门禁）：
+#   pydantic/pydantic, langchain-ai/langchain, langchain-ai/langgraph,
+#   pydantic/pydantic-ai, sqlalchemy/sqlalchemy
 
 defaults:
   requires_invite: true
@@ -22,195 +24,41 @@ defaults:
     - "accepted"
 
 repositories:
-
-  # ---- 硬门禁：会关闭未受邀 PR（核实过 workflow 实际行为）----
-  pydantic/pydantic:
-    requires_invite: true
-    note: "enforce-issue-assignment.yml 会 close 未指派 PR（除非带 skip-assignment-check 标签）"
-  langchain-ai/langchain:
-    requires_invite: true
-    note: "require-issue-link / reopen_on_assignment 会 close 未指派 PR（2026-10-30 #41571 实测）"
-  langchain-ai/langgraph:
-    requires_invite: true
-    note: "require_issue_link.yml 会 close 未指派 PR"
-  pydantic/pydantic-ai:
-    requires_invite: true
-    note: "未指派 PR 会被自动关闭（AGENTS.md §6 已有记录）"
-  sqlalchemy/sqlalchemy:
-    requires_invite: true
-    note: "sqla-tester bot 只接受带了 open for pull requests 的 issue（2026-10-28 #13736 实测）"
-
-  # ---- 需要先评论认领（不关 PR，但方案未对齐会白做）----
-  fivetran/great_expectations:
-    requires_invite: false
-    note: "需要先 /assign-me 认领，否则 issue 可能被他人锁定"
-
-  # ---- 核实为开放：明确允许直接开 PR ----
-  567-labs/instructor: {requires_invite: false}
   BerriAI/litellm: {requires_invite: false}
-  BurntSushi/ripgrep: {requires_invite: false}
-  FoundationAgents/MetaGPT: {requires_invite: false}
-  Kludex/starlette: {requires_invite: false}
-  MagicStack/asyncpg: {requires_invite: false}
-  Portkey-AI/gateway: {requires_invite: false}
   PrefectHQ/prefect: {requires_invite: false}
-  PyCQA/flake8: {requires_invite: false}
-  SeleniumHQ/selenium: {requires_invite: false}
-  Significant-Gravitas/AutoGPT: {requires_invite: false}
-  TanStack/query: {requires_invite: false}
-  TanStack/router: {requires_invite: false}
-  TanStack/table: {requires_invite: false}
-  Textualize/rich: {requires_invite: false}
-  Textualize/textual: {requires_invite: false}
-  actix/actix-web: {requires_invite: false}
   aio-libs/aiohttp: {requires_invite: false}
-  ajeetdsouza/zoxide: {requires_invite: false}
-  alacritty/alacritty: {requires_invite: false}
-  angular/angular: {requires_invite: false}
-  ansible/ansible: {requires_invite: false}
   ansible/ansible-lint: {requires_invite: false}
   apache/airflow: {requires_invite: false}
-  apache/arrow: {requires_invite: false}
   argoproj/argo-cd: {requires_invite: false}
   argoproj/argo-workflows: {requires_invite: false}
-  astral-sh/ruff: {requires_invite: false}
-  astral-sh/uv: {requires_invite: false}
-  babel/babel: {requires_invite: false}
-  benjaminp/six: {requires_invite: false}
-  biomejs/biome: {requires_invite: false}
-  caddyserver/caddy: {requires_invite: false}
-  chroma-core/chroma: {requires_invite: false}
-  clap-rs/clap: {requires_invite: false}
-  cohere-ai/cohere-python: {requires_invite: false}
-  colinhacks/zod: {requires_invite: false}
-  containerd/containerd: {requires_invite: false}
   crossplane/crossplane: {requires_invite: false}
-  dagster-io/dagster: {requires_invite: false}
-  dandavison/delta: {requires_invite: false}
-  dask/dask: {requires_invite: false}
-  dateutil/dateutil: {requires_invite: false}
   deepset-ai/haystack: {requires_invite: false}
-  denoland/deno: {requires_invite: false}
   docker/compose: {requires_invite: false}
-  dottxt-ai/outlines: {requires_invite: false}
-  drizzle-team/drizzle-orm: {requires_invite: false}
-  dtolnay/anyhow: {requires_invite: false}
-  elastic/elasticsearch: {requires_invite: false}
-  encode/httpx: {requires_invite: false}
-  ent/ent: {requires_invite: false}
-  envoyproxy/envoy: {requires_invite: false}
-  eslint/eslint: {requires_invite: false}
   etcd-io/etcd: {requires_invite: false}
-  evanw/esbuild: {requires_invite: false}
-  expressjs/express: {requires_invite: false}
-  fastapi/fastapi: {requires_invite: false}
-  fastapi/sqlmodel: {requires_invite: false}
-  fastify/fastify: {requires_invite: false}
+  fivetran/great_expectations: {requires_invite: false}
   fluxcd/flux2: {requires_invite: false}
-  frictionlessdata/frictionless-py: {requires_invite: false}
-  gin-contrib/cors: {requires_invite: false}
-  gin-gonic/gin: {requires_invite: false}
-  go-gorm/gorm: {requires_invite: false}
   gofiber/fiber: {requires_invite: false}
   googleapis/python-genai: {requires_invite: false}
-  grafana/grafana: {requires_invite: false}
-  guidance-ai/guidance: {requires_invite: false}
   hashicorp/consul: {requires_invite: false}
   hashicorp/terraform: {requires_invite: false}
-  hashicorp/vault: {requires_invite: false}
-  helix-editor/helix: {requires_invite: false}
-  helm/helm: {requires_invite: false}
-  honojs/hono: {requires_invite: false}
-  istio/istio: {requires_invite: false}
   jackc/pgx: {requires_invite: false}
-  jestjs/jest: {requires_invite: false}
   k3s-io/k3s: {requires_invite: false}
-  kubernetes-sigs/kustomize: {requires_invite: false}
-  kubernetes/kubernetes: {requires_invite: false}
-  kysely-org/kysely: {requires_invite: false}
-  labstack/echo: {requires_invite: false}
   linkerd/linkerd2: {requires_invite: false}
-  microsoft/TypeScript: {requires_invite: false}
-  microsoft/autogen: {requires_invite: false}
   microsoft/playwright-python: {requires_invite: false}
-  microsoft/semantic-kernel: {requires_invite: false}
-  mikro-orm/mikro-orm: {requires_invite: false}
-  mistralai/client-python: {requires_invite: false}
   moby/moby: {requires_invite: false}
-  mochajs/mocha: {requires_invite: false}
-  nestjs/nest: {requires_invite: false}
-  nginx/nginx: {requires_invite: false}
-  nodejs/node: {requires_invite: false}
-  npm/cli: {requires_invite: false}
   numpy/numpy: {requires_invite: false}
-  nushell/nushell: {requires_invite: false}
   openai/openai-python: {requires_invite: false}
-  opensearch-project/OpenSearch: {requires_invite: false}
-  oven-sh/bun: {requires_invite: false}
-  pallets/flask: {requires_invite: false}
   pandas-dev/pandas: {requires_invite: false}
-  pgvector/pgvector: {requires_invite: false}
-  pnpm/pnpm: {requires_invite: false}
-  pola-rs/polars: {requires_invite: false}
-  pre-commit/pre-commit: {requires_invite: false}
-  prettier/prettier: {requires_invite: false}
-  prisma/orm: {requires_invite: false}
   prometheus/prometheus: {requires_invite: false}
   psf/black: {requires_invite: false}
   pulumi/pulumi: {requires_invite: false}
-  puppeteer/puppeteer: {requires_invite: false}
-  pypa/pip: {requires_invite: false}
   pypa/pip-tools: {requires_invite: false}
-  pypa/setuptools: {requires_invite: false}
   pypa/virtualenv: {requires_invite: false}
-  pytest-dev/pytest: {requires_invite: false}
-  python-arq/arq: {requires_invite: false}
-  python-attrs/attrs: {requires_invite: false}
   python-poetry/poetry: {requires_invite: false}
-  python/mypy: {requires_invite: false}
-  qdrant/qdrant-client: {requires_invite: false}
   rancher/rancher: {requires_invite: false}
-  react/react: {requires_invite: false}
   redis/go-redis: {requires_invite: false}
-  redis/redis: {requires_invite: false}
-  remix-run/remix: {requires_invite: false}
-  rollup/rollup: {requires_invite: false}
-  run-llama/llama_index: {requires_invite: false}
-  rust-lang/cargo: {requires_invite: false}
-  rust-lang/rust: {requires_invite: false}
-  rust-lang/rust-clippy: {requires_invite: false}
-  scikit-learn/scikit-learn: {requires_invite: false}
   scipy/scipy: {requires_invite: false}
-  scrapy/scrapy: {requires_invite: false}
-  sequelize/sequelize: {requires_invite: false}
-  serde-rs/serde: {requires_invite: false}
-  sharkdp/bat: {requires_invite: false}
-  sharkdp/fd: {requires_invite: false}
-  spf13/cobra: {requires_invite: false}
-  spf13/viper: {requires_invite: false}
-  stanfordnlp/dspy: {requires_invite: false}
-  starship/starship: {requires_invite: false}
-  sveltejs/svelte: {requires_invite: false}
-  swc-project/swc: {requires_invite: false}
-  tauri-apps/tauri: {requires_invite: false}
-  tokio-rs/axum: {requires_invite: false}
-  tokio-rs/tokio: {requires_invite: false}
   tox-dev/tox: {requires_invite: false}
-  tqdm/tqdm: {requires_invite: false}
   traefik/traefik: {requires_invite: false}
-  treeverse/dvc: {requires_invite: false}
-  trpc/trpc: {requires_invite: false}
-  typeorm/typeorm: {requires_invite: false}
   unionai-oss/pandera: {requires_invite: false}
   urfave/cli: {requires_invite: false}
-  valkey-io/valkey: {requires_invite: false}
-  vercel/next.js: {requires_invite: false}
-  vercel/vercel: {requires_invite: false}
-  vitejs/vite: {requires_invite: false}
-  vitest-dev/vitest: {requires_invite: false}
-  vuejs/core: {requires_invite: false}
-  weaviate/weaviate-python-client: {requires_invite: false}
-  webpack/webpack: {requires_invite: false}
-  wezterm/wezterm: {requires_invite: false}
-  yarnpkg/berry: {requires_invite: false}
-  zellij-org/zellij: {requires_invite: false}
