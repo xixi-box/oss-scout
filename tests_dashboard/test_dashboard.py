@@ -581,7 +581,7 @@ def test_ingest_with_ai_score(fixture_root, monkeypatch):
         def __init__(self, **kw):
             pass
         def score_issue(self, issue):
-            return {"grade": "A", "score": 9, "reason": "clear crash", "model": "m"}
+            return {"usable": True, "reason": "clear crash", "model": "m"}
 
     import dashboard.data as DD
     import scout_v2.workers.issue_scorer as isc
@@ -596,5 +596,6 @@ def test_ingest_with_ai_score(fixture_root, monkeypatch):
     assert queued == 1
     q = json.loads((fixture_root / "queue" / "candidates.json").read_text(encoding="utf-8"))
     entry = q["aaif-goose/goose#42"]
-    assert entry["ai_grade"]["grade"] == "A" and entry["ai_grade"]["score"] == 9
-    assert entry["class"] in ("A", "B")   # 规则评分仍在
+    # 2026-10-30：判定改成 AI 二元结论，规则打分表已删除
+    assert entry["ai_verdict"]["usable"] is True
+    assert entry["ai_verdict"]["reason"] == "clear crash"

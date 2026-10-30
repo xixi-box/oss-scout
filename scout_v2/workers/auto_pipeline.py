@@ -466,7 +466,9 @@ def candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6) -> dict:
         log(root, "abort", key, summary["abort"])
         ledger.close()
         return summary
-    ok, reason = ledger.try_claim(eng.tz_name, key)
+    # 每日上限由策略层配置（max_new_claims_per_business_day，0=不限）
+    ok, reason = ledger.try_claim(eng.tz_name, key,
+                                  max_per_day=eng.max_claims_per_day)
     if not ok:
         summary["abort"] = f"claim budget: {reason}"
         ledger.close()
@@ -756,7 +758,13 @@ def _publish_pr(root: Path, entry: dict, base_sha: str, patch_file: Path,
 # ---------------- 候选筛选 ----------------
 
 def drain_ai_graded(root: Path, limit: int = 3, dry_run: bool = True) -> list[dict]:
-    """扫描候选池：AI 评 A 且规则 A/B、未处理过的 → 逐条走后端 pipeline。"""
+    """扫描候选池：AI 判定可处理、无客观否决、未处理过的 → 逐条走后端 pipeline。
+
+    2026-10-30（用户裁定）：入口只看 AI 的二元判断。规则打分那套加分表
+    （reactions/龄/标签权重）已删除——它是在 AI 评分之前写的启发式，等于对
+    AI 的判断再加一道更粗糙的复核，两层经常互相打架。规则只留客观事实否决
+    （blockers 非空 = 已有 PR / 认领信号 / 纯文档 / 计费抱怨这类不需要判断的事实）。
+    """
     root = _data_root(root)
     q = json.loads((root / "queue" / "candidates.json").read_text(encoding="utf-8"))
     picked = []
@@ -765,20 +773,20 @@ def drain_ai_graded(root: Path, limit: int = 3, dry_run: bool = True) -> list[di
             break
         if e.get("status") not in ("new", "queued", "queued_hist", "recheck_failed"):
             continue
-        # 入口判定只认 AI 的结论（用户裁定 2026-10-30）：规则打分那套加分表
-        # （reactions/龄/标签权重）是在 AI 评分之前写的启发式，等于对 AI 的判断
-        # 再加一道更粗糙的人为复核，两层经常互相打架。规则只保留**客观事实否决**：
-        # blockers 非空说明存在已有关联 PR、认领信号、duplicate、纯文档、计费抱怨
-        # 这类不需要判断的事实，那就直接丢弃。
         if e.get("blockers"):
             continue
-        if (e.get("ai_grade") or {}).get("grade") != "A":
+        # 新格式用 ai_verdict.usable；兼容旧的 ai_grade.grade == "A"
+        verdict = e.get("ai_verdict") or {}
+        usable = verdict.get("usable")
+        if usable is None:
+            usable = (e.get("ai_grade") or {}).get("grade") == "A"
+        if usable is not True:
             continue
         picked.append(e)
     if dry_run:
         return [{"id": e["id"], "repo": e["repo"], "number": e["number"],
-                 "ai": (e.get("ai_grade") or {}).get("grade"),
-                 "rule": e.get("class"), "dry_run": True} for e in picked]
+                 "ai": (e.get("ai_verdict") or {}).get("reason", "")[:60],
+                 "dry_run": True} for e in picked]
     out = []
     for e in picked:
         try:

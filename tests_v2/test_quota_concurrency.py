@@ -39,14 +39,30 @@ class TestClaimLedgerConcurrency:
         assert sum(1 for ok, _ in results if ok) == 1
 
     def test_release_allows_reclaim(self, tmp_path):
+        """每日上限可配置；同一候选重复认领永远拒绝。"""
         ledger = ClaimLedger(tmp_path / "l.sqlite3")
-        ok, _ = ledger.try_claim(TZ, "a#1")
+        ok, _ = ledger.try_claim(TZ, "a#1", max_per_day=1)
         assert ok
-        ok2, reason = ledger.try_claim(TZ, "a#2")
-        assert not ok2 and "already claimed" in reason
+        ok2, reason = ledger.try_claim(TZ, "a#2", max_per_day=1)
+        assert not ok2 and "daily limit" in reason
         ledger.release_day()
-        ok3, _ = ledger.try_claim(TZ, "a#3")
+        ok3, _ = ledger.try_claim(TZ, "a#3", max_per_day=1)
         assert ok3
+        ledger.close()
+
+    def test_same_candidate_cannot_be_claimed_twice(self, tmp_path):
+        ledger = ClaimLedger(tmp_path / "l.sqlite3")
+        assert ledger.try_claim(TZ, "a#1", max_per_day=0)[0] is True
+        again, reason = ledger.try_claim(TZ, "a#1", max_per_day=0)
+        assert again is False and "already claimed" in reason
+        ledger.close()
+
+    def test_unlimited_allows_many(self, tmp_path):
+        """max_per_day=0 表示不限条数（2026-10-30 用户裁定）。"""
+        ledger = ClaimLedger(tmp_path / "l.sqlite3")
+        for i in range(5):
+            ok, why = ledger.try_claim(TZ, f"a#{i}", max_per_day=0)
+            assert ok, why
         ledger.close()
 
 

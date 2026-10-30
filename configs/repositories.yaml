@@ -19,7 +19,9 @@ defaults:
   auto_comment: false
   auto_pr: false
   min_issue_age_hours: 2
-  max_new_claims_per_business_day: 1
+  # 2026-10-30 用户裁定：不再限制每日 1 条。0 = 不限，有个可改的正整数上限
+  # 更方便在需要时收紧（如账号被限流）。
+  max_new_claims_per_business_day: 0
   allow_force_push: false
   allow_merge_upstream: false
 

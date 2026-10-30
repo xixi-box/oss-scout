@@ -180,12 +180,14 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
                         _t.sleep(60)
                         continue
                     from scout_v2.workers.auto_pipeline import drain_ai_graded
-                    ready = drain_ai_graded(root, limit=1, dry_run=True)
-                    if ready:
-                        out = drain_ai_graded(root, limit=1, dry_run=False)
-                        if out:
-                            _audit(root, "auto_repair", str(out[0].get("id", "")),
-                                   json.dumps(out[0], ensure_ascii=False)[:400])
+                    # 2026-10-30 用户裁定：不再限制每日 1 条，也不限制每轮 1 条。
+                    # 每轮把所有 AI 判定可处理的候选都走一遍；每日上限由
+                    # repositories.yaml 的 max_new_claims_per_business_day 控制
+                    # （0 = 不限）。limit 只是防止单轮跑太久。
+                    out = drain_ai_graded(root, limit=8, dry_run=False)
+                    for item in out:
+                        _audit(root, "auto_repair", str(item.get("id", "")),
+                               json.dumps(item, ensure_ascii=False)[:400])
                     _t.sleep(interval)
                 except Exception as e:  # noqa: BLE001 — 永不因单次异常停摆
                     try:

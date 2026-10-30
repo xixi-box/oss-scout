@@ -22,20 +22,24 @@ DEFAULT_MODEL = "deepseek-v4.1-flash"
 
 SCORE_PROMPT = """You are triaging a GitHub issue for an autonomous contribution agent.
 The agent will read the repo, write a regression test, fix the defect, and open a PR
-with no human in the loop. Grade whether THIS issue is a good target for that.
+with no human in the loop. Decide whether THIS issue can be handled that way.
 
-A = attempt it. All of these hold:
+Answer YES only if all of these hold:
     - it is a real defect, not a question / feature request / docs / billing complaint
     - the report describes concrete, observable wrong behaviour
     - a competent contributor could locate the cause and fix it in a few files
+    - the report has enough detail to write a failing test from it
     - nothing suggests a fix is already in flight, or that maintainers want to
       agree on a design first
-B = plausible, but risky for an unattended attempt: vague report, wide blast radius,
-    needs a design decision, or too thin to act on
-C = do not attempt: not a bug / already answered / needs maintainer design input /
-    only reproducible in an environment the agent cannot reach / security-sensitive
 
-Judge scope from what the report implies, not from how long it is. A short report can
+Answer NO if any of these:
+    - not a bug, already answered, or docs-only
+    - too vague to act on, or needs a design decision from maintainers
+    - reproducible only in an environment the agent cannot reach
+    - security-sensitive
+    - blast radius spans many modules
+
+Judge this from what the report implies, not from how long it is. A short report can
 be precise; a long one can still be vague.
 
 Issue from {repo}#{number}
@@ -47,8 +51,7 @@ Body:
 {body}
 
 Answer in EXACTLY this format, nothing else:
-GRADE: A|B|C
-SCORE: 0-10
+DECISION: YES|NO
 REASON: one line
 """
 
@@ -122,7 +125,14 @@ class GoClient:
             return []
 
     def score_issue(self, issue: dict) -> dict:
-        """给一条 issue 评分。返回 {grade, score, reason, model}；失败 grade="error"。"""
+        """判断这条 issue 能不能自动处理。
+
+        返回 {"usable": bool, "reason": str, "model": str}；调用失败时
+        usable 为 None（区别于"明确判定不可用"，调用方可以决定重试）。
+
+        2026-10-30：从 A/B/C 三档改成二元判断。B 档从未被消费（入口只要 A），
+        留着只是让模型在"能不能做"和"有多好做"之间摇摆。
+        """
         prompt = SCORE_PROMPT.format(
             repo=issue.get("repo", ""), number=issue.get("number", ""),
             labels=", ".join(issue.get("labels") or []) or "none",
@@ -131,21 +141,21 @@ class GoClient:
             body=str(issue.get("body_excerpt", ""))[:4000])
         ok, text = self.chat(prompt)
         if not ok:
-            return {"grade": "error", "score": None, "reason": text[:200], "model": self.model}
-        grade, score, reason = "C", None, text[:200]
+            return {"usable": None, "reason": text[:200], "model": self.model}
+        usable = None
+        reason = text[:200]
         for line in text.splitlines():
-            line = line.strip()
-            if line.upper().startswith("GRADE:"):
-                g = line.split(":", 1)[1].strip().upper()[:1]
-                grade = g if g in ("A", "B", "C") else "C"
-            elif line.upper().startswith("SCORE:"):
-                try:
-                    score = int("".join(ch for ch in line.split(":", 1)[1] if ch.isdigit())[:2])
-                except ValueError:
-                    score = None
-            elif line.upper().startswith("REASON:"):
+            line = line.strip().lstrip("*-> ").strip()
+            upper = line.upper()
+            if upper.startswith("DECISION:"):
+                v = line.split(":", 1)[1].strip().upper()
+                if v.startswith("YES"):
+                    usable = True
+                elif v.startswith("NO"):
+                    usable = False
+            elif upper.startswith("REASON:"):
                 reason = line.split(":", 1)[1].strip()[:200]
-        return {"grade": grade, "score": score, "reason": reason, "model": self.model}
+        return {"usable": usable, "reason": reason, "model": self.model}
 
 
     def chat_with_fallback(self, prompt: str, fallbacks: list[str] | None = None

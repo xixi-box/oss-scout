@@ -223,22 +223,27 @@ class PolicyEngine:
         return out
 
     def claim_slot_available(self) -> bool:
-        """双闸：worklog 当日已有 claim/awaiting_assignment，或 SQLite 当日已占额 → 不可用。"""
+        """当日认领名额是否还有余量。
+
+        2026-10-30：从"每天 1 条"改成按 max_new_claims_per_business_day 配置，
+        0 表示不限。内部测试仓库的演练不占额度。
+        """
         internal = self._internal_test_targets()
+        limit = self.max_claims_per_day
         if self._worklog is not None:
-            # 内部测试仓库的演练记录不占用真实额度
             hits = self._worklog.claimed_today(self.tz_name)
             real = [h for h in hits
                     if not any(str(h.get("target", "")).startswith(p) for p in internal)]
-            if real:
+            if limit > 0 and len(real) >= limit:
                 return False
         if self._db is not None:
             from .state_store import business_day
             day = business_day(dt.datetime.now(), self.tz_name)
-            row = self._db._conn.execute(
-                "SELECT candidate_id FROM claim_days WHERE day=?", (day,)).fetchone()
-            if row is not None and not any(
-                    str(row[0]).startswith(p) for p in internal):
+            rows = self._db._conn.execute(
+                "SELECT candidate_id FROM claim_days WHERE day=?", (day,)).fetchall()
+            real = [r[0] for r in rows
+                    if not any(str(r[0]).startswith(p) for p in internal)]
+            if limit > 0 and len(real) >= limit:
                 return False
         return True
 

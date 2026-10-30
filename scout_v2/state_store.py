@@ -125,9 +125,13 @@ class Worklog:
 
 
 class ClaimLedger:
-    """SQLite 每日认领锁：跨进程并发下保证"每业务日至多 1 个新认领"。
+    """SQLite 认领账本：记录当日已认领的候选，支持每日多条上限。
 
-    用法：with ledger.lock_day(tz_name, candidate_id) as ok: ...
+    2026-10-30（用户裁定）：从"每日至多 1 个"改成按配置的每日上限。
+    表从 `day` 单主键改成 `(day, candidate_id)` 复合主键，因此同一天可以
+    记录多条；上限由调用方传入的 max_per_day 决定。
+    旧库自动迁移：检测到旧的单主键表就重建，已有记录按新结构搬过去。
+
     SQLite 连接必须打开在同一文件上（BEGIN IMMEDIATE 提供写序列化）。
     """
 
@@ -136,20 +140,57 @@ class ClaimLedger:
         self.db_path = db_path
         self._conn = sqlite3.connect(str(db_path), timeout=30, isolation_level=None)
         self._conn.execute("PRAGMA journal_mode=WAL")
+        self._migrate()
+
+    def _migrate(self) -> None:
+        """把旧的 day 单主键表升级成 (day, candidate_id) 复合主键。
+
+        先清掉上次迁移失败可能留下的 claim_days_old，避免
+        "there is already another table or index with this name"。
+        """
+        self._conn.execute("DROP TABLE IF EXISTS claim_days_old")
+        cols = [r[1] for r in self._conn.execute(
+            "PRAGMA table_info(claim_days)").fetchall()]
+        if cols:
+            pk_cols = [r[1] for r in self._conn.execute(
+                "PRAGMA table_info(claim_days)").fetchall() if r[5]]
+            if pk_cols == ["candidate_id"]:
+                return          # 已是新结构
+            # 旧结构：搬数据重建
+            rows = self._conn.execute(
+                "SELECT day, candidate_id, action, ts FROM claim_days").fetchall()
+            self._conn.execute("ALTER TABLE claim_days RENAME TO claim_days_old")
+            self._conn.execute(
+                "CREATE TABLE claim_days ("
+                " day TEXT NOT NULL, candidate_id TEXT NOT NULL,"
+                " action TEXT NOT NULL, ts TEXT NOT NULL,"
+                " PRIMARY KEY (day, candidate_id))")
+            self._conn.executemany(
+                "INSERT OR IGNORE INTO claim_days(day, candidate_id, action, ts)"
+                " VALUES (?,?,?,?)", rows)
+            self._conn.execute("DROP TABLE claim_days_old")
+            return
         self._conn.execute(
             "CREATE TABLE IF NOT EXISTS claim_days ("
-            " day TEXT PRIMARY KEY, candidate_id TEXT NOT NULL,"
-            " action TEXT NOT NULL, ts TEXT NOT NULL)")
+            " day TEXT NOT NULL, candidate_id TEXT NOT NULL,"
+            " action TEXT NOT NULL, ts TEXT NOT NULL,"
+            " PRIMARY KEY (day, candidate_id))")
 
     def close(self) -> None:
         self._conn.close()
 
-    def try_claim(self, tz_name: str, candidate_id: str, action: str = "claim",
-                  now: dt.datetime | None = None) -> tuple[bool, str]:
-        """尝试占用当日认领名额。返回 (ok, reason)。
+    def claimed_ids(self, day: str) -> list[str]:
+        return [r[0] for r in self._conn.execute(
+            "SELECT candidate_id FROM claim_days WHERE day=?", (day,)).fetchall()]
 
-        BEGIN IMMEDIATE 串行化后：SQLite 已有当日记录 → 拒绝；
-        否则插入成功 → 占额成功。与 worklog 的双闸由 repo_policy.PolicyEngine 组合完成。
+    def try_claim(self, tz_name: str, candidate_id: str, action: str = "claim",
+                  now: dt.datetime | None = None,
+                  max_per_day: int = 0) -> tuple[bool, str]:
+        """尝试占用一个当日认领名额。返回 (ok, reason)。
+
+        max_per_day <= 0 表示不限条数。
+        BEGIN IMMEDIATE 串行化后：同一条候选已认领过 → 拒绝；当日已达上限 →
+        拒绝；否则插入成功。
         """
         now = now or dt.datetime.now()
         day = business_day(now, tz_name)
@@ -157,11 +198,15 @@ class ClaimLedger:
         cur = self._conn.cursor()
         cur.execute("BEGIN IMMEDIATE")
         try:
-            row = cur.execute("SELECT candidate_id FROM claim_days WHERE day=?",
-                              (day,)).fetchone()
-            if row is not None:
+            existing = [r[0] for r in cur.execute(
+                "SELECT candidate_id FROM claim_days WHERE day=?", (day,)).fetchall()]
+            if candidate_id in existing:
                 cur.execute("ROLLBACK")
-                return False, f"day {day} already claimed by {row[0]}"
+                return False, f"already claimed on {day}: {candidate_id}"
+            if max_per_day > 0 and len(existing) >= max_per_day:
+                cur.execute("ROLLBACK")
+                return False, (f"daily limit {max_per_day} reached on {day} "
+                               f"({len(existing)} claimed)")
             cur.execute("INSERT INTO claim_days(day, candidate_id, action, ts) VALUES (?,?,?,?)",
                         (day, candidate_id, action, ts))
             cur.execute("COMMIT")

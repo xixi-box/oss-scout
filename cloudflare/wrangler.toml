@@ -13,4 +13,4 @@ binding = "SEEN"
 id = "06f5c54ef44a4e3ab31f7cf0e45646cc"
 
 [vars]
-REPOS = "aaif-goose/goose,openai/openai-agents-python,browser-use/browser-use,OpenHands/software-agent-sdk,OpenHands/OpenHands,deepset-ai/haystack,langfuse/langfuse,Arize-ai/phoenix,anomalyco/opencode,langchain-ai/langsmith-sdk,e2b-dev/e2b,infiniflow/ragflow,openai/openai-python,crewAIInc/crewAI"
+REPOS = "vectorize-io/hindsight,tigerless-labs/agent-memory,volcengine/OpenViking,oceanbase/powercontext,ruvnet/RuVector,openai/openai-agents-python,bytedance/deer-flow,VoltAgent/voltagent,HKUDS/RAG-Anything,OSU-NLP-Group/HippoRAG,lancedb/lancedb,milvus-io/milvus,weaviate/weaviate,qdrant/qdrant,upstash/context7,PrefectHQ/fastmcp,modelcontextprotocol/registry,Arize-ai/phoenix,promptfoo/promptfoo,langfuse/langfuse,confident-ai/deepeval,pypa/virtualenv,pypa/pip-tools,tox-dev/tox,biomejs/biome,psf/black,astral-sh/uv,astral-sh/ruff,firecracker-microvm/firecracker,vllm-project/vllm,microsoft/playwright-python,microsoft/playwright,instantdb/instant,liveblocks/liveblocks,yjs/yjs,dxos/dxos,tldraw/tldraw,supabase/supabase,zuplo/zudoku"

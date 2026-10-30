@@ -732,47 +732,55 @@ def ingest_cloudflare_issues(ds, items: list[dict]) -> int:
         title = str(it.get("title", ""))
         body = str(it.get("body_excerpt", ""))
         labels = [str(l) for l in (it.get("labels") or [])]
-        # AI 评分先行：thin_body 一票否决可被 AI A 级豁免（用户裁定 2026-10-25）
-        ai_grade = None
+
+        # 客观否决（不需要 AI 判断的事实）：标题像提问、纯文档、计费抱怨。
+        # 这类连调 AI 都省了。其余交给 AI 判断"能不能自动处理"。
+        blockers: list[str] = []
+        if discover.RE_BILLING.search(title):
+            blockers.append("billing_complaint")
+        if any(discover.RE_FEATURE_LABEL.search(lb) for lb in labels):
+            blockers.append("feature_label")
+        if discover.RE_BAD_TITLE.search(title):
+            blockers.append("question_or_feature_title")
+        if discover.RE_DOCS.search(title):
+            blockers.append("docs_only")
+        if len(body) < 200:
+            blockers.append("thin_body")
+
+        # AI 细筛：唯一的合格判定。usable=None 表示调用失败（与"判定不可用"区分）。
+        verdict = {"usable": None, "reason": "no scorer configured", "model": None}
         if scorer is not None:
             try:
-                ai_grade = scorer.score_issue({
+                verdict = scorer.score_issue({
                     "repo": repo, "number": number, "title": title,
                     "labels": labels, "reactions": int(it.get("reactions") or 0),
                     "comments": int(it.get("comments") or 0), "body_excerpt": body})
-            except Exception:  # noqa: BLE001 — 评分失败不阻塞入队
-                ai_grade = {"grade": "error"}
-        sig = {"body_len": len(body), "reactions": int(it.get("reactions") or 0),
-               "labels": labels, "comments": int(it.get("comments") or 0),
-               "claim_signal": False, "maintainer_confirm": False,
-               "duplicate_flag": False, "billing_flag": False, "bot_claim": False,
-               "cross_ref_pr": False,
-               "repro_signal": bool(discover.RE_REPRO.search(body)),
-               "ai_grade_a": bool(ai_grade and ai_grade.get("grade") == "A")}
-        try:
-            score, sclass, blockers = discover.score(title, sig, it.get("created_at", ""), lane)
-        except Exception:  # noqa: BLE001
-            continue
-        if sclass == "C" and not (ai_grade and ai_grade.get("grade") == "A"):
-            # AI A 级即使规则 C 也入队（带双方评分供人工复核），这是细筛的意义
+            except Exception as ex:  # noqa: BLE001 — 评分失败不阻塞入队，留给人工看
+                verdict = {"usable": None, "reason": f"scorer error: {ex}"[:200],
+                           "model": None}
+
+        if blockers or verdict.get("usable") is not True:
             seen[key] = {"first_seen": now_iso,
-                         "status": "blocked" if blockers else "lowscore"}
+                         "status": "blocked" if blockers else "rejected"}
+            # 记录 AI 的理由，便于事后核对"它为什么被拒"
+            if verdict.get("reason"):
+                seen[key]["why"] = verdict["reason"][:200]
             continue
+
         entry = {"id": key, "repo": repo, "number": number, "title": title,
                  "url": it.get("url") or f"https://github.com/{repo}/issues/{number}",
-                 "lane": lane, "score": score, "class": sclass, "blockers": blockers,
+                 "lane": lane, "blockers": blockers,
                  # 顶层也放一份 labels：PR 门禁要按标签判断这个仓库允不允许未受邀 PR。
                  # 只在 signals 里放会让 entry["labels"] 永远为空（2026-10-30 实测
                  # 0/210 个候选有顶层 labels），门禁于是对 requires_invite:false 的
                  # 仓库无条件放行、对 true 的永远拒绝——两头都错。
                  "labels": labels,
-                 "signals": {**sig, "labels": labels}, "created_at": it.get("created_at", ""),
+                 "ai_verdict": verdict,
+                 "created_at": it.get("created_at", ""),
                  "discovered_at": now_iso, "status": "new", "lease": None,
                  "source": "cloudflare-worker",
                  # 8000 而非 2000：AI 要判断"能否自动修"，需要看完整的复现步骤和预期行为
                  "body_excerpt": body[:8000]}
-        if ai_grade is not None:
-            entry["ai_grade"] = ai_grade
         q[key] = entry
         seen[key] = {"first_seen": now_iso, "status": "queued"}
         queued += 1
@@ -892,10 +900,11 @@ def cf_pull_seconds(ds) -> int:
 
 
 class _BuiltinScorer:
-    """discover.py 评分规则的内置等价实现（容器内无 config.json 时用）。
+    """discover.py 正则的容器内副本。
 
-    与 discover.score 保持同一套信号与 blocker 判定；正则从 discover.py 的语义复制，
-    避免运行时依赖（config.json / ROOT 常量）。
+    2026-10-30：只保留正则（RE_BILLING / RE_FEATURE / RE_BAD_TITLE / RE_DOCS /
+    RE_REPRO），用于入队前的客观事实否决。原先的 score() 打分方法已删除——
+    合格判定完全交给 AI 的二元结论，规则不再参与打分。
     """
 
     import re as _re
@@ -910,55 +919,3 @@ class _BuiltinScorer:
         r"\[?question\]?|\[?feature\s+(?:request|idea)\]?|support\s+for\b|roadmap|"
         r"support\b|add\s+(?:support|ability|option))", _re.I)
     _RE_DOCS = _re.compile(r"\b(typo|doc(?:umentation|s)?|readme|changelog|comment\s+fix)\b", _re.I)
-
-    def score(self, title, sig, created_at, lane):
-        import datetime as _dt
-        blockers = []
-        s = 0
-        if sig.get("maintainer_confirm"):
-            s += 3
-        if sig.get("reactions", 0) >= 5:
-            s += 3
-        elif sig.get("reactions", 0) >= 1:
-            s += 1
-        labels_l = [str(lb).lower() for lb in (sig.get("labels") or [])]
-        if "bug" in labels_l:
-            s += 2
-        if "help wanted" in labels_l:
-            s += 2
-        if sig.get("repro_signal"):
-            s += 2
-        try:
-            created = _dt.datetime.fromisoformat(str(created_at).replace("Z", "+00:00"))
-            age_days = (_dt.datetime.now(_dt.timezone.utc) - created).days
-            if age_days <= 7:
-                s += 1
-        except Exception:  # noqa: BLE001
-            pass
-        if sig.get("comments", 0) <= 3:
-            s += 1
-
-        if sig.get("cross_ref_pr"):
-            blockers.append("cross_ref_pr")
-        if sig.get("claim_signal"):
-            blockers.append("claim_signal")
-        if sig.get("duplicate_flag"):
-            blockers.append("duplicate_flagged")
-        if sig.get("bot_claim"):
-            blockers.append("org_bot_claimed")
-        if self._RE_BILLING.search(title or ""):
-            blockers.append("billing_complaint")
-        if any(self._RE_FEATURE.search(lb) for lb in (sig.get("labels") or [])):
-            blockers.append("feature_label")
-        if sig.get("body_len", 0) < 200 and not sig.get("ai_grade_a"):
-            blockers.append("thin_body")
-        if self._RE_BAD_TITLE.search(title or ""):
-            blockers.append("question_or_feature_title")
-        if self._RE_DOCS.search(title or ""):
-            blockers.append("docs_only")
-        if lane == "restricted" and not (sig.get("maintainer_confirm") or "help wanted" in labels_l):
-            blockers.append("restricted_requires_confirm")
-
-        if blockers:
-            return s, "C", blockers
-        return s, ("A" if s >= 6 else "B" if s >= 3 else "C"), []
