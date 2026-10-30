@@ -50,6 +50,8 @@ class TestPublishFlow:
 
         def fake(args, cwd=None, **kw):
             calls.append(list(args))
+            if "--jq" in args and ".default_branch" in args:
+                return subprocess.CompletedProcess(args, 0, "main", "")
             if args[:2] == ["gh", "pr"]:
                 return subprocess.CompletedProcess(args, 0, "https://github.com/up/stream/pull/7\n", "")
             return subprocess.CompletedProcess(args, 0, "", "")
@@ -77,6 +79,8 @@ class TestPublishFlow:
         patch.write_text("--- a/x\n+++ b/x\n", encoding="utf-8")
 
         def fake(args, cwd=None, **kw):
+            if "--jq" in args and ".default_branch" in args:
+                return subprocess.CompletedProcess(args, 0, "main", "")
             if "push" in args:
                 return subprocess.CompletedProcess(
                     args, 1, "", "fatal: could not push https://x-access-token:ghp_LEAK@github.com")
@@ -99,6 +103,8 @@ class TestPublishFlow:
         patch.write_text("--- a/x\n+++ b/x\n", encoding="utf-8")
 
         def fake(args, cwd=None, **kw):
+            if "--jq" in args and ".default_branch" in args:
+                return subprocess.CompletedProcess(args, 0, "main", "")
             if args[:3] == ["gh", "pr", "create"]:
                 return subprocess.CompletedProcess(
                     args, 1, "", "a pull request for branch already exists")
@@ -128,3 +134,53 @@ class TestWorkflowGate:
         gate = wf.index("evidence chain not satisfied")
         call = wf.index("publish_from_env(job")
         assert gate < call, "evidence gate must precede the publish call"
+
+
+class TestAutoFork:
+    """fork 不存在时必须自动创建。
+
+    2026-10-30 实测：langchain 和 pulumi 两次都通过了全部验证，最后一步
+    push 报 'Repository not found' —— xixi-box/<repo> 还没建。每次靠人工补一步
+    流程就不算跑通。
+    """
+
+    def test_existing_fork_returns_default_branch(self, monkeypatch):
+        from scout_v2.workers import publish_remote as pr
+
+        def fake(args, cwd=None):
+            return subprocess.CompletedProcess(args, 0, "dev\n", "")
+
+        monkeypatch.setattr(pr, "_run", fake)
+        assert pr._ensure_fork("me/fork", "tok", "up/stream") == "dev"
+
+    def test_missing_fork_is_created_then_polled(self, monkeypatch):
+        from scout_v2.workers import publish_remote as pr
+        calls: list[list[str]] = []
+        state = {"exists": False}
+
+        def fake(args, cwd=None):
+            calls.append(list(args))
+            if "-X" in args and "POST" in args:
+                state["exists"] = True
+                return subprocess.CompletedProcess(args, 0, "", "")
+            if state["exists"]:
+                return subprocess.CompletedProcess(args, 0, "main\n", "")
+            return subprocess.CompletedProcess(args, 1, "", "Not Found")
+
+        monkeypatch.setattr(pr, "_run", fake)
+        monkeypatch.setattr(pr.time if hasattr(pr, "time") else __import__("time"),
+                            "sleep", lambda *_: None, raising=False)
+        got = pr._ensure_fork("me/fork", "tok", "up/stream")
+        assert got == "main"
+        assert any("POST" in c for c in calls), "should call the fork API"
+
+    def test_fork_creation_failure_returns_none(self, monkeypatch):
+        from scout_v2.workers import publish_remote as pr
+
+        def fake(args, cwd=None):
+            return subprocess.CompletedProcess(args, 1, "", "Resource not accessible")
+
+        monkeypatch.setattr(pr, "_run", fake)
+        import time as _t
+        monkeypatch.setattr(_t, "sleep", lambda *_: None)
+        assert pr._ensure_fork("me/fork", "tok", "up/stream") is None

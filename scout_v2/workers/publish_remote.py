@@ -20,6 +20,45 @@ import subprocess
 from pathlib import Path
 
 
+def _ensure_fork(push_repo: str, token: str, upstream: str = "") -> str | None:
+    """确保 fork 仓库存在；返回 fork 的默认分支名，失败返回 None。
+
+    fork 已存在时直接读它的默认分支（fork 继承了上游，可能是 main 或 dev）。
+    不存在就调 GitHub 的 fork API 创建，然后轮询等它可用（大仓库要几十秒）。
+    """
+    import time
+
+    def _get_default() -> str | None:
+        r = _run(["gh", "api", f"repos/{push_repo}", "--jq", ".default_branch"])
+        if r.returncode == 0:
+            name = (r.stdout or "").strip()
+            return name or None
+        return None
+
+    branch = _get_default()
+    if branch:
+        return branch
+
+    # 不存在 —— 用 upstream 创建 fork
+    src = upstream or push_repo.split("/", 1)[-1]
+    if "/" not in src:
+        return None
+    r = _run(["gh", "api", "-X", "POST", f"repos/{src}/forks"])
+    if r.returncode != 0:
+        err = (r.stderr or "").strip()
+        # 已经存在（并发或之前建过）不是错误
+        if "already exists" not in err.lower():
+            return None
+
+    # fork 是异步的：大仓库要几十秒才可读
+    for _ in range(12):
+        time.sleep(10)
+        branch = _get_default()
+        if branch:
+            return branch
+    return None
+
+
 def _run(args: list[str], cwd: Path | None = None) -> subprocess.CompletedProcess:
     return subprocess.run(args, cwd=str(cwd) if cwd else None, capture_output=True,
                           text=True, encoding="utf-8", errors="replace", timeout=300)
@@ -44,6 +83,15 @@ def publish(repo_dir: Path, patch_file: Path, publish_cfg: dict) -> dict:
         return {"ok": False, "error": "no patch to publish"}
 
     token = (os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN") or "").strip()
+
+    # 0) 确保 fork 存在。2026-10-30 实测：langchain 和 pulumi 两次都通过了全部
+    #    验证，最后 push 报 "Repository not found" —— 因为 xixi-box/<repo> 还没建。
+    #    这件事必须自动化，否则每次都要人工补一步，流程就不算跑通。
+    fork_note = _ensure_fork(push_repo, token, upstream)
+    if fork_note is None:
+        return {"ok": False,
+                "error": f"fork {push_repo} is missing and could not be created "
+                         f"(check the token has repo scope)"}
 
     # 1) 在验证用的仓库里建分支并应用补丁
     co = _run(["git", "checkout", "-q", "-B", branch], cwd=repo_dir)
