@@ -141,3 +141,32 @@ class TestRepairLoopConcurrency:
                             "ai_verdict": {"usable": True, "reason": "looks fine"}},
         }), encoding="utf-8")
         assert drain_ai_graded(root, limit=5, dry_run=True) == []
+
+
+class TestOutOfScopeIsTerminal:
+    """lane=unknown/observe 必须写终态，否则每轮重试。
+
+    2026-10-30 实测：仓库名单从 173 换成 40 个后，旧名单遗留的
+    anomalyco/opencode、deepset-ai/haystack 候选，在 60 秒循环下每分钟
+    被取一次、每次都 lane=unknown 空转。原因是那条分支直接 return，
+    没改状态，drain 下一轮又选到它。
+    """
+
+    def test_terminal_statuses_excluded_from_drain(self):
+        import json as _json
+        from pathlib import Path as _P
+        from scout_v2.workers.auto_pipeline import drain_ai_graded
+
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            root = _P(td)
+            (root / "queue").mkdir(parents=True)
+            (root / "queue" / "candidates.json").write_text(_json.dumps({
+                "gone/repo#1": {"id": "gone/repo#1", "repo": "gone/repo",
+                                "number": 1, "status": "out_of_scope",
+                                "blockers": [], "ai_verdict": {"usable": True}},
+                "obs/repo#2": {"id": "obs/repo#2", "repo": "obs/repo",
+                               "number": 2, "status": "observe_only",
+                               "blockers": [], "ai_verdict": {"usable": True}},
+            }), encoding="utf-8")
+            assert drain_ai_graded(root, limit=5, dry_run=True) == []

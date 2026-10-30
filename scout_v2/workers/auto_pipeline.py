@@ -414,6 +414,13 @@ def candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6) -> dict:
 
     if lane in ("unknown", "observe"):
         summary["abort"] = f"lane={lane} no action"
+        # 必须写终态，否则状态留在 new/queued，drain 每轮都会重新取到它。
+        # 2026-10-30 实测：修复循环改成 60 秒后，旧名单遗留的
+        # anomalyco/opencode、deepset-ai/haystack 候选每分钟被重试一次，
+        # 每次都 lane=unknown 空转。
+        mark_candidate(root, key,
+                       "out_of_scope" if lane == "unknown" else "observe_only",
+                       extra={"abort_reason": summary["abort"]})
         return summary
     summary["steps"].append(f"lane={lane}")
 
