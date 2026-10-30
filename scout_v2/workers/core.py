@@ -130,8 +130,13 @@ def emit_envelope(result: Result, out_dir: Path) -> None:
     if patch_file.is_file():
         envelope["patch"] = patch_file.read_text(encoding="utf-8", errors="replace")[:200_000]
     report = out_dir / "test-report.json"
-    if result.test_report_path and report.is_file():
-        envelope["test_report"] = json.loads(report.read_text(encoding="utf-8"))
+    # 只要文件存在就带上：blocked 分支的 result 里 test_report_path 是 None，
+    # 但那份报告正是诊断"为什么没复现"的关键（2026-10-30 实测缺失）。
+    if report.is_file():
+        try:
+            envelope["test_report"] = json.loads(report.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            pass
     findings = out_dir / "findings.json"
     if findings.is_file():
         envelope["findings"] = json.loads(findings.read_text(encoding="utf-8"))

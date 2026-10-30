@@ -445,6 +445,30 @@ def _test_env_broken(stdout: str, stderr: str) -> str | None:
     return None
 
 
+def _write_base_diagnostics(out_dir: Path, job: Job, cmd: list[str], rc: int,
+                            stdout: str, stderr: str,
+                            test_files: dict, patch: str) -> None:
+    """base 阶段中止时也要留下可诊断的证据。
+
+    2026-10-30：blocked 分支原样返回，test-report 不生成，于是"测试在 base 上
+    没失败"这句话没有上下文——看不到跑的什么命令、agent 的测试长什么样、
+    那条命令输出了什么。
+    """
+    try:
+        (out_dir / "test-report.json").write_text(json.dumps({
+            "schema_version": 1, "job_id": job.job_id, "base_sha": job.base_sha,
+            "stage": "base", "test_cmd": cmd, "base_returncode": rc,
+            "base_stdout_tail": stdout[-4000:], "base_stderr_tail": stderr[-4000:],
+            "regression_test_files": sorted(test_files),
+            "patch_bytes": len(patch or ""),
+        }, ensure_ascii=False, indent=1), encoding="utf-8")
+        for rel, content in (test_files or {}).items():
+            safe = Path(rel).name
+            (out_dir / f"agent-test-{safe}").write_text(content, encoding="utf-8")
+    except OSError:
+        pass
+
+
 def _snapshot_worktree(work: Path) -> str:
     """把 agent 的改动做成一个 patch 存着，供验证后恢复。
 
@@ -736,6 +760,10 @@ def run_repair(job: Job, repo_dir: Path, out_dir: Path, *,
             (out_dir / "worker.log").write_text(
                 "the reported test passes on base; nothing to fix or the test does "
                 "not capture the bug\n", encoding="utf-8")
+            # 即使在这里中止也要落盘诊断：否则"测试在 base 上没失败"这句话
+            # 无法区分"agent 的测试没抓住 bug"和"我们把它的测试文件搞丢了"。
+            _write_base_diagnostics(out_dir, job, cmd, base_rc, base_out, base_err,
+                                    test_files, raw_patch)
             return Result(job_id=job.job_id, backend=backend_name, outcome="blocked",
                           base_sha=job.base_sha, reproduced_on_base=False,
                           logs_path=f"artifacts/{job.job_id}/worker.log",
@@ -745,6 +773,8 @@ def run_repair(job: Job, repo_dir: Path, out_dir: Path, *,
                 f"test command could not run on base: {broken}\n\n"
                 f"--- stdout ---\n{base_out[-2000:]}\n--- stderr ---\n{base_err[-2000:]}",
                 encoding="utf-8")
+            _write_base_diagnostics(out_dir, job, cmd, base_rc, base_out, base_err,
+                                    test_files, raw_patch)
             return Result(job_id=job.job_id, backend=backend_name, outcome="failed",
                           base_sha=job.base_sha, reproduced_on_base=False,
                           logs_path=f"artifacts/{job.job_id}/worker.log",
