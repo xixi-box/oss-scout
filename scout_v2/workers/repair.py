@@ -256,6 +256,26 @@ def _read_result_file(work_dir: Path) -> dict:
     return {}
 
 
+def _normalise_test_target(cmd: list[str]) -> list[str]:
+    """去掉 pytest 的 `::test_name` 后缀，只按文件跑。
+
+    2026-10-30 实测：agent 报的命令是
+      pytest -q .../test_x.py::test_from_model_id_accepts_device_string...
+    而它在 base 阶段把测试文件种进树里之后，pytest 报
+      ERROR: not found: ...::test_... (no match in any of [<Module ...>])
+    ——给单个用例名做验证太脆（用例名要完全一致才成立）。按整个文件跑，
+    只要该文件里有用例在 base 上失败就足以构成复现证据。
+    注意：workspace/路径里不会有 `::`，所以这个替换是安全的。
+    """
+    out: list[str] = []
+    for token in cmd:
+        if "::" in token and not token.startswith("-"):
+            out.append(token.split("::", 1)[0])
+        else:
+            out.append(token)
+    return out
+
+
 def _split_cmd(cmd: str) -> list[str]:
     """把 agent 报的命令行转成可执行的 argv。
 
@@ -384,7 +404,7 @@ def opencode_patch_producer(job: Job, work_dir: Path, context: str,
     cmd_str = markers.get("test_cmd", "").strip()
     return {
         "patch": patch,
-        "test_cmd": _split_cmd(cmd_str) if cmd_str else [],
+        "test_cmd": _normalise_test_target(_split_cmd(cmd_str)) if cmd_str else [],
         "test_files": test_files,
         "root_cause": markers.get("root_cause", "")[:300],
         "notes": notes,
@@ -500,28 +520,42 @@ def _restore_worktree(work: Path, snapshot: str) -> None:
 
 
 def _seed_test_files(repo_dir: Path,
-                     files: dict[str, str] | None) -> list[Path]:
-    """把 AI 回归测试临时写进 base 树，供 base 阶段的测试运行使用。
+                     files: dict[str, str] | None) -> list[tuple[Path, str | None]]:
+    """把 agent 的测试写进 base 树，供 base 阶段的运行使用。
 
-    返回实际新建的文件列表（原本就存在的文件不覆盖、也不回删），
-    由 _unseed_test_files 负责清理，避免污染工作区。
+    返回 [(path, 原内容或 None)]：None 表示这个文件是我们新建的（清理时删除），
+    有内容表示它原本就存在（清理时写回）。
+
+    必须覆盖已存在的文件（2026-10-30 实测）：agent 常常在仓库**已有**的测试
+    文件里追加用例，而 base 版本没有那个用例。早期实现"文件已存在就跳过"，
+    结果 base 阶段跑 `pytest path::test_new_case` 直接 "no match" —— 看起来像
+    环境坏了，其实是我们的种子逻辑把测试丢了。
     """
-    created: list[Path] = []
+    created: list[tuple[Path, str | None]] = []
     for rel, content in (files or {}).items():
         target = repo_dir / rel
+        original: str | None = None
         if target.exists():
-            continue
+            try:
+                original = target.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(content, encoding="utf-8")
-        created.append(target)
+        created.append((target, original))
     return created
 
 
-def _unseed_test_files(repo_dir: Path, created: list[Path]) -> None:
-    """删除 _seed_test_files 新建的文件，并清理因此变空的目录。"""
-    for p in reversed(created):
+def _unseed_test_files(repo_dir: Path,
+                       created: list[tuple[Path, str | None]]) -> None:
+    """恢复 _seed_test_files 动过的文件：新建的删除，原有的写回。"""
+    for p, original in reversed(created):
         try:
-            p.unlink(missing_ok=True)
+            if original is None:
+                p.unlink(missing_ok=True)
+            else:
+                p.write_text(original, encoding="utf-8")
+                continue
         except OSError:
             continue
         # 只在目录确实空了时向上删，避免动到仓库原有结构

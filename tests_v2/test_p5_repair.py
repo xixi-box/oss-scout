@@ -423,20 +423,24 @@ class TestReproductionMustBeReal:
         assert not (r / "test_generated.py").exists()
         created = _seed_test_files(r, {"test_generated.py": "def test_x():\n    pass\n"})
         assert (r / "test_generated.py").exists()
-        assert created == [r / "test_generated.py"]
+        assert created == [(r / "test_generated.py", None)]   # None = 我们新建的
         _unseed_test_files(r, created)
         assert not (r / "test_generated.py").exists()
 
-    def test_existing_file_is_never_overwritten_or_deleted(self, tmp_path):
+    def test_existing_file_is_overwritten_then_restored(self, tmp_path):
+        """agent 常在已有的测试文件里追加用例，必须覆盖后再还原。
+
+        2026-10-30 实测：不覆盖会让 base 阶段 `pytest path::new_case` 报
+        "no match" —— 那个新用例在 base 版本里本来就不存在，看起来像环境坏了。
+        """
         from scout_v2.workers.repair import (_seed_test_files,
                                              _unseed_test_files)
         r, sha = make_repo(tmp_path)
         original = (r / "test_div.py").read_text(encoding="utf-8")
-        created = _seed_test_files(r, {"test_div.py": "SHOULD NOT WIN\n"})
-        assert created == []
-        assert (r / "test_div.py").read_text(encoding="utf-8") == original
+        created = _seed_test_files(r, {"test_div.py": "SHOULD WIN\n"})
+        assert (r / "test_div.py").read_text(encoding="utf-8") == "SHOULD WIN\n"
         _unseed_test_files(r, created)
-        assert (r / "test_div.py").exists()
+        assert (r / "test_div.py").read_text(encoding="utf-8") == original
 
 
 def monkeypatch_(module, name, value):
