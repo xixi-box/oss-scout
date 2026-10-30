@@ -1,0 +1,49 @@
+name: Queue snapshot
+
+# 只读：把生产 /data 的候选池切成几个有用的视图打出来。
+# 存在的意义是不用登宿主机、也不用把 /data 拉到本地就能看清线上状态。
+on:
+  workflow_dispatch:
+    inputs:
+      view:
+        description: Which view to print
+        type: choice
+        options: [pr_open, active, needs_invite]
+        default: pr_open
+jobs:
+  snapshot:
+    runs-on: [self-hosted, aliyun]
+    steps:
+      - name: Print view
+        run: |
+          docker exec -i -e VIEW="${{ inputs.view }}" oss-scout python - <<'PY'
+          import json
+          import os
+
+          q = json.load(open("/data/queue/candidates.json", encoding="utf-8"))
+          view = os.environ["VIEW"]
+
+          if view == "pr_open":
+              rows = [(k, v) for k, v in q.items() if v.get("status") == "pr_open"]
+              print(f"pr_open: {len(rows)}")
+              for k, v in rows:
+                  print(f"  {k}")
+                  print(f"     pr={v.get('pr_url') or v.get('pr') or '-'}")
+                  print(f"     ts={v.get('pr_opened_at') or v.get('updated_at') or '-'}")
+          elif view == "needs_invite":
+              rows = [(k, v) for k, v in q.items() if v.get("status") == "needs_invite"]
+              print(f"needs_invite: {len(rows)}")
+              for k, v in rows:
+                  print(f"  {k} repo={v.get('repo')}")
+          else:
+              rows = [(k, v) for k, v in q.items()
+                      if v.get("status") in ("new", "queued", "queued_hist",
+                                             "recheck_failed")]
+              print(f"active: {len(rows)}")
+              for k, v in rows:
+                  verdict = v.get("ai_verdict") or {}
+                  print(f"  {k}")
+                  print(f"     usable={verdict.get('usable')} "
+                        f"why={str(verdict.get('reason'))[:80]}")
+                  print(f"     title={str(v.get('title'))[:80]}")
+          PY
