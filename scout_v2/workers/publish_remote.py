@@ -104,9 +104,14 @@ def publish(repo_dir: Path, patch_file: Path, publish_cfg: dict) -> dict:
     if ap.returncode != 0:
         return {"ok": False, "error": f"patch apply failed: {ap.stderr[-200:]}"}
     _run(["git", "add", "-A"], cwd=repo_dir)
+    # DCO：Playbook §4.3 要求查，但代码里一直没实现，导致 vllm/milvus 的 PR
+    # 全部挂着 DCO 红灯（2026-10-30 实测 #64811、#64800、#54926）。DCO bot 只
+    # 认 commit message 里的 Signed-off-by，所以无条件加上——不需要 DCO 的仓库
+    # 多一行 trailer 也无害（Git 惯例而非噪声）。
+    sign_off = "Signed-off-by: oss-scout <oss-scout@users.noreply.github.com>"
     ci = _run(["git", "-c", "user.name=oss-scout",
                "-c", "user.email=oss-scout@users.noreply.github.com",
-               "commit", "-qm", title[:72]], cwd=repo_dir)
+               "commit", "-qm", f"{title[:72]}\n\n{sign_off}"], cwd=repo_dir)
     if ci.returncode != 0:
         return {"ok": False, "error": f"commit failed: {ci.stderr[-200:]}"}
 

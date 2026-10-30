@@ -123,6 +123,47 @@ class TestPublishFlow:
         assert out["pr"].endswith("/pull/9")
 
 
+class TestDcoSignOff:
+    """DCO bot 只认 commit message 里的 Signed-off-by。
+
+    2026-10-30 实录：vllm#64811 / #64800、milvus#54926 全部挂着 DCO 红灯，
+    因为这些 PR 的 commit 是我们拼的、没带 trailer。Playbook §4.3 要求查
+    DCO，代码里从没实现过。
+    """
+
+    def _publish(self, tmp_path, monkeypatch):
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        patch = tmp_path / "change.patch"
+        patch.write_text("--- a/x\n+++ b/x\n", encoding="utf-8")
+        calls: list[list[str]] = []
+
+        def fake(args, cwd=None, **kw):
+            calls.append(list(args))
+            if "--jq" in args and ".default_branch" in args:
+                return subprocess.CompletedProcess(args, 0, "main", "")
+            if args[:3] == ["gh", "pr", "create"]:
+                return subprocess.CompletedProcess(args, 0, "https://x/pull/1\n", "")
+            return subprocess.CompletedProcess(args, 0, "", "")
+
+        monkeypatch.setattr(pr, "_run", fake)
+        monkeypatch.setattr(pr.subprocess, "run", fake)
+        monkeypatch.setenv("GITHUB_TOKEN", "ghp_X")
+        pr.publish(repo, patch, {"push_repo": "me/fork", "upstream": "up/stream",
+                                 "branch": "fix/1-a", "title": "fix: thing"})
+        return calls
+
+    def test_commit_carries_signed_off_by(self, tmp_path, monkeypatch):
+        calls = self._publish(tmp_path, monkeypatch)
+        commit = next(c for c in calls if "commit" in c)
+        msg = commit[commit.index("-qm") + 1]
+        assert "Signed-off-by:" in msg
+        # 首行仍是 PR 标题，trailer 在空行之后
+        assert msg.splitlines()[0] == "fix: thing"
+        assert msg.splitlines()[1] == ""
+        assert msg.splitlines()[2].startswith("Signed-off-by:")
+
+
 class TestWorkflowGate:
     """workflow 只应在证据链满足时才发布。"""
 
