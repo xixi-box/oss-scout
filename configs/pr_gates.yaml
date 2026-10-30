@@ -43,8 +43,13 @@ repositories:
     requires_invite: false
   npm/cli:
     requires_invite: false
+  pulumi/pulumi:
+    requires_invite: false
+    note: "近 40 个合并 PR 中 17 个来自外部贡献者（rgharris/seanyeh/aminix 等）"
   langchain-ai/langchain:
-    requires_invite: false
-    note: "外部贡献活跃（richardscarrott/eliornl 等近期有合并 PR），无 bot 门禁"
+    requires_invite: true
+    invite_labels: ["open for pull requests"]
+    note: "require-issue-link bot 会关闭未指派 PR（2026-10-30 实测 #41571 被秒关）；须先评论对齐并拿到指派"
   langchain-ai/langgraph:
-    requires_invite: false
+    requires_invite: true
+    note: "同 langchain，采用同一套 bot 门禁"

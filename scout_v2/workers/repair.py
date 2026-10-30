@@ -335,7 +335,11 @@ def opencode_patch_producer(job: Job, work_dir: Path, context: str,
     detail = ""
     try:
         # 1200s：agent 现在要装依赖、跑测试、迭代，比只改文件慢得多。
-        client = client or OpenCodeClient(timeout_seconds=1200, workdir=work_dir)
+        # 2400s (40 分钟)：pulumi 这类 Go 大仓库，agent 先要摸清 workspace 布局
+        # 再装工具链、跑 go test。2026-10-30 实测 1200s 正好在"还没开始改"时被
+        # 掐断。workflow 本身有 90 分钟预算，这里给 40 分钟留给 agent，剩下
+        # 50 分钟够两轮测试跑完。
+        client = client or OpenCodeClient(timeout_seconds=2400, workdir=work_dir)
         model = model or (job.model or "").strip() or resolve_model()
         rules = repo_rules_block(job.repo)
         (work_dir / TASK_FILE).write_text(
@@ -689,6 +693,7 @@ def run_repair(job: Job, repo_dir: Path, out_dir: Path, *,
     ai_cmd: list[str] = []
     test_files: dict[str, str] = dict(extra_test_files or {})
     root_cause = ""
+    agent_out = ""
     with tempfile.TemporaryDirectory() as td:
         work = Path(td) / "work"
         _git(["clone", "--quiet", str(repo_dir), str(work)], repo_dir)
@@ -735,8 +740,15 @@ def run_repair(job: Job, repo_dir: Path, out_dir: Path, *,
 
         cmd = ai_cmd or list(test_cmd or [])
         if not cmd:
-            raise_no_cmd = ("agent did not report a test command and none was supplied; "
-                            "cannot verify the fix")
+            # 说清楚是哪一种失败。2026-10-30 实测：pulumi 那次 agent 超时且零改动，
+            # 却只报"没报测试命令"，读起来像它只忘了写结果文件，实际是根本没干活。
+            if not (patch or "").strip():
+                raise_no_cmd = (
+                    "agent produced no changes and no test command - it likely ran out "
+                    f"of time or never located the code; agent said: {(agent_out or '')[:300]}")
+            else:
+                raise_no_cmd = ("agent changed files but did not report a test command, "
+                                "so the change cannot be verified")
             (out_dir / "worker.log").write_text(raise_no_cmd, encoding="utf-8")
             return Result(job_id=job.job_id, backend=backend_name, outcome="failed",
                           base_sha=job.base_sha,

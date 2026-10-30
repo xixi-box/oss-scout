@@ -120,8 +120,19 @@ def recheck_candidate(repo: str, number: int, *, my_login: str = "xixi-box",
         low = title.lower()
         if strong:
             return any(s.lower() in low for s in strong)
+        if not weak:
+            return False
+        # 普通词里，"最有辨识度"的那个（最长）必须命中，且总数要过半。
+        # 2026-10-30 实测假阳性：pulumi#25237 "Deduplicate policy violations..."
+        # 撞上 PR "include policy violations in JSON preview output"——
+        # 共享 "policy"/"violations" 两个泛词，但 "deduplicate" 才是关键，
+        # 它不在那个 PR 标题里，所以不该判成同一个问题。
+        must = max(weak, key=len).lower()
+        if must not in low:
+            return False
         hits = sum(1 for w in weak if w.lower() in low)
-        return hits >= 2 if len(weak) >= 2 else hits >= 1
+        need = max(2, (len(weak) + 1) // 2)
+        return hits >= need if len(weak) > 1 else hits >= 1
 
     for kw in kws:
         q = f"repo:{repo} is:pr is:open {kw}"

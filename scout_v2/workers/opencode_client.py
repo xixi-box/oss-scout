@@ -125,8 +125,22 @@ class OpenCodeClient:
                                    env=_child_env())
             except FileNotFoundError:
                 return False, "opencode binary not found"
-            except subprocess.TimeoutExpired:
-                return False, f"429 opencode run timed out after {self.timeout}s"
+            except subprocess.TimeoutExpired as exc:
+                # 超时也要把已经产生的输出带回去。2026-10-30 实测：pulumi 是 Go
+                # 大仓库，agent 跑了整 20 分钟（正好撞上 timeout）然后返回一句
+                # 固定字符串，完全看不出它卡在哪一步——是还在探索、还是在等权限。
+                tail = ""
+                for stream in (exc.stdout, exc.stderr):
+                    if not stream:
+                        continue
+                    text = (stream.decode("utf-8", "replace")
+                            if isinstance(stream, bytes) else str(stream))
+                    text = _strip_ansi(text).strip()
+                    if text:
+                        tail = text[-800:]
+                reason = (f"agent timed out after {self.timeout}s"
+                          + (f"; last output: {tail}" if tail else "; no output captured"))
+                return False, reason
             ok, detail = self._parse_events(p.stdout, p.stderr, p.returncode)
             if ok:
                 return True, detail
