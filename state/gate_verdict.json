@@ -1,0 +1,32 @@
+{
+ "hard_gated": {
+  "pydantic/pydantic": "enforce-issue-assignment.yml 会 close 未指派 PR（除非带 skip-assignment-check 标签）",
+  "langchain-ai/langchain": "require-issue-link / reopen_on_assignment 会 close 未指派 PR（2026-10-30 #41571 实测）",
+  "langchain-ai/langgraph": "require_issue_link.yml 会 close 未指派 PR",
+  "pydantic/pydantic-ai": "未指派 PR 会被自动关闭（AGENTS.md §6 已有记录）",
+  "sqlalchemy/sqlalchemy": "sqla-tester bot 只接受带了 open for pull requests 的 issue（2026-10-28 #13736 实测）"
+ },
+ "needs_claim": {
+  "fivetran/great_expectations": "需要先 /assign-me 认领，否则 issue 可能被他人锁定"
+ },
+ "false_positive": [
+  "astral-sh/uv",
+  "pnpm/pnpm",
+  "argoproj/argo-cd",
+  "oven-sh/bun",
+  "typeorm/typeorm",
+  "pandas-dev/pandas",
+  "scikit-learn/scikit-learn",
+  "BerriAI/litellm",
+  "Portkey-AI/gateway",
+  "microsoft/playwright-python",
+  "vercel/next.js",
+  "vercel/vercel",
+  "prisma/orm",
+  "babel/babel",
+  "grafana/grafana",
+  "nginx/nginx",
+  "valkey-io/valkey",
+  "opensearch-project/OpenSearch"
+ ]
+}

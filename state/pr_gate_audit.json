@@ -1,0 +1,189 @@
+[
+ {
+  "repo": "pydantic/pydantic",
+  "workflows": 9,
+  "closers": [
+   "enforce-issue-assignment.yml"
+  ],
+  "assigners": [
+   "enforce-issue-assignment.yml"
+  ],
+  "requires_invite": true
+ },
+ {
+  "repo": "astral-sh/uv",
+  "workflows": 48,
+  "closers": [],
+  "assigners": [
+   "promote-pull-request.yml",
+   "release-prepare.yml"
+  ],
+  "requires_invite": false
+ },
+ {
+  "repo": "pandas-dev/pandas",
+  "workflows": 14,
+  "closers": [],
+  "assigners": [],
+  "requires_invite": false
+ },
+ {
+  "repo": "scikit-learn/scikit-learn",
+  "workflows": 23,
+  "closers": [],
+  "assigners": [],
+  "requires_invite": false
+ },
+ {
+  "repo": "fivetran/great_expectations",
+  "workflows": 13,
+  "closers": [],
+  "assigners": [
+   "assign.yml"
+  ],
+  "requires_invite": false
+ },
+ {
+  "repo": "langchain-ai/langchain",
+  "workflows": 27,
+  "closers": [
+   "block_fork_main_prs.yml",
+   "close_unchecked_issues.yml",
+   "reopen_on_assignment.yml",
+   "require_issue_link.yml"
+  ],
+  "assigners": [
+   "reopen_on_assignment.yml",
+   "require_issue_link.yml"
+  ],
+  "requires_invite": true
+ },
+ {
+  "repo": "langchain-ai/langgraph",
+  "workflows": 17,
+  "closers": [
+   "reopen_on_assignment.yml",
+   "require_issue_link.yml"
+  ],
+  "assigners": [
+   "reopen_on_assignment.yml",
+   "require_issue_link.yml"
+  ],
+  "requires_invite": true
+ },
+ {
+  "repo": "BerriAI/litellm",
+  "workflows": 0,
+  "closers": [],
+  "assigners": [],
+  "requires_invite": false
+ },
+ {
+  "repo": "Portkey-AI/gateway",
+  "workflows": 6,
+  "closers": [],
+  "assigners": [],
+  "requires_invite": false
+ },
+ {
+  "repo": "microsoft/playwright-python",
+  "workflows": 6,
+  "closers": [],
+  "assigners": [],
+  "requires_invite": false
+ },
+ {
+  "repo": "vercel/next.js",
+  "workflows": 29,
+  "closers": [],
+  "assigners": [],
+  "requires_invite": false
+ },
+ {
+  "repo": "vercel/vercel",
+  "workflows": 25,
+  "closers": [],
+  "assigners": [],
+  "requires_invite": false
+ },
+ {
+  "repo": "prisma/orm",
+  "workflows": 18,
+  "closers": [],
+  "assigners": [],
+  "requires_invite": false
+ },
+ {
+  "repo": "typeorm/typeorm",
+  "workflows": 11,
+  "closers": [
+   "assign-milestone.yml"
+  ],
+  "assigners": [],
+  "requires_invite": true
+ },
+ {
+  "repo": "babel/babel",
+  "workflows": 16,
+  "closers": [],
+  "assigners": [],
+  "requires_invite": false
+ },
+ {
+  "repo": "oven-sh/bun",
+  "workflows": 30,
+  "closers": [
+   "close-linked-issues.yml"
+  ],
+  "assigners": [
+   "auto-assign-types.yml"
+  ],
+  "requires_invite": true
+ },
+ {
+  "repo": "pnpm/pnpm",
+  "workflows": 31,
+  "closers": [],
+  "assigners": [
+   "triage-issues.yml"
+  ],
+  "requires_invite": false
+ },
+ {
+  "repo": "grafana/grafana",
+  "workflows": 99,
+  "closers": [],
+  "assigners": [],
+  "requires_invite": false
+ },
+ {
+  "repo": "argoproj/argo-cd",
+  "workflows": 18,
+  "closers": [],
+  "assigners": [
+   "auto-assign-pr-author.yaml"
+  ],
+  "requires_invite": false
+ },
+ {
+  "repo": "nginx/nginx",
+  "workflows": 9,
+  "closers": [],
+  "assigners": [],
+  "requires_invite": false
+ },
+ {
+  "repo": "valkey-io/valkey",
+  "workflows": 20,
+  "closers": [],
+  "assigners": [],
+  "requires_invite": false
+ },
+ {
+  "repo": "opensearch-project/OpenSearch",
+  "workflows": 24,
+  "closers": [],
+  "assigners": [],
+  "requires_invite": false
+ }
+]

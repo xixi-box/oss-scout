@@ -1,0 +1,191 @@
+{
+ "stats": {
+  "repos": 19,
+  "issues": 25,
+  "passed_filter": 13,
+  "skipped_quota": 0
+ },
+ "hits": [
+  {
+   "repo": "sqlalchemy/sqlalchemy",
+   "number": 13732,
+   "title": "render bind_expression around each literal_execute expanding value",
+   "created": "2026-10-27T17:19",
+   "age_h": 18.9,
+   "comments": 0,
+   "labels": [
+    "bug",
+    "sql"
+   ],
+   "body_len": 1392,
+   "url": "https://github.com/sqlalchemy/sqlalchemy/issues/13732"
+  },
+  {
+   "repo": "sqlalchemy/sqlalchemy",
+   "number": 13731,
+   "title": "declared_attr.cascading fails to typecheck under mypy / pyright on documented usage",
+   "created": "2026-10-27T17:04",
+   "age_h": 19.2,
+   "comments": 2,
+   "labels": [
+    "bug",
+    "orm",
+    "typing"
+   ],
+   "body_len": 3546,
+   "url": "https://github.com/sqlalchemy/sqlalchemy/issues/13731"
+  },
+  {
+   "repo": "astral-sh/ruff",
+   "number": 29683,
+   "title": "Relative imports from a module named `__future__` are treated as future imports",
+   "created": "2026-10-23T21:50",
+   "age_h": 110.4,
+   "comments": 0,
+   "labels": [
+    "bug"
+   ],
+   "body_len": 1400,
+   "url": "https://github.com/astral-sh/ruff/issues/29683"
+  },
+  {
+   "repo": "astral-sh/ruff",
+   "number": 29512,
+   "title": "pydocstyle: `Attributes:` in doctest output is treated as a section header",
+   "created": "2026-10-19T22:21",
+   "age_h": 205.9,
+   "comments": 1,
+   "labels": [
+    "bug",
+    "docstring"
+   ],
+   "body_len": 1504,
+   "url": "https://github.com/astral-sh/ruff/issues/29512"
+  },
+  {
+   "repo": "astral-sh/uv",
+   "number": 22966,
+   "title": "Windows trampoline can close its own child or job handle when started through the C runtim",
+   "created": "2026-10-28T05:36",
+   "age_h": 6.6,
+   "comments": 0,
+   "labels": [
+    "bug"
+   ],
+   "body_len": 5088,
+   "url": "https://github.com/astral-sh/uv/issues/22966"
+  },
+  {
+   "repo": "astral-sh/uv",
+   "number": 22950,
+   "title": "no error when using non-existent `preview` setting",
+   "created": "2026-10-27T02:18",
+   "age_h": 33.9,
+   "comments": 4,
+   "labels": [
+    "bug",
+    "needs-mre"
+   ],
+   "body_len": 2219,
+   "url": "https://github.com/astral-sh/uv/issues/22950"
+  },
+  {
+   "repo": "astral-sh/uv",
+   "number": 22869,
+   "title": "Windows Smart App Control blocks unsigned uv-managed CPython and venv executables",
+   "created": "2026-10-23T15:47",
+   "age_h": 116.5,
+   "comments": 2,
+   "labels": [
+    "bug",
+    "area:windows"
+   ],
+   "body_len": 3832,
+   "url": "https://github.com/astral-sh/uv/issues/22869"
+  },
+  {
+   "repo": "astral-sh/uv",
+   "number": 22783,
+   "title": "`uv self update` fails with SOCKS5 proxy on Windows",
+   "created": "2026-10-20T23:08",
+   "age_h": 181.1,
+   "comments": 3,
+   "labels": [
+    "bug",
+    "bot:ai-policy-comment"
+   ],
+   "body_len": 2958,
+   "url": "https://github.com/astral-sh/uv/issues/22783"
+  },
+  {
+   "repo": "python/mypy",
+   "number": 22304,
+   "title": "Inconsistent erroring for wider argument type in operator override when using overloads (f",
+   "created": "2026-10-26T16:43",
+   "age_h": 43.5,
+   "comments": 0,
+   "labels": [
+    "bug"
+   ],
+   "body_len": 2313,
+   "url": "https://github.com/python/mypy/issues/22304"
+  },
+  {
+   "repo": "python/mypy",
+   "number": 22302,
+   "title": "Union type of two concrete modules is ModuleType",
+   "created": "2026-10-26T15:31",
+   "age_h": 44.7,
+   "comments": 2,
+   "labels": [
+    "bug",
+    "topic-join-v-union"
+   ],
+   "body_len": 948,
+   "url": "https://github.com/python/mypy/issues/22302"
+  },
+  {
+   "repo": "python/mypy",
+   "number": 22265,
+   "title": "`var-annotated` errors for iteration should point to the line where the variable is define",
+   "created": "2026-10-21T23:57",
+   "age_h": 156.3,
+   "comments": 3,
+   "labels": [
+    "bug",
+    "topic-parser",
+    "topic-error-reporting"
+   ],
+   "body_len": 1721,
+   "url": "https://github.com/python/mypy/issues/22265"
+  },
+  {
+   "repo": "python/mypy",
+   "number": 22240,
+   "title": "Functions with `global` inside should not have their function bodies be stripped",
+   "created": "2026-10-21T00:18",
+   "age_h": 179.9,
+   "comments": 1,
+   "labels": [
+    "bug",
+    "topic-parser"
+   ],
+   "body_len": 1847,
+   "url": "https://github.com/python/mypy/issues/22240"
+  },
+  {
+   "repo": "python/mypy",
+   "number": 22230,
+   "title": "Spurious note despite suppressing error",
+   "created": "2026-10-19T20:00",
+   "age_h": 208.3,
+   "comments": 0,
+   "labels": [
+    "bug",
+    "topic-error-reporting"
+   ],
+   "body_len": 1611,
+   "url": "https://github.com/python/mypy/issues/22230"
+  }
+ ]
+}

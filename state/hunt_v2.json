@@ -1,0 +1,1535 @@
+{
+ "stats": {
+  "repos": 180,
+  "issues": 324,
+  "passed_filter": 105,
+  "skipped_quota": 0
+ },
+ "hits": [
+  {
+   "repo": "sqlalchemy/sqlalchemy",
+   "number": 13732,
+   "title": "render bind_expression around each literal_execute expanding value",
+   "created": "2026-10-27T17:19",
+   "age_h": 60.7,
+   "comments": 0,
+   "labels": [
+    "bug",
+    "sql"
+   ],
+   "body_len": 1392,
+   "url": "https://github.com/sqlalchemy/sqlalchemy/issues/13732"
+  },
+  {
+   "repo": "sqlalchemy/sqlalchemy",
+   "number": 13731,
+   "title": "declared_attr.cascading fails to typecheck under mypy / pyright on documented usage",
+   "created": "2026-10-27T17:04",
+   "age_h": 61.0,
+   "comments": 2,
+   "labels": [
+    "bug",
+    "orm",
+    "typing"
+   ],
+   "body_len": 3546,
+   "url": "https://github.com/sqlalchemy/sqlalchemy/issues/13731"
+  },
+  {
+   "repo": "sqlalchemy/sqlalchemy",
+   "number": 13727,
+   "title": "revise the purpose of validate_sql_phrase",
+   "created": "2026-10-27T07:19",
+   "age_h": 70.7,
+   "comments": 4,
+   "labels": [
+    "bug",
+    "postgresql",
+    "schema",
+    "oracle"
+   ],
+   "body_len": 4577,
+   "url": "https://github.com/sqlalchemy/sqlalchemy/issues/13727"
+  },
+  {
+   "repo": "astral-sh/ruff",
+   "number": 29683,
+   "title": "Relative imports from a module named `__future__` are treated as future imports",
+   "created": "2026-10-23T21:50",
+   "age_h": 152.2,
+   "comments": 2,
+   "labels": [
+    "bug"
+   ],
+   "body_len": 1400,
+   "url": "https://github.com/astral-sh/ruff/issues/29683"
+  },
+  {
+   "repo": "astral-sh/ruff",
+   "number": 29422,
+   "title": "A few more: missed reports vs flake8/pylint, plus two fix bugs (B012, F402, F823, SIM102, ",
+   "created": "2026-10-15T15:18",
+   "age_h": 350.7,
+   "comments": 2,
+   "labels": [
+    "bug"
+   ],
+   "body_len": 4537,
+   "url": "https://github.com/astral-sh/ruff/issues/29422"
+  },
+  {
+   "repo": "astral-sh/uv",
+   "number": 22975,
+   "title": "Concurrent Git fetches for packages from the same repository race on a cold cache: \"failed",
+   "created": "2026-10-28T22:19",
+   "age_h": 31.7,
+   "comments": 1,
+   "labels": [
+    "bug"
+   ],
+   "body_len": 3620,
+   "url": "https://github.com/astral-sh/uv/issues/22975"
+  },
+  {
+   "repo": "astral-sh/uv",
+   "number": 22950,
+   "title": "no error when using non-existent `preview` setting",
+   "created": "2026-10-27T02:18",
+   "age_h": 75.7,
+   "comments": 4,
+   "labels": [
+    "bug",
+    "needs-mre"
+   ],
+   "body_len": 2219,
+   "url": "https://github.com/astral-sh/uv/issues/22950"
+  },
+  {
+   "repo": "astral-sh/uv",
+   "number": 22869,
+   "title": "Windows Smart App Control blocks unsigned uv-managed CPython and venv executables",
+   "created": "2026-10-23T15:47",
+   "age_h": 158.2,
+   "comments": 2,
+   "labels": [
+    "bug",
+    "area:windows"
+   ],
+   "body_len": 3832,
+   "url": "https://github.com/astral-sh/uv/issues/22869"
+  },
+  {
+   "repo": "astral-sh/uv",
+   "number": 22783,
+   "title": "`uv self update` fails with SOCKS5 proxy on Windows",
+   "created": "2026-10-20T23:08",
+   "age_h": 222.9,
+   "comments": 3,
+   "labels": [
+    "bug",
+    "bot:ai-policy-comment"
+   ],
+   "body_len": 2958,
+   "url": "https://github.com/astral-sh/uv/issues/22783"
+  },
+  {
+   "repo": "python/mypy",
+   "number": 22316,
+   "title": "Wrong comparison in type error for comparisons",
+   "created": "2026-10-28T23:45",
+   "age_h": 30.3,
+   "comments": 1,
+   "labels": [
+    "bug",
+    "topic-error-reporting"
+   ],
+   "body_len": 1522,
+   "url": "https://github.com/python/mypy/issues/22316"
+  },
+  {
+   "repo": "python/mypy",
+   "number": 22304,
+   "title": "Inconsistent erroring for wider argument type in operator override when using overloads (f",
+   "created": "2026-10-26T16:43",
+   "age_h": 85.3,
+   "comments": 1,
+   "labels": [
+    "bug"
+   ],
+   "body_len": 2313,
+   "url": "https://github.com/python/mypy/issues/22304"
+  },
+  {
+   "repo": "python/mypy",
+   "number": 22302,
+   "title": "Union type of two concrete modules is ModuleType",
+   "created": "2026-10-26T15:31",
+   "age_h": 86.5,
+   "comments": 2,
+   "labels": [
+    "bug",
+    "topic-join-v-union"
+   ],
+   "body_len": 948,
+   "url": "https://github.com/python/mypy/issues/22302"
+  },
+  {
+   "repo": "python/mypy",
+   "number": 22265,
+   "title": "`var-annotated` errors for iteration should point to the line where the variable is define",
+   "created": "2026-10-21T23:57",
+   "age_h": 198.1,
+   "comments": 3,
+   "labels": [
+    "bug",
+    "topic-parser",
+    "topic-error-reporting"
+   ],
+   "body_len": 1721,
+   "url": "https://github.com/python/mypy/issues/22265"
+  },
+  {
+   "repo": "python/mypy",
+   "number": 22240,
+   "title": "Functions with `global` inside should not have their function bodies be stripped",
+   "created": "2026-10-21T00:18",
+   "age_h": 221.7,
+   "comments": 1,
+   "labels": [
+    "bug",
+    "topic-parser"
+   ],
+   "body_len": 1847,
+   "url": "https://github.com/python/mypy/issues/22240"
+  },
+  {
+   "repo": "python/mypy",
+   "number": 22220,
+   "title": "corrupt cache causes alarming message",
+   "created": "2026-10-17T02:56",
+   "age_h": 315.1,
+   "comments": 1,
+   "labels": [
+    "bug"
+   ],
+   "body_len": 7740,
+   "url": "https://github.com/python/mypy/issues/22220"
+  },
+  {
+   "repo": "pandas-dev/pandas",
+   "number": 71769,
+   "title": "BUG: read_csv fails with TypeError: open() argument 'mode' must be str, not int (with Loca",
+   "created": "2026-10-29T12:58",
+   "age_h": 17.1,
+   "comments": 1,
+   "labels": [
+    "Bug",
+    "Needs Triage"
+   ],
+   "body_len": 8364,
+   "url": "https://github.com/pandas-dev/pandas/issues/71769"
+  },
+  {
+   "repo": "pandas-dev/pandas",
+   "number": 71768,
+   "title": "BUG: `Series.rank()` on object dtype returns random output when a comparison raises an err",
+   "created": "2026-10-29T10:21",
+   "age_h": 19.7,
+   "comments": 2,
+   "labels": [
+    "Bug",
+    "Needs Triage"
+   ],
+   "body_len": 1756,
+   "url": "https://github.com/pandas-dev/pandas/issues/71768"
+  },
+  {
+   "repo": "pandas-dev/pandas",
+   "number": 71485,
+   "title": "BUG: AttributeError: 'NoneType' object has no attribute 'total_seconds' using win32timezon",
+   "created": "2026-10-23T09:00",
+   "age_h": 165.0,
+   "comments": 3,
+   "labels": [
+    "Bug",
+    "Needs Triage"
+   ],
+   "body_len": 5234,
+   "url": "https://github.com/pandas-dev/pandas/issues/71485"
+  },
+  {
+   "repo": "scikit-learn/scikit-learn",
+   "number": 35254,
+   "title": "LinearDiscriminantAnalysis: \"svd\" and \"lsqr\"/\"eigen\" solvers disagree when priors differ f",
+   "created": "2026-10-28T11:05",
+   "age_h": 42.9,
+   "comments": 3,
+   "labels": [
+    "Bug",
+    "Needs Decision"
+   ],
+   "body_len": 5660,
+   "url": "https://github.com/scikit-learn/scikit-learn/issues/35254"
+  },
+  {
+   "repo": "scikit-learn/scikit-learn",
+   "number": 35195,
+   "title": "Pipeline.score routes sample_weight even when it is None (and should not be routed)",
+   "created": "2026-10-21T15:13",
+   "age_h": 206.8,
+   "comments": 4,
+   "labels": [
+    "Bug",
+    "Needs Investigation",
+    "Metadata Routing"
+   ],
+   "body_len": 5209,
+   "url": "https://github.com/scikit-learn/scikit-learn/issues/35195"
+  },
+  {
+   "repo": "langchain-ai/langchain",
+   "number": 41448,
+   "title": "`HuggingFacePipeline.from_model_id` crashes on device strings and misplaces models on non-",
+   "created": "2026-10-24T04:14",
+   "age_h": 145.8,
+   "comments": 2,
+   "labels": [
+    "bug",
+    "text-splitters",
+    "huggingface",
+    "external"
+   ],
+   "body_len": 6026,
+   "url": "https://github.com/langchain-ai/langchain/issues/41448"
+  },
+  {
+   "repo": "langchain-ai/langchain",
+   "number": 41412,
+   "title": "perplexity: Agent API requests send Chat Completions content blocks (`text`, `image_url`) ",
+   "created": "2026-10-22T06:19",
+   "age_h": 191.7,
+   "comments": 2,
+   "labels": [
+    "bug",
+    "perplexity",
+    "external"
+   ],
+   "body_len": 3121,
+   "url": "https://github.com/langchain-ai/langchain/issues/41412"
+  },
+  {
+   "repo": "langchain-ai/langchain",
+   "number": 41406,
+   "title": "langchain-model-profiles symlink error misnames generated output file",
+   "created": "2026-10-22T01:07",
+   "age_h": 196.9,
+   "comments": 2,
+   "labels": [
+    "bug",
+    "model-profiles",
+    "external"
+   ],
+   "body_len": 2623,
+   "url": "https://github.com/langchain-ai/langchain/issues/41406"
+  },
+  {
+   "repo": "langchain-ai/langchain",
+   "number": 41366,
+   "title": "perplexity: streaming with_structured_output emits JSON from inside an unclosed think bloc",
+   "created": "2026-10-21T11:30",
+   "age_h": 210.5,
+   "comments": 2,
+   "labels": [
+    "bug",
+    "perplexity",
+    "external"
+   ],
+   "body_len": 4404,
+   "url": "https://github.com/langchain-ai/langchain/issues/41366"
+  },
+  {
+   "repo": "langchain-ai/langchain",
+   "number": 41358,
+   "title": "langchain-openai: citation annotations streamed for a function_call are merged into it and",
+   "created": "2026-10-21T08:52",
+   "age_h": 213.1,
+   "comments": 4,
+   "labels": [
+    "bug",
+    "openai",
+    "external"
+   ],
+   "body_len": 6913,
+   "url": "https://github.com/langchain-ai/langchain/issues/41358"
+  },
+  {
+   "repo": "langchain-ai/langchain",
+   "number": 41323,
+   "title": "SummarizationMiddleware deletes conversation history when the summary model returns an emp",
+   "created": "2026-10-20T06:41",
+   "age_h": 239.3,
+   "comments": 2,
+   "labels": [
+    "bug",
+    "langchain",
+    "external"
+   ],
+   "body_len": 4238,
+   "url": "https://github.com/langchain-ai/langchain/issues/41323"
+  },
+  {
+   "repo": "langchain-ai/langchain",
+   "number": 41305,
+   "title": "langchain-mistralai: reasoning (thinking) blocks are dropped from assistant messages that ",
+   "created": "2026-10-19T18:00",
+   "age_h": 252.0,
+   "comments": 4,
+   "labels": [
+    "bug",
+    "mistralai",
+    "external"
+   ],
+   "body_len": 3556,
+   "url": "https://github.com/langchain-ai/langchain/issues/41305"
+  },
+  {
+   "repo": "langchain-ai/langchain",
+   "number": 41294,
+   "title": "[text-splitters] Dead code in HTMLSemanticPreservingSplitter._process_links() + markdown l",
+   "created": "2026-10-18T17:02",
+   "age_h": 277.0,
+   "comments": 3,
+   "labels": [
+    "bug",
+    "text-splitters",
+    "external"
+   ],
+   "body_len": 5414,
+   "url": "https://github.com/langchain-ai/langchain/issues/41294"
+  },
+  {
+   "repo": "langchain-ai/langgraph",
+   "number": 9490,
+   "title": "Enum, UUID and date dict keys in state lose their type in a checkpoint",
+   "created": "2026-10-30T03:11",
+   "age_h": 2.8,
+   "comments": 1,
+   "labels": [
+    "bug",
+    "external"
+   ],
+   "body_len": 2247,
+   "url": "https://github.com/langchain-ai/langgraph/issues/9490"
+  },
+  {
+   "repo": "langchain-ai/langgraph",
+   "number": 9488,
+   "title": "A read expires a PostgresStore item at once when its TTL is 30 seconds or less",
+   "created": "2026-10-30T01:58",
+   "age_h": 4.0,
+   "comments": 2,
+   "labels": [
+    "bug",
+    "external"
+   ],
+   "body_len": 2021,
+   "url": "https://github.com/langchain-ai/langgraph/issues/9488"
+  },
+  {
+   "repo": "langchain-ai/langgraph",
+   "number": 9404,
+   "title": "langgraph-checkpoint-sqlite: The test test_delta_channel_conformance fails: ValueError: 'd",
+   "created": "2026-10-23T06:02",
+   "age_h": 168.0,
+   "comments": 1,
+   "labels": [
+    "bug",
+    "external"
+   ],
+   "body_len": 4502,
+   "url": "https://github.com/langchain-ai/langgraph/issues/9404"
+  },
+  {
+   "repo": "langchain-ai/langgraph",
+   "number": 9394,
+   "title": "`stream()` deadlocks under `max_concurrency=1` with `stream_mode=\"messages\"` or `\"custom\"`",
+   "created": "2026-10-22T14:47",
+   "age_h": 183.2,
+   "comments": 3,
+   "labels": [
+    "bug",
+    "external"
+   ],
+   "body_len": 3946,
+   "url": "https://github.com/langchain-ai/langgraph/issues/9394"
+  },
+  {
+   "repo": "langchain-ai/langgraph",
+   "number": 9361,
+   "title": "In-memory runtime: crons fail after a restart because `SimpleUser` does not survive pickli",
+   "created": "2026-10-20T10:06",
+   "age_h": 235.9,
+   "comments": 2,
+   "labels": [
+    "bug",
+    "external"
+   ],
+   "body_len": 6519,
+   "url": "https://github.com/langchain-ai/langgraph/issues/9361"
+  },
+  {
+   "repo": "langchain-ai/langgraph",
+   "number": 9346,
+   "title": "A subgraph compiled with `checkpointer=True` returns its previous run's output when it is ",
+   "created": "2026-10-18T20:49",
+   "age_h": 273.2,
+   "comments": 2,
+   "labels": [
+    "bug",
+    "external"
+   ],
+   "body_len": 3970,
+   "url": "https://github.com/langchain-ai/langgraph/issues/9346"
+  },
+  {
+   "repo": "langchain-ai/langgraph",
+   "number": 9304,
+   "title": "Functional API with a cache: concurrent nested tasks fail with \"dictionary changed size du",
+   "created": "2026-10-14T04:29",
+   "age_h": 385.5,
+   "comments": 3,
+   "labels": [
+    "bug",
+    "external"
+   ],
+   "body_len": 4320,
+   "url": "https://github.com/langchain-ai/langgraph/issues/9304"
+  },
+  {
+   "repo": "run-llama/llama_index",
+   "number": 23613,
+   "title": "[Bug]: Fix Python 3.10 CI dependency failures and optional Gel DB test setup",
+   "created": "2026-10-20T02:30",
+   "age_h": 243.5,
+   "comments": 0,
+   "labels": [
+    "bug",
+    "triage"
+   ],
+   "body_len": 1879,
+   "url": "https://github.com/run-llama/llama_index/issues/23613"
+  },
+  {
+   "repo": "run-llama/llama_index",
+   "number": 23515,
+   "title": "[Bug]: Restoring a context loses an event a list join already holds, when it came from a n",
+   "created": "2026-10-14T23:42",
+   "age_h": 366.3,
+   "comments": 3,
+   "labels": [
+    "bug",
+    "triage"
+   ],
+   "body_len": 4711,
+   "url": "https://github.com/run-llama/llama_index/issues/23515"
+  },
+  {
+   "repo": "hwchase17/langchain",
+   "number": 41448,
+   "title": "`HuggingFacePipeline.from_model_id` crashes on device strings and misplaces models on non-",
+   "created": "2026-10-24T04:14",
+   "age_h": 145.8,
+   "comments": 2,
+   "labels": [
+    "bug",
+    "text-splitters",
+    "huggingface",
+    "external"
+   ],
+   "body_len": 6026,
+   "url": "https://github.com/langchain-ai/langchain/issues/41448"
+  },
+  {
+   "repo": "hwchase17/langchain",
+   "number": 41412,
+   "title": "perplexity: Agent API requests send Chat Completions content blocks (`text`, `image_url`) ",
+   "created": "2026-10-22T06:19",
+   "age_h": 191.7,
+   "comments": 2,
+   "labels": [
+    "bug",
+    "perplexity",
+    "external"
+   ],
+   "body_len": 3121,
+   "url": "https://github.com/langchain-ai/langchain/issues/41412"
+  },
+  {
+   "repo": "hwchase17/langchain",
+   "number": 41406,
+   "title": "langchain-model-profiles symlink error misnames generated output file",
+   "created": "2026-10-22T01:07",
+   "age_h": 196.9,
+   "comments": 2,
+   "labels": [
+    "bug",
+    "model-profiles",
+    "external"
+   ],
+   "body_len": 2623,
+   "url": "https://github.com/langchain-ai/langchain/issues/41406"
+  },
+  {
+   "repo": "hwchase17/langchain",
+   "number": 41366,
+   "title": "perplexity: streaming with_structured_output emits JSON from inside an unclosed think bloc",
+   "created": "2026-10-21T11:30",
+   "age_h": 210.5,
+   "comments": 2,
+   "labels": [
+    "bug",
+    "perplexity",
+    "external"
+   ],
+   "body_len": 4404,
+   "url": "https://github.com/langchain-ai/langchain/issues/41366"
+  },
+  {
+   "repo": "hwchase17/langchain",
+   "number": 41358,
+   "title": "langchain-openai: citation annotations streamed for a function_call are merged into it and",
+   "created": "2026-10-21T08:52",
+   "age_h": 213.1,
+   "comments": 4,
+   "labels": [
+    "bug",
+    "openai",
+    "external"
+   ],
+   "body_len": 6913,
+   "url": "https://github.com/langchain-ai/langchain/issues/41358"
+  },
+  {
+   "repo": "hwchase17/langchain",
+   "number": 41323,
+   "title": "SummarizationMiddleware deletes conversation history when the summary model returns an emp",
+   "created": "2026-10-20T06:41",
+   "age_h": 239.3,
+   "comments": 2,
+   "labels": [
+    "bug",
+    "langchain",
+    "external"
+   ],
+   "body_len": 4238,
+   "url": "https://github.com/langchain-ai/langchain/issues/41323"
+  },
+  {
+   "repo": "hwchase17/langchain",
+   "number": 41305,
+   "title": "langchain-mistralai: reasoning (thinking) blocks are dropped from assistant messages that ",
+   "created": "2026-10-19T18:00",
+   "age_h": 252.0,
+   "comments": 4,
+   "labels": [
+    "bug",
+    "mistralai",
+    "external"
+   ],
+   "body_len": 3556,
+   "url": "https://github.com/langchain-ai/langchain/issues/41305"
+  },
+  {
+   "repo": "hwchase17/langchain",
+   "number": 41294,
+   "title": "[text-splitters] Dead code in HTMLSemanticPreservingSplitter._process_links() + markdown l",
+   "created": "2026-10-18T17:02",
+   "age_h": 277.0,
+   "comments": 3,
+   "labels": [
+    "bug",
+    "text-splitters",
+    "external"
+   ],
+   "body_len": 5414,
+   "url": "https://github.com/langchain-ai/langchain/issues/41294"
+  },
+  {
+   "repo": "BerriAI/litellm",
+   "number": 49070,
+   "title": "[Bug]: A team's max_parallel_requests is dropped by /team/new and /team/update and never e",
+   "created": "2026-10-29T12:51",
+   "age_h": 17.2,
+   "comments": 2,
+   "labels": [
+    "bug",
+    "llm translation"
+   ],
+   "body_len": 2560,
+   "url": "https://github.com/BerriAI/litellm/issues/49070"
+  },
+  {
+   "repo": "BerriAI/litellm",
+   "number": 49042,
+   "title": "[Bug]: Responses API rejects a LiteLLM response id in prompt_cache_options.comparison_resp",
+   "created": "2026-10-29T07:51",
+   "age_h": 22.2,
+   "comments": 0,
+   "labels": [
+    "bug",
+    "llm translation"
+   ],
+   "body_len": 2925,
+   "url": "https://github.com/BerriAI/litellm/issues/49042"
+  },
+  {
+   "repo": "BerriAI/litellm",
+   "number": 48578,
+   "title": "[Bug]: Batch cost poller mis-routes raw gs:// Vertex batches to the first model_list entry",
+   "created": "2026-10-27T13:05",
+   "age_h": 64.9,
+   "comments": 1,
+   "labels": [
+    "bug",
+    "llm translation"
+   ],
+   "body_len": 4847,
+   "url": "https://github.com/BerriAI/litellm/issues/48578"
+  },
+  {
+   "repo": "BerriAI/litellm",
+   "number": 48571,
+   "title": "[Bug]: missing azure foundry price entries for GPT-6.1-terra",
+   "created": "2026-10-27T11:03",
+   "age_h": 67.0,
+   "comments": 0,
+   "labels": [
+    "bug",
+    "llm translation"
+   ],
+   "body_len": 587,
+   "url": "https://github.com/BerriAI/litellm/issues/48571"
+  },
+  {
+   "repo": "BerriAI/litellm",
+   "number": 48007,
+   "title": "[Bug]: Content filter streamed generic_api_key is missed when a long whitespace run separa",
+   "created": "2026-10-23T07:56",
+   "age_h": 166.1,
+   "comments": 1,
+   "labels": [
+    "bug",
+    "llm translation"
+   ],
+   "body_len": 4407,
+   "url": "https://github.com/BerriAI/litellm/issues/48007"
+  },
+  {
+   "repo": "BerriAI/litellm",
+   "number": 47862,
+   "title": "[Bug]: TypeError in litellm/proxy/utils.py",
+   "created": "2026-10-21T19:21",
+   "age_h": 202.7,
+   "comments": 1,
+   "labels": [
+    "bug",
+    "llm translation",
+    "claude code"
+   ],
+   "body_len": 37360,
+   "url": "https://github.com/BerriAI/litellm/issues/47862"
+  },
+  {
+   "repo": "drizzle-team/drizzle-orm",
+   "number": 6600,
+   "title": "[BUG]: bun-sql (PostgreSQL): json/jsonb values are double-encoded, or throw for numbers an",
+   "created": "2026-10-27T19:18",
+   "age_h": 58.7,
+   "comments": 1,
+   "labels": [
+    "bug",
+    "bug/fixed-in-beta"
+   ],
+   "body_len": 10416,
+   "url": "https://github.com/drizzle-team/drizzle-orm/issues/6600"
+  },
+  {
+   "repo": "drizzle-team/drizzle-orm",
+   "number": 6593,
+   "title": "[BUG]: drizzle-kit ignores tsconfig `paths` mapping `\"*\"` under Node (only trailing `/*` k",
+   "created": "2026-10-25T10:00",
+   "age_h": 116.0,
+   "comments": 2,
+   "labels": [
+    "bug"
+   ],
+   "body_len": 3752,
+   "url": "https://github.com/drizzle-team/drizzle-orm/issues/6593"
+  },
+  {
+   "repo": "drizzle-team/drizzle-orm",
+   "number": 6534,
+   "title": "[BUG]: MySQL generate stops when a new foreign key points to a table that is not exported ",
+   "created": "2026-10-19T10:11",
+   "age_h": 259.8,
+   "comments": 1,
+   "labels": [
+    "bug"
+   ],
+   "body_len": 2651,
+   "url": "https://github.com/drizzle-team/drizzle-orm/issues/6534"
+  },
+  {
+   "repo": "eslint/eslint",
+   "number": 21438,
+   "title": "Bug: `--cache` ignores changes to regular expressions in rule options and settings",
+   "created": "2026-10-23T18:04",
+   "age_h": 155.9,
+   "comments": 4,
+   "labels": [
+    "bug",
+    "core",
+    "repro:yes"
+   ],
+   "body_len": 1729,
+   "url": "https://github.com/eslint/eslint/issues/21438"
+  },
+  {
+   "repo": "microsoft/TypeScript",
+   "number": 64950,
+   "title": "7.1 regression: comparing a recursive `-?` mapped type is quadratic in the number of prope",
+   "created": "2026-10-24T13:37",
+   "age_h": 136.4,
+   "comments": 1,
+   "labels": [
+    "Bug"
+   ],
+   "body_len": 3723,
+   "url": "https://github.com/microsoft/TypeScript/issues/64950"
+  },
+  {
+   "repo": "microsoft/TypeScript",
+   "number": 64895,
+   "title": "panic: Unhandled case in Node.MemberList: KindVariableDeclarationList on merged namespace/",
+   "created": "2026-10-21T07:20",
+   "age_h": 214.7,
+   "comments": 1,
+   "labels": [
+    "Bug"
+   ],
+   "body_len": 1152,
+   "url": "https://github.com/microsoft/TypeScript/issues/64895"
+  },
+  {
+   "repo": "microsoft/TypeScript",
+   "number": 64875,
+   "title": "Incremental compile panics on a failed output write, or never retries it",
+   "created": "2026-10-19T18:08",
+   "age_h": 251.9,
+   "comments": 4,
+   "labels": [
+    "Bug",
+    "Crash",
+    "Domain: tsc: --incremental"
+   ],
+   "body_len": 2751,
+   "url": "https://github.com/microsoft/TypeScript/issues/64875"
+  },
+  {
+   "repo": "oven-sh/bun",
+   "number": 47408,
+   "title": "process.stdout._handle is undefined, so setBlocking(true) is a no-op and native or writeSy",
+   "created": "2026-10-29T22:09",
+   "age_h": 7.9,
+   "comments": 0,
+   "labels": [
+    "bug",
+    "node.js"
+   ],
+   "body_len": 2080,
+   "url": "https://github.com/oven-sh/bun/issues/47408"
+  },
+  {
+   "repo": "oven-sh/bun",
+   "number": 47365,
+   "title": "setTimeout that is already due when the event loop starts runs after setImmediate (Node ru",
+   "created": "2026-10-29T11:40",
+   "age_h": 18.4,
+   "comments": 1,
+   "labels": [
+    "bug",
+    "node.js",
+    "confirmed bug"
+   ],
+   "body_len": 1737,
+   "url": "https://github.com/oven-sh/bun/issues/47365"
+  },
+  {
+   "repo": "oven-sh/bun",
+   "number": 47358,
+   "title": "`bun lint` outputs `error: Script not found \"lint\"`",
+   "created": "2026-10-29T10:58",
+   "age_h": 19.0,
+   "comments": 0,
+   "labels": [
+    "bug",
+    "cli",
+    "needs triage",
+    "confirmed bug"
+   ],
+   "body_len": 617,
+   "url": "https://github.com/oven-sh/bun/issues/47358"
+  },
+  {
+   "repo": "oven-sh/bun",
+   "number": 47351,
+   "title": "node:http2: a response is held while expect().rejects waits, when the test resumed from th",
+   "created": "2026-10-29T09:53",
+   "age_h": 20.1,
+   "comments": 0,
+   "labels": [
+    "bug",
+    "node:http2"
+   ],
+   "body_len": 2863,
+   "url": "https://github.com/oven-sh/bun/issues/47351"
+  },
+  {
+   "repo": "oven-sh/bun",
+   "number": 47345,
+   "title": "Performance regression in 1.3.13: Bun.file responses under 1 MiB no longer use sendfile",
+   "created": "2026-10-29T09:09",
+   "age_h": 20.9,
+   "comments": 0,
+   "labels": [
+    "bug",
+    "needs triage"
+   ],
+   "body_len": 2112,
+   "url": "https://github.com/oven-sh/bun/issues/47345"
+  },
+  {
+   "repo": "oven-sh/bun",
+   "number": 47334,
+   "title": "Bun.WebView (WebKit, macOS): using views from more than one JS thread corrupts the heap (S",
+   "created": "2026-10-29T07:07",
+   "age_h": 22.9,
+   "comments": 0,
+   "labels": [
+    "bug",
+    "crash",
+    "macOS",
+    "Worker"
+   ],
+   "body_len": 4129,
+   "url": "https://github.com/oven-sh/bun/issues/47334"
+  },
+  {
+   "repo": "oven-sh/bun",
+   "number": 47277,
+   "title": "pipeline with an async-generator stage can reject before fs.WriteStream closes, leaving a ",
+   "created": "2026-10-29T00:36",
+   "age_h": 29.4,
+   "comments": 0,
+   "labels": [
+    "bug",
+    "node.js",
+    "node:fs",
+    "node:stream"
+   ],
+   "body_len": 4136,
+   "url": "https://github.com/oven-sh/bun/issues/47277"
+  },
+  {
+   "repo": "oven-sh/bun",
+   "number": 47263,
+   "title": "Windows: `fs.watch(dir, { recursive: true })` reports nothing from subfolders when `dir` i",
+   "created": "2026-10-28T23:32",
+   "age_h": 30.5,
+   "comments": 0,
+   "labels": [
+    "bug",
+    "windows",
+    "node:fs"
+   ],
+   "body_len": 2246,
+   "url": "https://github.com/oven-sh/bun/issues/47263"
+  },
+  {
+   "repo": "oven-sh/bun",
+   "number": 47256,
+   "title": "Bun's custom traceback is wrong by after next task loop",
+   "created": "2026-10-28T22:31",
+   "age_h": 31.5,
+   "comments": 1,
+   "labels": [
+    "bug",
+    "needs triage"
+   ],
+   "body_len": 3573,
+   "url": "https://github.com/oven-sh/bun/issues/47256"
+  },
+  {
+   "repo": "oven-sh/bun",
+   "number": 47227,
+   "title": "TLA-ts commit model takes 2.05 s in Bun 1.4.4 versus 1.50 s in Node 26.12.1 (37% slower)",
+   "created": "2026-10-28T19:25",
+   "age_h": 34.6,
+   "comments": 0,
+   "labels": [
+    "bug",
+    "performance",
+    "needs triage",
+    "runtime"
+   ],
+   "body_len": 7096,
+   "url": "https://github.com/oven-sh/bun/issues/47227"
+  },
+  {
+   "repo": "oven-sh/bun",
+   "number": 47189,
+   "title": "AOT silently disables Rapier SIMD colliders and stops simulation on macOS arm64; same revi",
+   "created": "2026-10-28T12:33",
+   "age_h": 41.5,
+   "comments": 1,
+   "labels": [
+    "bug",
+    "wasm",
+    "macOS",
+    "single-file-executable",
+    "arm"
+   ],
+   "body_len": 3613,
+   "url": "https://github.com/oven-sh/bun/issues/47189"
+  },
+  {
+   "repo": "yarnpkg/berry",
+   "number": 7316,
+   "title": "[Bug?]: patch:got@npm%3A11.8.2#~/.yarn/patches/got-npm-11.8.2-c1eb105458.patch",
+   "created": "2026-10-29T15:21",
+   "age_h": 14.7,
+   "comments": 0,
+   "labels": [
+    "bug"
+   ],
+   "body_len": 2244,
+   "url": "https://github.com/yarnpkg/berry/issues/7316"
+  },
+  {
+   "repo": "yarnpkg/berry",
+   "number": 7314,
+   "title": "[Bug?]: Catalog resolution when running publish/pack strips special protocols",
+   "created": "2026-10-27T13:50",
+   "age_h": 64.2,
+   "comments": 0,
+   "labels": [
+    "bug"
+   ],
+   "body_len": 2284,
+   "url": "https://github.com/yarnpkg/berry/issues/7314"
+  },
+  {
+   "repo": "npm/cli",
+   "number": 10173,
+   "title": "global update silently drops a platform-specific optional dependency",
+   "created": "2026-10-27T18:32",
+   "age_h": 59.5,
+   "comments": 0,
+   "labels": [
+    "Bug",
+    "Priority 2",
+    "cmd:update",
+    "config:global"
+   ],
+   "body_len": 1766,
+   "url": "https://github.com/npm/cli/issues/10173"
+  },
+  {
+   "repo": "npm/cli",
+   "number": 10168,
+   "title": "[BUG] After npm publish, npm pack cannot find the package",
+   "created": "2026-10-27T12:26",
+   "age_h": 65.6,
+   "comments": 0,
+   "labels": [
+    "Bug",
+    "Needs Triage"
+   ],
+   "body_len": 1876,
+   "url": "https://github.com/npm/cli/issues/10168"
+  },
+  {
+   "repo": "hashicorp/terraform",
+   "number": 39468,
+   "title": "terraform show of a saved plan fails with \"Module source has changed\" when a const variabl",
+   "created": "2026-10-28T17:16",
+   "age_h": 36.7,
+   "comments": 1,
+   "labels": [
+    "bug",
+    "new"
+   ],
+   "body_len": 5551,
+   "url": "https://github.com/hashicorp/terraform/issues/39468"
+  },
+  {
+   "repo": "hashicorp/terraform",
+   "number": 39441,
+   "title": "Possible bug in Mermaid format output from the `graph` command",
+   "created": "2026-10-23T15:33",
+   "age_h": 158.5,
+   "comments": 1,
+   "labels": [
+    "bug",
+    "new"
+   ],
+   "body_len": 14778,
+   "url": "https://github.com/hashicorp/terraform/issues/39441"
+  },
+  {
+   "repo": "hashicorp/terraform",
+   "number": 39440,
+   "title": "S3 backend: state read returns trailing NUL bytes when the object shrinks between HeadObje",
+   "created": "2026-10-23T14:53",
+   "age_h": 159.1,
+   "comments": 1,
+   "labels": [
+    "bug",
+    "backend/s3",
+    "new"
+   ],
+   "body_len": 7840,
+   "url": "https://github.com/hashicorp/terraform/issues/39440"
+  },
+  {
+   "repo": "hashicorp/terraform",
+   "number": 39431,
+   "title": "Terraform state issue in VM",
+   "created": "2026-10-22T10:07",
+   "age_h": 187.9,
+   "comments": 1,
+   "labels": [
+    "bug",
+    "new"
+   ],
+   "body_len": 1348,
+   "url": "https://github.com/hashicorp/terraform/issues/39431"
+  },
+  {
+   "repo": "hashicorp/terraform",
+   "number": 39412,
+   "title": "terraform crashed while trying to perform terraform apply",
+   "created": "2026-10-20T15:00",
+   "age_h": 231.0,
+   "comments": 1,
+   "labels": [
+    "bug",
+    "waiting-response",
+    "new"
+   ],
+   "body_len": 10161,
+   "url": "https://github.com/hashicorp/terraform/issues/39412"
+  },
+  {
+   "repo": "hashicorp/terraform",
+   "number": 39399,
+   "title": "Provider plugin processes keep running after Terraform panics (`os.Exit(11)` in `PanicHand",
+   "created": "2026-10-15T22:17",
+   "age_h": 343.7,
+   "comments": 3,
+   "labels": [
+    "bug",
+    "new"
+   ],
+   "body_len": 5544,
+   "url": "https://github.com/hashicorp/terraform/issues/39399"
+  },
+  {
+   "repo": "wezterm/wezterm",
+   "number": 8274,
+   "title": "RUSTSEC-2026-0382: Certificate verification may accept distrusted intermediates",
+   "created": "2026-10-22T00:39",
+   "age_h": 197.4,
+   "comments": 0,
+   "labels": [
+    "bug",
+    "needs:triage"
+   ],
+   "body_len": 1005,
+   "url": "https://github.com/wezterm/wezterm/issues/8274"
+  },
+  {
+   "repo": "wezterm/wezterm",
+   "number": 8260,
+   "title": "# OSC 52 clipboard assignment is dropped (Wayland native; Ctrl+Shift+C and Ghostty are una",
+   "created": "2026-10-14T14:21",
+   "age_h": 375.7,
+   "comments": 3,
+   "labels": [
+    "bug",
+    "variant: Wayland",
+    "T: clipboard",
+    "ai-assisted"
+   ],
+   "body_len": 5859,
+   "url": "https://github.com/wezterm/wezterm/issues/8260"
+  },
+  {
+   "repo": "astral-sh/ruff",
+   "number": 29683,
+   "title": "Relative imports from a module named `__future__` are treated as future imports",
+   "created": "2026-10-23T21:50",
+   "age_h": 152.2,
+   "comments": 2,
+   "labels": [
+    "bug"
+   ],
+   "body_len": 1400,
+   "url": "https://github.com/astral-sh/ruff/issues/29683"
+  },
+  {
+   "repo": "astral-sh/ruff",
+   "number": 29422,
+   "title": "A few more: missed reports vs flake8/pylint, plus two fix bugs (B012, F402, F823, SIM102, ",
+   "created": "2026-10-15T15:18",
+   "age_h": 350.7,
+   "comments": 2,
+   "labels": [
+    "bug"
+   ],
+   "body_len": 4537,
+   "url": "https://github.com/astral-sh/ruff/issues/29422"
+  },
+  {
+   "repo": "ansible/ansible",
+   "number": 87836,
+   "title": "`password_hash` overruns `struct crypt_data` with glibc's libcrypt, crashing the worker",
+   "created": "2026-10-30T00:49",
+   "age_h": 5.2,
+   "comments": 2,
+   "labels": [
+    "needs_triage",
+    "bug"
+   ],
+   "body_len": 5270,
+   "url": "https://github.com/ansible/ansible/issues/87836"
+  },
+  {
+   "repo": "ansible/ansible",
+   "number": 87820,
+   "title": "role deduplication not ran with `--skip-tags always`",
+   "created": "2026-10-28T17:20",
+   "age_h": 36.7,
+   "comments": 2,
+   "labels": [
+    "needs_triage",
+    "bug",
+    "affects_2.19"
+   ],
+   "body_len": 3758,
+   "url": "https://github.com/ansible/ansible/issues/87820"
+  },
+  {
+   "repo": "ansible/ansible",
+   "number": 87814,
+   "title": "password_hash: given salt is not used as-is when libxcrypt is available, so hashes change ",
+   "created": "2026-10-28T14:11",
+   "age_h": 39.8,
+   "comments": 4,
+   "labels": [
+    "needs_triage",
+    "bug",
+    "affects_2.21"
+   ],
+   "body_len": 3480,
+   "url": "https://github.com/ansible/ansible/issues/87814"
+  },
+  {
+   "repo": "ansible/ansible",
+   "number": 87812,
+   "title": "Ctrl-C is ignored on a new forked worker, the run fails with response \"A worker was found ",
+   "created": "2026-10-28T08:50",
+   "age_h": 45.2,
+   "comments": 1,
+   "labels": [
+    "needs_triage",
+    "bug",
+    "affects_2.23"
+   ],
+   "body_len": 9207,
+   "url": "https://github.com/ansible/ansible/issues/87812"
+  },
+  {
+   "repo": "ansible/ansible",
+   "number": 87690,
+   "title": "Potential WinRM instability when using large winrm_operation_timeout_sec and winrm_read_ti",
+   "created": "2026-10-14T06:44",
+   "age_h": 383.3,
+   "comments": 3,
+   "labels": [
+    "bug",
+    "affects_2.14"
+   ],
+   "body_len": 5578,
+   "url": "https://github.com/ansible/ansible/issues/87690"
+  },
+  {
+   "repo": "ansible/ansible-lint",
+   "number": 5217,
+   "title": "Possible false positive in `latest[git]` for ansible.builtin.git with `update: false`",
+   "created": "2026-10-19T05:36",
+   "age_h": 264.4,
+   "comments": 1,
+   "labels": [
+    "new",
+    "bug"
+   ],
+   "body_len": 3802,
+   "url": "https://github.com/ansible/ansible-lint/issues/5217"
+  },
+  {
+   "repo": "pulumi/pulumi",
+   "number": 25466,
+   "title": "3.273.0: preview fails on an existing awsx FargateService that has a `transforms` hook: \"E",
+   "created": "2026-10-30T03:06",
+   "age_h": 2.9,
+   "comments": 0,
+   "labels": [
+    "Bug",
+    "pulumi/pulumi",
+    "R1",
+    "S1"
+   ],
+   "body_len": 2954,
+   "url": "https://github.com/pulumi/pulumi/issues/25466"
+  },
+  {
+   "repo": "pulumi/pulumi",
+   "number": 25423,
+   "title": "Update plans should enforce `retainOnDelete` like `protect`",
+   "created": "2026-10-28T08:40",
+   "age_h": 45.4,
+   "comments": 0,
+   "labels": [
+    "kind/enhancement",
+    "area/update-plans",
+    "Bug",
+    "pulumi/pulumi",
+    "R1",
+    "S1"
+   ],
+   "body_len": 1362,
+   "url": "https://github.com/pulumi/pulumi/issues/25423"
+  },
+  {
+   "repo": "pulumi/pulumi",
+   "number": 25373,
+   "title": "`pulumi package add` writes a Go `replace` but no `require`, so the program doesn't build ",
+   "created": "2026-10-23T23:44",
+   "age_h": 150.3,
+   "comments": 0,
+   "labels": [
+    "language/go",
+    "Bug",
+    "pulumi/pulumi",
+    "R1",
+    "S1"
+   ],
+   "body_len": 2385,
+   "url": "https://github.com/pulumi/pulumi/issues/25373"
+  },
+  {
+   "repo": "pulumi/pulumi",
+   "number": 25237,
+   "title": "Deduplicate policy violations when the same pack runs from Cloud and `--policy-pack`",
+   "created": "2026-10-15T21:54",
+   "age_h": 344.1,
+   "comments": 0,
+   "labels": [
+    "kind/bug",
+    "Bug",
+    "pulumi/pulumi",
+    "area/policy"
+   ],
+   "body_len": 1754,
+   "url": "https://github.com/pulumi/pulumi/issues/25237"
+  },
+  {
+   "repo": "pulumi/pulumi",
+   "number": 25236,
+   "title": "Policy `remediationSteps` and `url` metadata never reach the user",
+   "created": "2026-10-15T21:53",
+   "age_h": 344.1,
+   "comments": 0,
+   "labels": [
+    "kind/bug",
+    "Bug",
+    "pulumi/pulumi",
+    "area/policy"
+   ],
+   "body_len": 2494,
+   "url": "https://github.com/pulumi/pulumi/issues/25236"
+  },
+  {
+   "repo": "pulumi/pulumi",
+   "number": 25219,
+   "title": "`pulumi package add` writes a project-level `pnpm-workspace.yaml` and uses a project-relat",
+   "created": "2026-10-15T07:44",
+   "age_h": 358.3,
+   "comments": 0,
+   "labels": [
+    "language/java",
+    "Bug",
+    "pulumi/pulumi"
+   ],
+   "body_len": 5274,
+   "url": "https://github.com/pulumi/pulumi/issues/25219"
+  },
+  {
+   "repo": "pulumi/pulumi",
+   "number": 25218,
+   "title": "`pulumi preview` with uv fails: No module named 'packaging' (3.267.0)",
+   "created": "2026-10-15T04:06",
+   "age_h": 361.9,
+   "comments": 2,
+   "labels": [
+    "language/python",
+    "impact/regression",
+    "Bug",
+    "pulumi/pulumi"
+   ],
+   "body_len": 1342,
+   "url": "https://github.com/pulumi/pulumi/issues/25218"
+  },
+  {
+   "repo": "pulumi/pulumi",
+   "number": 25212,
+   "title": "Node.js: extension package resources don't inherit the base provider from their parent",
+   "created": "2026-10-14T15:37",
+   "age_h": 374.4,
+   "comments": 1,
+   "labels": [
+    "kind/bug",
+    "needs-triage",
+    "Bug",
+    "pulumi/pulumi"
+   ],
+   "body_len": 8892,
+   "url": "https://github.com/pulumi/pulumi/issues/25212"
+  },
+  {
+   "repo": "argoproj/argo-cd",
+   "number": 30556,
+   "title": "RollingSync: Application that is modified while while \"Progressing\" stays \"OutOfSync\" fore",
+   "created": "2026-10-28T16:26",
+   "age_h": 37.6,
+   "comments": 0,
+   "labels": [
+    "bug",
+    "triage/pending"
+   ],
+   "body_len": 3797,
+   "url": "https://github.com/argoproj/argo-cd/issues/30556"
+  },
+  {
+   "repo": "argoproj/argo-cd",
+   "number": 30345,
+   "title": "argocd app diff --local --server-side-generate would fail from windows CLI to linux server",
+   "created": "2026-10-22T03:23",
+   "age_h": 194.6,
+   "comments": 1,
+   "labels": [
+    "bug",
+    "triage/pending"
+   ],
+   "body_len": 2207,
+   "url": "https://github.com/argoproj/argo-cd/issues/30345"
+  },
+  {
+   "repo": "argoproj/argo-cd",
+   "number": 30257,
+   "title": "UI crashes with \"NotFoundError: Failed to execute 'removeChild' on 'Node'\"",
+   "created": "2026-10-18T02:47",
+   "age_h": 291.2,
+   "comments": 3,
+   "labels": [
+    "bug",
+    "triage/pending"
+   ],
+   "body_len": 2421,
+   "url": "https://github.com/argoproj/argo-cd/issues/30257"
+  },
+  {
+   "repo": "envoyproxy/envoy",
+   "number": 48760,
+   "title": "ECDS: rejected filter config is committed to the subscription cache and never rolled back,",
+   "created": "2026-10-27T11:54",
+   "age_h": 66.1,
+   "comments": 3,
+   "labels": [
+    "bug",
+    "triage"
+   ],
+   "body_len": 5984,
+   "url": "https://github.com/envoyproxy/envoy/issues/48760"
+  },
+  {
+   "repo": "opensearch-project/OpenSearch",
+   "number": 23466,
+   "title": "[BUG] Core codebase grants never match when OPENSEARCH_HOME is a symlinked path containing",
+   "created": "2026-10-29T19:45",
+   "age_h": 10.3,
+   "comments": 0,
+   "labels": [
+    "bug",
+    "untriaged",
+    "Plugins"
+   ],
+   "body_len": 5054,
+   "url": "https://github.com/opensearch-project/OpenSearch/issues/23466"
+  },
+  {
+   "repo": "opensearch-project/OpenSearch",
+   "number": 23457,
+   "title": "[BUG] `_list/wlm_stats` JSON output repeats a `\"|\"` key between every column",
+   "created": "2026-10-28T23:28",
+   "age_h": 30.6,
+   "comments": 0,
+   "labels": [
+    "bug",
+    "untriaged",
+    "Search"
+   ],
+   "body_len": 1859,
+   "url": "https://github.com/opensearch-project/OpenSearch/issues/23457"
+  },
+  {
+   "repo": "opensearch-project/OpenSearch",
+   "number": 23452,
+   "title": "[BUG] GlobalOrdinalsBuilder.build() cancellation checkpoint added in #21318 is never invok",
+   "created": "2026-10-28T09:31",
+   "age_h": 44.5,
+   "comments": 1,
+   "labels": [
+    "bug",
+    "Search:Aggregations"
+   ],
+   "body_len": 817,
+   "url": "https://github.com/opensearch-project/OpenSearch/issues/23452"
+  },
+  {
+   "repo": "opensearch-project/OpenSearch",
+   "number": 23341,
+   "title": "High latency, Count Differ, Circuit Breaking Exception(status 429)",
+   "created": "2026-10-15T08:29",
+   "age_h": 357.5,
+   "comments": 1,
+   "labels": [
+    "bug",
+    "Search:Performance"
+   ],
+   "body_len": 2777,
+   "url": "https://github.com/opensearch-project/OpenSearch/issues/23341"
+  }
+ ]
+}

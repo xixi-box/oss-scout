@@ -1,0 +1,525 @@
+{
+ "clean": [
+  {
+   "repo": "sqlalchemy/sqlalchemy",
+   "number": 13732,
+   "title": "render bind_expression around each literal_execute expanding value",
+   "created": "2026-10-27T17:19",
+   "age_h": 60.7,
+   "comments": 0,
+   "labels": [
+    "bug",
+    "sql"
+   ],
+   "body_len": 1392,
+   "url": "https://github.com/sqlalchemy/sqlalchemy/issues/13732",
+   "keywords": [
+    "bind_expression",
+    "literal_execute",
+    "render"
+   ]
+  },
+  {
+   "repo": "sqlalchemy/sqlalchemy",
+   "number": 13731,
+   "title": "declared_attr.cascading fails to typecheck under mypy / pyright on documented usage",
+   "created": "2026-10-27T17:04",
+   "age_h": 61.0,
+   "comments": 2,
+   "labels": [
+    "bug",
+    "orm",
+    "typing"
+   ],
+   "body_len": 3546,
+   "url": "https://github.com/sqlalchemy/sqlalchemy/issues/13731",
+   "keywords": [
+    "declared_attr.cascading",
+    "fails",
+    "typecheck"
+   ]
+  },
+  {
+   "repo": "astral-sh/uv",
+   "number": 22975,
+   "title": "Concurrent Git fetches for packages from the same repository race on a cold cache: \"failed",
+   "created": "2026-10-28T22:19",
+   "age_h": 31.7,
+   "comments": 1,
+   "labels": [
+    "bug"
+   ],
+   "body_len": 3620,
+   "url": "https://github.com/astral-sh/uv/issues/22975",
+   "keywords": [
+    "Concurrent",
+    "fetches",
+    "packages"
+   ]
+  },
+  {
+   "repo": "astral-sh/uv",
+   "number": 22950,
+   "title": "no error when using non-existent `preview` setting",
+   "created": "2026-10-27T02:18",
+   "age_h": 75.7,
+   "comments": 4,
+   "labels": [
+    "bug",
+    "needs-mre"
+   ],
+   "body_len": 2219,
+   "url": "https://github.com/astral-sh/uv/issues/22950",
+   "keywords": [
+    "error",
+    "using",
+    "non-existent"
+   ]
+  },
+  {
+   "repo": "astral-sh/uv",
+   "number": 22869,
+   "title": "Windows Smart App Control blocks unsigned uv-managed CPython and venv executables",
+   "created": "2026-10-23T15:47",
+   "age_h": 158.2,
+   "comments": 2,
+   "labels": [
+    "bug",
+    "area:windows"
+   ],
+   "body_len": 3832,
+   "url": "https://github.com/astral-sh/uv/issues/22869",
+   "keywords": [
+    "Windows",
+    "Smart",
+    "Control"
+   ]
+  },
+  {
+   "repo": "astral-sh/uv",
+   "number": 22783,
+   "title": "`uv self update` fails with SOCKS5 proxy on Windows",
+   "created": "2026-10-20T23:08",
+   "age_h": 222.9,
+   "comments": 3,
+   "labels": [
+    "bug",
+    "bot:ai-policy-comment"
+   ],
+   "body_len": 2958,
+   "url": "https://github.com/astral-sh/uv/issues/22783",
+   "keywords": [
+    "update",
+    "fails",
+    "SOCKS5"
+   ]
+  },
+  {
+   "repo": "python/mypy",
+   "number": 22304,
+   "title": "Inconsistent erroring for wider argument type in operator override when using overloads (f",
+   "created": "2026-10-26T16:43",
+   "age_h": 85.3,
+   "comments": 1,
+   "labels": [
+    "bug"
+   ],
+   "body_len": 2313,
+   "url": "https://github.com/python/mypy/issues/22304",
+   "keywords": [
+    "Inconsistent",
+    "erroring",
+    "wider"
+   ]
+  },
+  {
+   "repo": "python/mypy",
+   "number": 22302,
+   "title": "Union type of two concrete modules is ModuleType",
+   "created": "2026-10-26T15:31",
+   "age_h": 86.5,
+   "comments": 2,
+   "labels": [
+    "bug",
+    "topic-join-v-union"
+   ],
+   "body_len": 948,
+   "url": "https://github.com/python/mypy/issues/22302",
+   "keywords": [
+    "Union",
+    "concrete",
+    "modules"
+   ]
+  },
+  {
+   "repo": "python/mypy",
+   "number": 22265,
+   "title": "`var-annotated` errors for iteration should point to the line where the variable is define",
+   "created": "2026-10-21T23:57",
+   "age_h": 198.1,
+   "comments": 3,
+   "labels": [
+    "bug",
+    "topic-parser",
+    "topic-error-reporting"
+   ],
+   "body_len": 1721,
+   "url": "https://github.com/python/mypy/issues/22265",
+   "keywords": [
+    "var-annotated",
+    "errors",
+    "iteration"
+   ]
+  },
+  {
+   "repo": "python/mypy",
+   "number": 22240,
+   "title": "Functions with `global` inside should not have their function bodies be stripped",
+   "created": "2026-10-21T00:18",
+   "age_h": 221.7,
+   "comments": 1,
+   "labels": [
+    "bug",
+    "topic-parser"
+   ],
+   "body_len": 1847,
+   "url": "https://github.com/python/mypy/issues/22240",
+   "keywords": [
+    "Functions",
+    "global",
+    "inside"
+   ]
+  },
+  {
+   "repo": "pandas-dev/pandas",
+   "number": 71768,
+   "title": "BUG: `Series.rank()` on object dtype returns random output when a comparison raises an err",
+   "created": "2026-10-29T10:21",
+   "age_h": 19.7,
+   "comments": 2,
+   "labels": [
+    "Bug",
+    "Needs Triage"
+   ],
+   "body_len": 1756,
+   "url": "https://github.com/pandas-dev/pandas/issues/71768",
+   "keywords": [
+    "Series.rank",
+    "object",
+    "dtype"
+   ]
+  },
+  {
+   "repo": "pandas-dev/pandas",
+   "number": 71485,
+   "title": "BUG: AttributeError: 'NoneType' object has no attribute 'total_seconds' using win32timezon",
+   "created": "2026-10-23T09:00",
+   "age_h": 165.0,
+   "comments": 3,
+   "labels": [
+    "Bug",
+    "Needs Triage"
+   ],
+   "body_len": 5234,
+   "url": "https://github.com/pandas-dev/pandas/issues/71485",
+   "keywords": [
+    "total_seconds",
+    "AttributeError",
+    "NoneType"
+   ]
+  },
+  {
+   "repo": "langchain-ai/langchain",
+   "number": 41448,
+   "title": "`HuggingFacePipeline.from_model_id` crashes on device strings and misplaces models on non-",
+   "created": "2026-10-24T04:14",
+   "age_h": 145.8,
+   "comments": 2,
+   "labels": [
+    "bug",
+    "text-splitters",
+    "huggingface",
+    "external"
+   ],
+   "body_len": 6026,
+   "url": "https://github.com/langchain-ai/langchain/issues/41448",
+   "keywords": [
+    "HuggingFacePipeline.from_model_id",
+    "crashes",
+    "device"
+   ]
+  },
+  {
+   "repo": "langchain-ai/langchain",
+   "number": 41406,
+   "title": "langchain-model-profiles symlink error misnames generated output file",
+   "created": "2026-10-22T01:07",
+   "age_h": 196.9,
+   "comments": 2,
+   "labels": [
+    "bug",
+    "model-profiles",
+    "external"
+   ],
+   "body_len": 2623,
+   "url": "https://github.com/langchain-ai/langchain/issues/41406",
+   "keywords": [
+    "langchain-model-profiles",
+    "symlink",
+    "error"
+   ]
+  },
+  {
+   "repo": "langchain-ai/langchain",
+   "number": 41323,
+   "title": "SummarizationMiddleware deletes conversation history when the summary model returns an emp",
+   "created": "2026-10-20T06:41",
+   "age_h": 239.3,
+   "comments": 2,
+   "labels": [
+    "bug",
+    "langchain",
+    "external"
+   ],
+   "body_len": 4238,
+   "url": "https://github.com/langchain-ai/langchain/issues/41323",
+   "keywords": [
+    "SummarizationMiddleware",
+    "deletes",
+    "conversation"
+   ]
+  }
+ ],
+ "rejected": [
+  {
+   "repo": "sqlalchemy/sqlalchemy",
+   "number": 13727,
+   "title": "revise the purpose of validate_sql_phrase",
+   "created": "2026-10-27T07:19",
+   "age_h": 70.7,
+   "comments": 4,
+   "labels": [
+    "bug",
+    "postgresql",
+    "schema",
+    "oracle"
+   ],
+   "body_len": 4577,
+   "url": "https://github.com/sqlalchemy/sqlalchemy/issues/13727",
+   "why": "claim signal"
+  },
+  {
+   "repo": "astral-sh/ruff",
+   "number": 29683,
+   "title": "Relative imports from a module named `__future__` are treated as future imports",
+   "created": "2026-10-23T21:50",
+   "age_h": 152.2,
+   "comments": 2,
+   "labels": [
+    "bug"
+   ],
+   "body_len": 1400,
+   "url": "https://github.com/astral-sh/ruff/issues/29683",
+   "why": "competed: astral-sh/ruff#23197: [`flake8-type-checking`] Add `from __f"
+  },
+  {
+   "repo": "astral-sh/ruff",
+   "number": 29422,
+   "title": "A few more: missed reports vs flake8/pylint, plus two fix bugs (B012, F402, F823, SIM102, ",
+   "created": "2026-10-15T15:18",
+   "age_h": 350.7,
+   "comments": 2,
+   "labels": [
+    "bug"
+   ],
+   "body_len": 4537,
+   "url": "https://github.com/astral-sh/ruff/issues/29422",
+   "why": "claim signal"
+  },
+  {
+   "repo": "python/mypy",
+   "number": 22316,
+   "title": "Wrong comparison in type error for comparisons",
+   "created": "2026-10-28T23:45",
+   "age_h": 30.3,
+   "comments": 1,
+   "labels": [
+    "bug",
+    "topic-error-reporting"
+   ],
+   "body_len": 1522,
+   "url": "https://github.com/python/mypy/issues/22316",
+   "why": "claim signal"
+  },
+  {
+   "repo": "python/mypy",
+   "number": 22220,
+   "title": "corrupt cache causes alarming message",
+   "created": "2026-10-17T02:56",
+   "age_h": 315.1,
+   "comments": 1,
+   "labels": [
+    "bug"
+   ],
+   "body_len": 7740,
+   "url": "https://github.com/python/mypy/issues/22220",
+   "why": "claim signal"
+  },
+  {
+   "repo": "pandas-dev/pandas",
+   "number": 71769,
+   "title": "BUG: read_csv fails with TypeError: open() argument 'mode' must be str, not int (with Loca",
+   "created": "2026-10-29T12:58",
+   "age_h": 17.1,
+   "comments": 1,
+   "labels": [
+    "Bug",
+    "Needs Triage"
+   ],
+   "body_len": 8364,
+   "url": "https://github.com/pandas-dev/pandas/issues/71769",
+   "why": "competed: pandas-dev/pandas#71402: BUG: read_csv dropping leading whit"
+  },
+  {
+   "repo": "scikit-learn/scikit-learn",
+   "number": 35254,
+   "title": "LinearDiscriminantAnalysis: \"svd\" and \"lsqr\"/\"eigen\" solvers disagree when priors differ f",
+   "created": "2026-10-28T11:05",
+   "age_h": 42.9,
+   "comments": 3,
+   "labels": [
+    "Bug",
+    "Needs Decision"
+   ],
+   "body_len": 5660,
+   "url": "https://github.com/scikit-learn/scikit-learn/issues/35254",
+   "why": "claim signal"
+  },
+  {
+   "repo": "scikit-learn/scikit-learn",
+   "number": 35195,
+   "title": "Pipeline.score routes sample_weight even when it is None (and should not be routed)",
+   "created": "2026-10-21T15:13",
+   "age_h": 206.8,
+   "comments": 4,
+   "labels": [
+    "Bug",
+    "Needs Investigation",
+    "Metadata Routing"
+   ],
+   "body_len": 5209,
+   "url": "https://github.com/scikit-learn/scikit-learn/issues/35195",
+   "why": "label"
+  },
+  {
+   "repo": "langchain-ai/langchain",
+   "number": 41412,
+   "title": "perplexity: Agent API requests send Chat Completions content blocks (`text`, `image_url`) ",
+   "created": "2026-10-22T06:19",
+   "age_h": 191.7,
+   "comments": 2,
+   "labels": [
+    "bug",
+    "perplexity",
+    "external"
+   ],
+   "body_len": 3121,
+   "url": "https://github.com/langchain-ai/langchain/issues/41412",
+   "why": "claim signal"
+  },
+  {
+   "repo": "langchain-ai/langchain",
+   "number": 41366,
+   "title": "perplexity: streaming with_structured_output emits JSON from inside an unclosed think bloc",
+   "created": "2026-10-21T11:30",
+   "age_h": 210.5,
+   "comments": 2,
+   "labels": [
+    "bug",
+    "perplexity",
+    "external"
+   ],
+   "body_len": 4404,
+   "url": "https://github.com/langchain-ai/langchain/issues/41366",
+   "why": "claim signal"
+  },
+  {
+   "repo": "langchain-ai/langchain",
+   "number": 41358,
+   "title": "langchain-openai: citation annotations streamed for a function_call are merged into it and",
+   "created": "2026-10-21T08:52",
+   "age_h": 213.1,
+   "comments": 4,
+   "labels": [
+    "bug",
+    "openai",
+    "external"
+   ],
+   "body_len": 6913,
+   "url": "https://github.com/langchain-ai/langchain/issues/41358",
+   "why": "competed: langchain-ai/langchain#39310: fix(openai): preserve `status`"
+  },
+  {
+   "repo": "langchain-ai/langchain",
+   "number": 41305,
+   "title": "langchain-mistralai: reasoning (thinking) blocks are dropped from assistant messages that ",
+   "created": "2026-10-19T18:00",
+   "age_h": 252.0,
+   "comments": 4,
+   "labels": [
+    "bug",
+    "mistralai",
+    "external"
+   ],
+   "body_len": 3556,
+   "url": "https://github.com/langchain-ai/langchain/issues/41305",
+   "why": "claim signal"
+  },
+  {
+   "repo": "langchain-ai/langchain",
+   "number": 41294,
+   "title": "[text-splitters] Dead code in HTMLSemanticPreservingSplitter._process_links() + markdown l",
+   "created": "2026-10-18T17:02",
+   "age_h": 277.0,
+   "comments": 3,
+   "labels": [
+    "bug",
+    "text-splitters",
+    "external"
+   ],
+   "body_len": 5414,
+   "url": "https://github.com/langchain-ai/langchain/issues/41294",
+   "why": "claim signal"
+  },
+  {
+   "repo": "langchain-ai/langgraph",
+   "number": 9490,
+   "title": "Enum, UUID and date dict keys in state lose their type in a checkpoint",
+   "created": "2026-10-30T03:11",
+   "age_h": 2.8,
+   "comments": 1,
+   "labels": [
+    "bug",
+    "external"
+   ],
+   "body_len": 2247,
+   "url": "https://github.com/langchain-ai/langgraph/issues/9490",
+   "why": "competed: langchain-ai/langgraph#6512: fix(langgraph): validate node o"
+  },
+  {
+   "repo": "langchain-ai/langgraph",
+   "number": 9488,
+   "title": "A read expires a PostgresStore item at once when its TTL is 30 seconds or less",
+   "created": "2026-10-30T01:58",
+   "age_h": 4.0,
+   "comments": 2,
+   "labels": [
+    "bug",
+    "external"
+   ],
+   "body_len": 2021,
+   "url": "https://github.com/langchain-ai/langgraph/issues/9488",
+   "why": "claim signal"
+  }
+ ]
+}

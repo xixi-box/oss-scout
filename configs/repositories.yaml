@@ -1,9 +1,13 @@
-# 仓库策略覆盖（计划 §6）。
+# 仓库策略（计划 §6）。
 # 优先级：AGENTS.md 及人工批准的例外 > 官方 CONTRIBUTING 最新规则 > 本文件 > LLM 提取建议。
-# 本文件只做保守覆盖；与 AGENTS.md 冲突时以 AGENTS.md 为准，冲突记录到 worklog 并 hold。
 # lane 取值：open | gated（assignment_gate） | restricted | observe
-# 与 config.json 的差异点：config.json 是发现层监控名单（每仓库另有 notes/pr_rules），
-# 本文件是 v2 策略引擎的保守基线；两处都存在时取更严格者。
+#
+# 2026-10-30：扫描池（configs/scan_pool_wide.txt，173 个仓库）全部纳入本文件，
+# lane 统一 open。仓库本身不做评级——能不能做由 AI 对**单条 issue**的判断决定，
+# 而不是预先给仓库贴标签。
+#
+# 唯一的分档依据是 PR 门禁：会关闭未受邀 PR 的仓库标 gated，避免白跑一轮修复
+# 再被 bot 关掉（详见 configs/pr_gates.yaml）。
 
 defaults:
   unknown_repo_action: hold_for_review
@@ -15,44 +19,199 @@ defaults:
   allow_merge_upstream: false
 
 repositories:
-  # ---- 开放池（config.json open_pool）----
-  aaif-goose/goose:            {lane: open}
-  openai/openai-agents-python: {lane: open}
-  OpenHands/software-agent-sdk: {lane: open, verify_before_first_pr: true}
-  browser-use/browser-use:     {lane: open}
-  OpenHands/OpenHands:         {lane: open, verify_before_first_pr: true}
-  deepset-ai/haystack:
-    lane: open
-    pr_rules: [ai_disclaimer, conventional_commits]
-  langfuse/langfuse:           {lane: open, draft_ok_unverified: true}
-  Arize-ai/phoenix:            {lane: open}
-  anomalyco/opencode:
-    lane: open
-    default_branch: dev
-    pr_rules: [no_ai_walls]
-  langchain-ai/langsmith-sdk:  {lane: open}
-  e2b-dev/e2b:                 {lane: open}
-  infiniflow/ragflow:          {lane: open, verify_before_first_pr: true}
-  openai/openai-python:        {lane: open}
-  crewAIInc/crewAI:            {lane: open}
 
-  # ---- 闸门池：先评论对齐、等指派，绝不直接 PR ----
-  pydantic/pydantic-ai:        {lane: gated}
-  microsoft/playwright:        {lane: gated, cla: true}
-  microsoft/agent-framework:   {lane: gated, python_side_only: true}
+  # ---- C (4) ----
+  nginx/nginx: {lane: open}
+  pgvector/pgvector: {lane: open}
+  redis/redis: {lane: open}
+  valkey-io/valkey: {lane: open}
 
-  # ---- 限制档 ----
-  BerriAI/litellm:
-    lane: restricted
-    only: maintainer_confirmed
-    pr_rules: [tests_required]
+  # ---- C# (1) ----
+  microsoft/semantic-kernel: {lane: open}
 
-  # ---- 仅观测 ----
-  google-gemini/gemini-cli:    {lane: observe}
+  # ---- C++ (2) ----
+  apache/arrow: {lane: open}
+  envoyproxy/envoy: {lane: open}
 
-  # ---- 放宽扫描后新增（2026-10-28，wide_hunt 找到的可修目标）----
-  # sqlalchemy：欢迎小 PR（近期合并的都是几行改动），有 typing 测试体系
-  sqlalchemy/sqlalchemy:       {lane: open, verify_before_first_pr: true}
+  # ---- Go (35) ----
+  argoproj/argo-cd: {lane: open}
+  argoproj/argo-workflows: {lane: open}
+  caddyserver/caddy: {lane: open}
+  containerd/containerd: {lane: open}
+  crossplane/crossplane: {lane: open}
+  docker/compose: {lane: open}
+  ent/ent: {lane: open}
+  etcd-io/etcd: {lane: open}
+  evanw/esbuild: {lane: open}
+  fluxcd/flux2: {lane: open}
+  gin-contrib/cors: {lane: open}
+  gin-gonic/gin: {lane: open}
+  go-gorm/gorm: {lane: open}
+  gofiber/fiber: {lane: open}
+  hashicorp/consul: {lane: open}
+  hashicorp/terraform: {lane: open}
+  hashicorp/vault: {lane: open}
+  helm/helm: {lane: open}
+  istio/istio: {lane: open}
+  jackc/pgx: {lane: open}
+  k3s-io/k3s: {lane: open}
+  kubernetes-sigs/kustomize: {lane: open}
+  kubernetes/kubernetes: {lane: open}
+  labstack/echo: {lane: open}
+  linkerd/linkerd2: {lane: open}
+  microsoft/TypeScript: {lane: open}
+  moby/moby: {lane: open}
+  prometheus/prometheus: {lane: open}
+  pulumi/pulumi: {lane: open}
+  rancher/rancher: {lane: open}
+  redis/go-redis: {lane: open}
+  spf13/cobra: {lane: open}
+  spf13/viper: {lane: open}
+  traefik/traefik: {lane: open}
+  urfave/cli: {lane: open}
 
-  # ---- 内部测试仓库（P5 闭环演练用；不承载真实开源贡献）----
+  # ---- Java (3) ----
+  SeleniumHQ/selenium: {lane: open}
+  elastic/elasticsearch: {lane: open}
+  opensearch-project/OpenSearch: {lane: open}
+
+  # ---- JavaScript (12) ----
+  eslint/eslint: {lane: open}
+  expressjs/express: {lane: open}
+  fastify/fastify: {lane: open}
+  mochajs/mocha: {lane: open}
+  nodejs/node: {lane: open}
+  npm/cli: {lane: open}
+  prettier/prettier: {lane: open}
+  react/react: {lane: open}
+  rollup/rollup: {lane: open}
+  sveltejs/svelte: {lane: open}
+  vercel/next.js: {lane: open}
+  webpack/webpack: {lane: open}
+
+  # ---- Jupyter Notebook (1) ----
+  guidance-ai/guidance: {lane: open}
+
+  # ---- Python (60) ----
+  567-labs/instructor: {lane: open}
+  BerriAI/litellm: {lane: open}
+  FoundationAgents/MetaGPT: {lane: open}
+  Kludex/starlette: {lane: open}
+  MagicStack/asyncpg: {lane: open}
+  PrefectHQ/prefect: {lane: open}
+  PyCQA/flake8: {lane: open}
+  Significant-Gravitas/AutoGPT: {lane: open}
+  Textualize/rich: {lane: open}
+  Textualize/textual: {lane: open}
+  aio-libs/aiohttp: {lane: open}
+  ansible/ansible: {lane: open}
+  ansible/ansible-lint: {lane: open}
+  apache/airflow: {lane: open}
+  benjaminp/six: {lane: open}
+  cohere-ai/cohere-python: {lane: open}
+  dagster-io/dagster: {lane: open}
+  dask/dask: {lane: open}
+  dateutil/dateutil: {lane: open}
+  deepset-ai/haystack: {lane: open}
+  dottxt-ai/outlines: {lane: open}
+  encode/httpx: {lane: open}
+  fastapi/fastapi: {lane: open}
+  fastapi/sqlmodel: {lane: open}
+  fivetran/great_expectations: {lane: open}
+  frictionlessdata/frictionless-py: {lane: open}
+  googleapis/python-genai: {lane: open}
+  langchain-ai/langchain: {lane: gated}
+  langchain-ai/langgraph: {lane: gated}
+  microsoft/autogen: {lane: open}
+  microsoft/playwright-python: {lane: open}
+  mistralai/client-python: {lane: open}
+  numpy/numpy: {lane: open}
+  openai/openai-python: {lane: open}
+  pallets/flask: {lane: open}
+  pandas-dev/pandas: {lane: open}
+  pre-commit/pre-commit: {lane: open}
+  psf/black: {lane: open}
+  pydantic/pydantic: {lane: gated}
+  pypa/pip: {lane: open}
+  pypa/pip-tools: {lane: open}
+  pypa/setuptools: {lane: open}
+  pypa/virtualenv: {lane: open}
+  pytest-dev/pytest: {lane: open}
+  python-arq/arq: {lane: open}
+  python-attrs/attrs: {lane: open}
+  python-poetry/poetry: {lane: open}
+  python/mypy: {lane: open}
+  qdrant/qdrant-client: {lane: open}
+  run-llama/llama_index: {lane: open}
+  scikit-learn/scikit-learn: {lane: open}
+  scipy/scipy: {lane: open}
+  scrapy/scrapy: {lane: open}
+  sqlalchemy/sqlalchemy: {lane: gated}
+  stanfordnlp/dspy: {lane: open}
+  tox-dev/tox: {lane: open}
+  tqdm/tqdm: {lane: open}
+  treeverse/dvc: {lane: open}
+  unionai-oss/pandera: {lane: open}
+  weaviate/weaviate-python-client: {lane: open}
+
+  # ---- Rust (30) ----
+  BurntSushi/ripgrep: {lane: open}
+  actix/actix-web: {lane: open}
+  ajeetdsouza/zoxide: {lane: open}
+  alacritty/alacritty: {lane: open}
+  astral-sh/ruff: {lane: open}
+  astral-sh/uv: {lane: open}
+  biomejs/biome: {lane: open}
+  chroma-core/chroma: {lane: open}
+  clap-rs/clap: {lane: open}
+  dandavison/delta: {lane: open}
+  denoland/deno: {lane: open}
+  dtolnay/anyhow: {lane: open}
+  helix-editor/helix: {lane: open}
+  nushell/nushell: {lane: open}
+  oven-sh/bun: {lane: open}
+  pnpm/pnpm: {lane: open}
+  pola-rs/polars: {lane: open}
+  rust-lang/cargo: {lane: open}
+  rust-lang/rust: {lane: open}
+  rust-lang/rust-clippy: {lane: open}
+  serde-rs/serde: {lane: open}
+  sharkdp/bat: {lane: open}
+  sharkdp/fd: {lane: open}
+  starship/starship: {lane: open}
+  swc-project/swc: {lane: open}
+  tauri-apps/tauri: {lane: open}
+  tokio-rs/axum: {lane: open}
+  tokio-rs/tokio: {lane: open}
+  wezterm/wezterm: {lane: open}
+  zellij-org/zellij: {lane: open}
+
+  # ---- TypeScript (25) ----
+  Portkey-AI/gateway: {lane: open}
+  TanStack/query: {lane: open}
+  TanStack/router: {lane: open}
+  TanStack/table: {lane: open}
+  angular/angular: {lane: open}
+  babel/babel: {lane: open}
+  colinhacks/zod: {lane: open}
+  drizzle-team/drizzle-orm: {lane: open}
+  grafana/grafana: {lane: open}
+  honojs/hono: {lane: open}
+  jestjs/jest: {lane: open}
+  kysely-org/kysely: {lane: open}
+  mikro-orm/mikro-orm: {lane: open}
+  nestjs/nest: {lane: open}
+  prisma/orm: {lane: open}
+  puppeteer/puppeteer: {lane: open}
+  remix-run/remix: {lane: open}
+  sequelize/sequelize: {lane: open}
+  trpc/trpc: {lane: open}
+  typeorm/typeorm: {lane: open}
+  vercel/vercel: {lane: open}
+  vitejs/vite: {lane: open}
+  vitest-dev/vitest: {lane: open}
+  vuejs/core: {lane: open}
+  yarnpkg/berry: {lane: open}
+
+  # ---- 内部测试仓库（不承载真实开源贡献）----
   xixi-box/oss-scout-v2-test:  {lane: open, internal_test_repo: true}

@@ -5,16 +5,14 @@
 
 # --- Python: Web / API / 数据 ---
 fastapi/fastapi
-tiangolo/sqlmodel
+fastapi/sqlmodel
 encode/httpx
-encode/starlette
+Kludex/starlette
 pallets/flask
-django/django
 sqlalchemy/sqlalchemy
 pydantic/pydantic
-samuelcolvin/arq
+python-arq/arq
 aio-libs/aiohttp
-aio-libs/asyncpg
 MagicStack/asyncpg
 python-poetry/poetry
 pypa/pip
@@ -28,15 +26,13 @@ PyCQA/flake8
 pytest-dev/pytest
 tox-dev/tox
 pre-commit/pre-commit
-jazzband/pip-tools
+pypa/pip-tools
 python-attrs/attrs
 dateutil/dateutil
 benjaminp/six
-python-click/click
 Textualize/rich
 Textualize/textual
 tqdm/tqdm
-psutil/psutil
 
 # --- Python: 数据/ML 工具 ---
 pandas-dev/pandas
@@ -47,11 +43,11 @@ scikit-learn/scikit-learn
 dask/dask
 apache/arrow
 apache/airflow
-prefecthq/prefect
+PrefectHQ/prefect
 dagster-io/dagster
-iterative/dvc
-great-expectations/great_expectations
-pandera-dev/pandera
+treeverse/dvc
+fivetran/great_expectations
+unionai-oss/pandera
 frictionlessdata/frictionless-py
 
 # --- Python: AI/LLM 框架 ---
@@ -63,38 +59,31 @@ chroma-core/chroma
 qdrant/qdrant-client
 weaviate/weaviate-python-client
 pgvector/pgvector
-instructor-ai/instructor
-jxnl/instructor
+567-labs/instructor
 guidance-ai/guidance
-outlines-dev/outlines
-dspy/dspy
+dottxt-ai/outlines
 stanfordnlp/dspy
 microsoft/autogen
 microsoft/semantic-kernel
-geekan/MetaGPT
+FoundationAgents/MetaGPT
 Significant-Gravitas/AutoGPT
-hwchase17/langchain
 BerriAI/litellm
 Portkey-AI/gateway
 openai/openai-python
-anthropic-sdk-python
 mistralai/client-python
 cohere-ai/cohere-python
 googleapis/python-genai
 
 # --- Python: 爬虫/自动化 ---
 scrapy/scrapy
-scrapinghub/scrapy
 microsoft/playwright-python
 SeleniumHQ/selenium
-ultrafunkamsterdam/undetected-chromedriver
 puppeteer/puppeteer
-mozilla/playwright
 
 # --- TypeScript / Node ---
 vercel/next.js
 vercel/vercel
-facebook/react
+react/react
 vuejs/core
 sveltejs/svelte
 angular/angular
@@ -103,18 +92,17 @@ nestjs/nest
 expressjs/express
 fastify/fastify
 honojs/hono
-prisma/prisma
+prisma/orm
 drizzle-team/drizzle-orm
 typeorm/typeorm
 sequelize/sequelize
 mikro-orm/mikro-orm
 kysely-org/kysely
-zod/zod
 colinhacks/zod
 trpc/trpc
-tanstack/query
-tanstack/table
-tanstack/router
+TanStack/query
+TanStack/table
+TanStack/router
 vitejs/vite
 rollup/rollup
 evanw/esbuild
@@ -181,7 +169,6 @@ wezterm/wezterm
 nushell/nushell
 zellij-org/zellij
 helix-editor/helix
-astral-sh/ruff
 tauri-apps/tauri
 
 # --- DevOps / 基础设施 ---
@@ -200,9 +187,5 @@ envoyproxy/envoy
 nginx/nginx
 redis/redis
 valkey-io/valkey
-mongodb/mongo
-postgres/postgres
 elastic/elasticsearch
 opensearch-project/OpenSearch
-minio/minio
-ceph/ceph
