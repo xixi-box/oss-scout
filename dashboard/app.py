@@ -159,6 +159,19 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
     app = FastAPI(title="oss-scout Dashboard", docs_url=None, redoc_url=None)
 
 
+    def _load_candidate(root_path: Path, key: str) -> dict | None:
+        """从队列重读一条候选（线程启动时用最新状态，不用轮询时的快照）。"""
+        try:
+            q = json.loads((root_path / "queue" / "candidates.json")
+                           .read_text(encoding="utf-8"))
+            ent = q.get(key)
+            if isinstance(ent, dict):
+                ent.setdefault("id", key)
+                return ent
+        except Exception:  # noqa: BLE001
+            pass
+        return None
+
     def _auto_repair_loop():
         """自动修复：周期性扫描候选池，A 级（AI=A 且规则 A/B）即触发 pipeline。
 
@@ -168,6 +181,29 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
         import threading as _th
         import time as _t
 
+        # 正在跑的候选（key → thread）。pipeline 是长任务（几十分钟），
+        # 不能让它阻塞轮询：否则 60 秒的发现节奏会被一条慢修复拖成几小时。
+        # 每条候选一个线程，循环本身只负责"发现可跑的、派出去、不重复派"。
+        inflight: dict[str, object] = {}
+        inflight_lock = _th.Lock()
+        MAX_CONCURRENT = 3   # 同时最多 3 条，避免 VPS（2 核 1.6G）被打满
+
+        def _run_one(entry: dict) -> None:
+            key = str(entry.get("id", ""))
+            try:
+                from scout_v2.workers.auto_pipeline import candidate_pipeline
+                out = candidate_pipeline(root, entry)
+                _audit(root, "auto_repair", key,
+                       json.dumps(out, ensure_ascii=False)[:400])
+            except Exception as e:  # noqa: BLE001
+                try:
+                    _audit(root, "auto_repair_error", key, str(e)[:200])
+                except Exception:  # noqa: BLE001
+                    pass
+            finally:
+                with inflight_lock:
+                    inflight.pop(key, None)
+
         def _loop():
             if os.environ.get("OSSCOUT_DISABLE_AUTO_REPAIR") == "1":
                 return   # 运维/验收模式：手动触发 pipeline
@@ -175,19 +211,34 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
             while True:
                 try:
                     cfg = D.dashboard_settings(ds)
-                    interval = int(cfg.get("auto_repair_seconds", 300))
+                    interval = int(cfg.get("auto_repair_seconds", 60))
                     if interval <= 0:
                         _t.sleep(60)
                         continue
                     from scout_v2.workers.auto_pipeline import drain_ai_graded
-                    # 2026-10-30 用户裁定：不再限制每日 1 条，也不限制每轮 1 条。
-                    # 每轮把所有 AI 判定可处理的候选都走一遍；每日上限由
-                    # repositories.yaml 的 max_new_claims_per_business_day 控制
-                    # （0 = 不限）。limit 只是防止单轮跑太久。
-                    out = drain_ai_graded(root, limit=8, dry_run=False)
-                    for item in out:
-                        _audit(root, "auto_repair", str(item.get("id", "")),
-                               json.dumps(item, ensure_ascii=False)[:400])
+                    with inflight_lock:
+                        busy = set(inflight)
+                        room = MAX_CONCURRENT - len(busy)
+                    if room > 0:
+                        # dry_run 只取候选清单，实际执行交给线程池
+                        ready = drain_ai_graded(root, limit=room + len(busy),
+                                                dry_run=True)
+                        for e in ready:
+                            key = str(e.get("id", ""))
+                            if key in busy:
+                                continue
+                            with inflight_lock:
+                                if len(inflight) >= MAX_CONCURRENT:
+                                    break
+                                if key in inflight:
+                                    continue
+                                ent = _load_candidate(root, key)
+                                if ent is None:
+                                    continue
+                                th = _th.Thread(target=_run_one, args=(ent,),
+                                                daemon=True, name=f"repair-{key}")
+                                inflight[key] = th
+                                th.start()
                     _t.sleep(interval)
                 except Exception as e:  # noqa: BLE001 — 永不因单次异常停摆
                     try:

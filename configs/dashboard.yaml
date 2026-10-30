@@ -1,0 +1,33 @@
+# Dashboard 运行时配置模板。
+#
+# 容器里实际读 /data/configs/dashboard.yaml（持久卷），这个文件是版本控制里的
+# 基线副本 —— 部署不会覆盖 /data 下的文件，改这里之后要手工同步到运行时。
+#
+# 改完同步：
+#   scp configs/dashboard.yaml root@<host>:/tmp/ && \
+#   ssh root@<host> 'docker cp /tmp/dashboard.yaml oss-scout:/data/configs/'
+
+# 自动修复循环间隔（秒）。0 = 关闭。
+# 2026-10-30 用户裁定改成 60：Worker 每分钟扫一次，这里对齐到同一节奏，
+# 发现到开工的延迟压到 1 分钟内。单轮很轻（读一个 JSON + 走已入队的候选）。
+auto_repair_seconds: 60
+
+# Cloudflare KV 拉取间隔（秒）。现在是 Worker 直接 POST 到 /api/ingest，
+# 这条轮询只作为 KV 兜底通道的补充。
+cf_pull_seconds: 20
+
+# GitHub 数据缓存 TTL（秒）
+gh_cache_ttl: 300
+
+# PR 状态刷新间隔（秒）
+pr_refresh_seconds: 120
+
+# 首页「外部 PR」面板盯的仓库
+pr_repos:
+  - xixi-box/oss-scout
+  - xixi-box/oss-scout-v2-test
+  - xixi-box/CAD2SHP
+  - xixi-box/JoyShockMapper
+  - wangshun-china/interview-web
+
+updated_at: "2026-10-30T00:00:00"

@@ -62,14 +62,20 @@ def log(root: Path, action: str, target: str, result: str) -> None:
         f.write(json.dumps(rec, ensure_ascii=False) + "\n")
 
 
-def mark_candidate(root: Path, key: str, status: str) -> None:
-    """pipeline 终态写回候选（原子写），避免同一候选无限重试。"""
+def mark_candidate(root: Path, key: str, status: str,
+                   extra: dict | None = None) -> None:
+    """pipeline 终态写回候选（原子写），避免同一候选无限重试。
+
+    extra：一并写入的附加字段（如 recheck_failures 计数）。
+    """
     p = root / "queue" / "candidates.json"
     try:
         q = json.loads(p.read_text(encoding="utf-8"))
         if key in q:
             q[key]["status"] = status
             q[key]["updated_at"] = time.strftime("%Y-%m-%dT%H:%M:%S")
+            if extra:
+                q[key].update(extra)
             tmp = p.with_suffix(".json.tmp")
             tmp.write_text(json.dumps(q, ensure_ascii=False, indent=1), encoding="utf-8")
             json.loads(tmp.read_text(encoding="utf-8"))
@@ -426,7 +432,12 @@ def candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6) -> dict:
     if recheck is None or not recheck.complete:
         summary["abort"] = f"recheck incomplete: {recheck.errors if recheck else 'None'}"
         log(root, "abort", key, summary["abort"])
-        mark_candidate(root, key, "recheck_failed")
+        # 复检失败会重试（状态 recheck_failed 在 drain 的候选集里）。修复循环
+        # 现在每 60 秒一轮，如果 GitHub 持续抖动就会每分钟打一次。记失败次数，
+        # 超过 3 次就标 escalated 不再自动重试，避免无意义刷 API。
+        n = int(entry.get("recheck_failures") or 0) + 1
+        mark_candidate(root, key, "escalated" if n >= 3 else "recheck_failed",
+                       extra={"recheck_failures": n})
         return summary
     if not recheck.issue_open or not recheck.unassigned or recheck.has_claim_signal \
             or recheck.has_cross_ref_pr or recheck.open_pr_hits:

@@ -87,3 +87,57 @@ class TestReproduce:
                           modal_enabled=True, modal_budget_ok=False))
         d = r.route(job("scan", "project_contribution"))
         assert d.backend == "github_actions" and d.fallback_used
+
+
+class TestRepairLoopConcurrency:
+    """修复循环改成 60 秒轮询 + 后台线程派发后，必须保证不重复派同一条。
+
+    2026-10-30：间隔从 300 秒压到 60 秒（对齐 Worker 的每分钟扫描）。pipeline
+    是长任务，如果让它阻塞轮询，一条慢修复会把发现节奏拖成几小时；所以改成
+    轮询只负责派发、每条候选一个线程。代价是必须自己防重复派发。
+    """
+
+    def test_drain_dry_run_returns_id_for_dedup(self, tmp_path):
+        """dry_run 的返回必须带 id，否则无法在 inflight 表里去重。"""
+        import json as _json
+        from pathlib import Path as _P
+        from scout_v2.workers.auto_pipeline import drain_ai_graded
+
+        root = tmp_path
+        (root / "queue").mkdir(parents=True)
+        (root / "queue" / "candidates.json").write_text(_json.dumps({
+            "acme/real#1": {"id": "acme/real#1", "repo": "acme/real", "number": 1,
+                            "status": "new", "blockers": [],
+                            "ai_verdict": {"usable": True, "reason": "clear bug"}},
+        }), encoding="utf-8")
+        ready = drain_ai_graded(root, limit=5, dry_run=True)
+        assert len(ready) == 1
+        assert ready[0]["id"] == "acme/real#1"
+
+    def test_ai_no_is_not_drained(self, tmp_path):
+        """AI 判定 NO 的候选不进 drain。"""
+        import json as _json
+        from scout_v2.workers.auto_pipeline import drain_ai_graded
+
+        root = tmp_path
+        (root / "queue").mkdir(parents=True)
+        (root / "queue" / "candidates.json").write_text(_json.dumps({
+            "acme/real#2": {"id": "acme/real#2", "repo": "acme/real", "number": 2,
+                            "status": "new", "blockers": [],
+                            "ai_verdict": {"usable": False, "reason": "needs design"}},
+        }), encoding="utf-8")
+        assert drain_ai_graded(root, limit=5, dry_run=True) == []
+
+    def test_blockers_still_veto(self, tmp_path):
+        """客观否决优先于 AI 结论：有 blockers 就不进 drain。"""
+        import json as _json
+        from scout_v2.workers.auto_pipeline import drain_ai_graded
+
+        root = tmp_path
+        (root / "queue").mkdir(parents=True)
+        (root / "queue" / "candidates.json").write_text(_json.dumps({
+            "acme/real#3": {"id": "acme/real#3", "repo": "acme/real", "number": 3,
+                            "status": "new", "blockers": ["docs_only"],
+                            "ai_verdict": {"usable": True, "reason": "looks fine"}},
+        }), encoding="utf-8")
+        assert drain_ai_graded(root, limit=5, dry_run=True) == []
