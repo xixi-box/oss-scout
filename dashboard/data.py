@@ -761,6 +761,11 @@ def ingest_cloudflare_issues(ds, items: list[dict]) -> int:
         entry = {"id": key, "repo": repo, "number": number, "title": title,
                  "url": it.get("url") or f"https://github.com/{repo}/issues/{number}",
                  "lane": lane, "score": score, "class": sclass, "blockers": blockers,
+                 # 顶层也放一份 labels：PR 门禁要按标签判断这个仓库允不允许未受邀 PR。
+                 # 只在 signals 里放会让 entry["labels"] 永远为空（2026-10-30 实测
+                 # 0/210 个候选有顶层 labels），门禁于是对 requires_invite:false 的
+                 # 仓库无条件放行、对 true 的永远拒绝——两头都错。
+                 "labels": labels,
                  "signals": {**sig, "labels": labels}, "created_at": it.get("created_at", ""),
                  "discovered_at": now_iso, "status": "new", "lease": None,
                  "source": "cloudflare-worker",

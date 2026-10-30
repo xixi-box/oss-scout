@@ -89,6 +89,20 @@ def _emergency_release(root: Path) -> None:
         pass
 
 
+def _fetch_issue_labels(repo: str, number: int) -> set[str] | None:
+    """现场读 issue 当前的标签集合。取数失败返回 None（调用方回退到快照）。"""
+    try:
+        out = subprocess.run(
+            ["gh", "api", f"repos/{repo}/issues/{number}", "--jq",
+             "[.labels[]? | (.name // .)]"],
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60)
+        if out.returncode != 0:
+            return None
+        return {str(x) for x in json.loads(out.stdout or "[]")}
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def _probe_test_stack(repo: str, base_sha: str):
     """用 GitHub tree API 探测仓库结构与测试栈（不 clone）。
 
@@ -427,8 +441,14 @@ def candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6) -> dict:
     # ---- PR 门禁（在认领/派发之前，避免白烧一轮 Actions）----
     # 2026-10-28 实录：sqlalchemy 的 sqla-tester bot 只接受维护者标记
     # "open for pull requests" 的 issue 对应 PR，我们的 #13736 开出来几秒被关。
-    # 判断"能否开 PR"不能只看 issue 是否无竞争，还要看仓库是否允许未受邀 PR。
-    issue_labels = {str(x) for x in (entry.get("labels") or [])}
+    # 2026-10-30 实录：langchain 的 require-issue-link bot 同理关了 #41571。
+    #
+    # 标签必须**现场查**，不能用队列快照：实测 210 个候选全都没有顶层 labels 字段，
+    # 空集会让 requires_invite:true 的仓库永远被拒、false 的仓库无条件放行，
+    # 两头都错。这里直接读 issue 当前的 labels。
+    issue_labels = _fetch_issue_labels(repo, number) or {
+        str(x) for x in (entry.get("labels")
+                         or (entry.get("signals") or {}).get("labels") or [])}
     if not eng.pr_invited(repo, issue_labels):
         summary["abort"] = (
             f"repo requires an invite label before PRs "
@@ -745,8 +765,14 @@ def drain_ai_graded(root: Path, limit: int = 3, dry_run: bool = True) -> list[di
             break
         if e.get("status") not in ("new", "queued", "queued_hist", "recheck_failed"):
             continue
-        ai = e.get("ai_grade") or {}
-        if ai.get("grade") != "A" or e.get("class") not in ("A", "B"):
+        # 入口判定只认 AI 的结论（用户裁定 2026-10-30）：规则打分那套加分表
+        # （reactions/龄/标签权重）是在 AI 评分之前写的启发式，等于对 AI 的判断
+        # 再加一道更粗糙的人为复核，两层经常互相打架。规则只保留**客观事实否决**：
+        # blockers 非空说明存在已有关联 PR、认领信号、duplicate、纯文档、计费抱怨
+        # 这类不需要判断的事实，那就直接丢弃。
+        if e.get("blockers"):
+            continue
+        if (e.get("ai_grade") or {}).get("grade") != "A":
             continue
         picked.append(e)
     if dry_run:

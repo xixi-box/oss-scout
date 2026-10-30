@@ -45,7 +45,11 @@ repositories:
     requires_invite: false
   pulumi/pulumi:
     requires_invite: false
-    note: "近 40 个合并 PR 中 17 个来自外部贡献者（rgharris/seanyeh/aminix 等）"
+    note: >
+      on-community-pr.yml 只留言提示维护者（/run-acceptance-tests 等命令），
+      不关闭 PR；近 40 个合并 PR 中 17 个来自外部贡献者。
+      判据必须看"有没有 bot 强制先指派"，而不是"外部贡献多不多"——
+      后者与前者无关（2026-10-30 langchain 就是按后者误判的）
   langchain-ai/langchain:
     requires_invite: true
     invite_labels: ["open for pull requests"]
