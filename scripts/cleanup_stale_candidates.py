@@ -55,6 +55,11 @@ def main() -> int:
                        and (v.get("ai_grade") or {}).get("grade") is None]
 
     print(f"pool={len(pool)} candidates={before}")
+    counts: dict[str, int] = {}
+    for v in q.values():
+        counts[str(v.get("status"))] = counts.get(str(v.get("status")), 0) + 1
+    for st, n in sorted(counts.items(), key=lambda kv: -kv[1]):
+        print(f"  {st:24s} {n}")
     print(f"drop (repo not in pool): {len(drop_out_of_pool)}")
     print(f"drop (in pool, never AI-judged): {len(drop_no_verdict)}")
     for k in (drop_out_of_pool + drop_no_verdict)[:10]:

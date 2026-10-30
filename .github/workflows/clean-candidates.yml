@@ -14,6 +14,39 @@ jobs:
   clean:
     runs-on: [self-hosted, aliyun]
     steps:
+      - name: Report queue composition
+        run: |
+          docker exec -i oss-scout python - <<'PY'
+          import json
+          import collections
+          import yaml
+
+          q = json.load(open("/data/queue/candidates.json", encoding="utf-8"))
+          pool = set((yaml.safe_load(open("/app/configs.seed/repositories.yaml",
+                                         encoding="utf-8")) or {})
+                     .get("repositories") or {})
+          print(f"candidates={len(q)} pool={len(pool)}")
+          print("--- status x in_pool ---")
+          grid = collections.Counter(
+              (str(v.get("status")), v.get("repo") in pool) for v in q.values())
+          for (st, inp), n in sorted(grid.items(), key=lambda kv: -kv[1]):
+              print(f"  {st:22s} in_pool={str(inp):5s} {n}")
+          print("--- repos ---")
+          repos = collections.Counter(v.get("repo") for v in q.values())
+          for r, n in repos.most_common(20):
+              print(f"  {r:45s} {n:4d} {'OK' if r in pool else 'OUT-OF-POOL'}")
+          print(f"distinct repos={len(repos)}, out-of-pool repos="
+                f"{sum(1 for r in repos if r not in pool)}")
+          print("--- active entries without AI verdict ---")
+          bad = [k for k, v in q.items()
+                 if v.get("status") in ("new", "queued", "queued_hist", "recheck_failed")
+                 and (v.get("ai_verdict") or {}).get("usable") is None
+                 and (v.get("ai_grade") or {}).get("grade") is None]
+          print(f"  count={len(bad)}")
+          for k in bad[:15]:
+              print(f"  - {k}")
+          PY
+
       - name: Run cleanup inside the container
         run: |
           set -euo pipefail
