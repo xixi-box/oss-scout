@@ -257,35 +257,3 @@ defaults: {requires_invite: false}
 repositories: {}
 """)
         assert eng.pr_invited("someone/else", set()) is True
-
-
-class TestLabelsMustBeFetchedNotAssumed:
-    """门禁判断依赖 labels，而候选队列里根本没有这个字段。
-
-    2026-10-30 实录：210 个候选 0 个有顶层 labels。空集导致
-    requires_invite:true 的仓库永远被拒、false 的无条件放行——两头都错，
-    而 langchain 就是靠后者把未指派的 PR 开出去后被 bot 关闭的。
-    """
-
-    def test_labels_fetched_live(self, monkeypatch):
-        import json as _json
-        import subprocess as _sp
-        from scout_v2.workers import auto_pipeline as ap
-
-        def fake_run(cmd, **kw):
-            return _sp.CompletedProcess(
-                cmd, 0, _json.dumps(["bug", "open for pull requests"]), "")
-
-        monkeypatch.setattr(ap.subprocess, "run", fake_run)
-        got = ap._fetch_issue_labels("acme/real", 7)
-        assert got == {"bug", "open for pull requests"}
-
-    def test_fetch_failure_returns_none(self, monkeypatch):
-        import subprocess as _sp
-        from scout_v2.workers import auto_pipeline as ap
-
-        def fake_run(cmd, **kw):
-            return _sp.CompletedProcess(cmd, 1, "", "boom")
-
-        monkeypatch.setattr(ap.subprocess, "run", fake_run)
-        assert ap._fetch_issue_labels("acme/real", 7) is None

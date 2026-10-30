@@ -178,7 +178,11 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
     import threading as _thr
     _inflight: dict[str, object] = {}
     _inflight_lock = _thr.Lock()
-    _MAX_CONCURRENT = 3   # 同时最多 3 条，避免 VPS（2 核 1.6G）被打满
+    # 真正的修复跑在 GitHub Actions runner 上（VPS 只负责派发、提交
+    # workflow_dispatch，不 clone 也不编译），所以这里的上限跟 VPS 算力无关，
+    # 只用来防止一次性把几百条一起甩给 Actions 打爆自动化的并发配额。
+    # repair job 没有 concurrency 组，可以并行跑，实测 3 条同时在飞。
+    _MAX_CONCURRENT = 10
 
     def _run_one(entry: dict) -> None:
         key = str(entry.get("id", ""))

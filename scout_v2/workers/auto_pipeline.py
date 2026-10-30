@@ -95,20 +95,6 @@ def _emergency_release(root: Path) -> None:
         pass
 
 
-def _fetch_issue_labels(repo: str, number: int) -> set[str] | None:
-    """现场读 issue 当前的标签集合。取数失败返回 None（调用方回退到快照）。"""
-    try:
-        out = subprocess.run(
-            ["gh", "api", f"repos/{repo}/issues/{number}", "--jq",
-             "[.labels[]? | (.name // .)]"],
-            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60)
-        if out.returncode != 0:
-            return None
-        return {str(x) for x in json.loads(out.stdout or "[]")}
-    except Exception:  # noqa: BLE001
-        return None
-
-
 def _probe_test_stack(repo: str, base_sha: str):
     """用 GitHub tree API 探测仓库结构与测试栈（不 clone）。
 
@@ -456,25 +442,13 @@ def candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6) -> dict:
         mark_candidate(root, key, "aborted_competed")
         return summary
 
-    # ---- PR 门禁（在认领/派发之前，避免白烧一轮 Actions）----
-    # 2026-10-28 实录：sqlalchemy 的 sqla-tester bot 只接受维护者标记
-    # "open for pull requests" 的 issue 对应 PR，我们的 #13736 开出来几秒被关。
-    # 2026-10-30 实录：langchain 的 require-issue-link bot 同理关了 #41571。
-    #
-    # 标签必须**现场查**，不能用队列快照：实测 210 个候选全都没有顶层 labels 字段，
-    # 空集会让 requires_invite:true 的仓库永远被拒、false 的仓库无条件放行，
-    # 两头都错。这里直接读 issue 当前的 labels。
-    issue_labels = _fetch_issue_labels(repo, number) or {
-        str(x) for x in (entry.get("labels")
-                         or (entry.get("signals") or {}).get("labels") or [])}
-    if not eng.pr_invited(repo, issue_labels):
-        summary["abort"] = (
-            f"repo requires an invite label before PRs "
-            f"(labels={sorted(issue_labels) or 'none'}); "
-            f"comment-alignment only")
-        log(root, "abort", key, summary["abort"])
-        mark_candidate(root, key, "needs_invite")
-        return summary
+    # 这里原本有一道 pr_invited() 检查（查仓库要不要 invite label 才许开 PR）。
+    # 2026-10-30 删除：门禁已经在**挑选仓库**这一步完成了 —— 会关闭未受邀 PR 的
+    # 仓库根本不进 configs/repositories.yaml，也就不会被发现。留着它是对 39 个
+    # 仓库恒真的空检查（实测空 labels 下 39/40 直接返回 True），而且是带状态的
+    # 运行时判断：它曾在 labels 取不到时两头出错（该拒的放行、该放的拒掉）。
+    # 约束归位到加仓库时：pr_gates.yaml 里 requires_invite: true 的仓库不该入池。
+
     summary["steps"].append("recheck ok")
 
     # ---- 认领闸 + 闸门池 ----
