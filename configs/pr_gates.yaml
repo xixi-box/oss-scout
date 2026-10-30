@@ -1,18 +1,10 @@
 # 仓库 PR 门禁（2026-10-30，基于核实过的 workflow 实际行为）。
 #
 # 判据只认一件事：**会不会自动关闭未受邀/未指派的 PR**。
-# 不看"外部贡献多不多"——那与门禁无关（langchain 就是按此误判过）。
+# 不看"外部贡献多不多"——那与门禁无关（langchain 就是按此误判过一次）。
 #
-# 待核查记录（曾判定为门禁、核实后确认开放）：
-#   oven-sh/bun     close-linked-issues.yml 是 PR 合并后关 issue，不是关 PR
-#   typeorm/typeorm assign-milestone.yml 里的 closed 是查里程碑状态
-#   astral-sh/uv    promote-pull-request.yml 是发版晋升
-#   pnpm/pnpm       只打标签 + 自动指派作者
-#   argoproj/argo-cd 只把 PR 作者设为 assignee
-#
-# 已剔除出池（确有硬门禁）：
-#   pydantic/pydantic, langchain-ai/langchain, langchain-ai/langgraph,
-#   pydantic/pydantic-ai, sqlalchemy/sqlalchemy
+# 下表这 40 个仓库全部核实为「不会自动关闭」，因此 requires_invite: false。
+# 未在此文件声明的仓库走 defaults（true，fail-closed）。
 
 defaults:
   requires_invite: true
@@ -24,41 +16,90 @@ defaults:
     - "accepted"
 
 repositories:
-  BerriAI/litellm: {requires_invite: false}
-  PrefectHQ/prefect: {requires_invite: false}
-  aio-libs/aiohttp: {requires_invite: false}
-  ansible/ansible-lint: {requires_invite: false}
-  apache/airflow: {requires_invite: false}
-  argoproj/argo-cd: {requires_invite: false}
-  argoproj/argo-workflows: {requires_invite: false}
-  crossplane/crossplane: {requires_invite: false}
-  deepset-ai/haystack: {requires_invite: false}
-  docker/compose: {requires_invite: false}
-  etcd-io/etcd: {requires_invite: false}
-  fivetran/great_expectations: {requires_invite: false}
-  fluxcd/flux2: {requires_invite: false}
-  gofiber/fiber: {requires_invite: false}
-  googleapis/python-genai: {requires_invite: false}
-  hashicorp/consul: {requires_invite: false}
-  hashicorp/terraform: {requires_invite: false}
-  jackc/pgx: {requires_invite: false}
-  k3s-io/k3s: {requires_invite: false}
-  linkerd/linkerd2: {requires_invite: false}
-  microsoft/playwright-python: {requires_invite: false}
-  moby/moby: {requires_invite: false}
-  numpy/numpy: {requires_invite: false}
-  openai/openai-python: {requires_invite: false}
-  pandas-dev/pandas: {requires_invite: false}
-  prometheus/prometheus: {requires_invite: false}
-  psf/black: {requires_invite: false}
-  pulumi/pulumi: {requires_invite: false}
-  pypa/pip-tools: {requires_invite: false}
-  pypa/virtualenv: {requires_invite: false}
-  python-poetry/poetry: {requires_invite: false}
-  rancher/rancher: {requires_invite: false}
-  redis/go-redis: {requires_invite: false}
-  scipy/scipy: {requires_invite: false}
-  tox-dev/tox: {requires_invite: false}
-  traefik/traefik: {requires_invite: false}
-  unionai-oss/pandera: {requires_invite: false}
-  urfave/cli: {requires_invite: false}
+  # ---- Agent Memory ----
+  vectorize-io/hindsight:       {requires_invite: false}
+  tigerless-labs/agent-memory:  {requires_invite: false}
+  volcengine/OpenViking:        {requires_invite: false}
+  oceanbase/powercontext:       {requires_invite: false}
+  ruvnet/RuVector:              {requires_invite: false}
+
+  # ---- Agent 框架 ----
+  openai/openai-agents-python:  {requires_invite: false}
+  bytedance/deer-flow:          {requires_invite: false}
+  VoltAgent/voltagent:          {requires_invite: false}
+
+  # ---- RAG ----
+  HKUDS/RAG-Anything:           {requires_invite: false}
+  OSU-NLP-Group/HippoRAG:       {requires_invite: false}
+
+  # ---- 向量库 ----
+  lancedb/lancedb:              {requires_invite: false}
+  milvus-io/milvus:             {requires_invite: false}
+  weaviate/weaviate:            {requires_invite: false}
+  qdrant/qdrant:                {requires_invite: false}
+
+  # ---- MCP ----
+  upstash/context7:             {requires_invite: false}
+  PrefectHQ/fastmcp:            {requires_invite: false}
+  modelcontextprotocol/registry: {requires_invite: false}
+
+  # ---- 可观测 / 评估 ----
+  Arize-ai/phoenix:             {requires_invite: false}
+  promptfoo/promptfoo:          {requires_invite: false}
+  langfuse/langfuse:            {requires_invite: false}
+  confident-ai/deepeval:        {requires_invite: false}
+
+  # ---- 工程工具 ----
+  pypa/virtualenv:              {requires_invite: false}
+  pypa/pip-tools:               {requires_invite: false}
+  tox-dev/tox:                  {requires_invite: false}
+  biomejs/biome:                {requires_invite: false}
+  psf/black:                    {requires_invite: false}
+  astral-sh/uv:                 {requires_invite: false}
+  astral-sh/ruff:               {requires_invite: false}
+
+  # ---- 沙箱 / 推理 ----
+  firecracker-microvm/firecracker: {requires_invite: false}
+  vllm-project/vllm:            {requires_invite: false}
+
+  # ---- 浏览器自动化 ----
+  microsoft/playwright-python:  {requires_invite: false}
+  microsoft/playwright:         {requires_invite: false}
+
+  # ---- 实时 / 协作 / 画布 ----
+  instantdb/instant:            {requires_invite: false}
+  liveblocks/liveblocks:        {requires_invite: false}
+  yjs/yjs:                      {requires_invite: false}
+  dxos/dxos:                    {requires_invite: false}
+  tldraw/tldraw:                {requires_invite: false}
+
+  # ---- 平台 / 文档 ----
+  supabase/supabase:            {requires_invite: false}
+  zuplo/zudoku:                 {requires_invite: false}
+
+  # ---- 限制档（规则不同：只做维护者确认过的，PR 必须带测试）----
+  BerriAI/litellm:
+    requires_invite: true
+    invite_labels: ["maintainer_confirmed", "help wanted"]
+    note: "PR 必须带测试；只做维护者确认过的 issue"
+
+# ============ 剔除记录（曾考虑、核实后排除）============
+#
+# 会关闭未受邀 PR：
+#   mem0ai/mem0              pr-gate.yml 明说关闭未事先同意承接的 PR
+#   pydantic/pydantic-ai     pr-gates.yml 关闭未指派 PR
+#   langchain-ai/deepagents  require_issue_link 会关闭未指派 PR
+#   langchain-ai/langchain   require-issue-link bot
+#   langchain-ai/langgraph   require_issue_link.yml
+#   pydantic/pydantic        enforce-issue-assignment.yml
+#   sqlalchemy/sqlalchemy    sqla-tester 需要 issue 带 invite label
+#
+# 误判更正（文件名像门禁、实际不是）：
+#   oven-sh/bun        close-linked-issues.yml 是 PR 合并后关 issue
+#   typeorm/typeorm    assign-milestone.yml 的 closed 是查里程碑状态
+#   astral-sh/uv       promote-pull-request.yml 是发版晋升
+#   pnpm/pnpm          只打标签 + 自动指派作者
+#   argoproj/argo-cd   只把 PR 作者设为 assignee
+#
+# 停更：llm-tools/embedJs（2026-06）、awslabs/agent-evaluation（2025-12）
+# 超大单体：Significant-Gravitas/AutoGPT（issue 都在深水区）

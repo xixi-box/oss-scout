@@ -1,11 +1,18 @@
 # 仓库策略（计划 §6）。
 #
-# 2026-10-30 重建：从 173 个扫描池仓库里筛出 38 个**真正方便贡献**的。
-# 筛选依据见 docs/best_repos.md：外部贡献者合并率 ≥55%、语言为 Python/Go
-# （自动化验证成本最低）、无 PR 门禁。
+# 2026-10-30 重建：从 123 个 agent 生态仓库 + 之前 173 个扫描池里，
+# 用**外部贡献者合并率**实测筛出 40 个真正方便提交的仓库。
+# 完整评测见 docs/final_repos.md，生态概览见 docs/agent_ecosystem.md。
+#
+# 筛选方法：取每个仓库最近 60 个已关闭 PR，统计非成员提交且被合并的比例。
+# 外部贡献者 = author_association ∈ {NONE, CONTRIBUTOR, FIRST_TIME_CONTRIBUTOR}
+#（该字段是动态的：首次被合并后会从 FIRST_TIME_CONTRIBUTOR 升级成 CONTRIBUTOR，
+# 所以只看前者永远是 0）。
+#
+# 入库门槛：合并率 ≥50%、语言可自动验证、无会关闭未受邀 PR 的 bot、非停更。
 #
 # 仓库本身不做"难度评级"——能不能做由 AI 对单条 issue 的判断决定。
-# 这里只记录车道（open/gated）和个别仓库的项目特殊规则。
+# 这里只记录车道和个别仓库的项目特殊规则。
 
 defaults:
   unknown_repo_action: hold_for_review
@@ -17,50 +24,70 @@ defaults:
   allow_merge_upstream: false
 
 repositories:
-  # ---- Python (19) ----
-  PrefectHQ/prefect: {lane: open}
-  aio-libs/aiohttp: {lane: open}
-  ansible/ansible-lint: {lane: open}
-  apache/airflow: {lane: open}
-  deepset-ai/haystack: {lane: open}
-  fivetran/great_expectations: {lane: open}
-  googleapis/python-genai: {lane: open}
-  microsoft/playwright-python: {lane: open}
-  numpy/numpy: {lane: open}
-  openai/openai-python: {lane: open}
-  pandas-dev/pandas: {lane: open}
-  psf/black: {lane: open}
-  pypa/pip-tools: {lane: open}
-  pypa/virtualenv: {lane: open}
-  python-poetry/poetry: {lane: open}
-  scipy/scipy: {lane: open}
-  tox-dev/tox: {lane: open}
-  unionai-oss/pandera: {lane: open}
+  # ========== Agent Memory ==========
+  vectorize-io/hindsight:       {lane: open}   # 100%  56.4k  自学习记忆
+  tigerless-labs/agent-memory:  {lane: open}   #  80%   4.4k  纯 Markdown 存记忆
+  volcengine/OpenViking:        {lane: open}   #  65%  41.2k  自演化上下文数据库
+  oceanbase/powercontext:       {lane: open}   #  57%   1.4k  长期记忆 + 交接
+  ruvnet/RuVector:              {lane: open}   #  53%   4.6k  实时决策向量层
 
-  # ---- Go (19) ----
-  argoproj/argo-cd: {lane: open}
-  argoproj/argo-workflows: {lane: open}
-  crossplane/crossplane: {lane: open}
-  docker/compose: {lane: open}
-  etcd-io/etcd: {lane: open}
-  fluxcd/flux2: {lane: open}
-  gofiber/fiber: {lane: open}
-  hashicorp/consul: {lane: open}
-  hashicorp/terraform: {lane: open}
-  jackc/pgx: {lane: open}
-  k3s-io/k3s: {lane: open}
-  linkerd/linkerd2: {lane: open}
-  moby/moby: {lane: open}
-  prometheus/prometheus: {lane: open}
-  pulumi/pulumi: {lane: open}
-  rancher/rancher: {lane: open}
-  redis/go-redis: {lane: open}
-  traefik/traefik: {lane: open}
-  urfave/cli: {lane: open}
+  # ========== Agent 框架 / Harness ==========
+  openai/openai-agents-python:  {lane: open}   #  91%  30.4k  OpenAI 官方
+  bytedance/deer-flow:          {lane: open}   #  59%  84.7k  长时程 SuperAgent
+  VoltAgent/voltagent:          {lane: open}   #  53%  10.9k  TS agent 平台
 
-  # ---- 特殊规则 ----
+  # ========== RAG ==========
+  HKUDS/RAG-Anything:           {lane: open}   #  86%  24.3k  一站式 RAG
+  OSU-NLP-Group/HippoRAG:       {lane: open}   #  52%   4.1k  NeurIPS'24
+
+  # ========== 向量库 ==========
+  lancedb/lancedb:              {lane: open}   #  87%  11.8k  嵌入式列式
+  milvus-io/milvus:             {lane: open}   #  76%  46.5k  云原生亿级
+  weaviate/weaviate:            {lane: open}   #  74%  16.9k  混合检索
+  qdrant/qdrant:                {lane: open}   #  60%  35.3k  Rust 单机首选
+
+  # ========== MCP ==========
+  upstash/context7:             {lane: open}   #  63%  64.0k  最新库文档
+  PrefectHQ/fastmcp:            {lane: open}   #  61%  28.2k  写 server 首选
+  modelcontextprotocol/registry: {lane: open}  #  57%   7.4k  官方注册表
+
+  # ========== 可观测 / 评估 ==========
+  Arize-ai/phoenix:             {lane: open}   #  86%  12.1k  trace + eval
+  promptfoo/promptfoo:          {lane: open}   #  86%  26.6k  prompt 测试
+  langfuse/langfuse:            {lane: open}   #  62%  36.8k  开源自托管追踪
+  confident-ai/deepeval:        {lane: open}   #  51%  19.2k  pytest 风格单测
+
+  # ========== 工程工具 ==========
+  pypa/virtualenv:              {lane: open}   #  93%   5.1k
+  pypa/pip-tools:               {lane: open}   #  93%   8.0k
+  tox-dev/tox:                  {lane: open}   #  90%   4.0k
+  biomejs/biome:                {lane: open}   #  90%  26.0k
+  psf/black:                    {lane: open}   #  88%  42.1k
+  astral-sh/uv:                 {lane: open}   #  76%  91.4k
+  astral-sh/ruff:               {lane: open}   #  64%  50.3k
+
+  # ========== 沙箱 / 推理 ==========
+  firecracker-microvm/firecracker: {lane: open}  #  77%  37.7k  跑不可信代码
+  vllm-project/vllm:            {lane: open}   #  69%  95.9k  高吞吐推理
+
+  # ========== 浏览器自动化 ==========
+  microsoft/playwright-python:  {lane: open}   #  78%  15.1k
+  microsoft/playwright:         {lane: open}   #  62%  98.9k
+
+  # ========== 实时 / 协作 / 画布 ==========
+  instantdb/instant:            {lane: open}   #  93%  10.6k  前端直连数据库
+  liveblocks/liveblocks:        {lane: open}   #  82%   4.8k  协作基础设施
+  yjs/yjs:                      {lane: open}   #  68%  23.0k  CRDT 标准
+  dxos/dxos:                    {lane: open}   # 100%   0.5k  本地优先运行时（样本小）
+  tldraw/tldraw:                {lane: open}   #  58%  51.2k  无限画布
+
+  # ========== 平台 / 文档 ==========
+  supabase/supabase:            {lane: open}   #  72% 114.3k
+  zuplo/zudoku:                 {lane: open}   #  84%   0.6k  OpenAPI 文档
+
+  # ========== 特殊规则 ==========
   # litellm 只做维护者确认过的 issue，且 PR 必须带测试
-  BerriAI/litellm: {lane: restricted, only: maintainer_confirmed, pr_rules: [tests_required]}
+  BerriAI/litellm:              {lane: restricted, only: maintainer_confirmed, pr_rules: [tests_required]}
 
-  # ---- 内部测试仓库（不承载真实开源贡献）----
-  xixi-box/oss-scout-v2-test: {lane: open, internal_test_repo: true}
+  # ========== 内部测试仓库（不承载真实开源贡献）==========
+  xixi-box/oss-scout-v2-test:   {lane: open, internal_test_repo: true}
