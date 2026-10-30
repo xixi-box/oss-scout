@@ -630,8 +630,11 @@ def _build_publish_cfg(repo: str, number: int, base_sha: str,
     """
     push_repo = _fork_of(repo)
     title = str(entry.get("title") or "").strip()
-    # 仓库普遍用 conventional commits；我们没有足够信息判定 type，用最中性的 fix
-    pr_title = f"fix: {title[:70]}" if title else f"fix: resolves #{number}"
+    # 仓库普遍用 conventional commits；我们没有足够信息判定 type，用最中性的 fix。
+    # 标题不截断：2026-10-30 实测 [:70] 把 "...point to the line where the
+    # variable is defined" 切成了 "...where the"，PR 标题成了半句话。
+    # issue 标题本身就是最贴切的 PR 标题，GitHub 也不限制长度。
+    pr_title = f"fix: {title}" if title else f"fix: resolves #{number}"
     body_lines = [
         f"Fixes #{number}",
         "",
