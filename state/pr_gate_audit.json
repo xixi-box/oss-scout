@@ -49,31 +49,23 @@
   "closers": [
    "block_fork_main_prs.yml",
    "close_unchecked_issues.yml",
-   "reopen_on_assignment.yml",
    "require_issue_link.yml"
   ],
   "assigners": [
-   "reopen_on_assignment.yml",
    "require_issue_link.yml"
   ],
   "requires_invite": true
  },
  {
   "repo": "langchain-ai/langgraph",
-  "workflows": 17,
-  "closers": [
-   "reopen_on_assignment.yml",
-   "require_issue_link.yml"
-  ],
-  "assigners": [
-   "reopen_on_assignment.yml",
-   "require_issue_link.yml"
-  ],
-  "requires_invite": true
+  "workflows": 0,
+  "closers": [],
+  "assigners": [],
+  "requires_invite": false
  },
  {
   "repo": "BerriAI/litellm",
-  "workflows": 0,
+  "workflows": 42,
   "closers": [],
   "assigners": [],
   "requires_invite": false
@@ -167,7 +159,7 @@
  },
  {
   "repo": "nginx/nginx",
-  "workflows": 9,
+  "workflows": 0,
   "closers": [],
   "assigners": [],
   "requires_invite": false

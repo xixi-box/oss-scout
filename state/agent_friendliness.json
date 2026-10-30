@@ -1,0 +1,906 @@
+[
+ {
+  "repo": "All-Hands-AI/OpenHands",
+  "sampled": 60,
+  "ext": 27,
+  "ext_merged": 13,
+  "ext_merge_rate": 0.481,
+  "ext_share_of_merges": 0.289
+ },
+ {
+  "repo": "bytedance/deer-flow",
+  "sampled": 60,
+  "ext": 54,
+  "ext_merged": 32,
+  "ext_merge_rate": 0.593,
+  "ext_share_of_merges": 0.865
+ },
+ {
+  "repo": "cline/cline",
+  "sampled": 60,
+  "ext": 59,
+  "ext_merged": 29,
+  "ext_merge_rate": 0.492,
+  "ext_share_of_merges": 0.967
+ },
+ {
+  "repo": "aaif-goose/goose",
+  "sampled": 60,
+  "ext": 43,
+  "ext_merged": 15,
+  "ext_merge_rate": 0.349,
+  "ext_share_of_merges": 0.536
+ },
+ {
+  "repo": "langchain-ai/deepagents",
+  "sampled": 60,
+  "ext": 37,
+  "ext_merged": 28,
+  "ext_merge_rate": 0.757,
+  "ext_share_of_merges": 0.966
+ },
+ {
+  "repo": "openai/openai-agents-python",
+  "sampled": 60,
+  "ext": 35,
+  "ext_merged": 32,
+  "ext_merge_rate": 0.914,
+  "ext_share_of_merges": 0.561
+ },
+ {
+  "repo": "pydantic/pydantic-ai",
+  "sampled": 60,
+  "ext": 56,
+  "ext_merged": 38,
+  "ext_merge_rate": 0.679,
+  "ext_share_of_merges": 0.905
+ },
+ {
+  "repo": "google/adk-python",
+  "sampled": 60,
+  "ext": 60,
+  "ext_merged": 1,
+  "ext_merge_rate": 0.017,
+  "ext_share_of_merges": 1.0
+ },
+ {
+  "repo": "microsoft/agent-framework",
+  "sampled": 60,
+  "ext": 38,
+  "ext_merged": 9,
+  "ext_merge_rate": 0.237,
+  "ext_share_of_merges": 0.3
+ },
+ {
+  "repo": "crewAIInc/crewAI",
+  "sampled": 60,
+  "ext": 20,
+  "ext_merged": 0,
+  "ext_merge_rate": 0.0,
+  "ext_share_of_merges": 0.0
+ },
+ {
+  "repo": "microsoft/autogen",
+  "sampled": 60,
+  "ext": 60,
+  "ext_merged": 2,
+  "ext_merge_rate": 0.033,
+  "ext_share_of_merges": 1.0
+ },
+ {
+  "repo": "langchain-ai/langgraph",
+  "sampled": 60,
+  "ext": 55,
+  "ext_merged": 35,
+  "ext_merge_rate": 0.636,
+  "ext_share_of_merges": 0.897
+ },
+ {
+  "repo": "langchain-ai/langchain",
+  "sampled": 60,
+  "ext": 47,
+  "ext_merged": 12,
+  "ext_merge_rate": 0.255,
+  "ext_share_of_merges": 0.48
+ },
+ {
+  "repo": "openai/swarm",
+  "sampled": 53,
+  "ext": 24,
+  "ext_merged": 10,
+  "ext_merge_rate": 0.417,
+  "ext_share_of_merges": 0.294
+ },
+ {
+  "repo": "geekan/MetaGPT",
+  "sampled": 60,
+  "ext": 58,
+  "ext_merged": 3,
+  "ext_merge_rate": 0.052,
+  "ext_share_of_merges": 0.6
+ },
+ {
+  "repo": "FoundationAgents/MetaGPT",
+  "sampled": 60,
+  "ext": 58,
+  "ext_merged": 3,
+  "ext_merge_rate": 0.052,
+  "ext_share_of_merges": 0.6
+ },
+ {
+  "repo": "camel-ai/camel",
+  "sampled": 60,
+  "ext": 57,
+  "ext_merged": 15,
+  "ext_merge_rate": 0.263,
+  "ext_share_of_merges": 0.833
+ },
+ {
+  "repo": "TransformerOptimus/SuperAGI",
+  "sampled": 60,
+  "ext": 34,
+  "ext_merged": 15,
+  "ext_merge_rate": 0.441,
+  "ext_share_of_merges": 0.366
+ },
+ {
+  "repo": "QwenLM/Qwen-Agent",
+  "sampled": 60,
+  "ext": 60,
+  "ext_merged": 2,
+  "ext_merge_rate": 0.033,
+  "ext_share_of_merges": 1.0
+ },
+ {
+  "repo": "VoltAgent/voltagent",
+  "sampled": 60,
+  "ext": 32,
+  "ext_merged": 17,
+  "ext_merge_rate": 0.531,
+  "ext_share_of_merges": 0.415
+ },
+ {
+  "repo": "omnigent-ai/omnigent",
+  "sampled": 60,
+  "ext": 35,
+  "ext_merged": 13,
+  "ext_merge_rate": 0.371,
+  "ext_share_of_merges": 0.433
+ },
+ {
+  "repo": "Significant-Gravitas/AutoGPT",
+  "sampled": 60,
+  "ext": 24,
+  "ext_merged": 17,
+  "ext_merge_rate": 0.708,
+  "ext_share_of_merges": 0.347
+ },
+ {
+  "repo": "reworkd/AgentGPT",
+  "sampled": 60,
+  "ext": 60,
+  "ext_merged": 10,
+  "ext_merge_rate": 0.167,
+  "ext_share_of_merges": 1.0
+ },
+ {
+  "repo": "yoheinakajima/babyagi",
+  "sampled": 60,
+  "ext": 59,
+  "ext_merged": 2,
+  "ext_merge_rate": 0.034,
+  "ext_share_of_merges": 0.667
+ },
+ {
+  "repo": "mem0ai/mem0",
+  "sampled": 60,
+  "ext": 59,
+  "ext_merged": 1,
+  "ext_merge_rate": 0.017,
+  "ext_share_of_merges": 1.0
+ },
+ {
+  "repo": "letta-ai/letta",
+  "sampled": 60,
+  "ext": 47,
+  "ext_merged": 8,
+  "ext_merge_rate": 0.17,
+  "ext_share_of_merges": 0.421
+ },
+ {
+  "repo": "getzep/zep",
+  "sampled": 60,
+  "ext": 42,
+  "ext_merged": 22,
+  "ext_merge_rate": 0.524,
+  "ext_share_of_merges": 0.595
+ },
+ {
+  "repo": "getzep/graphiti",
+  "sampled": 60,
+  "ext": 48,
+  "ext_merged": 21,
+  "ext_merge_rate": 0.438,
+  "ext_share_of_merges": 0.636
+ },
+ {
+  "repo": "vectorize-io/hindsight",
+  "sampled": 60,
+  "ext": 15,
+  "ext_merged": 15,
+  "ext_merge_rate": 1.0,
+  "ext_share_of_merges": 0.259
+ },
+ {
+  "repo": "volcengine/OpenViking",
+  "sampled": 60,
+  "ext": 23,
+  "ext_merged": 15,
+  "ext_merge_rate": 0.652,
+  "ext_share_of_merges": 0.306
+ },
+ {
+  "repo": "tigerless-labs/agent-memory",
+  "sampled": 60,
+  "ext": 46,
+  "ext_merged": 37,
+  "ext_merge_rate": 0.804,
+  "ext_share_of_merges": 0.725
+ },
+ {
+  "repo": "oceanbase/powercontext",
+  "sampled": 60,
+  "ext": 51,
+  "ext_merged": 29,
+  "ext_merge_rate": 0.569,
+  "ext_share_of_merges": 0.806
+ },
+ {
+  "repo": "ruvnet/RuVector",
+  "sampled": 60,
+  "ext": 32,
+  "ext_merged": 17,
+  "ext_merge_rate": 0.531,
+  "ext_share_of_merges": 0.378
+ },
+ {
+  "repo": "TencentCloud/TencentDB-Agent-Memory",
+  "sampled": 60,
+  "ext": 53,
+  "ext_merged": 6,
+  "ext_merge_rate": 0.113,
+  "ext_share_of_merges": 0.75
+ },
+ {
+  "repo": "run-llama/llama_index",
+  "sampled": 60,
+  "ext": 60,
+  "ext_merged": 0,
+  "ext_merge_rate": 0.0,
+  "ext_share_of_merges": null
+ },
+ {
+  "repo": "HKUDS/RAG-Anything",
+  "sampled": 60,
+  "ext": 49,
+  "ext_merged": 42,
+  "ext_merge_rate": 0.857,
+  "ext_share_of_merges": 0.792
+ },
+ {
+  "repo": "OSU-NLP-Group/HippoRAG",
+  "sampled": 52,
+  "ext": 29,
+  "ext_merged": 15,
+  "ext_merge_rate": 0.517,
+  "ext_share_of_merges": 0.429
+ },
+ {
+  "repo": "llm-tools/embedJs",
+  "sampled": 60,
+  "ext": 12,
+  "ext_merged": 9,
+  "ext_merge_rate": 0.75,
+  "ext_share_of_merges": 0.158
+ },
+ {
+  "repo": "deepset-ai/haystack",
+  "sampled": 60,
+  "ext": 58,
+  "ext_merged": 36,
+  "ext_merge_rate": 0.621,
+  "ext_share_of_merges": 0.947
+ },
+ {
+  "repo": "Unstructured-IO/unstructured",
+  "sampled": 60,
+  "ext": 59,
+  "ext_merged": 52,
+  "ext_merge_rate": 0.881,
+  "ext_share_of_merges": 0.981
+ },
+ {
+  "repo": "milvus-io/milvus",
+  "sampled": 60,
+  "ext": 38,
+  "ext_merged": 29,
+  "ext_merge_rate": 0.763,
+  "ext_share_of_merges": 0.592
+ },
+ {
+  "repo": "qdrant/qdrant",
+  "sampled": 60,
+  "ext": 30,
+  "ext_merged": 18,
+  "ext_merge_rate": 0.6,
+  "ext_share_of_merges": 0.375
+ },
+ {
+  "repo": "chroma-core/chroma",
+  "sampled": 60,
+  "ext": 60,
+  "ext_merged": 28,
+  "ext_merge_rate": 0.467,
+  "ext_share_of_merges": 1.0
+ },
+ {
+  "repo": "weaviate/weaviate",
+  "sampled": 60,
+  "ext": 47,
+  "ext_merged": 35,
+  "ext_merge_rate": 0.745,
+  "ext_share_of_merges": 0.795
+ },
+ {
+  "repo": "pgvector/pgvector",
+  "sampled": 60,
+  "ext": 60,
+  "ext_merged": 8,
+  "ext_merge_rate": 0.133,
+  "ext_share_of_merges": 1.0
+ },
+ {
+  "repo": "alibaba/zvec",
+  "sampled": 60,
+  "ext": 16,
+  "ext_merged": 7,
+  "ext_merge_rate": 0.438,
+  "ext_share_of_merges": 0.152
+ },
+ {
+  "repo": "lancedb/lancedb",
+  "sampled": 60,
+  "ext": 54,
+  "ext_merged": 47,
+  "ext_merge_rate": 0.87,
+  "ext_share_of_merges": 0.922
+ },
+ {
+  "repo": "facebookresearch/faiss",
+  "sampled": 60,
+  "ext": 60,
+  "ext_merged": 0,
+  "ext_merge_rate": 0.0,
+  "ext_share_of_merges": null
+ },
+ {
+  "repo": "spotify/annoy",
+  "sampled": 60,
+  "ext": 47,
+  "ext_merged": 40,
+  "ext_merge_rate": 0.851,
+  "ext_share_of_merges": 0.769
+ },
+ {
+  "repo": "nmslib/hnswlib",
+  "sampled": 60,
+  "ext": 48,
+  "ext_merged": 19,
+  "ext_merge_rate": 0.396,
+  "ext_share_of_merges": 0.613
+ },
+ {
+  "repo": "modelcontextprotocol/servers",
+  "sampled": 60,
+  "ext": 1,
+  "ext_merged": 0,
+  "ext_merge_rate": 0.0,
+  "ext_share_of_merges": 0.0
+ },
+ {
+  "repo": "modelcontextprotocol/python-sdk",
+  "sampled": 60,
+  "ext": 46,
+  "ext_merged": 2,
+  "ext_merge_rate": 0.043,
+  "ext_share_of_merges": 0.154
+ },
+ {
+  "repo": "modelcontextprotocol/typescript-sdk",
+  "sampled": 60,
+  "ext": 56,
+  "ext_merged": 22,
+  "ext_merge_rate": 0.393,
+  "ext_share_of_merges": 1.0
+ },
+ {
+  "repo": "PrefectHQ/fastmcp",
+  "sampled": 60,
+  "ext": 18,
+  "ext_merged": 11,
+  "ext_merge_rate": 0.611,
+  "ext_share_of_merges": 0.22
+ },
+ {
+  "repo": "jlowin/fastmcp",
+  "sampled": 60,
+  "ext": 18,
+  "ext_merged": 11,
+  "ext_merge_rate": 0.611,
+  "ext_share_of_merges": 0.22
+ },
+ {
+  "repo": "punkpeye/awesome-mcp-servers",
+  "sampled": 60,
+  "ext": 60,
+  "ext_merged": 6,
+  "ext_merge_rate": 0.1,
+  "ext_share_of_merges": 1.0
+ },
+ {
+  "repo": "microsoft/playwright-mcp",
+  "sampled": 60,
+  "ext": 40,
+  "ext_merged": 18,
+  "ext_merge_rate": 0.45,
+  "ext_share_of_merges": 0.486
+ },
+ {
+  "repo": "github/github-mcp-server",
+  "sampled": 60,
+  "ext": 49,
+  "ext_merged": 20,
+  "ext_merge_rate": 0.408,
+  "ext_share_of_merges": 0.741
+ },
+ {
+  "repo": "upstash/context7",
+  "sampled": 60,
+  "ext": 41,
+  "ext_merged": 26,
+  "ext_merge_rate": 0.634,
+  "ext_share_of_merges": 0.619
+ },
+ {
+  "repo": "activepieces/activepieces",
+  "sampled": 60,
+  "ext": 24,
+  "ext_merged": 1,
+  "ext_merge_rate": 0.042,
+  "ext_share_of_merges": 0.029
+ },
+ {
+  "repo": "modelcontextprotocol/registry",
+  "sampled": 60,
+  "ext": 28,
+  "ext_merged": 16,
+  "ext_merge_rate": 0.571,
+  "ext_share_of_merges": 0.333
+ },
+ {
+  "repo": "open-webui/mcpo",
+  "sampled": 60,
+  "ext": 39,
+  "ext_merged": 16,
+  "ext_merge_rate": 0.41,
+  "ext_share_of_merges": 0.444
+ },
+ {
+  "repo": "Arize-ai/phoenix",
+  "sampled": 60,
+  "ext": 36,
+  "ext_merged": 31,
+  "ext_merge_rate": 0.861,
+  "ext_share_of_merges": 0.564
+ },
+ {
+  "repo": "confident-ai/deepeval",
+  "sampled": 60,
+  "ext": 51,
+  "ext_merged": 26,
+  "ext_merge_rate": 0.51,
+  "ext_share_of_merges": 0.765
+ },
+ {
+  "repo": "awslabs/agent-evaluation",
+  "sampled": 60,
+  "ext": 60,
+  "ext_merged": 50,
+  "ext_merge_rate": 0.833,
+  "ext_share_of_merges": 1.0
+ },
+ {
+  "repo": "langfuse/langfuse",
+  "sampled": 60,
+  "ext": 53,
+  "ext_merged": 33,
+  "ext_merge_rate": 0.623,
+  "ext_share_of_merges": 0.868
+ },
+ {
+  "repo": "traceloop/openllmetry",
+  "sampled": 60,
+  "ext": 59,
+  "ext_merged": 19,
+  "ext_merge_rate": 0.322,
+  "ext_share_of_merges": 0.95
+ },
+ {
+  "repo": "braintrustdata/braintrust-sdk",
+  "sampled": 60,
+  "ext": 37,
+  "ext_merged": 13,
+  "ext_merge_rate": 0.351,
+  "ext_share_of_merges": 0.419
+ },
+ {
+  "repo": "EleutherAI/lm-evaluation-harness",
+  "sampled": 60,
+  "ext": 57,
+  "ext_merged": 4,
+  "ext_merge_rate": 0.07,
+  "ext_share_of_merges": 0.667
+ },
+ {
+  "repo": "openai/evals",
+  "sampled": 60,
+  "ext": 59,
+  "ext_merged": 14,
+  "ext_merge_rate": 0.237,
+  "ext_share_of_merges": 0.933
+ },
+ {
+  "repo": "promptfoo/promptfoo",
+  "sampled": 60,
+  "ext": 59,
+  "ext_merged": 51,
+  "ext_merge_rate": 0.864,
+  "ext_share_of_merges": 0.981
+ },
+ {
+  "repo": "browser-use/browser-use",
+  "sampled": 60,
+  "ext": 56,
+  "ext_merged": 4,
+  "ext_merge_rate": 0.071,
+  "ext_share_of_merges": 0.5
+ },
+ {
+  "repo": "microsoft/playwright",
+  "sampled": 60,
+  "ext": 32,
+  "ext_merged": 20,
+  "ext_merge_rate": 0.625,
+  "ext_share_of_merges": 0.426
+ },
+ {
+  "repo": "microsoft/playwright-python",
+  "sampled": 60,
+  "ext": 23,
+  "ext_merged": 18,
+  "ext_merge_rate": 0.783,
+  "ext_share_of_merges": 0.367
+ },
+ {
+  "repo": "SeleniumHQ/selenium",
+  "sampled": 60,
+  "ext": 13,
+  "ext_merged": 9,
+  "ext_merge_rate": 0.692,
+  "ext_share_of_merges": 0.209
+ },
+ {
+  "repo": "e2b-dev/e2b",
+  "sampled": 60,
+  "ext": 57,
+  "ext_merged": 37,
+  "ext_merge_rate": 0.649,
+  "ext_share_of_merges": 0.925
+ },
+ {
+  "repo": "firecracker-microvm/firecracker",
+  "sampled": 60,
+  "ext": 60,
+  "ext_merged": 46,
+  "ext_merge_rate": 0.767,
+  "ext_share_of_merges": 1.0
+ },
+ {
+  "repo": "vllm-project/vllm",
+  "sampled": 60,
+  "ext": 42,
+  "ext_merged": 29,
+  "ext_merge_rate": 0.69,
+  "ext_share_of_merges": 0.63
+ },
+ {
+  "repo": "huggingface/text-generation-inference",
+  "sampled": 60,
+  "ext": 33,
+  "ext_merged": 30,
+  "ext_merge_rate": 0.909,
+  "ext_share_of_merges": 0.566
+ },
+ {
+  "repo": "huggingface/text-embeddings-inference",
+  "sampled": 60,
+  "ext": 46,
+  "ext_merged": 21,
+  "ext_merge_rate": 0.457,
+  "ext_share_of_merges": 0.636
+ },
+ {
+  "repo": "ggml-org/llama.cpp",
+  "sampled": 60,
+  "ext": 49,
+  "ext_merged": 36,
+  "ext_merge_rate": 0.735,
+  "ext_share_of_merges": 0.783
+ },
+ {
+  "repo": "ollama/ollama",
+  "sampled": 60,
+  "ext": 36,
+  "ext_merged": 13,
+  "ext_merge_rate": 0.361,
+  "ext_share_of_merges": 0.351
+ },
+ {
+  "repo": "BerriAI/litellm",
+  "sampled": 60,
+  "ext": 60,
+  "ext_merged": 34,
+  "ext_merge_rate": 0.567,
+  "ext_share_of_merges": 1.0
+ },
+ {
+  "repo": "Portkey-AI/gateway",
+  "sampled": 60,
+  "ext": 56,
+  "ext_merged": 2,
+  "ext_merge_rate": 0.036,
+  "ext_share_of_merges": 0.5
+ },
+ {
+  "repo": "duckdb/duckdb",
+  "sampled": 60,
+  "ext": 27,
+  "ext_merged": 22,
+  "ext_merge_rate": 0.815,
+  "ext_share_of_merges": 0.415
+ },
+ {
+  "repo": "pola-rs/polars",
+  "sampled": 60,
+  "ext": 9,
+  "ext_merged": 4,
+  "ext_merge_rate": 0.444,
+  "ext_share_of_merges": 0.077
+ },
+ {
+  "repo": "tursodatabase/libsql",
+  "sampled": 60,
+  "ext": 34,
+  "ext_merged": 19,
+  "ext_merge_rate": 0.559,
+  "ext_share_of_merges": 0.432
+ },
+ {
+  "repo": "electric-sql/pglite",
+  "sampled": 60,
+  "ext": 34,
+  "ext_merged": 21,
+  "ext_merge_rate": 0.618,
+  "ext_share_of_merges": 0.477
+ },
+ {
+  "repo": "neondatabase/neon",
+  "sampled": 60,
+  "ext": 60,
+  "ext_merged": 12,
+  "ext_merge_rate": 0.2,
+  "ext_share_of_merges": 1.0
+ },
+ {
+  "repo": "supabase/supabase",
+  "sampled": 60,
+  "ext": 51,
+  "ext_merged": 37,
+  "ext_merge_rate": 0.725,
+  "ext_share_of_merges": 0.86
+ },
+ {
+  "repo": "instantdb/instant",
+  "sampled": 60,
+  "ext": 60,
+  "ext_merged": 56,
+  "ext_merge_rate": 0.933,
+  "ext_share_of_merges": 1.0
+ },
+ {
+  "repo": "dxos/dxos",
+  "sampled": 60,
+  "ext": 35,
+  "ext_merged": 35,
+  "ext_merge_rate": 1.0,
+  "ext_share_of_merges": 0.625
+ },
+ {
+  "repo": "yjs/yjs",
+  "sampled": 60,
+  "ext": 53,
+  "ext_merged": 36,
+  "ext_merge_rate": 0.679,
+  "ext_share_of_merges": 0.837
+ },
+ {
+  "repo": "liveblocks/liveblocks",
+  "sampled": 60,
+  "ext": 60,
+  "ext_merged": 49,
+  "ext_merge_rate": 0.817,
+  "ext_share_of_merges": 1.0
+ },
+ {
+  "repo": "tldraw/tldraw",
+  "sampled": 60,
+  "ext": 36,
+  "ext_merged": 21,
+  "ext_merge_rate": 0.583,
+  "ext_share_of_merges": 0.467
+ },
+ {
+  "repo": "excalidraw/excalidraw",
+  "sampled": 60,
+  "ext": 36,
+  "ext_merged": 3,
+  "ext_merge_rate": 0.083,
+  "ext_share_of_merges": 0.12
+ },
+ {
+  "repo": "penpot/penpot",
+  "sampled": 60,
+  "ext": 54,
+  "ext_merged": 54,
+  "ext_merge_rate": 1.0,
+  "ext_share_of_merges": 0.9
+ },
+ {
+  "repo": "zuplo/zudoku",
+  "sampled": 60,
+  "ext": 57,
+  "ext_merged": 48,
+  "ext_merge_rate": 0.842,
+  "ext_share_of_merges": 0.98
+ },
+ {
+  "repo": "astral-sh/ruff",
+  "sampled": 60,
+  "ext": 33,
+  "ext_merged": 21,
+  "ext_merge_rate": 0.636,
+  "ext_share_of_merges": 0.477
+ },
+ {
+  "repo": "astral-sh/uv",
+  "sampled": 60,
+  "ext": 38,
+  "ext_merged": 29,
+  "ext_merge_rate": 0.763,
+  "ext_share_of_merges": 0.644
+ },
+ {
+  "repo": "python/mypy",
+  "sampled": 60,
+  "ext": 24,
+  "ext_merged": 6,
+  "ext_merge_rate": 0.25,
+  "ext_share_of_merges": 0.146
+ },
+ {
+  "repo": "psf/black",
+  "sampled": 60,
+  "ext": 56,
+  "ext_merged": 49,
+  "ext_merge_rate": 0.875,
+  "ext_share_of_merges": 0.925
+ },
+ {
+  "repo": "pytest-dev/pytest",
+  "sampled": 60,
+  "ext": 52,
+  "ext_merged": 17,
+  "ext_merge_rate": 0.327,
+  "ext_share_of_merges": 0.708
+ },
+ {
+  "repo": "tox-dev/tox",
+  "sampled": 60,
+  "ext": 21,
+  "ext_merged": 19,
+  "ext_merge_rate": 0.905,
+  "ext_share_of_merges": 0.333
+ },
+ {
+  "repo": "pypa/pip-tools",
+  "sampled": 60,
+  "ext": 58,
+  "ext_merged": 54,
+  "ext_merge_rate": 0.931,
+  "ext_share_of_merges": 0.964
+ },
+ {
+  "repo": "pypa/virtualenv",
+  "sampled": 60,
+  "ext": 60,
+  "ext_merged": 56,
+  "ext_merge_rate": 0.933,
+  "ext_share_of_merges": 1.0
+ },
+ {
+  "repo": "pre-commit/pre-commit",
+  "sampled": 60,
+  "ext": 49,
+  "ext_merged": 8,
+  "ext_merge_rate": 0.163,
+  "ext_share_of_merges": 0.444
+ },
+ {
+  "repo": "biomejs/biome",
+  "sampled": 60,
+  "ext": 50,
+  "ext_merged": 45,
+  "ext_merge_rate": 0.9,
+  "ext_share_of_merges": 0.833
+ },
+ {
+  "repo": "evanw/esbuild",
+  "sampled": 60,
+  "ext": 57,
+  "ext_merged": 19,
+  "ext_merge_rate": 0.333,
+  "ext_share_of_merges": 0.864
+ },
+ {
+  "repo": "vitejs/vite",
+  "sampled": 60,
+  "ext": 43,
+  "ext_merged": 18,
+  "ext_merge_rate": 0.419,
+  "ext_share_of_merges": 0.529
+ },
+ {
+  "repo": "vercel/turbo",
+  "sampled": 60,
+  "ext": 57,
+  "ext_merged": 48,
+  "ext_merge_rate": 0.842,
+  "ext_share_of_merges": 0.941
+ },
+ {
+  "repo": "nrwl/nx",
+  "sampled": 60,
+  "ext": 8,
+  "ext_merged": 5,
+  "ext_merge_rate": 0.625,
+  "ext_share_of_merges": 0.093
+ },
+ {
+  "repo": "bazelbuild/bazel",
+  "sampled": 60,
+  "ext": 13,
+  "ext_merged": 2,
+  "ext_merge_rate": 0.154,
+  "ext_share_of_merges": 0.05
+ }
+]

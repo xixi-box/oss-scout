@@ -1,0 +1,147 @@
+# 待测池：agent 生态 + 之前精选 38 个 + 有亮点的项目
+# 一行一个 owner/repo，# 开头为注释。生成时间 2026-10-30。
+
+# ========== 一、Agent Harness / Framework ==========
+# --- 闭源标杆（仅参考形态，不贡献）---
+# anthropics/claude-code  # 闭源
+# --- 开源 harness ---
+All-Hands-AI/OpenHands
+bytedance/deer-flow
+cline/cline
+aaif-goose/goose
+langchain-ai/deepagents
+openai/openai-agents-python
+pydantic/pydantic-ai
+google/adk-python
+microsoft/agent-framework
+crewAIInc/crewAI
+microsoft/autogen
+langchain-ai/langgraph
+langchain-ai/langchain
+openai/swarm
+geekan/MetaGPT
+FoundationAgents/MetaGPT
+camel-ai/camel
+TransformerOptimus/SuperAGI
+QwenLM/Qwen-Agent
+VoltAgent/voltagent
+omnigent-ai/omnigent
+Significant-Gravitas/AutoGPT
+reworkd/AgentGPT
+yoheinakajima/babyagi
+SuperagentAI/superagent
+
+# ========== 二、Agent Memory ==========
+mem0ai/mem0
+letta-ai/letta
+getzep/zep
+getzep/graphiti
+vectorize-io/hindsight
+volcengine/OpenViking
+tigerless-labs/agent-memory
+oceanbase/powercontext
+ruvnet/RuVector
+TencentCloud/TencentDB-Agent-Memory
+
+# ========== 三、RAG ==========
+run-llama/llama_index
+HKUDS/RAG-Anything
+OSU-NLP-Group/HippoRAG
+pinecone-io/canopy
+llm-tools/embedJs
+microsoft/markitdown
+deepset-ai/haystack
+explodinggradients/ragas
+infiniflow/ragflow
+Unstructured-IO/unstructured
+
+# ========== 四、向量数据库 ==========
+milvus-io/milvus
+qdrant/qdrant
+chroma-core/chroma
+weaviate/weaviate
+pgvector/pgvector
+alibaba/zvec
+lancedb/lancedb
+facebookresearch/faiss
+spotify/annoy
+nmslib/hnswlib
+
+# ========== 五、MCP ==========
+modelcontextprotocol/servers
+modelcontextprotocol/python-sdk
+modelcontextprotocol/typescript-sdk
+PrefectHQ/fastmcp
+jlowin/fastmcp
+punkpeye/awesome-mcp-servers
+microsoft/playwright-mcp
+github/github-mcp-server
+upstash/context7
+activepieces/activepieces
+modelcontextprotocol/registry
+open-webui/mcpo
+
+# ========== 六、Agent 评估 / 可观测 ==========
+Arize-ai/phoenix
+confident-ai/deepeval
+awslabs/agent-evaluation
+langfuse/langfuse
+traceloop/openllmetry
+braintrustdata/braintrust-sdk
+EleutherAI/lm-evaluation-harness
+openai/evals
+promptfoo/promptfoo
+
+# ========== 七、工具调用 / 沙箱 / 浏览器 ==========
+browser-use/browser-use
+microsoft/playwright
+microsoft/playwright-python
+SeleniumHQ/selenium
+e2b-dev/e2b
+modal-labs/modal-client
+firecracker-microvm/firecracker
+
+# ========== 八、推理 / 模型服务 ==========
+vllm-project/vllm
+sgl-project/sglang
+huggingface/text-generation-inference
+huggingface/text-embeddings-inference
+ggml-org/llama.cpp
+ollama/ollama
+BerriAI/litellm
+Portkey-AI/gateway
+
+# ========== 九、有亮点 / 技术有趣 ==========
+duckdb/duckdb
+pola-rs/polars
+tursodatabase/libsql
+electric-sql/pglite
+neondatabase/neon
+supabase/supabase
+instantdb/instant
+dxos/dxos
+automerge/automerge
+yjs/yjs
+liveblocks/liveblocks
+tldraw/tldraw
+excalidraw/excalidraw
+penpot/penpot
+zuplo/zudoku
+
+# ========== 十、开发工具 / 工程实践 ==========
+astral-sh/ruff
+astral-sh/uv
+python/mypy
+psf/black
+pytest-dev/pytest
+tox-dev/tox
+pypa/pip-tools
+pypa/virtualenv
+pre-commit/pre-commit
+biomejs/biome
+swc-project/swc
+evanw/esbuild
+vitejs/vite
+vercel/turbo
+nrwl/nx
+bazelbuild/bazel
