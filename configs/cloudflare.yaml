@@ -1,0 +1,59 @@
+# Cloudflare Worker 配置。
+#
+# 密钥不在这个文件里：api_token / ingest_token 由环境变量注入
+# （GitHub Secrets → 容器，见 .github/workflows/deploy.yml）。
+# 2026-10-31 仓库转公开时把真实 token 从版本库和全部历史中移除了。
+#
+# 环境变量名：
+#   CF_API_TOKEN        Cloudflare API token（读写 KV）
+#   CF_INGEST_TOKEN     Worker → dashboard 的共享密钥
+#   CF_ACCOUNT_ID       可选覆盖下面这行
+#   CF_KV_NAMESPACE_ID  可选覆盖下面这行
+
+account_id: 8b5f2575c2c2f0dd4d6e4eaa3d4e7530
+api_token: ""
+ingest_token: ""
+ingest_url: https://oss.wangshun.work/api/ingest/issues
+kv_namespace_id: 06f5c54ef44a4e3ab31f7cf0e45646cc
+
+# Worker 扫描的仓库列表（与 cloudflare/wrangler.toml 的 REPOS 保持一致）。
+# 这里是给 dashboard 侧参考的副本；真正生效的是 wrangler.toml。
+repos:
+  - vectorize-io/hindsight
+  - tigerless-labs/agent-memory
+  - volcengine/OpenViking
+  - oceanbase/powercontext
+  - ruvnet/RuVector
+  - openai/openai-agents-python
+  - bytedance/deer-flow
+  - VoltAgent/voltagent
+  - HKUDS/RAG-Anything
+  - OSU-NLP-Group/HippoRAG
+  - lancedb/lancedb
+  - milvus-io/milvus
+  - qdrant/qdrant
+  - upstash/context7
+  - PrefectHQ/fastmcp
+  - modelcontextprotocol/registry
+  - Arize-ai/phoenix
+  - promptfoo/promptfoo
+  - langfuse/langfuse
+  - confident-ai/deepeval
+  - pypa/virtualenv
+  - pypa/pip-tools
+  - tox-dev/tox
+  - biomejs/biome
+  - psf/black
+  - firecracker-microvm/firecracker
+  - microsoft/playwright-python
+  - microsoft/playwright
+  - instantdb/instant
+  - liveblocks/liveblocks
+  - yjs/yjs
+  - dxos/dxos
+  - tldraw/tldraw
+  - supabase/supabase
+  - zuplo/zudoku
+  - mem0ai/mem0
+  - chroma-core/chroma
+  - pgvector/pgvector
