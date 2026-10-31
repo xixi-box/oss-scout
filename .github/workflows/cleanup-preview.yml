@@ -1,0 +1,11 @@
+name: Cleanup preview
+
+# 直接在容器里跑清理脚本的 dry-run，不经过 Actions 日志（日志下载偶发 EOF）。
+on:
+  workflow_dispatch:
+jobs:
+  preview:
+    runs-on: [self-hosted, aliyun]
+    steps:
+      - name: Dry run
+        run: docker exec oss-scout python /app/scripts/cleanup_stale_candidates.py --dry-run
