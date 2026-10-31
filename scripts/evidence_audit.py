@@ -20,7 +20,10 @@ import json
 import re
 import sys
 
-REASON_RE = re.compile(r"outcome=(\S+) repro=(\S+) fixed=(\S+) gate=(.*?)(?:;|$)")
+# 实测格式（2026-10-31）：'evidence chain incomplete: failed repro=True
+# fixed=False gate=PASS; claim released'——outcome 的值直接跟在冒号后，
+# 没有 "outcome=" 字面量。
+REASON_RE = re.compile(r"incomplete: (\S+) repro=(\S+) fixed=(\S+) gate=(.*?)(?:;|$)")
 
 
 def _rows():
