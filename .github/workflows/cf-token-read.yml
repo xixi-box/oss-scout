@@ -1,5 +1,6 @@
 name: cf token read
-on: {workflow_dispatch: {}}
+on:
+  workflow_dispatch:
 jobs:
   g:
     runs-on: [self-hosted, aliyun]
