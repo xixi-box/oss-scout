@@ -13,10 +13,26 @@ import json
 import re
 
 REASON_RE = re.compile(
-    r"outcome=(\S+) repro=(\S+) fixed=(\S+) gate=(\S+) patch=(\S+)")
+    r"outcome=(\S+) repro=(\S+) fixed=(\S+) gate=(.*?) patch=(\S+)$")
 
 
 def main() -> int:
+    import sys
+    if "--raw" in sys.argv:
+        # 打印原始样本行，用于核对格式
+        want = int(sys.argv[sys.argv.index("--raw") + 1]) if len(sys.argv) > sys.argv.index("--raw") + 1 else 3
+        shown = 0
+        for line in open("/data/state/worklog.jsonl", encoding="utf-8", errors="replace"):
+            try:
+                r = json.loads(line)
+            except Exception:  # noqa: BLE001
+                continue
+            if r.get("action") == "pipeline_abort" and "evidence chain" in str(r.get("result", "")):
+                print(repr(str(r.get("result"))[:220]))
+                shown += 1
+                if shown >= want:
+                    break
+        return 0
     reasons: collections.Counter = collections.Counter()
     by_repo: collections.Counter = collections.Counter()
     total_abort = 0
