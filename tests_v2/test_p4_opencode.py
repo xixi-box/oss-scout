@@ -196,6 +196,17 @@ class TestPolicyConfig:
         assert p.paid_fallback_enabled is False  # 无第二付费兜底
 
     def test_binary_resolved_via_which(self):
-        """Windows .cmd shim：binary 必须经 shutil.which 解析成可执行全路径。"""
+        """Windows .cmd shim：binary 必须经 shutil.which 解析成可执行全路径。
+
+        这条只对 Windows 有意义——名字里就写着 .cmd shim。Linux 上
+        shutil.which("opencode") 返回裸名字是正常的，而 CI 跑在 ubuntu 上
+        也没有 opencode 可执行文件。断言"一定是绝对路径"是把 Windows 的
+        实现细节当成跨平台契约，2026-10-31 在公开仓库的托管 runner 上直接失败。
+        """
+        import os
+        import pytest as _pytest
+
+        if os.name != "nt":
+            _pytest.skip("cmd shim resolution only applies on Windows")
         c = OpenCodeClient()
         assert c.binary.lower().endswith((".cmd", ".exe", ".bat")) or "/" in c.binary or "\\" in c.binary
