@@ -1,0 +1,20 @@
+name: channel check
+on:
+  workflow_dispatch:
+jobs:
+  c:
+    runs-on: [self-hosted, aliyun]
+    steps:
+      - shell: bash
+        run: |
+          docker exec oss-scout python -c "
+import json
+p = '/data/state/pr_sync.json'
+try:
+    d = json.load(open(p))
+    print('pr_sync_at:', d.get('at'))
+    print('prs:', len(d.get('prs', [])))
+    print('sample:', d.get('prs', [])[:3])
+except Exception as e:
+    print('pr_sync missing:', str(e)[:80])
+"
