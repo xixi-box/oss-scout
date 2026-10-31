@@ -105,13 +105,21 @@ def publish(repo_dir: Path, patch_file: Path, publish_cfg: dict) -> dict:
         return {"ok": False, "error": f"patch apply failed: {ap.stderr[-200:]}"}
     _run(["git", "add", "-A"], cwd=repo_dir)
     # DCO：Playbook §4.3 要求查，但代码里一直没实现，导致 vllm/milvus 的 PR
-    # 全部挂着 DCO 红灯（2026-10-30 实测 #64811、#64800、#54926）。DCO bot 只
-    # 认 commit message 里的 Signed-off-by，所以无条件加上——不需要 DCO 的仓库
-    # 多一行 trailer 也无害（Git 惯例而非噪声）。
-    sign_off = "Signed-off-by: oss-scout <oss-scout@users.noreply.github.com>"
-    ci = _run(["git", "-c", "user.name=oss-scout",
-               "-c", "user.email=oss-scout@users.noreply.github.com",
-               "commit", "-qm", f"{title[:72]}\n\n{sign_off}"], cwd=repo_dir)
+    # 全部挂着 DCO 红灯（2026-10-30 实测 #64811、#64800、#54926）。
+    #
+    # 2026-10-31 第二次踩坑：签名用的是 "oss-scout <oss-scout@...>"，DCO bot 直接
+    # 判失败——它比对的是**签名身份与 commit 作者是否一致**：
+    #   Expected "wangshun <96341168+xixi-box@users.noreply.github.com>",
+    #   but got "oss-scout <oss-scout@users.noreply.github.com>"
+    # DCO 是法律性质的声明（"我有权提交这段代码"），署名必须是账号本人，不能是
+    # 工具名。作者与签名统一用 GitHub 的 noreply 地址。
+    author_name = (os.environ.get("GIT_AUTHOR_NAME") or "wangshun").strip()
+    author_email = (os.environ.get("GIT_AUTHOR_EMAIL")
+                    or "96341168+xixi-box@users.noreply.github.com").strip()
+    sign_off = f"Signed-off-by: {author_name} <{author_email}>"
+    identity = ["-c", f"user.name={author_name}", "-c", f"user.email={author_email}"]
+    ci = _run(["git", *identity, "commit", "-qm",
+               f"{title[:72]}\n\n{sign_off}"], cwd=repo_dir)
     if ci.returncode != 0:
         return {"ok": False, "error": f"commit failed: {ci.stderr[-200:]}"}
 

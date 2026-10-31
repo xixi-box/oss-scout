@@ -121,6 +121,16 @@ weaviate）——可以进池，但描述必须自己写得像人话。
 5. 描述结构：what → root cause → how → tests → compatibility → 未验证项。精炼。
 6. 分支命名 `fix/<issueN>-<slug>`；提交信息遵循仓库约定。
 7. 不 @ 打扰 maintainer，不在 PR 里说"我很快会…"这类承诺。
+8. **改之前先跑那个包已有的测试**。2026-10-31 实录（milvus #54924）：我们把
+   `PresizeAppendFieldData` 的 `rows <= 0` 分支改成返回 typed 空列，结果撞上
+   仓库里已有的 `TestPresizeAppendFieldDataColumns/no_rows_keeps_every_column_nil`
+   ——那个测试明确要求返回 nil，而且该语义还被 proxy 依赖。CI 只报 `UT-GO`
+   失败，看不出是断言冲突；在本地跑一遍 `go test ./<pkg>/` 十秒就能发现。
+   **改任何行为之前，先跑那个包的全量测试，而不是只跑自己新写的用例。**
+9. **先看 issue 有没有被上游分析过**。同一个 issue 里，milvus 的 team2 机器人
+   给出了比我们更准的根因（修复点应该在 `SearchCommonReduce`，不是
+   `PresizeAppendFieldData`）。认领前翻一遍 issue 的全部评论——有人已经定位过
+   就别重复劳动，照着那个方向做或者放弃。
 
 ## 5. 认领评论模板（英文，可按 issue 内容增删，保持 ≤6 行）
 

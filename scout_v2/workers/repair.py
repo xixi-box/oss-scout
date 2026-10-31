@@ -45,6 +45,17 @@ Do this, in order:
 4. CHECK that you did not break things: run the narrowest relevant existing test
    suite for the file(s) you touched.
 
+   Before changing any behaviour, run the FULL test suite of the package you are
+   about to modify, not just your own new test. Existing tests often encode the
+   current behaviour as a contract, and a change that looks correct can contradict
+   one. If an existing test asserts the behaviour you are changing, STOP and
+   reconsider: either the fix belongs at a different layer, or that test is part of
+   what this change is meant to update. Report which one in "root_cause".
+
+   Read every comment on the issue before choosing a fix. If someone -- a
+   maintainer or a bot -- has already diagnosed it, follow that diagnosis or pick a
+   different issue; do not spend a cycle re-deriving a worse version of it.
+
 You have a shell. Use it: install what you need, run the test runner this project
 actually uses. You may modify test files (you are adding a regression test) but do
 NOT reformat unrelated code and do NOT touch CI config.
