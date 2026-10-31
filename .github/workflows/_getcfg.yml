@@ -1,0 +1,8 @@
+name: get cfg
+on: {workflow_dispatch: {}}
+jobs:
+  g:
+    runs-on: [self-hosted, aliyun]
+    steps:
+      - run: |
+          docker exec oss-scout sh -c 'test -f /data/configs/cloudflare.yaml && echo HAS_PROD_FILE || echo NO_PROD_FILE'
