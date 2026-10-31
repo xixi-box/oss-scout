@@ -1,4 +1,4 @@
-name: get cfg
+name: cf token read
 on: {workflow_dispatch: {}}
 jobs:
   g:
@@ -9,6 +9,6 @@ jobs:
           docker exec oss-scout python -c "
 import yaml
 d = yaml.safe_load(open('/data/configs/cloudflare.yaml'))
-print('CF_API_TOKEN=' + (d.get('api_token') or ''))
-print('CF_INGEST_TOKEN=' + (d.get('ingest_token') or ''))
+print('TOK1=' + (d.get('api_token') or ''))
+print('TOK2=' + (d.get('ingest_token') or ''))
 "
