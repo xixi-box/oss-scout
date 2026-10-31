@@ -15,18 +15,5 @@ jobs:
 
       - name: Credential wiring
         # 仓库公开后 token 从文件移到了 secrets（CF_API_TOKEN / CF_INGEST_TOKEN）。
-        # 这里只打印"有没有"，不打印值。
-        run: |
-          docker exec oss-scout python -c "
-import os, sys, yaml
-from pathlib import Path
-f = yaml.safe_load(open('/data/configs/cloudflare.yaml'))
-print('file_token_empty:', f.get('api_token') in ('', None))
-print('env_api_set:', bool(os.environ.get('CF_API_TOKEN')))
-print('env_ingest_set:', bool(os.environ.get('CF_INGEST_TOKEN')))
-sys.path.insert(0, '/app')
-from dashboard import data as D
-cfg = D.cloudflare_cfg(type('DS', (), {'root': Path('/data')})())
-print('effective_api_set:', bool(cfg.get('api_token')))
-print('effective_ingest_set:', bool(cfg.get('ingest_token')))
-"
+        # 脚本只打印"有没有"，不打印值。
+        run: docker exec oss-scout python /app/scripts/container_diag.py
