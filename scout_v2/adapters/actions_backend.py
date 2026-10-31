@@ -243,7 +243,3 @@ def verify_collected(collected: dict, job: Job) -> list[str]:
     if job.base_sha and collected.get("base_sha") and collected["base_sha"] != job.base_sha:
         errs.append("base_sha mismatch")
     return errs
-
-
-def result_from(collected: dict) -> Result:
-    return Result.from_dict(collected)

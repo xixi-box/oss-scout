@@ -870,6 +870,32 @@ def cloudflare_pull(ds) -> dict:
     return {"pulled": pulled, "ingested": ingested}
 
 
+def cloudflare_kv_put(ds, key: str, value: str) -> dict:
+    """往 CF KV 写一个键。返回 {"ok": bool, "error": str}。
+
+    KV 免费档 1000 write/天，所以调用方必须自己限流——PR 列表同步是 15 分钟
+    一次（96/天），在预算内。
+    """
+    cfg = cloudflare_cfg(ds)
+    token, account = cfg.get("api_token") or "", cfg.get("account_id") or ""
+    ns = cfg.get("kv_namespace_id") or ""
+    if not (token and account and ns):
+        return {"ok": False, "error": "not configured"}
+    base = (f"https://api.cloudflare.com/client/v4/accounts/{account}"
+            f"/storage/kv/namespaces/{ns}/values/{key}")
+    import urllib.request
+    try:
+        req = urllib.request.Request(
+            base, data=value.encode("utf-8"), method="PUT",
+            headers={"Authorization": f"Bearer {token}",
+                     "Content-Type": "text/plain"})
+        with urllib.request.urlopen(req, timeout=20) as r:
+            body = json.loads(r.read().decode())
+        return {"ok": bool(body.get("success")), "error": ""}
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": str(e)[:200]}
+
+
 def cloudflare_last_pull(ds) -> str:
     p = ds.root / "state" / "cloudflare_last_pull.json"
     try:

@@ -17,13 +17,11 @@
 """
 from __future__ import annotations
 
-import base64
 import json
 import os
 import re
 import subprocess
 import shutil
-import sys
 import tempfile
 import time
 from pathlib import Path
@@ -36,7 +34,6 @@ from ..job_router import JobRouter, RouterConfig
 from ..repo_policy import PolicyEngine
 from ..schemas import Job, Result
 from ..state_store import ClaimLedger, Worklog
-from .issue_scorer import GoClient, load_scorer_config
 from .quality_gate import verify_result
 
 # 推送目标：对第三方仓库我们没有写权限，分支一律推自己的 fork，再向原仓库发 PR。
@@ -90,126 +87,24 @@ def mark_candidate(root: Path, key: str, status: str,
         pass
 
 
-def _emergency_release(root: Path) -> None:
-    """pipeline 崩溃时的兜底：释放当日认领，避免额度被僵尸占死。"""
+def _emergency_release(root: Path, candidate_id: str = "",
+                       tz_name: str = "Asia/Shanghai") -> None:
+    """pipeline 崩溃时的兜底：释放这条候选的认领，避免额度被僵尸占死。
+
+    2026-10-31 修正两处：
+      - 以前用 `date.today()`（宿主机本地日期），业务时区是 Asia/Shanghai，
+        跨日窗口会删错行。改用 business_day。
+      - 以前删整日，一条崩溃连带清掉同批其他候选的占额，等于白送额度。现在
+        只删自己这条；candidate_id 为空时什么都不做（宁可漏放，不要误清）。
+    """
+    if not candidate_id:
+        return
     try:
-        import datetime as _dt
         conn_ledger = ClaimLedger(root / "state" / "scout_v2.sqlite3")
-        conn_ledger.release_day(_dt.date.today().isoformat())
+        conn_ledger.release_claim(candidate_id, tz_name)
         conn_ledger.close()
     except Exception:  # noqa: BLE001
         pass
-
-
-def _probe_test_stack(repo: str, base_sha: str):
-    """用 GitHub tree API 探测仓库结构与测试栈（不 clone）。
-
-    返回 (lang, tpl, tests_dir, top_entries) 或 None（不支持/不可达）。
-    """
-    try:
-        out = subprocess.run(
-            ["gh", "api", f"repos/{repo}/git/trees/{base_sha}", "--jq",
-             "[.tree[] | .path]"],
-            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120)
-        if out.returncode != 0:
-            return None
-        entries = json.loads(out.stdout or "[]")
-    except Exception:  # noqa: BLE001
-        return None
-    names = set(entries)
-    tests_dir = next((d for d in ("tests", "test", "spec") if d in names), None)
-    top = sorted(names)[:12]
-    # typing-only 仓库：测试是 mypy/pyright 的静态断言，不是运行期用例。
-    # AI 生成的 pytest 文件在这种仓库里收集不到任何用例（no tests ran），
-    # 防护会把整轮判为"环境不可用"并拒绝产出补丁——这是对的，但白烧一整个
-    # Actions run。这里直接返回 None，让调用方在派发前就放弃。
-    # 实测 2026-10-28：sqlalchemy#13731（declared_attr.cascading 的 typing 问题）
-    # 走 pytest 路径必然 no tests ran。
-    if "test/typing" in names or "typing" in names:
-        return None
-    if {"pyproject.toml", "setup.py", "requirements.txt"} & names:
-        return "python", "python -m pytest {path} -q", tests_dir, top
-    if "package.json" in names:
-        return "node", "npx --no-install bun test {path}", tests_dir, top
-    if "go.mod" in names:
-        return "go", "go test {path}", tests_dir, top
-    # 兜底：无标准清单文件但根目录有 Python 测试 → 仍按 Python 处理
-    if any(str(n).startswith("test_") and str(n).endswith(".py") for n in names):
-        return "python", "python -m pytest {path} -q", (tests_dir or "."), top
-    return None
-
-
-def _ai_generate_test_remote(job: Job, lang: str, tpl: str, tests_dir: str | None,
-                             top_entries: list[str], summary: dict):
-    """让 AI 生成回归测试内容（不落盘，随 job 下发）。
-
-    返回 (test_cmd, rel_path, code)；失败返回 (None, None, None)。
-    """
-    try:
-        cfg = load_scorer_config(_data_root(Path(__file__).resolve().parents[2]))
-        if not cfg.get("api_key"):
-            return None, None, None
-        if lang == "python":
-            lang_rule = ("Output ONLY a single Python file content using pytest "
-                         "(no markdown fences, no explanations).")
-            marker, ext = "def test", ".py"
-        elif lang == "node":
-            lang_rule = ("Output ONLY a single TypeScript test file using bun:test "
-                         "(import {test, expect} from 'bun:test'). "
-                         "No markdown fences, no explanations.")
-            marker, ext = "test(", ".test.ts"
-        else:
-            lang_rule = "Output ONLY a single Go test file (package *_test)."
-            marker, ext = "func Test", "_test.go"
-        prompt = (
-            "You are writing a MINIMAL regression test that must FAIL on the current code "
-            "and PASS after the bug is fixed.\n"
-            f"Repo: {job.repo} @ {job.base_sha[:12]}\n"
-            f"Issue context:\n{job.context[:2500]}\n\n"
-            f"Top-level entries: {', '.join(top_entries)}\n"
-            f"Existing test dir: {tests_dir or 'none'}\n\n"
-            f"{lang_rule} It must import from the repo's own modules and assert the "
-            "behaviour described in the issue.\n\n"
-            "IMPORTANT: This is a plain-text completion, NOT an agent session. You have no "
-            "tools and cannot run commands. Do NOT emit tool-call syntax (no DSML, no "
-            "function calls, no XML tags). Reply with the test file source only."
-        )
-        client = GoClient(key=cfg["api_key"],
-                          model=cfg.get("model", "deepseek-v4.1-flash"), timeout=90)
-        # 上游模型偶发 "Model is unavailable"：按序降级到其他可用模型
-        ok, code, used = client.chat_with_fallback(
-            prompt, fallbacks=["glm-5.3-flash", "glm-5.3", "deepseek-v4.1-flash"])
-        text = str(code or "")
-        ok_marker = marker in text or (lang == "node" and any(
-            m in text for m in ("test(", "it(", "describe("))) or (
-            lang == "python" and "def test" in text)
-        if not ok:
-            summary["steps"].append(f"AI gen failed: {text[:160]}")
-            return None, None, None
-        if not ok_marker:
-            looks_toolcall = any(t in text for t in (
-                "DSML", "invoke name=", "tool_call", "<function", "parameter name="))
-            summary["steps"].append(
-                "AI returned tool-call syntax instead of a test file"
-                if looks_toolcall else f"AI output lacks test marker: {text[:120]}")
-            return None, None, None
-        code = str(code).strip()
-        if code.startswith("```"):
-            code = "\n".join(code.splitlines()[1:-1])
-        rel = (tests_dir + "/" if tests_dir else "") + "test_ai_regression" + ext
-        summary["steps"].append(f"AI-generated regression test: {rel} (model={used})")
-        if lang == "python":
-            # 不能用 sys.executable：那是**控制器**的 Python 绝对路径，
-            # 发到 Modal/Actions 上根本不存在，base 测试直接 exit 127
-            # "command likely not runnable"（2026-10-28 实测）。用 PATH 里的名字，
-            # 由执行环境自己解析。
-            cmd = ["python3", "-m", "pytest", rel, "-q"]
-        else:
-            cmd = tpl.format(path=rel).split()
-        return cmd, rel, code
-    except Exception as e:  # noqa: BLE001
-        summary["steps"].append(f"AI gen error: {type(e).__name__}: {str(e)[:150]}")
-        return None, None, None
 
 
 # ---------------- 后端选择 ----------------
@@ -457,13 +352,33 @@ def candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6) -> dict:
 
     summary["steps"].append("recheck ok")
 
-    # ---- 认领闸 + 闸门池 ----
-    ledger = ClaimLedger(root / "state" / "scout_v2.sqlite3")
+    # ---- 车道闸：gated 只做评论对齐，restricted 只做维护者确认过的 ----
+    # 2026-10-31 实录：这里原本只拦了 gated，restricted（litellm）直接往下走
+    # 正常开 PR —— PolicyEngine.authorize() 里那条规则写得清清楚楚，但
+    # candidate_pipeline 从来没调用过 authorize，规则等于没有生效。
+    # 现在两道都拦，并且写终态，避免每轮重新取到又空转。
     if lane == "gated":
         summary["abort"] = "gated lane: comment-alignment flow only (no auto PR)"
         log(root, "abort", key, summary["abort"])
-        ledger.close()
+        mark_candidate(root, key, "gated_alignment_only",
+                       extra={"abort_reason": summary["abort"]})
         return summary
+    if lane == "restricted":
+        # 受限档只接受维护者已确认的候选：discover 打上 maintainer_confirm，
+        # 或 issue 带 help wanted / 维护者在本 issue 里明确同意。
+        confirmed = bool(entry.get("maintainer_confirm")
+                         or (entry.get("signals") or {}).get("maintainer_confirm"))
+        if not confirmed:
+            summary["abort"] = ("restricted lane: needs maintainer confirmation "
+                                "(maintainer_confirm / help wanted)")
+            log(root, "abort", key, summary["abort"])
+            mark_candidate(root, key, "needs_maintainer_confirm",
+                           extra={"abort_reason": summary["abort"]})
+            return summary
+        summary["steps"].append("restricted lane: maintainer-confirmed")
+
+    # ---- 认领闸 ----
+    ledger = ClaimLedger(root / "state" / "scout_v2.sqlite3")
     # 每日上限由策略层配置（max_new_claims_per_business_day，0=不限）
     ok, reason = ledger.try_claim(eng.tz_name, key,
                                   max_per_day=eng.max_claims_per_day)
@@ -476,7 +391,8 @@ def candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6) -> dict:
     summary["steps"].append("claimed (daily budget)")
 
     def _abort_release(msg: str) -> dict:
-        ledger.release_day()
+        # 只释放这一条候选的占额，不能动别人的（见 ClaimLedger.release_claim）。
+        ledger.release_claim(key, eng.tz_name)
         ledger.close()
         summary["abort"] = msg
         log(root, "abort", key, msg + "; claim released")
@@ -840,7 +756,9 @@ def _stage_age_days(entry: dict) -> float:
     return max(0.0, (time.time() - then) / 86400.0)
 
 
-def _order_candidates(entries: list[tuple[str, dict]]) -> list[tuple[str, dict]]:
+def _order_candidates(entries: list[tuple[str, dict]],
+                      expired_out: list[str] | None = None,
+                      ) -> list[tuple[str, dict]]:
     """暂存优先，且同组内先到先出。
 
     2026-10-30（用户裁定）：每天额度用完之后，当天新识别出的可处理 issue 不要
@@ -848,13 +766,17 @@ def _order_candidates(entries: list[tuple[str, dict]]) -> list[tuple[str, dict]]
     这样额度紧张时优先消化积压，同时保证昨天的发现不会因为今天又扫到一堆新的
     就永远排不上。
 
-    超过 STAGE_TTL_DAYS 的暂存直接丢弃：一个 issue 放了三天，多半已经被人修了、
+    超过 STAGE_TTL_DAYS 的暂存不再返回：一个 issue 放了三天，多半已经被人修了、
     被关了，或者上下文已经变了；拿去修反而浪费额度并可能撞车。
+    expired_out 收集被丢弃的 key，调用方负责写日志——静默丢弃会让"这周处理了几
+    条"这类问题无从查起。
     """
     staged, fresh = [], []
     for key, e in entries:
         if e.get("status") == STAGED_STATUS:
             if _stage_age_days(e) > STAGE_TTL_DAYS:
+                if expired_out is not None:
+                    expired_out.append(key)
                 continue
             staged.append((key, e))
         else:
@@ -897,7 +819,13 @@ def drain_ai_graded(root: Path, limit: int = 3, dry_run: bool = True,
             continue
         eligible.append((key, e))
 
-    ordered = _order_candidates(eligible)
+    expired: list[str] = []
+    ordered = _order_candidates(eligible, expired_out=expired)
+    if expired and not dry_run:
+        for key in expired:
+            mark_candidate(root, key, "stage_expired")
+        log(root, "stage_expired", f"{len(expired)} candidates",
+            f"older than {STAGE_TTL_DAYS}d: " + ", ".join(expired[:5]))
     picked: list[dict] = []
     to_stage: list[str] = []
     for key, e in ordered:
@@ -927,11 +855,12 @@ def drain_ai_graded(root: Path, limit: int = 3, dry_run: bool = True,
                  "dry_run": True} for e in picked]
     out = []
     for e in picked:
+        key = str(e.get("id", ""))
         try:
             out.append(candidate_pipeline(root, e))
         except Exception as ex:  # noqa: BLE001
-            log(root, "crash", str(e.get("id", "")),
-                f"unhandled: {type(ex).__name__}: {str(ex)[:200]}; releasing day claim")
-            _emergency_release(root)
-            out.append({"id": e.get("id", ""), "crash": f"{type(ex).__name__}: {str(ex)[:150]}"})
+            log(root, "crash", key,
+                f"unhandled: {type(ex).__name__}: {str(ex)[:200]}; releasing claim")
+            _emergency_release(root, key)
+            out.append({"id": key, "crash": f"{type(ex).__name__}: {str(ex)[:150]}"})
     return out

@@ -35,18 +35,32 @@ repos/<name>/          懒 clone 缓存（origin=xixi-box fork, --filter=blob:no
 worktrees/<repo>-<issueN>/  每个候选一个 worktree
 ```
 
-状态机：`new → awaiting_assignment（仅闸门池）→ assigned_to_me → claimed → pr_open → merged | closed | aborted_* | escalated`
+状态机：`new → staged → awaiting_assignment（仅闸门池）→ assigned_to_me → claimed → pr_open → merged | closed | aborted_* | escalated`
 实现失败退回 `new`，同一候选失败 2 次 → `escalated` 并在报告里说明。写 JSON 一律临时文件 + 原子替换。
+
+**额度释放的语义**（2026-10-31 修正）：单条候选 abort 只释放**它自己**的占额
+（`ClaimLedger.release_claim`）。曾经的写法是 `release_day()` 无参，那是
+`DELETE FROM claim_days`——一条失败就把当天所有额度还回去，下一轮又能开两条，
+这是一天开出 12 个 PR 的第二个原因。
 
 ## 2. 每日三段（每段独立提前退出）
 
 ### ① PR 监控段（最优先，几秒钟）
-`python scripts/monitor_prs.py` 扫所有 open PR，按 CI 结果和新评论分类：
-`fix_ci` / `address_review` / `answer_question` / `wait`。
+两条通道，互为备份：
+- **Worker 轮询**（每分钟）：Cloudflare Worker 按 KV 里的 `prs` 列表拉
+  `comments?since=`，命中就 POST `/api/ingest/pr-comments` → 有新人说话几十秒内
+  就能知道。**这是"评论即时响应"的主通道。**
+- **Actions 定时**（每 30 分钟）+ dashboard 循环（每 15 分钟）：`monitor_prs.py`
+  全量分类，同时把 PR 列表同步回 KV 供 Worker 使用。
+
+分类：`fix_ci` / `address_review` / `answer_question` / `wait`。
 - CI 因我们的改动失败 → 读日志、修复、推送（新 commit，不 force-push）。
 - **先排除 flaky**：连真实 LLM 的测试（如 pydantic-ai 的 `test_exploration[gpt-live]`）、
   Vercel 授权类检查，失败与我们无关，不要当成自己的 bug 去改。
+- 需要 maintainer 加标签的检查（pydantic-ai 的 `Package Label`）也是等，不是修。
 - maintainer 提修改意见 → 本轮优先落实；**48 小时内必须响应**（防烂尾第一杠杆）。
+- **不自动发评论**：维护者提了意见该怎么回需要人判断（astral-sh 明文禁止 AI 写
+  沟通，biome 说低信号描述会被直接关）。系统只负责尽快让你知道，回复由人写。
 - 被合并/被关 → 更新状态，被关要看原因记入 worklog（影响该仓库后续出价意愿）。
   **被关的 PR 要回溯到仓库规则**：2026-10-30 一天被关 3 个（astral AI 政策、
   langchain 未指派、biome 低信号描述），全不是代码问题。任何一个被关就去读

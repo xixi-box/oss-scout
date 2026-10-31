@@ -304,15 +304,20 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
         _thr.Thread(target=_loop, daemon=True).start()
 
     def _pr_watch_loop():
-        """盯着我们开出去的 PR：CI 红了就把对应的修复重新派发一轮。
+        """盯着我们开出去的 PR：CI 红了留痕，并把 PR 列表同步给 Worker。
 
         Playbook §2① 要求"CI 因我们的改动失败 → 读日志、修复、推送"，但这条
         从没实现：PR 开出去之后就没有任何主动动作了。这里每 15 分钟扫一遍
         （比 Actions 的 30 分钟定时更密，两边互为备份）。
 
-        只处理 fix_ci：maintainer 的评论不改代码就直接动，风险太高——那需要在
-        一个已经存在的分支上增量修改，和重新修一个 issue 是两码事。评论类先在
-        看板/worklog 里留痕，由人决定。
+        两条职责：
+        1. 分类每个 PR（fix_ci / address_review / answer_question），写
+           state/pr_watch.jsonl —— 看板和人都读这个。
+        2. 把"我们的 PR 列表"同步到 Cloudflare Worker 的 PRS 变量（写到
+           /data/state/pr_sync.json，由部署脚本读取）。Worker 靠这个列表轮询
+           评论，是评论即时通道的前提——没有列表它不知道该看哪些 PR。
+
+        不自动发评论：维护者提了意见该怎么回需要人判断。
         """
         import time as _t
 
@@ -330,14 +335,38 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
                     mod = importlib.util.module_from_spec(spec)
                     spec.loader.exec_module(mod)
                     results = mod.run(dry_run=False)
+
+                    # 同步 PR 列表给 Worker（评论通道的输入）。
+                    # 两条通道：写 /data/state/pr_sync.json 留作审计，写 CF KV
+                    # 让 Worker 真的能读到。KV 免费档 1000 write/天，15 分钟一次
+                    # 是 96 次/天，安全。
+                    prs = [f"{r['repo']}#{r['number']}" for r in results]
+                    try:
+                        (root / "state" / "pr_sync.json").write_text(
+                            json.dumps({"at": _t.strftime("%Y-%m-%dT%H:%M:%S"),
+                                        "prs": prs}, ensure_ascii=False),
+                            encoding="utf-8")
+                    except OSError:
+                        pass
+                    try:
+                        out = D.cloudflare_kv_put(ds, "prs", json.dumps(prs))
+                        if not out.get("ok"):
+                            _audit(root, "pr_sync_failed", f"{len(prs)} prs",
+                                   str(out.get("error"))[:150])
+                    except Exception:  # noqa: BLE001
+                        pass
+
                     for r in results:
-                        if r.get("action") != "fix_ci":
-                            continue
                         key = f"{r['repo']}#{r['number']}"
-                        _audit(root, "pr_ci_failed", key,
-                               str(r.get("failing_checks"))[:200])
-                        # PR 已经开着，重新跑一遍修复会把 PR 的候选状态带乱；
-                        # 这里只留痕，由人工/下一轮决定怎么补。
+                        action = r.get("action")
+                        if action == "fix_ci":
+                            _audit(root, "pr_ci_failed", key,
+                                   str(r.get("failing_checks"))[:200])
+                        elif action in ("address_review", "answer_question"):
+                            # 有人提了意见：这是 48 小时响应窗口的起点，必须留痕
+                            _audit(root, "pr_needs_reply", key,
+                                   f"{action} from {r.get('latest_author')}: "
+                                   f"{str(r.get('latest_excerpt'))[:150]}")
                 except Exception as e:  # noqa: BLE001
                     try:
                         _audit(root, "pr_watch_error", "-", str(e)[:200])
@@ -881,6 +910,87 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
                f"repos={body.get('repos_scanned', '?')}")
         return JSONResponse({"queued": queued, "received": len(clean),
                              "dispatched": dispatched})
+
+    @app.post("/api/ingest/pr-comments")
+    async def api_ingest_pr_comments(request: Request):
+        """Worker 推过来的 PR 新评论（我们自己开出去的 PR）。
+
+        为什么走这条路而不是 GitHub 的 webhook：webhook 注册在**仓库**上，要接收
+        上游仓库（mypy、milvus 等）的事件需要那个仓库的 admin 权限，我们没有。
+        Worker 每 60 秒拉一次 comments?since=...，命中就推到这里。
+
+        这里只做**记录和分类**，不发任何对外文字：维护者提了意见该怎么回，是
+        需要人判断的事（astral-sh 明文禁止 AI 写沟通，biome 说低信号描述会被
+        直接关）。分类结果进 state/pr_watch.jsonl，看板和 PR 监控循环都读它。
+        """
+        cfg = D.cloudflare_cfg(ds)
+        expect = (cfg.get("ingest_token") or "").strip()
+        got = request.headers.get("X-Ingest-Token", "").strip()
+        if not expect:
+            return JSONResponse({"detail": "ingest_token not configured"}, status_code=503)
+        if not hmac.compare_digest(got, expect):
+            return JSONResponse({"detail": "forbidden"}, status_code=403)
+        try:
+            body = json.loads((await request.body()) or b"{}")
+        except Exception:  # noqa: BLE001
+            return JSONResponse({"detail": "bad json"}, status_code=400)
+
+        raw = body.get("events")
+        if not isinstance(raw, list):
+            return JSONResponse({"detail": "events must be a list"}, status_code=400)
+
+        # 按 comment_id 去重：Worker 的窗口有 10 分钟重叠，同一条会被推到多次
+        seen_path = root / "state" / "pr_comments.json"
+        try:
+            seen = json.loads(seen_path.read_text(encoding="utf-8"))
+        except Exception:  # noqa: BLE001
+            seen = {}
+        watch_path = root / "state" / "pr_watch.jsonl"
+
+        fresh = 0
+        for ev in raw[:200]:
+            if not isinstance(ev, dict):
+                continue
+            cid = str(ev.get("comment_id") or "")
+            repo = str(ev.get("repo", ""))[:120]
+            num = int(ev.get("number") or 0)
+            if not cid or not repo or not num or cid in seen:
+                continue
+            seen[cid] = {"at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                         "repo": repo, "number": num}
+            # 复用 PR 监控的分类逻辑，保证两条通道判定一致
+            try:
+                import importlib.util
+                spec = importlib.util.spec_from_file_location(
+                    "monitor_prs",
+                    Path(__file__).resolve().parents[1] / "scripts" / "monitor_prs.py")
+                mod = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(mod)
+                cls = mod.classify({
+                    "comments": [{"author": {"login": ev.get("author", "")},
+                                  "body": ev.get("body", "")}],
+                    "statusCheckRollup": [],
+                })
+                action = cls.get("action", "wait")
+            except Exception:  # noqa: BLE001
+                action = "unknown"
+            rec = {"ts": time.strftime("%Y-%m-%dT%H:%M:%S"), "source": "worker",
+                   "repo": repo, "number": num, "action": action,
+                   "author": str(ev.get("author", ""))[:60],
+                   "excerpt": str(ev.get("body", ""))[:300]}
+            watch_path.parent.mkdir(parents=True, exist_ok=True)
+            with watch_path.open("a", encoding="utf-8") as f:
+                f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+            fresh += 1
+
+        if fresh:
+            tmp = seen_path.with_suffix(".json.tmp")
+            tmp.write_text(json.dumps(seen, ensure_ascii=False), encoding="utf-8")
+            os.replace(tmp, seen_path)
+            _audit(root, "pr_comment", f"{fresh} new",
+                   ", ".join(f"{r['repo']}#{r['number']}" for r in
+                             list(seen.values())[-3:]))
+        return JSONResponse({"received": len(raw), "new": fresh})
 
     @app.post("/api/dashboard/settings")
     def api_dashboard_settings(request: Request,

@@ -261,12 +261,36 @@ class ClaimLedger:
             "SELECT COUNT(*) FROM claim_days WHERE day=?", (day,)).fetchone()
         return int(row[0] if row else 0)
 
+    def release_claim(self, candidate_id: str,
+                      tz_name: str = "Asia/Shanghai",
+                      now: dt.datetime | None = None) -> bool:
+        """释放**单条**候选的认领记录。返回是否真的删掉了一行。
+
+        这是 abort 时该调的方法。2026-10-31 实录：之前 abort 走的是
+        release_day() 无参，那是 `DELETE FROM claim_days`——把当天所有候选的
+        占额记录一起抹掉。后果是任何一条 pipeline 中途失败（gh api 超时、路由
+        失败、模型解析失败都算）都会把当日额度清零，下一轮又能开两条。这是
+        一天开出 12 个 PR 的第二个原因（第一个是 ingest 绕过额度检查）。
+        """
+        now = now or dt.datetime.now()
+        day = business_day(now, tz_name)
+        cur = self._conn.execute(
+            "DELETE FROM claim_days WHERE day=? AND candidate_id=?", (day, candidate_id))
+        self._conn.commit()
+        return cur.rowcount > 0
+
     def release_day(self, day: str | None = None) -> None:
-        """仅测试/运维回滚用：删除某日占额记录。"""
+        """运维/测试用的整日回滚：删掉某一天的全部占额记录。
+
+        只用人工排障，不要在 pipeline 流程里调用——单个候选 abort 请用
+        release_claim()。day=None 表示清空整张表，那是"重置全部额度"的
+        破坏性操作，代码路径里不该出现。
+        """
         if day is None:
             self._conn.execute("DELETE FROM claim_days")
         else:
             self._conn.execute("DELETE FROM claim_days WHERE day=?", (day,))
+        self._conn.commit()
 
 
 class BlockerRegistry:
