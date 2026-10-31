@@ -6,4 +6,4 @@ jobs:
     runs-on: [self-hosted, aliyun]
     steps:
       - name: Audit
-        run: docker exec oss-scout python /app/scripts/evidence_audit.py --raw 3
+        run: docker exec oss-scout python /app/scripts/evidence_audit.py
