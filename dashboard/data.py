@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import os
 import re
 import sqlite3
 import subprocess
@@ -679,11 +680,33 @@ def opencode_state(ds):
 
 
 def cloudflare_cfg(ds) -> dict:
+    """Cloudflare 配置。密钥优先取环境变量，文件里只放非密结构。
+
+    2026-10-31：仓库转公开，configs/cloudflare.yaml 里的 api_token / ingest_token
+    是真实凭据，不能留在版本库里。现在文件只保留 account_id、namespace、repos
+    这类标识符，token 一律由环境变量注入（GitHub Secrets → 容器）。
+
+    环境变量名：
+      CF_API_TOKEN      Cloudflare API token（读写 KV）
+      CF_INGEST_TOKEN   Worker → dashboard 的共享密钥
+    """
     p = ds.root / "configs" / "cloudflare.yaml"
     try:
-        return yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+        cfg = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
     except Exception:  # noqa: BLE001
-        return {}
+        cfg = {}
+    if not isinstance(cfg, dict):
+        cfg = {}
+    # 环境变量覆盖文件值：文件里理论上已经没有真 token，但保留覆盖能力，
+    # 这样运维可以只改容器环境而不动镜像。
+    for env_key, cfg_key in (("CF_API_TOKEN", "api_token"),
+                             ("CF_INGEST_TOKEN", "ingest_token"),
+                             ("CF_ACCOUNT_ID", "account_id"),
+                             ("CF_KV_NAMESPACE_ID", "kv_namespace_id")):
+        val = (os.environ.get(env_key) or "").strip()
+        if val:
+            cfg[cfg_key] = val
+    return cfg
 
 
 def ingest_cloudflare_issues(ds, items: list[dict]) -> tuple[int, list[str]]:

@@ -97,6 +97,10 @@ jobs:
       OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
       MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
       MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+      # Cloudflare 凭据：2026-10-31 仓库转公开，token 从 configs/cloudflare.yaml
+      # 移出，改由 Secrets 注入容器环境。
+      CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+      CF_INGEST_TOKEN: ${{ secrets.CF_INGEST_TOKEN }}
     steps:
       # 不 checkout：阿里云到 GitHub 的 git 协议不通（TLS/大包被拦，实测 130s 超时）。
       # 部署只需 ACR 镜像 + 服务定义，全部内联在此（不依赖仓库文件）。
@@ -138,6 +142,8 @@ jobs:
                 - OPENCODE_API_KEY=\${OPENCODE_API_KEY}
                 - MODAL_TOKEN_ID=\${MODAL_TOKEN_ID}
                 - MODAL_TOKEN_SECRET=\${MODAL_TOKEN_SECRET}
+                - CF_API_TOKEN=\${CF_API_TOKEN}
+                - CF_INGEST_TOKEN=\${CF_INGEST_TOKEN}
                 # git/外网经宿主 sing-box（docker0 网桥入站）；国内直连域走 NO_PROXY
                 - HTTPS_PROXY=http://172.17.0.1:7890
                 - HTTP_PROXY=http://172.17.0.1:7890
@@ -155,6 +161,8 @@ jobs:
             echo "OPENCODE_API_KEY=$OPENCODE_API_KEY"
             echo "MODAL_TOKEN_ID=$MODAL_TOKEN_ID"
             echo "MODAL_TOKEN_SECRET=$MODAL_TOKEN_SECRET"
+            echo "CF_API_TOKEN=$CF_API_TOKEN"
+            echo "CF_INGEST_TOKEN=$CF_INGEST_TOKEN"
           } > "$DEPLOY_DIR/.env"
           chmod 600 "$DEPLOY_DIR/.env"
           echo "compose written to $DEPLOY_DIR/compose.yaml"
