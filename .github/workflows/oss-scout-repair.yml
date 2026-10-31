@@ -214,5 +214,5 @@ jobs:
         with:
           name: oss-result-${{ inputs.job_id }}
           path: ${{ runner.temp }}/artifacts/
-          retention-days: 2
+          retention-days: 1
           if-no-files-found: warn

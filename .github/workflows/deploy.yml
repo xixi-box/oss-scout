@@ -179,3 +179,26 @@ jobs:
           docker images --format '{{.Repository}}:{{.Tag}}'             | grep "^$ALIYUN_ACR_REGISTRY/$ALIYUN_ACR_IMAGE_NAME:"             | grep -v ":$KEEP_SHA$" | grep -v ":latest$"             | xargs -r docker rmi -f > /dev/null 2>&1 || true
           docker image prune -f > /dev/null 2>&1 || true
           docker compose -f "$DEPLOY_DIR/compose.yaml" ps || docker ps --format '{{.Names}} {{.Status}}' | head -5
+
+      - name: Clean artifacts and old images
+        # 每次部署顺手清一次，避免累积。GitHub artifact 有账号级配额，
+        # 撞上时上传直接失败并拖垮 job（2026-10-30 实录）；ACR 免费额度也有限，
+        # 每次部署推一个新 tag，不清会撑爆。
+        # 用 API 而不是 gh CLI 删：这里是 self-hosted runner，gh 不一定最新。
+        continue-on-error: true
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: |
+          set -uo pipefail
+          REPO="${{ github.repository }}"
+          # 1) 删本仓库全部 artifact（修复产物已由 stdout 信封/本地目录兜底）
+          ids=$(curl -s -H "Authorization: Bearer $GH_TOKEN"                  "https://api.github.com/repos/$REPO/actions/artifacts?per_page=100"                  | grep -o '"id": [0-9]*' | grep -o '[0-9]*' || true)
+          n=0
+          for id in $ids; do
+            curl -s -X DELETE -H "Authorization: Bearer $GH_TOKEN"               "https://api.github.com/repos/$REPO/actions/artifacts/$id" > /dev/null && n=$((n+1))
+          done
+          echo "deleted $n artifacts"
+          # 2) 只在 VPS 上清 ACR 侧残留（本步跑在 self-hosted，docker 可用）
+          docker image prune -af --filter "until=24h" > /dev/null 2>&1 || true
+          echo "pruned docker images older than 24h"
