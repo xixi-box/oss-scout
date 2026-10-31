@@ -479,7 +479,13 @@ def candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6) -> dict:
         _r["repair"] = {"backend": backend, "outcome": res.outcome,
                         "repro": res.reproduced_on_base, "fixed": res.fixed_on_patch,
                         "unverified": res.unverified_items[:3]}
-        mark_candidate(root, key, "aborted_no_evidence")
+        # 原因必须落到候选条目上：只写 worklog 的话，事后统计（如 2026-10-31
+        # 排查 66 条 aborted_no_evidence）得去解析一整个 JSONL 才能拿到分布。
+        mark_candidate(root, key, "aborted_no_evidence",
+                       extra={"abort_reason": _r["abort"][:300],
+                              "repair_outcome": res.outcome,
+                              "repro": bool(res.reproduced_on_base),
+                              "fixed": bool(res.fixed_on_patch)})
         return _r
     summary["steps"].append("repair + quality gate ok")
 

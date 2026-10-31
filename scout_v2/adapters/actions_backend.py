@@ -29,6 +29,21 @@ DEFAULT_RUNNER_REPO = "xixi-box/oss-scout"
 # artifact / result.json 的固定名字（与 workers/core.py 一致）
 RESULT_FILE = "result.json"
 
+# submit 的 dispatch→认领 段的进程内串行锁（派发线程都跑在 dashboard 进程里）。
+# 跨进程重启窗口仍有极小的竞争面，但认领按时间窗取最早，实际危害已封住。
+_SUBMIT_LOCK = __import__("threading").Lock()
+
+
+def _parse_ts(iso: str | None) -> float | None:
+    """GitHub 的 created_at → epoch 秒；解析失败返回 None（调用方跳过该 run）。"""
+    if not iso:
+        return None
+    try:
+        from datetime import datetime
+        return datetime.fromisoformat(str(iso).replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return None
+
 
 def _default_gh(args: list[str], retries: int = 4) -> tuple[int, str]:
     last = ""
@@ -94,14 +109,21 @@ class ActionsBackend:
         if not self.eligible(job):
             raise RuntimeError("actions backend ineligible for this job (scope/mode/workflow)")
         payload = base64.b64encode(json.dumps(job, ensure_ascii=False).encode("utf-8")).decode()
-        rc, out = self.gh(["-X", "POST",
-                           f"repos/{self.repo}/actions/workflows/{self.workflow}/dispatches",
-                           "-f", f"ref={self.ref}",
-                           "-f", f"inputs[oss_job_b64]={payload}",
-                           "-f", f"inputs[job_id]={job['job_id']}"])
-        if rc != 0:
-            raise RuntimeError(f"workflow_dispatch failed: {out[:200]}")
-        run_id = self._find_run(job["job_id"])
+        # dispatch→认领 run 的整段必须串行：_find_run 只能按时间窗认"最新"的
+        # dispatch run，GitHub 没有"按 inputs 找 run"的 API。两个线程并发
+        # submit 时，A 可能认到 B 刚 dispatch 的 run，于是 collect 拿到 B 的
+        # result——job_id mismatch，A 修复成功的成果也作废（2026-10-31 实测
+        # 8 条 succeeded+repro+fixed 全被这条拦掉）。
+        with _SUBMIT_LOCK:
+            dispatch_at = time.time()
+            rc, out = self.gh(["-X", "POST",
+                               f"repos/{self.repo}/actions/workflows/{self.workflow}/dispatches",
+                               "-f", f"ref={self.ref}",
+                               "-f", f"inputs[oss_job_b64]={payload}",
+                               "-f", f"inputs[job_id]={job['job_id']}"])
+            if rc != 0:
+                raise RuntimeError(f"workflow_dispatch failed: {out[:200]}")
+            run_id = self._find_run(job["job_id"], not_before=dispatch_at - 5)
         if run_id is None:
             raise RuntimeError("dispatch accepted but run not found in time")
         return str(run_id)
@@ -209,14 +231,31 @@ class ActionsBackend:
 
     # ---- 内部 ----
 
-    def _find_run(self, job_id: str, attempts: int = 8) -> int | None:
+    def _find_run(self, job_id: str, attempts: int = 8,
+                  not_before: float | None = None) -> int | None:
+        """找本次 dispatch 对应的 run。
+
+        按时间窗过滤：runs API 不暴露 dispatch inputs，唯一可靠的关联是
+        "created_at 晚于 dispatch 时刻"。只认 event=workflow_dispatch 且
+        created_at >= not_before 的 run 里**最早**的那条——并发时别的线程
+        可能已 dispatch 出更新的 run，认最新就会张冠李戴。
+        """
         for _ in range(attempts):
             rc, out = self.gh([f"repos/{self.repo}/actions/workflows/{self.workflow}/runs",
                                "-X", "GET", "-f", "per_page=10"])
             if rc == 0:
+                candidates = []
                 for run in json.loads(out).get("workflow_runs", []):
-                    if run.get("event") == "workflow_dispatch":
-                        return run["id"]
+                    if run.get("event") != "workflow_dispatch":
+                        continue
+                    if not_before is not None:
+                        created = _parse_ts(run.get("created_at"))
+                        if created is not None and created < not_before:
+                            continue
+                    candidates.append((run.get("created_at") or "", run["id"]))
+                if candidates:
+                    candidates.sort()
+                    return candidates[0][1]
             time.sleep(5)
         return None
 
