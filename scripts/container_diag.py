@@ -27,10 +27,12 @@ def main() -> int:
     cfg = D.cloudflare_cfg(_DS())
     print("effective_api_set:", bool(cfg.get("api_token")))
     print("effective_ingest_set:", bool(cfg.get("ingest_token")))
-    # PR 评论通道的前提：Worker 能读到 PR 列表
+    # PR 评论通道的前提：Worker 能读到 PR 列表（dashboard 每 15 分钟写 KV）
     sync = Path("/data/state/pr_sync.json")
     try:
-        prs = json_prs = __import__("json").loads(sync.read_text(encoding="utf-8"))
+        import json
+        prs = json.loads(sync.read_text(encoding="utf-8"))
+        print("pr_sync_at:", prs.get("at"))
         print("pr_sync_count:", len(prs.get("prs", [])))
     except Exception:  # noqa: BLE001
         print("pr_sync_count: 0")
