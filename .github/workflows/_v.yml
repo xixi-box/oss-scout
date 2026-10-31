@@ -1,0 +1,9 @@
+name: verify cfg
+on: {workflow_dispatch: {}}
+jobs:
+  v:
+    runs-on: [self-hosted, aliyun]
+    steps:
+      - run: |
+          docker exec oss-scout grep -E "max_new_claims|astral-sh|vllm-project" /data/configs/repositories.yaml || echo "REMOVED-OK"
+          echo "repo count: $(docker exec oss-scout grep -cE '^  [a-zA-Z0-9_.-]+/' /data/configs/repositories.yaml)"
