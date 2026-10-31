@@ -1,0 +1,7 @@
+name: Cleanup execute
+on: {workflow_dispatch: {}}
+jobs:
+  go:
+    runs-on: [self-hosted, aliyun]
+    steps:
+      - run: docker exec oss-scout python /app/scripts/cleanup_stale_candidates.py
