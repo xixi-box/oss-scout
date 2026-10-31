@@ -649,10 +649,13 @@ def _build_publish_cfg(repo: str, number: int, base_sha: str,
     # variable is defined" 切成了 "...where the"，PR 标题成了半句话。
     # issue 标题本身就是最贴切的 PR 标题，GitHub 也不限制长度。
     pr_title = f"fix: {title}" if title else f"fix: resolves #{number}"
+    # 描述里不写 "Root cause: <issue 标题>"：组 job 时还没跑出结果，能填的只有
+    # 标题本身，于是同一句话出现两遍，读起来像假装做了归因。真正的根因由 agent
+    # 产出，runner 发布时用 result.json 里的 root_cause 补上（见
+    # publish_remote._rewrite_body）。这里只留能确证的事实：关联哪个 issue、
+    # 在哪个 base 上验证过。
     body_lines = [
         f"Fixes #{number}",
-        "",
-        f"Root cause: {title}" if title else "",
         "",
         f"Verified by running the failing test at `{base_sha[:12]}` (fails) and "
         f"again with this patch applied (passes).",

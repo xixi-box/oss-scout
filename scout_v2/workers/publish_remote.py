@@ -145,12 +145,52 @@ def publish(repo_dir: Path, patch_file: Path, publish_cfg: dict) -> dict:
 
 def publish_from_env(job_dict: dict, repo_dir: Path, out_dir: Path) -> dict | None:
     """workflow 调用入口：payload 里没有 publish 配置时返回 None（不发布）。"""
-    cfg = job_dict.get("publish") or {}
+    cfg = dict(job_dict.get("publish") or {})
     if not cfg:
         return None
+    cfg["body"] = _rewrite_body(cfg, out_dir)
     patch = out_dir / "change.patch"
     result = publish(repo_dir, patch, cfg)
     (out_dir / "publish.json").write_text(json.dumps(result, ensure_ascii=False, indent=1),
                                           encoding="utf-8")
     print("##OSSCOUT_PUBLISH##" + json.dumps(result, ensure_ascii=False))
     return result
+
+
+def _rewrite_body(cfg: dict, out_dir: Path) -> str:
+    """用 agent 真正查到的根因重写 PR 描述。
+
+    控制器组 job 时还没跑出结果，只能拿 issue 标题占位，于是 PR 里出现
+    "Root cause: <issue 标题>" 这种同一句话重复两遍的假分析。2026-10-30 实测
+    我们开的每个 PR 都是这个样子——biome 的 CONTRIBUTING 明确说 AI 生成的低
+    信号描述会被直接关掉，astral-sh 更彻底（禁止自主 agent 贡献）。
+    runner 这里已经拿到 result.json，用里面 agent 写的 root_cause 覆盖掉占位，
+    没有就整段删掉：宁可少一行，也不要留一句假装分析了的话。
+    """
+    body = str(cfg.get("body") or "")
+    issue_number = cfg.get("issue_number")
+    root_cause = ""
+    res_file = out_dir / "result.json"
+    if res_file.is_file():
+        try:
+            res = json.loads(res_file.read_text(encoding="utf-8"))
+            root_cause = str(res.get("root_cause") or "").strip()
+        except Exception:  # noqa: BLE001
+            root_cause = ""
+    # 只留真正的归因；与 issue 标题雷同的（就是占位串）当没有
+    title = str(cfg.get("title") or "").removeprefix("fix: ").strip()
+    if root_cause and root_cause.strip().lower() == title.lower():
+        root_cause = ""
+    lines = []
+    if issue_number:
+        lines.append(f"Fixes #{issue_number}")
+        lines.append("")
+    if root_cause:
+        lines.append(f"Root cause: {root_cause[:400]}")
+        lines.append("")
+    if body:
+        kept = [ln for ln in body.splitlines()
+                if not ln.startswith("Fixes #") and not ln.startswith("Root cause:")]
+        kept = [ln for ln in kept if ln.strip()]
+        lines.extend(kept)
+    return "\n".join(lines).strip() or body

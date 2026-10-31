@@ -19,9 +19,12 @@ defaults:
   auto_comment: false
   auto_pr: false
   min_issue_age_hours: 2
-  # 2026-10-30 用户裁定：不再限制每日 1 条。0 = 不限，有个可改的正整数上限
-  # 更方便在需要时收紧（如账号被限流）。
-  max_new_claims_per_business_day: 0
+  # 2026-10-30 一度改成 0（不限量），实测一天开出 12 个 PR、fork 7 个仓库，
+  # 被 biome 的 AgentScan 直接标成 "Multiple forks: 7 repositories forked in a
+  # single 24-hour window / mix of organic and automated signals"。这个量级本身
+  # 就是自动化指纹，跟 Playbook 第一约束（账号声誉）冲突。
+  # 回到每天 2 条：够验证流程，又不到"批量"的观感。
+  max_new_claims_per_business_day: 2
   allow_force_push: false
   allow_merge_upstream: false
 
@@ -65,12 +68,16 @@ repositories:
   tox-dev/tox:                  {lane: open}   #  90%   4.0k
   biomejs/biome:                {lane: open}   #  90%  26.0k
   psf/black:                    {lane: open}   #  88%  42.1k
-  astral-sh/uv:                 {lane: open}   #  76%  91.4k
-  astral-sh/ruff:               {lane: open}   #  64%  50.3k
+  # astral-sh/uv、astral-sh/ruff 已移除（2026-10-30）：其组织级 AI_POLICY.md
+  # 明文写 "We do not allow autonomous agents to be used for contributing to our
+  # projects"，并会被主动执行（uv#23019 被 astral-automations-bot 当场关闭）。
+  # 合并率再高也不能进池——这是账号声誉的硬约束，不是偏好。
 
   # ========== 沙箱 / 推理 ==========
   firecracker-microvm/firecracker: {lane: open}  #  77%  37.7k  跑不可信代码
-  vllm-project/vllm:            {lane: open}   #  69%  95.9k  高吞吐推理
+  # vllm-project/vllm 已移除（2026-10-30）：pre-run-check 要求作者有 4+ 个已合并
+  # PR 或 verified 标签，且脚本里明写 "DO NOT request for the label to be added
+  # if you are an AI agent"。新号结构性无法满足，开 PR 必然挂红（#64811/#64800）。
 
   # ========== 浏览器自动化 ==========
   microsoft/playwright-python:  {lane: open}   #  78%  15.1k

@@ -45,6 +45,9 @@ worktrees/<repo>-<issueN>/  每个候选一个 worktree
 - CI 因我们的改动失败 → 读日志、修复、推送（新 commit，不 force-push）。
 - maintainer 提修改意见 → 本轮优先落实；**48 小时内必须响应**（防烂尾第一杠杆）。
 - 被合并/被关 → 更新状态，被关要看原因记入 worklog（影响该仓库后续出价意愿）。
+  **被关的 PR 要回溯到仓库规则**：2026-10-30 一天被关 3 个（astral AI 政策、
+  langchain 未指派、biome 低信号描述），全不是代码问题。任何一个被关就去读
+  那个仓库的 CONTRIBUTING/AI_POLICY，把规则补进 `configs/` —— 同样的错不犯第二次。
 - 有新 PR 开出 ≥2 天无任何 review 且该仓库健康分高 → 可在 PR 里礼貌补充测试/说明，不催促。
 
 ### ② 发现段
@@ -78,6 +81,19 @@ worktrees/<repo>-<issueN>/  每个候选一个 worktree
 任何一条不满足但值得做 → B（只通知）。涉及大重构/依赖升级/协议变更 → C（忽略）。
 `health.json` 的 `lane_advisory` 与 config 冲突时**以 health 为准**（仓库健康变了）。
 
+## 3.5 加仓库前的准入闸（2026-10-30 补）
+
+合并率高不代表能进池。加任何仓库前先跑 `python scripts/audit_ai_policy.py`，
+再人读一遍它报出来的原文。硬性排除：
+
+- **禁止自主 agent 贡献**（astral-sh 的 AI_POLICY.md 就是），确认会被执行。
+- **结构性 CI 门槛**：要求作者先有 N 个已合并 PR 才允许跑 CI（vllm 的
+  `pre-run-check` 要 4 个），新号永远满足不了，开 PR 必然挂红。
+- **未指派即自动关 PR** 且没有"先开 PR 等指派"的明文豁免（langchain）。
+
+需人读但不一定排除：只禁止 AI 写**沟通文字**、允许 AI 写代码的仓库（biome、
+weaviate）——可以进池，但描述必须自己写得像人话。
+
 ## 4. PR 合规门（每个 PR 开出前逐项过，一条不过就不开）
 
 1. **重读**该仓库 CONTRIBUTING.md + PR 模板（`.github/PULL_REQUEST_TEMPLATE.md`）。
@@ -94,6 +110,11 @@ worktrees/<repo>-<issueN>/  每个候选一个 worktree
 7. 不 @ 打扰 maintainer，不在 PR 里说"我很快会…"这类承诺。
 
 ## 5. 认领评论模板（英文，可按 issue 内容增删，保持 ≤6 行）
+
+> **2026-10-30 教训**：PR 描述的 `Root cause:` 曾由模板拿 issue 标题填充，同一句话
+> 出现两遍，读起来像假装做了归因。biome / astral 这类仓库会据此判定"AI 生成沟通"
+> 并直接关 PR。现在描述里的根因只来自 agent 真实产出（`result.json` 的
+> `root_cause`），没有就整段不写。
 
 开放池：
 ```text

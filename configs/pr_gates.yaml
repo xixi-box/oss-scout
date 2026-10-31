@@ -55,12 +55,11 @@ repositories:
   tox-dev/tox:                  {requires_invite: false}
   biomejs/biome:                {requires_invite: false}
   psf/black:                    {requires_invite: false}
-  astral-sh/uv:                 {requires_invite: false}
-  astral-sh/ruff:               {requires_invite: false}
+  # astral-sh/uv、astral-sh/ruff 已移出池：组织级 AI_POLICY.md 禁止自主 agent
+  # 贡献，与"要不要 invite label"无关——这两个仓库根本不该被提交 PR。
 
   # ---- 沙箱 / 推理 ----
   firecracker-microvm/firecracker: {requires_invite: false}
-  vllm-project/vllm:            {requires_invite: false}
 
   # ---- 浏览器自动化 ----
   microsoft/playwright-python:  {requires_invite: false}
