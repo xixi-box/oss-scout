@@ -1,0 +1,9 @@
+name: v2
+on: {workflow_dispatch: {}}
+jobs:
+  v:
+    runs-on: [self-hosted, aliyun]
+    steps:
+      - run: |
+          docker exec oss-scout grep -c "needs_invite" /app/scripts/cleanup_stale_candidates.py || echo "OLD SCRIPT"
+          docker exec oss-scout ls -la /app/scout_v2/workers/cla.py 2>/dev/null || echo "NO CLA MODULE"
