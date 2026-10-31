@@ -23,11 +23,20 @@ import yaml
 
 
 def _pool(root: Path) -> set[str]:
-    path = root / "configs" / "repositories.yaml"
-    if not path.exists():
-        path = root / "configs.seed" / "repositories.yaml"
-    cfg = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    return set((cfg.get("repositories") or {}).keys())
+    """读池子。优先镜像里的 configs.seed：/data/configs 可能是旧快照。
+
+    2026-10-30 实录：/data/configs 由 entrypoint 首次部署时播种，之后不再更新，
+    导致清理脚本以为池子还是 41 个仓库。判断"哪些候选该删"必须用当前代码里的
+    池子定义，不能用可能过期的运行期副本。
+    """
+    for path in (Path("/app/configs.seed/repositories.yaml"),
+                 root / "configs" / "repositories.yaml",
+                 Path(__file__).resolve().parents[1] / "configs" / "repositories.yaml"):
+        if path.exists():
+            cfg = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+            print(f"[cleanup] pool from {path}")
+            return set((cfg.get("repositories") or {}).keys())
+    raise SystemExit("no repositories.yaml found")
 
 
 def main() -> int:
