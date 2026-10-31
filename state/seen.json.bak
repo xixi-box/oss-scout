@@ -3462,5 +3462,17 @@
  "anomalyco/opencode#60152": {
   "first_seen": "2026-10-30T10:35:55",
   "status": "queued"
+ },
+ "aaif-goose/goose#13236": {
+  "first_seen": "2026-10-30T11:07:55",
+  "status": "lowscore"
+ },
+ "anomalyco/opencode#60434": {
+  "first_seen": "2026-10-30T11:07:55",
+  "status": "queued"
+ },
+ "anomalyco/opencode#60433": {
+  "first_seen": "2026-10-30T11:07:55",
+  "status": "queued"
  }
 }

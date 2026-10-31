@@ -989,7 +989,7 @@
   "url": "https://github.com/anomalyco/opencode/issues/58874",
   "lane": "open",
   "score": 4,
-  "class": "B",
+  "class": "C",
   "blockers": [],
   "signals": {
    "body_len": 1412,
@@ -1009,9 +1009,10 @@
   },
   "created_at": "2026-10-25T04:31:16Z",
   "discovered_at": "2026-10-25T12:41:25",
-  "status": "new",
+  "status": "aborted_stale",
   "lease": null,
-  "source": "cloudflare-worker"
+  "source": "cloudflare-worker",
+  "abort_reason": "opencode Go/server-side usage-metering family (title matches RE_BILLING v2) — bulk cull"
  },
  "anomalyco/opencode#58859": {
   "id": "anomalyco/opencode#58859",
@@ -1021,7 +1022,7 @@
   "url": "https://github.com/anomalyco/opencode/issues/58859",
   "lane": "open",
   "score": 4,
-  "class": "B",
+  "class": "C",
   "blockers": [],
   "signals": {
    "body_len": 984,
@@ -1041,9 +1042,10 @@
   },
   "created_at": "2026-10-25T03:46:44Z",
   "discovered_at": "2026-10-25T12:41:25",
-  "status": "new",
+  "status": "aborted_stale",
   "lease": null,
-  "source": "cloudflare-worker"
+  "source": "cloudflare-worker",
+  "abort_reason": "opencode Go/server-side usage-metering family (title matches RE_BILLING v2) — bulk cull"
  },
  "anomalyco/opencode#58876": {
   "id": "anomalyco/opencode#58876",
@@ -1053,7 +1055,7 @@
   "url": "https://github.com/anomalyco/opencode/issues/58876",
   "lane": "open",
   "score": 4,
-  "class": "B",
+  "class": "C",
   "blockers": [],
   "signals": {
    "body_len": 372,
@@ -1070,9 +1072,10 @@
   },
   "created_at": "2026-10-25T04:42:46Z",
   "discovered_at": "2026-10-25T12:43:48",
-  "status": "new",
+  "status": "aborted_stale",
   "lease": null,
-  "source": "cloudflare-worker"
+  "source": "cloudflare-worker",
+  "abort_reason": "opencode Go/server-side usage-metering family (title matches RE_BILLING v2) — bulk cull"
  },
  "anomalyco/opencode#56862": {
   "id": "anomalyco/opencode#56862",
@@ -1300,7 +1303,7 @@
   "url": "https://github.com/anomalyco/opencode/issues/58906",
   "lane": "open",
   "score": 4,
-  "class": "B",
+  "class": "C",
   "blockers": [],
   "signals": {
    "body_len": 427,
@@ -1317,7 +1320,7 @@
   },
   "created_at": "2026-10-25T06:13:37Z",
   "discovered_at": "2026-10-25T14:14:39",
-  "status": "new",
+  "status": "aborted_stale",
   "lease": null,
   "source": "cloudflare-worker",
   "ai_grade": {
@@ -1325,7 +1328,8 @@
    "score": 1,
    "reason": "Billing/quota complaint with no reproduction or actionable bug details.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "abort_reason": "opencode Go/server-side usage-metering family (title matches RE_BILLING v2) — bulk cull"
  },
  "anomalyco/opencode#58909": {
   "id": "anomalyco/opencode#58909",
@@ -1370,7 +1374,7 @@
   "url": "https://github.com/anomalyco/opencode/issues/58781",
   "lane": "open",
   "score": 6,
-  "class": "A",
+  "class": "C",
   "blockers": [],
   "signals": {
    "body_len": 945,
@@ -1390,7 +1394,7 @@
   },
   "created_at": "2026-10-24T18:58:55Z",
   "discovered_at": "2026-10-25T15:15:29",
-  "status": "new",
+  "status": "aborted_stale",
   "lease": null,
   "source": "cloudflare-worker",
   "ai_grade": {
@@ -1398,7 +1402,8 @@
    "score": 0,
    "reason": "Billing/quota complaint about free usage limits, not an actionable reproducible code bug.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "abort_reason": "opencode Go/server-side usage-metering family (title matches RE_BILLING v2) — bulk cull"
  },
  "infiniflow/ragflow#21435": {
   "id": "infiniflow/ragflow#21435",
@@ -1427,7 +1432,7 @@
   },
   "created_at": "2026-10-25T00:37:51Z",
   "discovered_at": "2026-10-25T15:18:03",
-  "status": "aborted_competed",
+  "status": "new",
   "lease": null,
   "source": "cloudflare-worker",
   "ai_grade": {
@@ -1435,8 +1440,7 @@
    "score": 8,
    "reason": "Clear reproducible ingestion-pipeline bug with concrete steps and exact error, likely a small fix to avoid sending empty inputs to embeddings; no duplicate/feature signal.",
    "model": "deepseek-v4.1-flash"
-  },
-  "updated_at": "2026-10-28T10:02:04"
+  }
  },
  "crewAIInc/crewAI#8556": {
   "id": "crewAIInc/crewAI#8556",
@@ -1516,7 +1520,7 @@
   "url": "https://github.com/anomalyco/opencode/issues/58919",
   "lane": "open",
   "score": 4,
-  "class": "B",
+  "class": "C",
   "blockers": [],
   "signals": {
    "body_len": 682,
@@ -1536,7 +1540,7 @@
   },
   "created_at": "2026-10-25T07:32:46Z",
   "discovered_at": "2026-10-25T15:35:09",
-  "status": "new",
+  "status": "aborted_stale",
   "lease": null,
   "source": "cloudflare-worker",
   "ai_grade": {
@@ -1544,7 +1548,8 @@
    "score": 2,
    "reason": "Billing/quota complaint about free usage limits, not a reproducible code bug.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "abort_reason": "opencode Go/server-side usage-metering family (title matches RE_BILLING v2) — bulk cull"
  },
  "crewAIInc/crewAI#8558": {
   "id": "crewAIInc/crewAI#8558",
@@ -1571,7 +1576,7 @@
   },
   "created_at": "2026-10-25T07:36:30Z",
   "discovered_at": "2026-10-25T15:38:07",
-  "status": "new",
+  "status": "out_of_scope",
   "lease": null,
   "source": "cloudflare-worker",
   "ai_grade": {
@@ -1579,7 +1584,9 @@
    "score": 9,
    "reason": "Clear, reproducible bug in a specific storage method with exact repro and small fix scope; no competing work.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "updated_at": "2026-10-31T08:20:48",
+  "abort_reason": "lane=unknown no action"
  },
  "crewAIInc/crewAI#8560": {
   "id": "crewAIInc/crewAI#8560",
@@ -1717,7 +1724,7 @@
   },
   "created_at": "2026-10-25T00:00:00Z",
   "discovered_at": "2026-10-25T16:47:26",
-  "status": "new",
+  "status": "aborted_competed",
   "lease": null,
   "source": "cloudflare-worker",
   "body_excerpt": "Steps to reproduce: call div(7,2) in calc.py at main. Expected 3.5, actual 3. The regression test test_div.py fails on current main. Fix the implementation, not the test.",
@@ -1726,7 +1733,8 @@
    "score": 9,
    "reason": "Clear reproducible regression with failing test, expected behavior specified, and small implementation-only scope.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "updated_at": "2026-10-31T08:13:30"
  },
  "OpenHands/OpenHands#18924": {
   "id": "OpenHands/OpenHands#18924",
@@ -1755,7 +1763,7 @@
   },
   "created_at": "2026-10-25T08:46:50Z",
   "discovered_at": "2026-10-25T16:48:34",
-  "status": "new",
+  "status": "out_of_scope",
   "lease": null,
   "source": "cloudflare-worker",
   "ai_grade": {
@@ -1763,7 +1771,9 @@
    "score": 9,
    "reason": "Clear reproducible Escape-key bug in two menus, precise steps and file identified, small scoped fix with no competing work noted.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "updated_at": "2026-10-31T08:13:24",
+  "abort_reason": "lane=unknown no action"
  },
  "crewAIInc/crewAI#7695": {
   "id": "crewAIInc/crewAI#7695",
@@ -1792,7 +1802,7 @@
   },
   "created_at": "2026-09-21T17:13:22Z",
   "discovered_at": "2026-10-25T17:15:21",
-  "status": "new",
+  "status": "out_of_scope",
   "lease": null,
   "source": "cloudflare-worker",
   "ai_grade": {
@@ -1800,7 +1810,9 @@
    "score": 9,
    "reason": "Clear reproducible Flow routing bug with minimal repro, expected/actual behavior, and narrow fix scope; no competing work indicated.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "updated_at": "2026-10-31T08:13:24",
+  "abort_reason": "lane=unknown no action"
  },
  "anomalyco/opencode#58932": {
   "id": "anomalyco/opencode#58932",
@@ -1845,7 +1857,7 @@
   "url": "https://github.com/anomalyco/opencode/issues/58933",
   "lane": "open",
   "score": 4,
-  "class": "B",
+  "class": "C",
   "blockers": [],
   "signals": {
    "body_len": 1284,
@@ -1862,7 +1874,7 @@
   },
   "created_at": "2026-10-25T09:21:35Z",
   "discovered_at": "2026-10-25T17:32:14",
-  "status": "new",
+  "status": "aborted_stale",
   "lease": null,
   "source": "cloudflare-worker",
   "ai_grade": {
@@ -1870,7 +1882,8 @@
    "score": 1,
    "reason": "Quota/cooldown complaint asking for clarification, not a reproducible small-scope code bug.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "abort_reason": "opencode Go/server-side usage-metering family (title matches RE_BILLING v2) — bulk cull"
  },
  "langfuse/langfuse#19345": {
   "id": "langfuse/langfuse#19345",
@@ -1897,7 +1910,7 @@
   },
   "created_at": "2026-10-25T09:25:57Z",
   "discovered_at": "2026-10-25T17:34:07",
-  "status": "new",
+  "status": "aborted_competed",
   "lease": null,
   "source": "cloudflare-worker",
   "ai_grade": {
@@ -1905,7 +1918,8 @@
    "score": 9,
    "reason": "Clear, narrow bug in CommandMenu where closing does not reset/cancel debounced search, with plausible repro and no competing work.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "updated_at": "2026-10-31T08:14:39"
  },
  "OpenHands/OpenHands#18928": {
   "id": "OpenHands/OpenHands#18928",
@@ -2039,7 +2053,7 @@
   },
   "created_at": "2026-10-25T09:40:03Z",
   "discovered_at": "2026-10-25T17:40:56",
-  "status": "new",
+  "status": "out_of_scope",
   "lease": null,
   "source": "cloudflare-worker",
   "ai_grade": {
@@ -2047,7 +2061,9 @@
    "score": 9,
    "reason": "Clear, reproducible tz-aware datetime comparison bug with specific backends, repro, and expected behavior; small actionable fix.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "updated_at": "2026-10-31T08:14:24",
+  "abort_reason": "lane=unknown no action"
  },
  "anomalyco/opencode#58937": {
   "id": "anomalyco/opencode#58937",
@@ -2109,7 +2125,7 @@
   },
   "created_at": "2026-10-25T09:45:48Z",
   "discovered_at": "2026-10-25T17:47:34",
-  "status": "new",
+  "status": "out_of_scope",
   "lease": null,
   "source": "cloudflare-worker",
   "ai_grade": {
@@ -2117,7 +2133,9 @@
    "score": 9,
    "reason": "Clear reproducible bug with a small localized fix and no apparent duplicate/competing work.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "updated_at": "2026-10-31T08:19:48",
+  "abort_reason": "lane=unknown no action"
  },
  "anomalyco/opencode#58928": {
   "id": "anomalyco/opencode#58928",
@@ -2127,7 +2145,7 @@
   "url": "https://github.com/anomalyco/opencode/issues/58928",
   "lane": "open",
   "score": 3,
-  "class": "B",
+  "class": "C",
   "blockers": [],
   "signals": {
    "body_len": 274,
@@ -2147,7 +2165,7 @@
   },
   "created_at": "2026-10-25T09:04:20Z",
   "discovered_at": "2026-10-25T18:01:37",
-  "status": "new",
+  "status": "aborted_stale",
   "lease": null,
   "source": "cloudflare-worker",
   "ai_grade": {
@@ -2155,7 +2173,8 @@
    "score": 0,
    "reason": "Billing/quota complaint about free usage limits, not an actionable reproducible bug.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "abort_reason": "opencode Go/server-side usage-metering family (title matches RE_BILLING v2) — bulk cull"
  },
  "anomalyco/opencode#58926": {
   "id": "anomalyco/opencode#58926",
@@ -2165,7 +2184,7 @@
   "url": "https://github.com/anomalyco/opencode/issues/58926",
   "lane": "open",
   "score": 3,
-  "class": "B",
+  "class": "C",
   "blockers": [],
   "signals": {
    "body_len": 388,
@@ -2185,7 +2204,7 @@
   },
   "created_at": "2026-10-25T08:49:51Z",
   "discovered_at": "2026-10-25T18:01:37",
-  "status": "new",
+  "status": "aborted_stale",
   "lease": null,
   "source": "cloudflare-worker",
   "ai_grade": {
@@ -2193,7 +2212,8 @@
    "score": null,
    "reason": "<urlopen error [SSL: UNEXPECTED_EOF_WHILE_READING] EOF occurred in violation of protocol (_ssl.c:1082)>",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "abort_reason": "opencode Go/server-side usage-metering family (title matches RE_BILLING v2) — bulk cull"
  },
  "anomalyco/opencode#58912": {
   "id": "anomalyco/opencode#58912",
@@ -2203,7 +2223,7 @@
   "url": "https://github.com/anomalyco/opencode/issues/58912",
   "lane": "open",
   "score": 3,
-  "class": "B",
+  "class": "C",
   "blockers": [],
   "signals": {
    "body_len": 707,
@@ -2223,7 +2243,7 @@
   },
   "created_at": "2026-10-25T06:53:45Z",
   "discovered_at": "2026-10-25T18:01:37",
-  "status": "new",
+  "status": "aborted_stale",
   "lease": null,
   "source": "cloudflare-worker",
   "ai_grade": {
@@ -2231,7 +2251,8 @@
    "score": null,
    "reason": "<urlopen error [SSL: UNEXPECTED_EOF_WHILE_READING] EOF occurred in violation of protocol (_ssl.c:1082)>",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "abort_reason": "opencode Go/server-side usage-metering family (title matches RE_BILLING v2) — bulk cull"
  },
  "crewAIInc/crewAI#8569": {
   "id": "crewAIInc/crewAI#8569",
@@ -2258,7 +2279,7 @@
   },
   "created_at": "2026-10-25T10:01:52Z",
   "discovered_at": "2026-10-25T18:04:06",
-  "status": "new",
+  "status": "out_of_scope",
   "lease": null,
   "source": "cloudflare-worker",
   "ai_grade": {
@@ -2266,7 +2287,9 @@
    "score": 9,
    "reason": "Clear reproducible bug with a small, well-scoped validator fix and no competing work.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "updated_at": "2026-10-31T08:20:48",
+  "abort_reason": "lane=unknown no action"
  },
  "crewAIInc/crewAI#8571": {
   "id": "crewAIInc/crewAI#8571",
@@ -2599,7 +2622,7 @@
   "url": "https://github.com/anomalyco/opencode/issues/58814",
   "lane": "open",
   "score": 4,
-  "class": "B",
+  "class": "C",
   "blockers": [],
   "signals": {
    "body_len": 719,
@@ -2619,7 +2642,7 @@
   },
   "created_at": "2026-10-24T22:28:30Z",
   "discovered_at": "2026-10-25T19:34:28",
-  "status": "new",
+  "status": "aborted_stale",
   "lease": null,
   "source": "cloudflare-worker",
   "ai_grade": {
@@ -2627,7 +2650,8 @@
    "score": 2,
    "reason": "Billing/quota reset complaint with no reproduction details; not actionable as a code bug.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "abort_reason": "opencode Go/server-side usage-metering family (title matches RE_BILLING v2) — bulk cull"
  },
  "OpenHands/OpenHands#18898": {
   "id": "OpenHands/OpenHands#18898",
@@ -2711,7 +2735,7 @@
   "url": "https://github.com/anomalyco/opencode/issues/58963",
   "lane": "open",
   "score": 4,
-  "class": "B",
+  "class": "C",
   "blockers": [],
   "signals": {
    "body_len": 1486,
@@ -2731,7 +2755,7 @@
   },
   "created_at": "2026-10-25T11:47:52Z",
   "discovered_at": "2026-10-25T19:49:40",
-  "status": "new",
+  "status": "aborted_stale",
   "lease": null,
   "source": "cloudflare-worker",
   "ai_grade": {
@@ -2739,7 +2763,8 @@
    "score": 2,
    "reason": "Free usage/quota complaint rather than a clear reproducible code bug, so not actionable for triage.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "abort_reason": "opencode Go/server-side usage-metering family (title matches RE_BILLING v2) — bulk cull"
  },
  "langfuse/langfuse#19347": {
   "id": "langfuse/langfuse#19347",
@@ -2749,7 +2774,7 @@
   "url": "https://github.com/langfuse/langfuse/issues/19347",
   "lane": "open",
   "score": 7,
-  "class": "A",
+  "class": "C",
   "blockers": [],
   "signals": {
    "body_len": 2150,
@@ -2771,7 +2796,7 @@
   },
   "created_at": "2026-10-25T11:52:11Z",
   "discovered_at": "2026-10-25T19:53:06",
-  "status": "new",
+  "status": "aborted_competed",
   "lease": null,
   "source": "cloudflare-worker",
   "ai_grade": {
@@ -2779,7 +2804,8 @@
    "score": 9,
    "reason": "Clear reproducible bug with specific root cause, small targeted fix, and no competing work.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "abort_reason": "PR #19349 opened by ghazy2001 (10-25) — claimed+PR within 12h of filing"
  },
  "anomalyco/opencode#58965": {
   "id": "anomalyco/opencode#58965",
@@ -2789,7 +2815,7 @@
   "url": "https://github.com/anomalyco/opencode/issues/58965",
   "lane": "open",
   "score": 4,
-  "class": "B",
+  "class": "C",
   "blockers": [],
   "signals": {
    "body_len": 454,
@@ -2806,7 +2832,7 @@
   },
   "created_at": "2026-10-25T11:52:19Z",
   "discovered_at": "2026-10-25T19:53:06",
-  "status": "new",
+  "status": "aborted_stale",
   "lease": null,
   "source": "cloudflare-worker",
   "ai_grade": {
@@ -2814,7 +2840,8 @@
    "score": 1,
    "reason": "Free usage/quota complaint with no reproducible code bug; not actionable.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "abort_reason": "opencode Go/server-side usage-metering family (title matches RE_BILLING v2) — bulk cull"
  },
  "OpenHands/software-agent-sdk#6174": {
   "id": "OpenHands/software-agent-sdk#6174",
@@ -3289,7 +3316,8 @@
    "score": 10,
    "reason": "Clear reproducible strict-schema bug with provided repro, root cause, small fix, regression test, and no competing work.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "notes": "live-checked 10-31: no claims in comments, no linked PRs to this issue; 6 days old; SchemaOptimizer strict-mode bug — TOP CANDIDATE"
  },
  "anomalyco/opencode#58995": {
   "id": "anomalyco/opencode#58995",
@@ -3334,7 +3362,7 @@
   "url": "https://github.com/langfuse/langfuse/issues/19353",
   "lane": "open",
   "score": 7,
-  "class": "A",
+  "class": "C",
   "blockers": [],
   "signals": {
    "body_len": 2464,
@@ -3355,7 +3383,7 @@
   },
   "created_at": "2026-10-25T14:47:07Z",
   "discovered_at": "2026-10-25T22:47:57",
-  "status": "new",
+  "status": "aborted_competed",
   "lease": null,
   "source": "cloudflare-worker",
   "ai_grade": {
@@ -3363,7 +3391,8 @@
    "score": 9,
    "reason": "Detailed, code-referenced, reproducible UI bug with small fix scope and no indicated competing work.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "abort_reason": "assigned to LysanderKie"
  },
  "anomalyco/opencode#58854": {
   "id": "anomalyco/opencode#58854",
@@ -3552,7 +3581,7 @@
   "url": "https://github.com/anomalyco/opencode/issues/59140",
   "lane": "open",
   "score": 3,
-  "class": "B",
+  "class": "C",
   "blockers": [],
   "signals": {
    "body_len": 548,
@@ -3573,7 +3602,7 @@
   },
   "created_at": "2026-10-26T02:44:16Z",
   "discovered_at": "2026-10-26T12:26:40",
-  "status": "new",
+  "status": "aborted_stale",
   "lease": null,
   "source": "cloudflare-worker",
   "body_excerpt": "**Title:** Free usage exceeded on all free models — OpenCode Desktop 1.19.4\n\n**Description:**\n\nI use OpenCode Desktop 1.19.4 on Windows.\n\nAll free models I have tested show this error:\n\n“Free usage exceeded, subscribe to Go.”\n\nThe countdown expires, but access is not restored. The timer starts again, even when I wait for it to reach zero.\n\nI also used Spark successfully until recently, but it has disappeared from my model list.\n\nI want to continue using free models without subscribing to a paid plan. Please investigate this issue.\n\nThank you.",
@@ -3582,7 +3611,8 @@
    "score": 1,
    "reason": "Billing/quota complaint about free model access, not an actionable reproducible code bug.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "abort_reason": "opencode Go/server-side usage-metering family (title matches RE_BILLING v2) — bulk cull"
  },
  "deepset-ai/haystack#13436": {
   "id": "deepset-ai/haystack#13436",
@@ -3781,7 +3811,7 @@
   "url": "https://github.com/anomalyco/opencode/issues/59147",
   "lane": "open",
   "score": 4,
-  "class": "B",
+  "class": "C",
   "blockers": [],
   "signals": {
    "body_len": 480,
@@ -3799,7 +3829,7 @@
   },
   "created_at": "2026-10-26T03:49:21Z",
   "discovered_at": "2026-10-26T12:29:32",
-  "status": "new",
+  "status": "aborted_stale",
   "lease": null,
   "source": "cloudflare-worker",
   "body_excerpt": "### Description\n\n```\nFree usage exceeded, subscribe to Go\nretrying in 72840s - attempt #1\n```\n\nUnable to use opencode at all. This is happening for all the models!!\n\n### Plugins\n\n_No response_\n\n### OpenCode version\n\n_No response_\n\n### Steps to reproduce\n\n_No response_\n\n### Screenshot\n\n<img width=\"1462\" height=\"563\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/1352586b-e84f-46dc-a303-cf504d97b446\" />\n\n### Operating System\n\nWindows 10\n\n### Terminal\n\n_No response_",
@@ -3808,7 +3838,8 @@
    "score": 2,
    "reason": "Billing/quota complaint, not an actionable reproducible bug.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "abort_reason": "opencode Go/server-side usage-metering family (title matches RE_BILLING v2) — bulk cull"
  },
  "OpenHands/OpenHands#18956": {
   "id": "OpenHands/OpenHands#18956",
@@ -3935,7 +3966,7 @@
   "url": "https://github.com/anomalyco/opencode/issues/59285",
   "lane": "open",
   "score": 4,
-  "class": "B",
+  "class": "C",
   "blockers": [],
   "signals": {
    "body_len": 258,
@@ -3956,7 +3987,7 @@
   },
   "created_at": "2026-10-26T13:34:18Z",
   "discovered_at": "2026-10-26T21:55:05",
-  "status": "new",
+  "status": "aborted_stale",
   "lease": null,
   "source": "cloudflare-worker",
   "body_excerpt": "### Description\n\nthe free tier usage always get exceeded \n\n### Plugins\n\n_No response_\n\n### OpenCode version\n\n_No response_\n\n### Steps to reproduce\n\n_No response_\n\n### Screenshot\n\n_No response_\n\n### Operating System\n\n_No response_\n\n### Terminal\n\n_No response_",
@@ -3965,7 +3996,8 @@
    "score": 2,
    "reason": "Vague billing/quota complaint with no reproduction steps, version, or OS details — not actionable per rules.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "abort_reason": "opencode Go/server-side usage-metering family (title matches RE_BILLING v2) — bulk cull"
  },
  "anomalyco/opencode#59282": {
   "id": "anomalyco/opencode#59282",
@@ -4127,7 +4159,7 @@
   "url": "https://github.com/crewAIInc/crewAI/issues/8621",
   "lane": "open",
   "score": 6,
-  "class": "A",
+  "class": "C",
   "blockers": [],
   "signals": {
    "body_len": 4000,
@@ -4147,7 +4179,7 @@
   },
   "created_at": "2026-10-26T14:14:08Z",
   "discovered_at": "2026-10-26T22:40:25",
-  "status": "new",
+  "status": "aborted_competed",
   "lease": null,
   "source": "cloudflare-worker",
   "body_excerpt": "### Description\n\nContext: \nI filed a High-Severity private security advisory (GHSA-986m-m422-92xq) 48 hours ago respecting your SECURITY.md. I also reached out directly to the core team. Because there has been no response, I am escalating this publicly per standard responsible disclosure practices.\n\nThe Architectural Gap:\nCrewAI lacks cryptographic non-repudiation for agent tool calls and inter-agent handoffs. Specifically, in server/utils/agents/aibitat/index.js, the handleExecution and handleAsyncExecution functions execute actions (fn.handler(args)) without signing the payload or verifying the origin of the request cryptographically.\n\nThe Enterprise Impact:\nThis is a critical blocker for enterprise adoption. Because the conversation history and tool outputs are not hash-linked or signed (e.g., via Dilithium5), an attacker who achieves indirect prompt injection can execute unauthorized tool calls. Incident response teams will have no mathematically verifiable proof of which sub-agent authorized the action.\n\nWithout this, enterprise CISOs cannot deploy CrewAI in production. It fails SOC2, ISO 27001, and EU AI Act audits out of the box.\n\nThe Standard (W3C Context):\nAs a participant in the W3C AI Agent Protocol Community Group, we are currently defining the standards for preimage defense and trust leases. We are building the missing trust layer for the Agentic Web (Neutral Trust Infrastructure - NTI), and we built an open-source AST scanner to measure the industry against it.\n\n### Steps to Reproduce\n\n1. pip install nti-scanner\n2. git clone https://github.com/crewAIInc/crewAI\n3. nti-scanner scan ./crewAI\n\nResult: 1,462 findings related to missing cryptographic controls. \nThe live, cryptographically signed attestation of this scan and the AST findings are public on our compliance leaderboard: https://nti-leaderboard.vercel.app\n(CrewAI currently scores 0/100 on cryptographic safety).\n\nThe Fix:\nI have already built the solution to make CrewAI the hero of enterprise AI se",
@@ -4156,7 +4188,8 @@
    "score": 1,
    "reason": "Broad security-architecture feature/standards demand, not a concrete reproducible bug or scoped fix; scanner promotion and auto-patcher request are not actionable.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "abort_reason": "draft PR already staged by abisheakp197 (10-26) + community responses — claimed"
  },
  "deepset-ai/haystack#13446": {
   "id": "deepset-ai/haystack#13446",
@@ -4345,6 +4378,243 @@
    "grade": "A",
    "score": 9,
    "reason": "Reproduced v2 regression with clear repro steps and two focused defects (missing auto-trigger and internal title requests blocked by free-tier gate); actionable and worth fixing.",
+   "model": "deepseek-v4.1-flash"
+  }
+ },
+ "OpenHands/OpenHands#19040": {
+  "id": "OpenHands/OpenHands#19040",
+  "repo": "OpenHands/OpenHands",
+  "number": 19040,
+  "title": "[Bug]: Scrolling up skips main-conversation history once the planner has events older than the loaded tail",
+  "url": "https://github.com/OpenHands/OpenHands/issues/19040",
+  "lane": "open",
+  "score": 6,
+  "class": "A",
+  "blockers": [],
+  "signals": {
+   "body_len": 4000,
+   "reactions": 0,
+   "labels": [
+    "bug",
+    "priority:medium",
+    "ready-for-dev"
+   ],
+   "comments": 0,
+   "claim_signal": false,
+   "maintainer_confirm": false,
+   "duplicate_flag": false,
+   "billing_flag": false,
+   "bot_claim": false,
+   "cross_ref_pr": false,
+   "repro_signal": true,
+   "ai_grade_a": true
+  },
+  "created_at": "2026-10-28T01:33:14Z",
+  "discovered_at": "2026-10-28T10:01:30",
+  "status": "new",
+  "lease": null,
+  "source": "cloudflare-worker",
+  "body_excerpt": "### Operating System\n\nWindows\n\n### Installation Method\n\nFrom source (`npm run dev` / `npm run dev:minimal`)\n\n### Agent Canvas Version\n\nmain @ 6354932 (1.34.0)\n\n### Bug Description\n\nIn a conversation that has used Plan mode, scrolling up to load older history can permanently skip a stretch of the main conversation.\n\n`useLoadOlderEvents` anchors `timestamp__lt` on `useEventStore.getState().events[0]`, the oldest event in the store. The store is shared with the planner sub-conversation, whose socket replays its whole log (`after_seq=-1`), while the main conversation only has its 50-event REST tail. When the planner started before that tail, `events[0]` is a planner event, so the older-page request asks for main events older than the planner's first event. Every main event between that point and the oldest loaded main event is never requested. The returned page is usually short, so `hasMore` flips to false and nothing retries.\n\n### Steps to Reproduce\n\nRun method: from a source checkout, `npm run dev:mock` (MSW mock mode; the same code path runs under `npm run dev`).\n\n1. `npm ci && npm run dev:mock`, open http://127.0.0.1:3001/conversations/pagination-local (the built-in 100-event pagination fixture). The REST tail loads messages 51-100.\n2. In the devtools console, add two planner events the way the planning socket handler does (`addEvent` with `isFromPlanningAgent: true`), timestamped between messages 10 and 12:\n   ```js\n   const s = window.__OH_EVENT_STORE__.getState();\n   const mk = (id, ts, text) => ({ id, timestamp: ts, source: \"agent\", isFromPlanningAgent: true,\n     llm_message: { role: \"assistant\", content: [{ type: \"text\", text }] }, activated_skills: [], extended_content: [] });\n   s.addEvent(mk(\"planner-1\", \"2026-05-13T00:10:30.000Z\", \"[Planner] Drafting PLAN.md\"));\n   s.addEvent(mk(\"planner-2\", \"2026-05-13T00:11:30.000Z\", \"[Planner] Plan ready\"));\n   ```\n3. Scroll the chat to the top.\n\nIn real use the same store state comes from reopening a long conversation ",
+  "ai_grade": {
+   "grade": "A",
+   "score": 9,
+   "reason": "Clear, reproducible pagination bug with identified root cause and small likely fix scope; no duplicate or competing work indicated.",
+   "model": "deepseek-v4.1-flash"
+  }
+ },
+ "anomalyco/opencode#59792": {
+  "id": "anomalyco/opencode#59792",
+  "repo": "anomalyco/opencode",
+  "number": 59792,
+  "title": "ACP: attachment filenames stay URL-encoded",
+  "url": "https://github.com/anomalyco/opencode/issues/59792",
+  "lane": "open",
+  "score": 4,
+  "class": "B",
+  "blockers": [],
+  "signals": {
+   "body_len": 1358,
+   "reactions": 0,
+   "labels": [
+    "reproduced"
+   ],
+   "comments": 1,
+   "claim_signal": false,
+   "maintainer_confirm": false,
+   "duplicate_flag": false,
+   "billing_flag": false,
+   "bot_claim": false,
+   "cross_ref_pr": false,
+   "repro_signal": true,
+   "ai_grade_a": true
+  },
+  "created_at": "2026-10-28T01:35:57Z",
+  "discovered_at": "2026-10-28T10:01:30",
+  "status": "new",
+  "lease": null,
+  "source": "cloudflare-worker",
+  "body_excerpt": "### Description\n\nAttachment names that come in over ACP keep their URL encoding. If an image is sent with `uri: \"file:///tmp/photo%201.png\"`, the part ends up with `filename: \"photo%201.png\"` instead of `photo 1.png`. Same for names with spaces, accented letters, `#` or `%`.\n\nEmbedded attachments get it twice. On replay the URI is rebuilt with `pathToFileURL(filename)` from the already encoded name, so `photo%201.png` turns into `photo%25201.png` in the URI.\n\n### Plugins\n\nNone\n\n### OpenCode version\n\n2.2.0 (dev at 76e1f5b)\n\n### Steps to reproduce\n\nFrom the repo root, run this with Bun:\n\n```ts\nimport { promptContentToParts } from \"./packages/cli/src/acp/content\"\nconsole.log(promptContentToParts([\n  { type: \"image\", data: \"\", mimeType: \"image/png\", uri: \"file:///tmp/photo%201.png\" },\n]))\n```\n\nIt prints `filename: \"photo%201.png\"`.\n\nYou can also see it in the prompt wire test (`packages/cli/test/acp/prompt.test.ts`) by renaming its local image to `local #1 100% café.png`: the URI that reaches the server is fine, but the name is `local%20%231%20100%25%20caf%C3%A9.png`.\n\nExpected: `photo 1.png`. One thing to keep in mind for a fix: Zed's `?path=` query paths are already decoded, so those shouldn't be decoded again.\n\n### Screenshot\n\nN/A, protocol only.\n\n### Operating System\n\nmacOS 26.6.2 (arm64), Bun 1.4.4\n\n### Terminal\n\nN/A, not a TUI issue.\n",
+  "ai_grade": {
+   "grade": "A",
+   "score": 9,
+   "reason": "Clear reproducible URL-decoding bug with a small scoped fix and test guidance, no competing work indicated.",
+   "model": "deepseek-v4.1-flash"
+  }
+ },
+ "anomalyco/opencode#59791": {
+  "id": "anomalyco/opencode#59791",
+  "repo": "anomalyco/opencode",
+  "number": 59791,
+  "title": "web: side-panel \"Open file\" is a silent no-op on insecure HTTP origins (v2.2.0 regression)",
+  "url": "https://github.com/anomalyco/opencode/issues/59791",
+  "lane": "open",
+  "score": 4,
+  "class": "B",
+  "blockers": [],
+  "signals": {
+   "body_len": 3851,
+   "reactions": 0,
+   "labels": [
+    "reproduced"
+   ],
+   "comments": 1,
+   "claim_signal": false,
+   "maintainer_confirm": false,
+   "duplicate_flag": false,
+   "billing_flag": false,
+   "bot_claim": false,
+   "cross_ref_pr": false,
+   "repro_signal": true,
+   "ai_grade_a": true
+  },
+  "created_at": "2026-10-28T01:35:53Z",
+  "discovered_at": "2026-10-28T10:01:30",
+  "status": "new",
+  "lease": null,
+  "source": "cloudflare-worker",
+  "body_excerpt": "### Description\n\nOn the Web UI served over **plain HTTP from a non-localhost origin** (LAN IP / hostname / Tailscale), clicking **Open file** in the side panel's new-tab view does nothing: no tab opens, no toast, no request. The console shows:\n\n```\nUncaught TypeError: crypto.randomUUID is not a function\n```\n\nReview and Terminal launchers in the same panel work. The same server and session work over `http://127.0.0.1:<port>`.\n\nRoot cause: `packages/gui-plugins/src/file/renderer.tsx` opens a new launcher tab with an unguarded `crypto.randomUUID()`:\n\nhttps://github.com/anomalyco/opencode/blob/v2.2.0/packages/gui-plugins/src/file/renderer.tsx#L170\n\n```ts\nif (selected || layout.narrow())\n  layout.open(`file:${selected ?? OPEN}`, session, { tab: \"preview\", background: options?.background })\nelse layout.open(`file:${OPEN}:${crypto.randomUUID()}`, session, { tab: \"select\" })\n```\n\n`crypto.randomUUID` exists only in secure contexts, so on an insecure origin the call throws inside the click handler before `layout.open`, and the click is silently lost. Both the `+` → “Open file” launcher and `Ctrl+Alt+P` reach this branch; narrow layouts (<768px) take the other branch and are unaffected.\n\n### Steps to reproduce\n\n1. Start the Web UI (`opencode serve`, or the background service) and open it from a non-localhost HTTP origin, e.g. `http://<LAN-IP>:<port>/` (Chrome shows “Not secure”).\n2. Open any session and open the side panel (Toggle review).\n3. Click `+` (Add tab), then **Open file**.\n4. Nothing happens; devtools shows `TypeError: crypto.randomUUID is not a function`.\n\nExpected: the file browser tab opens on any origin (id generation should not require a secure context).\n\n### Regression / history\n\n- `v2.1.4` used a fixed key (`file:open`) in `openPicker` and worked on insecure origins.\n- `#57182` (`879479b467`, “allow multiple open file tabs”) introduced `file:${OPEN}:${crypto.randomUUID()}`; `#55246` moved it to `packages/gui-plugins/src/file/renderer.tsx`. First release contai",
+  "ai_grade": {
+   "grade": "A",
+   "score": 9,
+   "reason": "Clear reproducible v2.2.0 regression with root cause and a small fix using an existing guarded uuid helper; no competing work noted.",
+   "model": "deepseek-v4.1-flash"
+  }
+ },
+ "anomalyco/opencode#59789": {
+  "id": "anomalyco/opencode#59789",
+  "repo": "anomalyco/opencode",
+  "number": 59789,
+  "title": "ACP: a failed model or agent switch still changes the selection",
+  "url": "https://github.com/anomalyco/opencode/issues/59789",
+  "lane": "open",
+  "score": 4,
+  "class": "B",
+  "blockers": [],
+  "signals": {
+   "body_len": 1436,
+   "reactions": 0,
+   "labels": [
+    "reproduced"
+   ],
+   "comments": 1,
+   "claim_signal": false,
+   "maintainer_confirm": false,
+   "duplicate_flag": false,
+   "billing_flag": false,
+   "bot_claim": false,
+   "cross_ref_pr": false,
+   "repro_signal": true,
+   "ai_grade_a": true
+  },
+  "created_at": "2026-10-28T01:35:45Z",
+  "discovered_at": "2026-10-28T10:01:30",
+  "status": "new",
+  "lease": null,
+  "source": "cloudflare-worker",
+  "body_excerpt": "### Description\n\nWhen a model or agent switch over ACP fails, the adapter keeps the new value as the current selection anyway. The server is still on the old one, so ACP and the server disagree from then on.\n\nYou see it on the next config change. After a failed switch from a model with `high` effort to one that only has `low` and `medium`, setting effort to `high` fails with `effort not found: high`, even though the session never left the original model. A failed agent switch does the same thing: the next config response shows the rejected agent as the current mode.\n\n### Plugins\n\nNone\n\n### OpenCode version\n\n2.2.0 (dev at 76e1f5b)\n\n### Steps to reproduce\n\nUsing the ACP wire test fixture in `packages/cli/test/acp`:\n\n1. Start a session on `test/test-model`, which has `high` effort. `test/second-model` only has `low` and `medium`.\n2. Make the first `POST /api/session/<id>/model` return a 503.\n3. Switch the model to `test/second-model` with `session/set_config_option`. It returns an error, which is right.\n4. Set effort to `high`. It fails with `-32602`, `effort not found: high`.\n\nThe agent version: fail a switch from `build` to `plan`, then change effort. The response reports `plan` as the mode.\n\nExpected: a failed switch leaves the selection as it was, and later valid changes keep working.\n\n### Screenshot\n\nN/A, protocol only.\n\n### Operating System\n\nmacOS 26.6.2 (arm64), Bun 1.4.4\n\n### Terminal\n\nN/A, not a TUI issue.\n",
+  "ai_grade": {
+   "grade": "A",
+   "score": 9,
+   "reason": "Clear reproducible state-desync bug with steps, expected behavior, and small scoped fix.",
+   "model": "deepseek-v4.1-flash"
+  }
+ },
+ "anomalyco/opencode#59387": {
+  "id": "anomalyco/opencode#59387",
+  "repo": "anomalyco/opencode",
+  "number": 59387,
+  "title": "Free tier issues: read this first, then post your report here",
+  "url": "https://github.com/anomalyco/opencode/issues/59387",
+  "lane": "open",
+  "score": 4,
+  "class": "C",
+  "blockers": [],
+  "signals": {
+   "body_len": 3591,
+   "reactions": 7,
+   "labels": [
+    "zen"
+   ],
+   "comments": 36,
+   "claim_signal": false,
+   "maintainer_confirm": false,
+   "duplicate_flag": false,
+   "billing_flag": false,
+   "bot_claim": false,
+   "cross_ref_pr": false,
+   "repro_signal": false,
+   "ai_grade_a": false
+  },
+  "created_at": "2026-10-26T20:02:23Z",
+  "discovered_at": "2026-10-28T10:01:30",
+  "status": "aborted_stale",
+  "lease": null,
+  "source": "cloudflare-worker",
+  "body_excerpt": "This is the **main issue for free tier problems**. If you see any of these, you're in the right place:\n\n- `Free usage exceeded, subscribe to Go`\n- `Free usage limit reached`\n- `You've used today's free messages. They reset at ...` and the reset never happens\n- `This version of OpenCode Desktop no longer supports free models`\n- `OpenCode's free tier can only be used from within OpenCode`\n- `OpenCode 1.18.0 or newer is required to use the free tier`\n\n**Please comment here instead of opening a new issue.** We're closing duplicates and pointing them here so everything is in one place.\n\n## 1. Make sure you're on the latest OpenCode v2\n\nMost free tier reports come from **OpenCode v1** (versions `0.x` and `1.x`, for example Desktop or CLI `1.19.4`). v1 no longer supports free models and only gets fixes for critical bugs. Updating to v2 has fixed this for many people.\n\nCheck your version:\n\n- **Terminal:** `opencode --version`\n- **Desktop:** Settings → About\n\nThe latest v2 release is **2.1.4**.\n\n> [!IMPORTANT]\n> The v1 Desktop app's built-in updater keeps you on `1.x`. Download v2 manually from **https://opencode.ai/v2/docs**.\n\n### Desktop\n\nDownload v2 Desktop for macOS, Windows or Linux from **https://opencode.ai/v2/docs**, or on macOS:\n\n```sh\nbrew install --cask opencode-desktop\n```\n\n### Terminal (TUI / CLI)\n\nAll install options are listed at **https://opencode.ai/v2/docs**. The quickest on macOS and Linux:\n\n```sh\ncurl -fsSL https://opencode.ai/v2/install | bash\n```\n\nOr use a package manager:\n\n```sh\nnpm install -g @opencode/cli\nbun install -g --trust @opencode/cli\nbrew install anomalyco/tap/opencode-v2\nparu -S opencode-beta\n```\n\nv1 and v2 both use the `opencode` command. If you installed v1 with a package manager, remove it first, for example `npm uninstall -g opencode-ai`. Windows package managers (Chocolatey, Scoop) don't support v2. On Windows, use the Desktop app, npm, or a [standalone binary](https://opencode.ai/v2/docs/).\n\n### Useful docs\n\n- [Install OpenCode v2](htt",
+  "ai_grade": {
+   "grade": "C",
+   "score": 1,
+   "reason": "Meta support/tracking issue for free-tier quota and versioning complaints, not a reproducible code bug; billing/quota and duplicate consolidation are C.",
+   "model": "deepseek-v4.1-flash"
+  },
+  "abort_reason": "opencode Go/server-side usage-metering family (title matches RE_BILLING v2) — bulk cull"
+ },
+ "anomalyco/opencode#52178": {
+  "id": "anomalyco/opencode#52178",
+  "repo": "anomalyco/opencode",
+  "number": 52178,
+  "title": "Zen API: CORS headers only served on /zen/v1/models, all inference endpoints fail preflight (404)",
+  "url": "https://github.com/anomalyco/opencode/issues/52178",
+  "lane": "open",
+  "score": 2,
+  "class": "C",
+  "blockers": [],
+  "signals": {
+   "body_len": 1955,
+   "reactions": 0,
+   "labels": [
+    "reproduced"
+   ],
+   "comments": 4,
+   "claim_signal": false,
+   "maintainer_confirm": false,
+   "duplicate_flag": false,
+   "billing_flag": false,
+   "bot_claim": false,
+   "cross_ref_pr": false,
+   "repro_signal": true,
+   "ai_grade_a": true
+  },
+  "created_at": "2026-09-29T22:13:01Z",
+  "discovered_at": "2026-10-28T10:01:30",
+  "status": "new",
+  "lease": null,
+  "source": "cloudflare-worker",
+  "body_excerpt": "**Description**\n\nZen only serves CORS headers on `/zen/v1/models`. None of the inference endpoints return `Access-Control-Allow-Origin` on preflight, so no third-party browser client can call any Zen model - paid or free.\n\n**Steps to reproduce**\n\n```\n$ curl -i -X OPTIONS https://opencode.ai/zen/v1/models \\\n    -H 'Origin: https://example.com' \\\n    -H 'Access-Control-Request-Method: POST' \\\n    -H 'Access-Control-Request-Headers: accept,content-type,authorization'\nHTTP/2 200\naccess-control-allow-origin: *\naccess-control-allow-headers: Content-Type, Authorization\naccess-control-allow-methods: GET, POST, OPTIONS\n```\n\n```\n$ curl -i -X OPTIONS https://opencode.ai/zen/v1/chat/completions \\\n    -H 'Origin: https://example.com' \\\n    -H 'Access-Control-Request-Method: POST' \\\n    -H 'Access-Control-Request-Headers: accept,content-type,authorization'\nHTTP/2 404\n(no Access-Control-Allow-Origin)\n```\n\nSame 404-with-no-CORS-headers result for every inference path:\n\n```\n/zen/v1/chat/completions          404   gpt-*, qwen3.8-max, deepseek-v4*, kimi-*, glm-*, minimax-*, big-pickle, space-bunny-free\n/zen/v1/responses                 404   grok-*, gpt-*, muse-spark-1.3-contributor-free\n/zen/v1/messages                  404   claude-*, qwen3.5-3.7\n/zen/v1/models/{gemini-*}         404\n/zen/v1/systemone                 404\n```\n\nThe browser fails the preflight and never issues the POST, so the client reports a generic connection/CORS error. Meanwhile `GET /zen/v1/models` succeeds, which makes it look like the base URL and API key are correct.\n\n**Expected**\n\nAll `/zen/v1/*` endpoints behind the gateway should return the same CORS headers as `/zen/v1/models`, so third-party web clients can use Zen.\n\n**Note (separate issue)**\n\nFree-tier models return `403 FreeTierError: \"OpenCode's free tier can only be used from within OpenCode\"`, which is not documented. Paid models are unaffected. Reporting the CORS gap here, which also affects paid models.\n",
+  "ai_grade": {
+   "grade": "A",
+   "score": 9,
+   "reason": "Reproduced, clearly scoped CORS/preflight bug affecting all inference endpoints with concrete curl evidence and a confined gateway fix.",
    "model": "deepseek-v4.1-flash"
   }
  }

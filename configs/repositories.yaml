@@ -35,6 +35,7 @@ repositories:
   volcengine/OpenViking:        {lane: open}   #  65%  41.2k  自演化上下文数据库
   oceanbase/powercontext:       {lane: open}   #  57%   1.4k  长期记忆 + 交接
   ruvnet/RuVector:              {lane: open}   #  53%   4.6k  实时决策向量层
+  mem0ai/mem0:                  {lane: open}   # 新增  68.1k  通用 agent 记忆层（需签 CLA，一次性）
 
   # ========== Agent 框架 / Harness ==========
   openai/openai-agents-python:  {lane: open}   #  91%  30.4k  OpenAI 官方
@@ -47,9 +48,12 @@ repositories:
 
   # ========== 向量库 ==========
   lancedb/lancedb:              {lane: open}   #  87%  11.8k  嵌入式列式
-  milvus-io/milvus:             {lane: open}   #  76%  46.5k  云原生亿级
-  weaviate/weaviate:            {lane: open}   #  74%  16.9k  混合检索
+  milvus-io/milvus:             {lane: open}   #  76%  46.5k  云原生亿级  [需 DCO，已自动签名]
+  # weaviate 已移除（2026-10-30）：CONTRIBUTING 明写会无审核关闭 "bulk automated
+  # or AI-generated changes"，并强制 CLA。我们正是自动化提交，落在这条规则正中间。
   qdrant/qdrant:                {lane: open}   #  60%  35.3k  Rust 单机首选
+  chroma-core/chroma:           {lane: open}   # 新增  29.6k  开发者友好的嵌入式向量库
+  pgvector/pgvector:            {lane: open}   # 新增  23.5k  Postgres 向量扩展（C，代码库小）
 
   # ========== MCP ==========
   upstash/context7:             {lane: open}   #  63%  64.0k  最新库文档

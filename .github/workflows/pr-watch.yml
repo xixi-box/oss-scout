@@ -1,0 +1,48 @@
+name: PR watch
+
+# PR 开出去之后的闭环。Playbook §2① 一直写着这段该做什么（CI 失败要修、
+# maintainer 意见 48 小时内响应、被关要记录原因），但从来没实现过——PR 一开出去
+# 就没人管了。
+#
+# 为什么不收 webhook：GitHub 的 webhook 注册在仓库上，要接收上游仓库（mypy、
+# milvus 等）的事件需要那个仓库的 admin 权限，我们没有。所以用轮询。
+#
+# 每 30 分钟一次：足够快地看着 CI 结果，又不会把 API 配额烧光（每次约 20 个 PR
+# × 1 次 GraphQL）。
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: pip install pyyaml
+
+      - name: Classify our open PRs
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: |
+          set -euo pipefail
+          python scripts/monitor_prs.py | tee /tmp/pr_watch.txt
+
+      - name: Summarize
+        if: always()
+        run: |
+          {
+            echo "### PR watch"
+            echo '```'
+            cat /tmp/pr_watch.txt 2>/dev/null | tail -40 || echo "no output"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

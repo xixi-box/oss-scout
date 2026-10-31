@@ -22,6 +22,7 @@ repositories:
   volcengine/OpenViking:        {requires_invite: false}
   oceanbase/powercontext:       {requires_invite: false}
   ruvnet/RuVector:              {requires_invite: false}
+  mem0ai/mem0:                  {requires_invite: false, requires_cla: true}
 
   # ---- Agent 框架 ----
   openai/openai-agents-python:  {requires_invite: false}
@@ -34,9 +35,11 @@ repositories:
 
   # ---- 向量库 ----
   lancedb/lancedb:              {requires_invite: false}
-  milvus-io/milvus:             {requires_invite: false}
-  weaviate/weaviate:            {requires_invite: false}
+  milvus-io/milvus:             {requires_invite: false, requires_dco: true}
+  # weaviate 已移出：会无审核关闭自动化/AI 生成的改动，且强制 CLA。
   qdrant/qdrant:                {requires_invite: false}
+  chroma-core/chroma:           {requires_invite: false}
+  pgvector/pgvector:            {requires_invite: false}
 
   # ---- MCP ----
   upstash/context7:             {requires_invite: false}

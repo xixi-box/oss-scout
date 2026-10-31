@@ -249,6 +249,18 @@ class ClaimLedger:
             cur.execute("ROLLBACK")
             raise
 
+    def count_today(self, tz_name: str, now: dt.datetime | None = None) -> int:
+        """当日业务时区已用掉几个认领名额。
+
+        额度判断必须读这张表而不是 worklog：表里有唯一约束，worklog 是
+        追加日志，重复记录会让计数偏高、把额度误判成已用尽。
+        """
+        now = now or dt.datetime.now()
+        day = business_day(now, tz_name)
+        row = self._conn.execute(
+            "SELECT COUNT(*) FROM claim_days WHERE day=?", (day,)).fetchone()
+        return int(row[0] if row else 0)
+
     def release_day(self, day: str | None = None) -> None:
         """仅测试/运维回滚用：删除某日占额记录。"""
         if day is None:

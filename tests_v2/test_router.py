@@ -170,3 +170,85 @@ class TestOutOfScopeIsTerminal:
                                "blockers": [], "ai_verdict": {"usable": True}},
             }), encoding="utf-8")
             assert drain_ai_graded(root, limit=5, dry_run=True) == []
+
+
+class TestStagedCandidates:
+    """额度用完后的候选暂存：今天做不完的留到明天，不是丢弃也不是反复扫描。
+
+    2026-10-30（用户裁定）：每天至多 2 个 PR。当天额度用完之后又识别出可处理的
+    issue，先存着，第二天**先清暂存**；暂存空了才接当天新扫的。暂存超过 3 天
+    丢弃——放三天的 issue 多半已经被人修了或关了。
+    """
+
+    def _root(self, tmp_path, entries):
+        import json as _json
+        (tmp_path / "queue").mkdir(parents=True)
+        (tmp_path / "queue" / "candidates.json").write_text(
+            _json.dumps(entries), encoding="utf-8")
+        return tmp_path
+
+    def _read(self, root):
+        import json as _json
+        return _json.loads((root / "queue" / "candidates.json").read_text(encoding="utf-8"))
+
+    def test_staged_come_before_fresh(self, tmp_path):
+        """暂存项必须排在当天新扫的前面。"""
+        from scout_v2.workers.auto_pipeline import drain_ai_graded
+        root = self._root(tmp_path, {
+            "a/fresh#2": {"id": "a/fresh#2", "repo": "a/fresh", "number": 2,
+                          "status": "new", "blockers": [],
+                          "discovered_at": "2026-10-30T01:00:00",
+                          "ai_verdict": {"usable": True}},
+            "a/old#1": {"id": "a/old#1", "repo": "a/old", "number": 1,
+                        "status": "staged", "blockers": [],
+                        "staged_at": "2026-10-29T01:00:00",
+                        "discovered_at": "2026-10-29T01:00:00",
+                        "ai_verdict": {"usable": True}},
+        })
+        ready = drain_ai_graded(root, limit=1, dry_run=True)
+        assert [r["id"] for r in ready] == ["a/old#1"]
+
+    def test_overflow_is_staged_not_dropped(self, tmp_path):
+        """额度只剩 1 条时，新扫到的其余候选标 staged 并记时间。"""
+        from scout_v2.workers.auto_pipeline import drain_ai_graded
+        entries = {
+            f"a/r#{i}": {"id": f"a/r#{i}", "repo": "a/r", "number": i,
+                         "status": "new", "blockers": [],
+                         "discovered_at": f"2026-10-30T0{i}:00:00",
+                         "ai_verdict": {"usable": True}}
+            for i in range(1, 4)
+        }
+        root = self._root(tmp_path, entries)
+        drain_ai_graded(root, limit=1, dry_run=False)
+        q = self._read(root)
+        staged = [k for k, v in q.items() if v.get("status") == "staged"]
+        assert len(staged) == 2
+        assert all(q[k].get("staged_at") for k in staged)
+
+    def test_expired_stage_is_dropped(self, tmp_path):
+        """超过 3 天的暂存不再参与派发。"""
+        from scout_v2.workers.auto_pipeline import drain_ai_graded
+        root = self._root(tmp_path, {
+            "a/stale#1": {"id": "a/stale#1", "repo": "a/stale", "number": 1,
+                          "status": "staged", "blockers": [],
+                          "staged_at": "2026-10-01T00:00:00",
+                          "ai_verdict": {"usable": True}},
+        })
+        assert drain_ai_graded(root, limit=5, dry_run=True) == []
+
+    def test_existing_stage_keeps_original_timestamp(self, tmp_path):
+        """已经在暂存里的不能被刷新 staged_at，否则永远不会过期。"""
+        from scout_v2.workers.auto_pipeline import drain_ai_graded
+        root = self._root(tmp_path, {
+            "a/keep#1": {"id": "a/keep#1", "repo": "a/keep", "number": 1,
+                         "status": "staged", "blockers": [],
+                         "staged_at": "2026-10-29T08:00:00",
+                         "ai_verdict": {"usable": True}},
+            "a/new#2": {"id": "a/new#2", "repo": "a/new", "number": 2,
+                        "status": "new", "blockers": [],
+                        "discovered_at": "2026-10-30T09:00:00",
+                        "ai_verdict": {"usable": True}},
+        })
+        drain_ai_graded(root, limit=1, dry_run=False)
+        q = self._read(root)
+        assert q["a/keep#1"]["staged_at"] == "2026-10-29T08:00:00"

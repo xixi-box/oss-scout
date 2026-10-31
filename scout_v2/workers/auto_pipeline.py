@@ -58,8 +58,14 @@ def _data_root(root: Path) -> Path:
 def log(root: Path, action: str, target: str, result: str) -> None:
     rec = {"ts": time.strftime("%Y-%m-%dT%H:%M:%S"), "action": f"pipeline_{action}",
            "target": target, "result": result[:500]}
-    with (root / "state" / "worklog.jsonl").open("a", encoding="utf-8") as f:
-        f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+    # worklog 是唯一审计账本，写日志失败不该让调用方崩掉：暂存这类状态变更
+    # 在 queue 里已经落盘，日志只是留痕。
+    try:
+        (root / "state").mkdir(parents=True, exist_ok=True)
+        with (root / "state" / "worklog.jsonl").open("a", encoding="utf-8") as f:
+            f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+    except OSError:
+        pass
 
 
 def mark_candidate(root: Path, key: str, status: str,
@@ -752,21 +758,99 @@ def _publish_pr(root: Path, entry: dict, base_sha: str, patch_file: Path,
 
 # ---------------- 候选筛选 ----------------
 
-def drain_ai_graded(root: Path, limit: int = 3, dry_run: bool = True) -> list[dict]:
+def _stage_candidates(root: Path, keys: list[str]) -> int:
+    """把候选标成暂存，留到下一轮再处理。返回实际改动的条数。
+
+    用于额度用完之后：ingest 一次扫到 10 条、今天只剩 1 个额度，剩下 9 条不该
+    继续躺在 new 里被每轮反复扫描，也不该丢掉——标 staged 并记时间，drain 时
+    会优先清暂存。
+    """
+    if not keys:
+        return 0
+    p = root / "queue" / "candidates.json"
+    try:
+        q = json.loads(p.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        return 0
+    n = 0
+    now_iso = time.strftime("%Y-%m-%dT%H:%M:%S")
+    for key in keys:
+        e = q.get(key)
+        if not isinstance(e, dict) or e.get("status") not in ("new", "queued"):
+            continue
+        e["status"] = STAGED_STATUS
+        e.setdefault("staged_at", now_iso)
+        n += 1
+    if n:
+        tmp = p.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(q, ensure_ascii=False, indent=1), encoding="utf-8")
+        json.loads(tmp.read_text(encoding="utf-8"))
+        os.replace(tmp, p)
+        log(root, "stage", f"{n} candidates", "deferred (daily budget exhausted)")
+    return n
+
+
+STAGED_STATUS = "staged"          # 今天额度用完了，留到明天再处理
+STAGE_TTL_DAYS = 3                # 暂存超过这个天数就丢，避免拿陈旧的 issue 去修
+
+
+def _stage_age_days(entry: dict) -> float:
+    """候选进入暂存状态多久了（天）。时间戳缺失按 0 处理（当作刚暂存）。"""
+    ts = entry.get("staged_at") or entry.get("discovered_at") or ""
+    if not ts:
+        return 0.0
+    try:
+        then = time.mktime(time.strptime(ts[:19], "%Y-%m-%dT%H:%M:%S"))
+    except (ValueError, TypeError):
+        return 0.0
+    return max(0.0, (time.time() - then) / 86400.0)
+
+
+def _order_candidates(entries: list[tuple[str, dict]]) -> list[tuple[str, dict]]:
+    """暂存优先，且同组内先到先出。
+
+    2026-10-30（用户裁定）：每天额度用完之后，当天新识别出的可处理 issue 不要
+    丢，也不要挤掉明天——存起来，第二天**先清暂存**，暂存清完才接当天新扫的。
+    这样额度紧张时优先消化积压，同时保证昨天的发现不会因为今天又扫到一堆新的
+    就永远排不上。
+
+    超过 STAGE_TTL_DAYS 的暂存直接丢弃：一个 issue 放了三天，多半已经被人修了、
+    被关了，或者上下文已经变了；拿去修反而浪费额度并可能撞车。
+    """
+    staged, fresh = [], []
+    for key, e in entries:
+        if e.get("status") == STAGED_STATUS:
+            if _stage_age_days(e) > STAGE_TTL_DAYS:
+                continue
+            staged.append((key, e))
+        else:
+            fresh.append((key, e))
+    # 暂存组按进入时间正序（最早暂存的先做）；新候选按发现时间正序
+    staged.sort(key=lambda kv: str(kv[1].get("staged_at")
+                                   or kv[1].get("discovered_at") or ""))
+    fresh.sort(key=lambda kv: str(kv[1].get("discovered_at") or ""))
+    return staged + fresh
+
+
+def drain_ai_graded(root: Path, limit: int = 3, dry_run: bool = True,
+                    max_new_claims: int = 0) -> list[dict]:
     """扫描候选池：AI 判定可处理、无客观否决、未处理过的 → 逐条走后端 pipeline。
 
     2026-10-30（用户裁定）：入口只看 AI 的二元判断。规则打分那套加分表
     （reactions/龄/标签权重）已删除——它是在 AI 评分之前写的启发式，等于对
     AI 的判断再加一道更粗糙的复核，两层经常互相打架。规则只留客观事实否决
     （blockers 非空 = 已有 PR / 认领信号 / 纯文档 / 计费抱怨这类不需要判断的事实）。
+
+    max_new_claims：当日还剩几个额度。额度耗尽时今天新识别出的候选标成
+    staged（留到明天），而不是留在 new 里等着被同一轮反复扫描。
     """
     root = _data_root(root)
-    q = json.loads((root / "queue" / "candidates.json").read_text(encoding="utf-8"))
-    picked = []
+    qpath = root / "queue" / "candidates.json"
+    q = json.loads(qpath.read_text(encoding="utf-8"))
+    ACTIVE = ("new", "queued", "queued_hist", "recheck_failed", STAGED_STATUS)
+    eligible: list[tuple[str, dict]] = []
     for key, e in q.items():
-        if len(picked) >= limit:
-            break
-        if e.get("status") not in ("new", "queued", "queued_hist", "recheck_failed"):
+        if e.get("status") not in ACTIVE:
             continue
         if e.get("blockers"):
             continue
@@ -777,9 +861,34 @@ def drain_ai_graded(root: Path, limit: int = 3, dry_run: bool = True) -> list[di
             usable = (e.get("ai_grade") or {}).get("grade") == "A"
         if usable is not True:
             continue
+        eligible.append((key, e))
+
+    ordered = _order_candidates(eligible)
+    picked: list[dict] = []
+    to_stage: list[str] = []
+    for key, e in ordered:
+        if len(picked) >= limit:
+            # 额度（或本轮并发）用完：把今天新扫到的留到明天。
+            # 已经在暂存里的不动——它的 staged_at 要保持原值，否则永远不会过期。
+            if e.get("status") != STAGED_STATUS:
+                to_stage.append(key)
+            continue
         picked.append(e)
+
+    if to_stage and not dry_run:
+        for key in to_stage:
+            q[key]["status"] = STAGED_STATUS
+            q[key].setdefault("staged_at", time.strftime("%Y-%m-%dT%H:%M:%S"))
+        tmp = qpath.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(q, ensure_ascii=False, indent=1), encoding="utf-8")
+        json.loads(tmp.read_text(encoding="utf-8"))
+        os.replace(tmp, qpath)
+        log(root, "stage", f"{len(to_stage)} candidates",
+            "deferred to next run: " + ", ".join(to_stage[:5]))
+
     if dry_run:
         return [{"id": e["id"], "repo": e["repo"], "number": e["number"],
+                 "status": e.get("status"),
                  "ai": (e.get("ai_verdict") or {}).get("reason", "")[:60],
                  "dry_run": True} for e in picked]
     out = []

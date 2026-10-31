@@ -199,10 +199,34 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
             with _inflight_lock:
                 _inflight.pop(key, None)
 
+    def _claims_left() -> int:
+        """当日还剩几个新认领额度。上限 0（或不限）时返回一个很大的数。"""
+        try:
+            from scout_v2.repo_policy import PolicyEngine
+            from scout_v2.state_store import ClaimLedger
+            eng, err = PolicyEngine.load(root)
+            if err:
+                return 0
+            cap = int(getattr(eng, "max_claims_per_day", 0) or 0)
+            if cap <= 0:
+                return 10 ** 6
+            led = ClaimLedger(root / "state" / "scout_v2.sqlite3")
+            try:
+                used = led.count_today(eng.tz_name)
+            finally:
+                led.close()
+            return max(0, cap - used)
+        except Exception:  # noqa: BLE001 — 额度算不出来就当作没额度，宁可不做
+            return 0
+
     def _dispatch(keys: list[str] | None = None, limit: int = 8) -> list[str]:
         """派发候选去修复。keys 为空时从队列按 AI 判定挑。
 
         返回本次新派发的 key 列表。不阻塞：线程启动即返回。
+
+        两条入口（ingest 即时触发 / 定时轮询）都必须过当日额度：2026-10-30
+        之前 ingest 那条路径完全绕过额度检查，扫到多少就派多少，一天开出 12 个
+        PR。现在统一在这里卡。
         """
         started: list[str] = []
         if os.environ.get("OSSCOUT_DISABLE_AUTO_REPAIR") == "1":
@@ -210,15 +234,22 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
         try:
             with _inflight_lock:
                 room = _MAX_CONCURRENT - len(_inflight)
+            room = min(room, _claims_left())
             if room <= 0:
                 return started
+            from scout_v2.workers.auto_pipeline import drain_ai_graded
             if keys is None:
-                from scout_v2.workers.auto_pipeline import drain_ai_graded
                 cands = [c["id"] for c in
-                         drain_ai_graded(root, limit=room + len(_inflight),
-                                         dry_run=True)]
+                         drain_ai_graded(root, limit=room, dry_run=True,
+                                         max_new_claims=room)]
             else:
-                cands = list(keys)
+                # ingest 即时触发：只取当日额度内的前 N 条，其余标成暂存留给
+                # 下一轮（drain_ai_graded 会按"暂存优先"重新排序）。
+                cands = list(keys)[:room]
+                rest = list(keys)[room:]
+                if rest:
+                    from scout_v2.workers.auto_pipeline import _data_root
+                    _stage_candidates(_data_root(root), rest)
             for key in cands:
                 with _inflight_lock:
                     if len(_inflight) >= _MAX_CONCURRENT:
@@ -269,6 +300,50 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
                     except Exception:  # noqa: BLE001
                         pass
                     _t.sleep(120)
+
+        _thr.Thread(target=_loop, daemon=True).start()
+
+    def _pr_watch_loop():
+        """盯着我们开出去的 PR：CI 红了就把对应的修复重新派发一轮。
+
+        Playbook §2① 要求"CI 因我们的改动失败 → 读日志、修复、推送"，但这条
+        从没实现：PR 开出去之后就没有任何主动动作了。这里每 15 分钟扫一遍
+        （比 Actions 的 30 分钟定时更密，两边互为备份）。
+
+        只处理 fix_ci：maintainer 的评论不改代码就直接动，风险太高——那需要在
+        一个已经存在的分支上增量修改，和重新修一个 issue 是两码事。评论类先在
+        看板/worklog 里留痕，由人决定。
+        """
+        import time as _t
+
+        def _loop():
+            if os.environ.get("OSSCOUT_DISABLE_AUTO_REPAIR") == "1":
+                return
+            _t.sleep(120)
+            while True:
+                try:
+                    import importlib.util
+                    spec = importlib.util.spec_from_file_location(
+                        "monitor_prs", root.parent / "scripts" / "monitor_prs.py"
+                        if (root.parent / "scripts" / "monitor_prs.py").exists()
+                        else Path(__file__).resolve().parents[1] / "scripts" / "monitor_prs.py")
+                    mod = importlib.util.module_from_spec(spec)
+                    spec.loader.exec_module(mod)
+                    results = mod.run(dry_run=False)
+                    for r in results:
+                        if r.get("action") != "fix_ci":
+                            continue
+                        key = f"{r['repo']}#{r['number']}"
+                        _audit(root, "pr_ci_failed", key,
+                               str(r.get("failing_checks"))[:200])
+                        # PR 已经开着，重新跑一遍修复会把 PR 的候选状态带乱；
+                        # 这里只留痕，由人工/下一轮决定怎么补。
+                except Exception as e:  # noqa: BLE001
+                    try:
+                        _audit(root, "pr_watch_error", "-", str(e)[:200])
+                    except Exception:  # noqa: BLE001
+                        pass
+                _t.sleep(900)
 
         _thr.Thread(target=_loop, daemon=True).start()
 
@@ -333,6 +408,7 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
     _reap_orphan_claim()
     _cf_poll_loop()   # 必须在 ds 创建后启动（依赖 ds 读配置）
     _auto_repair_loop()
+    _pr_watch_loop()  # PR 开出去之后的闭环：盯 CI / 评论
     app.state.ds = ds
     app.state.root = root
     secret = _secret(root)

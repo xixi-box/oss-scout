@@ -989,7 +989,7 @@
   "url": "https://github.com/anomalyco/opencode/issues/58874",
   "lane": "open",
   "score": 4,
-  "class": "B",
+  "class": "C",
   "blockers": [],
   "signals": {
    "body_len": 1412,
@@ -1009,9 +1009,10 @@
   },
   "created_at": "2026-10-25T04:31:16Z",
   "discovered_at": "2026-10-25T12:41:25",
-  "status": "new",
+  "status": "aborted_stale",
   "lease": null,
-  "source": "cloudflare-worker"
+  "source": "cloudflare-worker",
+  "abort_reason": "opencode Go/server-side usage-metering family (title matches RE_BILLING v2) — bulk cull"
  },
  "anomalyco/opencode#58859": {
   "id": "anomalyco/opencode#58859",
@@ -1021,7 +1022,7 @@
   "url": "https://github.com/anomalyco/opencode/issues/58859",
   "lane": "open",
   "score": 4,
-  "class": "B",
+  "class": "C",
   "blockers": [],
   "signals": {
    "body_len": 984,
@@ -1041,9 +1042,10 @@
   },
   "created_at": "2026-10-25T03:46:44Z",
   "discovered_at": "2026-10-25T12:41:25",
-  "status": "new",
+  "status": "aborted_stale",
   "lease": null,
-  "source": "cloudflare-worker"
+  "source": "cloudflare-worker",
+  "abort_reason": "opencode Go/server-side usage-metering family (title matches RE_BILLING v2) — bulk cull"
  },
  "anomalyco/opencode#58876": {
   "id": "anomalyco/opencode#58876",
@@ -1053,7 +1055,7 @@
   "url": "https://github.com/anomalyco/opencode/issues/58876",
   "lane": "open",
   "score": 4,
-  "class": "B",
+  "class": "C",
   "blockers": [],
   "signals": {
    "body_len": 372,
@@ -1070,9 +1072,10 @@
   },
   "created_at": "2026-10-25T04:42:46Z",
   "discovered_at": "2026-10-25T12:43:48",
-  "status": "new",
+  "status": "aborted_stale",
   "lease": null,
-  "source": "cloudflare-worker"
+  "source": "cloudflare-worker",
+  "abort_reason": "opencode Go/server-side usage-metering family (title matches RE_BILLING v2) — bulk cull"
  },
  "anomalyco/opencode#56862": {
   "id": "anomalyco/opencode#56862",
@@ -1300,7 +1303,7 @@
   "url": "https://github.com/anomalyco/opencode/issues/58906",
   "lane": "open",
   "score": 4,
-  "class": "B",
+  "class": "C",
   "blockers": [],
   "signals": {
    "body_len": 427,
@@ -1317,7 +1320,7 @@
   },
   "created_at": "2026-10-25T06:13:37Z",
   "discovered_at": "2026-10-25T14:14:39",
-  "status": "new",
+  "status": "aborted_stale",
   "lease": null,
   "source": "cloudflare-worker",
   "ai_grade": {
@@ -1325,7 +1328,8 @@
    "score": 1,
    "reason": "Billing/quota complaint with no reproduction or actionable bug details.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "abort_reason": "opencode Go/server-side usage-metering family (title matches RE_BILLING v2) — bulk cull"
  },
  "anomalyco/opencode#58909": {
   "id": "anomalyco/opencode#58909",
@@ -1370,7 +1374,7 @@
   "url": "https://github.com/anomalyco/opencode/issues/58781",
   "lane": "open",
   "score": 6,
-  "class": "A",
+  "class": "C",
   "blockers": [],
   "signals": {
    "body_len": 945,
@@ -1390,7 +1394,7 @@
   },
   "created_at": "2026-10-24T18:58:55Z",
   "discovered_at": "2026-10-25T15:15:29",
-  "status": "new",
+  "status": "aborted_stale",
   "lease": null,
   "source": "cloudflare-worker",
   "ai_grade": {
@@ -1398,7 +1402,8 @@
    "score": 0,
    "reason": "Billing/quota complaint about free usage limits, not an actionable reproducible code bug.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "abort_reason": "opencode Go/server-side usage-metering family (title matches RE_BILLING v2) — bulk cull"
  },
  "infiniflow/ragflow#21435": {
   "id": "infiniflow/ragflow#21435",
@@ -1427,7 +1432,7 @@
   },
   "created_at": "2026-10-25T00:37:51Z",
   "discovered_at": "2026-10-25T15:18:03",
-  "status": "new",
+  "status": "out_of_scope",
   "lease": null,
   "source": "cloudflare-worker",
   "ai_grade": {
@@ -1435,7 +1440,9 @@
    "score": 8,
    "reason": "Clear reproducible ingestion-pipeline bug with concrete steps and exact error, likely a small fix to avoid sending empty inputs to embeddings; no duplicate/feature signal.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "updated_at": "2026-10-31T09:16:23",
+  "abort_reason": "lane=unknown no action"
  },
  "crewAIInc/crewAI#8556": {
   "id": "crewAIInc/crewAI#8556",
@@ -1462,7 +1469,7 @@
   },
   "created_at": "2026-10-25T07:20:21Z",
   "discovered_at": "2026-10-25T15:22:50",
-  "status": "new",
+  "status": "out_of_scope",
   "lease": null,
   "source": "cloudflare-worker",
   "ai_grade": {
@@ -1470,7 +1477,9 @@
    "score": 9,
    "reason": "Clear reproducible crash from an unguarded storage call, with small localized fix and no competing work.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "updated_at": "2026-10-31T09:17:23",
+  "abort_reason": "lane=unknown no action"
  },
  "anomalyco/opencode#58917": {
   "id": "anomalyco/opencode#58917",
@@ -1515,7 +1524,7 @@
   "url": "https://github.com/anomalyco/opencode/issues/58919",
   "lane": "open",
   "score": 4,
-  "class": "B",
+  "class": "C",
   "blockers": [],
   "signals": {
    "body_len": 682,
@@ -1535,7 +1544,7 @@
   },
   "created_at": "2026-10-25T07:32:46Z",
   "discovered_at": "2026-10-25T15:35:09",
-  "status": "new",
+  "status": "aborted_stale",
   "lease": null,
   "source": "cloudflare-worker",
   "ai_grade": {
@@ -1543,7 +1552,8 @@
    "score": 2,
    "reason": "Billing/quota complaint about free usage limits, not a reproducible code bug.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "abort_reason": "opencode Go/server-side usage-metering family (title matches RE_BILLING v2) — bulk cull"
  },
  "crewAIInc/crewAI#8558": {
   "id": "crewAIInc/crewAI#8558",
@@ -1570,7 +1580,7 @@
   },
   "created_at": "2026-10-25T07:36:30Z",
   "discovered_at": "2026-10-25T15:38:07",
-  "status": "new",
+  "status": "out_of_scope",
   "lease": null,
   "source": "cloudflare-worker",
   "ai_grade": {
@@ -1578,7 +1588,9 @@
    "score": 9,
    "reason": "Clear, reproducible bug in a specific storage method with exact repro and small fix scope; no competing work.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "updated_at": "2026-10-31T08:20:48",
+  "abort_reason": "lane=unknown no action"
  },
  "crewAIInc/crewAI#8560": {
   "id": "crewAIInc/crewAI#8560",
@@ -1716,7 +1728,7 @@
   },
   "created_at": "2026-10-25T00:00:00Z",
   "discovered_at": "2026-10-25T16:47:26",
-  "status": "new",
+  "status": "aborted_competed",
   "lease": null,
   "source": "cloudflare-worker",
   "body_excerpt": "Steps to reproduce: call div(7,2) in calc.py at main. Expected 3.5, actual 3. The regression test test_div.py fails on current main. Fix the implementation, not the test.",
@@ -1725,7 +1737,8 @@
    "score": 9,
    "reason": "Clear reproducible regression with failing test, expected behavior specified, and small implementation-only scope.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "updated_at": "2026-10-31T08:13:30"
  },
  "OpenHands/OpenHands#18924": {
   "id": "OpenHands/OpenHands#18924",
@@ -1754,7 +1767,7 @@
   },
   "created_at": "2026-10-25T08:46:50Z",
   "discovered_at": "2026-10-25T16:48:34",
-  "status": "new",
+  "status": "out_of_scope",
   "lease": null,
   "source": "cloudflare-worker",
   "ai_grade": {
@@ -1762,7 +1775,9 @@
    "score": 9,
    "reason": "Clear reproducible Escape-key bug in two menus, precise steps and file identified, small scoped fix with no competing work noted.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "updated_at": "2026-10-31T08:13:24",
+  "abort_reason": "lane=unknown no action"
  },
  "crewAIInc/crewAI#7695": {
   "id": "crewAIInc/crewAI#7695",
@@ -1791,7 +1806,7 @@
   },
   "created_at": "2026-09-21T17:13:22Z",
   "discovered_at": "2026-10-25T17:15:21",
-  "status": "new",
+  "status": "out_of_scope",
   "lease": null,
   "source": "cloudflare-worker",
   "ai_grade": {
@@ -1799,7 +1814,9 @@
    "score": 9,
    "reason": "Clear reproducible Flow routing bug with minimal repro, expected/actual behavior, and narrow fix scope; no competing work indicated.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "updated_at": "2026-10-31T08:13:24",
+  "abort_reason": "lane=unknown no action"
  },
  "anomalyco/opencode#58932": {
   "id": "anomalyco/opencode#58932",
@@ -1844,7 +1861,7 @@
   "url": "https://github.com/anomalyco/opencode/issues/58933",
   "lane": "open",
   "score": 4,
-  "class": "B",
+  "class": "C",
   "blockers": [],
   "signals": {
    "body_len": 1284,
@@ -1861,7 +1878,7 @@
   },
   "created_at": "2026-10-25T09:21:35Z",
   "discovered_at": "2026-10-25T17:32:14",
-  "status": "new",
+  "status": "aborted_stale",
   "lease": null,
   "source": "cloudflare-worker",
   "ai_grade": {
@@ -1869,7 +1886,8 @@
    "score": 1,
    "reason": "Quota/cooldown complaint asking for clarification, not a reproducible small-scope code bug.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "abort_reason": "opencode Go/server-side usage-metering family (title matches RE_BILLING v2) — bulk cull"
  },
  "langfuse/langfuse#19345": {
   "id": "langfuse/langfuse#19345",
@@ -1896,7 +1914,7 @@
   },
   "created_at": "2026-10-25T09:25:57Z",
   "discovered_at": "2026-10-25T17:34:07",
-  "status": "new",
+  "status": "aborted_competed",
   "lease": null,
   "source": "cloudflare-worker",
   "ai_grade": {
@@ -1904,7 +1922,8 @@
    "score": 9,
    "reason": "Clear, narrow bug in CommandMenu where closing does not reset/cancel debounced search, with plausible repro and no competing work.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "updated_at": "2026-10-31T08:14:39"
  },
  "OpenHands/OpenHands#18928": {
   "id": "OpenHands/OpenHands#18928",
@@ -2038,7 +2057,7 @@
   },
   "created_at": "2026-10-25T09:40:03Z",
   "discovered_at": "2026-10-25T17:40:56",
-  "status": "new",
+  "status": "out_of_scope",
   "lease": null,
   "source": "cloudflare-worker",
   "ai_grade": {
@@ -2046,7 +2065,9 @@
    "score": 9,
    "reason": "Clear, reproducible tz-aware datetime comparison bug with specific backends, repro, and expected behavior; small actionable fix.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "updated_at": "2026-10-31T08:14:24",
+  "abort_reason": "lane=unknown no action"
  },
  "anomalyco/opencode#58937": {
   "id": "anomalyco/opencode#58937",
@@ -2108,7 +2129,7 @@
   },
   "created_at": "2026-10-25T09:45:48Z",
   "discovered_at": "2026-10-25T17:47:34",
-  "status": "new",
+  "status": "out_of_scope",
   "lease": null,
   "source": "cloudflare-worker",
   "ai_grade": {
@@ -2116,7 +2137,9 @@
    "score": 9,
    "reason": "Clear reproducible bug with a small localized fix and no apparent duplicate/competing work.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "updated_at": "2026-10-31T08:19:48",
+  "abort_reason": "lane=unknown no action"
  },
  "anomalyco/opencode#58928": {
   "id": "anomalyco/opencode#58928",
@@ -2126,7 +2149,7 @@
   "url": "https://github.com/anomalyco/opencode/issues/58928",
   "lane": "open",
   "score": 3,
-  "class": "B",
+  "class": "C",
   "blockers": [],
   "signals": {
    "body_len": 274,
@@ -2146,7 +2169,7 @@
   },
   "created_at": "2026-10-25T09:04:20Z",
   "discovered_at": "2026-10-25T18:01:37",
-  "status": "new",
+  "status": "aborted_stale",
   "lease": null,
   "source": "cloudflare-worker",
   "ai_grade": {
@@ -2154,7 +2177,8 @@
    "score": 0,
    "reason": "Billing/quota complaint about free usage limits, not an actionable reproducible bug.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "abort_reason": "opencode Go/server-side usage-metering family (title matches RE_BILLING v2) — bulk cull"
  },
  "anomalyco/opencode#58926": {
   "id": "anomalyco/opencode#58926",
@@ -2164,7 +2188,7 @@
   "url": "https://github.com/anomalyco/opencode/issues/58926",
   "lane": "open",
   "score": 3,
-  "class": "B",
+  "class": "C",
   "blockers": [],
   "signals": {
    "body_len": 388,
@@ -2184,7 +2208,7 @@
   },
   "created_at": "2026-10-25T08:49:51Z",
   "discovered_at": "2026-10-25T18:01:37",
-  "status": "new",
+  "status": "aborted_stale",
   "lease": null,
   "source": "cloudflare-worker",
   "ai_grade": {
@@ -2192,7 +2216,8 @@
    "score": null,
    "reason": "<urlopen error [SSL: UNEXPECTED_EOF_WHILE_READING] EOF occurred in violation of protocol (_ssl.c:1082)>",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "abort_reason": "opencode Go/server-side usage-metering family (title matches RE_BILLING v2) — bulk cull"
  },
  "anomalyco/opencode#58912": {
   "id": "anomalyco/opencode#58912",
@@ -2202,7 +2227,7 @@
   "url": "https://github.com/anomalyco/opencode/issues/58912",
   "lane": "open",
   "score": 3,
-  "class": "B",
+  "class": "C",
   "blockers": [],
   "signals": {
    "body_len": 707,
@@ -2222,7 +2247,7 @@
   },
   "created_at": "2026-10-25T06:53:45Z",
   "discovered_at": "2026-10-25T18:01:37",
-  "status": "new",
+  "status": "aborted_stale",
   "lease": null,
   "source": "cloudflare-worker",
   "ai_grade": {
@@ -2230,7 +2255,8 @@
    "score": null,
    "reason": "<urlopen error [SSL: UNEXPECTED_EOF_WHILE_READING] EOF occurred in violation of protocol (_ssl.c:1082)>",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "abort_reason": "opencode Go/server-side usage-metering family (title matches RE_BILLING v2) — bulk cull"
  },
  "crewAIInc/crewAI#8569": {
   "id": "crewAIInc/crewAI#8569",
@@ -2257,7 +2283,7 @@
   },
   "created_at": "2026-10-25T10:01:52Z",
   "discovered_at": "2026-10-25T18:04:06",
-  "status": "new",
+  "status": "out_of_scope",
   "lease": null,
   "source": "cloudflare-worker",
   "ai_grade": {
@@ -2265,7 +2291,9 @@
    "score": 9,
    "reason": "Clear reproducible bug with a small, well-scoped validator fix and no competing work.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "updated_at": "2026-10-31T08:20:48",
+  "abort_reason": "lane=unknown no action"
  },
  "crewAIInc/crewAI#8571": {
   "id": "crewAIInc/crewAI#8571",
@@ -2598,7 +2626,7 @@
   "url": "https://github.com/anomalyco/opencode/issues/58814",
   "lane": "open",
   "score": 4,
-  "class": "B",
+  "class": "C",
   "blockers": [],
   "signals": {
    "body_len": 719,
@@ -2618,7 +2646,7 @@
   },
   "created_at": "2026-10-24T22:28:30Z",
   "discovered_at": "2026-10-25T19:34:28",
-  "status": "new",
+  "status": "aborted_stale",
   "lease": null,
   "source": "cloudflare-worker",
   "ai_grade": {
@@ -2626,7 +2654,8 @@
    "score": 2,
    "reason": "Billing/quota reset complaint with no reproduction details; not actionable as a code bug.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "abort_reason": "opencode Go/server-side usage-metering family (title matches RE_BILLING v2) — bulk cull"
  },
  "OpenHands/OpenHands#18898": {
   "id": "OpenHands/OpenHands#18898",
@@ -2710,7 +2739,7 @@
   "url": "https://github.com/anomalyco/opencode/issues/58963",
   "lane": "open",
   "score": 4,
-  "class": "B",
+  "class": "C",
   "blockers": [],
   "signals": {
    "body_len": 1486,
@@ -2730,7 +2759,7 @@
   },
   "created_at": "2026-10-25T11:47:52Z",
   "discovered_at": "2026-10-25T19:49:40",
-  "status": "new",
+  "status": "aborted_stale",
   "lease": null,
   "source": "cloudflare-worker",
   "ai_grade": {
@@ -2738,7 +2767,8 @@
    "score": 2,
    "reason": "Free usage/quota complaint rather than a clear reproducible code bug, so not actionable for triage.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "abort_reason": "opencode Go/server-side usage-metering family (title matches RE_BILLING v2) — bulk cull"
  },
  "langfuse/langfuse#19347": {
   "id": "langfuse/langfuse#19347",
@@ -2748,7 +2778,7 @@
   "url": "https://github.com/langfuse/langfuse/issues/19347",
   "lane": "open",
   "score": 7,
-  "class": "A",
+  "class": "C",
   "blockers": [],
   "signals": {
    "body_len": 2150,
@@ -2770,7 +2800,7 @@
   },
   "created_at": "2026-10-25T11:52:11Z",
   "discovered_at": "2026-10-25T19:53:06",
-  "status": "new",
+  "status": "aborted_competed",
   "lease": null,
   "source": "cloudflare-worker",
   "ai_grade": {
@@ -2778,7 +2808,8 @@
    "score": 9,
    "reason": "Clear reproducible bug with specific root cause, small targeted fix, and no competing work.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "abort_reason": "PR #19349 opened by ghazy2001 (10-25) — claimed+PR within 12h of filing"
  },
  "anomalyco/opencode#58965": {
   "id": "anomalyco/opencode#58965",
@@ -2788,7 +2819,7 @@
   "url": "https://github.com/anomalyco/opencode/issues/58965",
   "lane": "open",
   "score": 4,
-  "class": "B",
+  "class": "C",
   "blockers": [],
   "signals": {
    "body_len": 454,
@@ -2805,7 +2836,7 @@
   },
   "created_at": "2026-10-25T11:52:19Z",
   "discovered_at": "2026-10-25T19:53:06",
-  "status": "new",
+  "status": "aborted_stale",
   "lease": null,
   "source": "cloudflare-worker",
   "ai_grade": {
@@ -2813,7 +2844,8 @@
    "score": 1,
    "reason": "Free usage/quota complaint with no reproducible code bug; not actionable.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "abort_reason": "opencode Go/server-side usage-metering family (title matches RE_BILLING v2) — bulk cull"
  },
  "OpenHands/software-agent-sdk#6174": {
   "id": "OpenHands/software-agent-sdk#6174",
@@ -3288,7 +3320,8 @@
    "score": 10,
    "reason": "Clear reproducible strict-schema bug with provided repro, root cause, small fix, regression test, and no competing work.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "notes": "live-checked 10-31: no claims in comments, no linked PRs to this issue; 6 days old; SchemaOptimizer strict-mode bug — TOP CANDIDATE"
  },
  "anomalyco/opencode#58995": {
   "id": "anomalyco/opencode#58995",
@@ -3333,7 +3366,7 @@
   "url": "https://github.com/langfuse/langfuse/issues/19353",
   "lane": "open",
   "score": 7,
-  "class": "A",
+  "class": "C",
   "blockers": [],
   "signals": {
    "body_len": 2464,
@@ -3354,7 +3387,7 @@
   },
   "created_at": "2026-10-25T14:47:07Z",
   "discovered_at": "2026-10-25T22:47:57",
-  "status": "new",
+  "status": "aborted_competed",
   "lease": null,
   "source": "cloudflare-worker",
   "ai_grade": {
@@ -3362,7 +3395,8 @@
    "score": 9,
    "reason": "Detailed, code-referenced, reproducible UI bug with small fix scope and no indicated competing work.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "abort_reason": "assigned to LysanderKie"
  },
  "anomalyco/opencode#58854": {
   "id": "anomalyco/opencode#58854",
@@ -3551,7 +3585,7 @@
   "url": "https://github.com/anomalyco/opencode/issues/59140",
   "lane": "open",
   "score": 3,
-  "class": "B",
+  "class": "C",
   "blockers": [],
   "signals": {
    "body_len": 548,
@@ -3572,7 +3606,7 @@
   },
   "created_at": "2026-10-26T02:44:16Z",
   "discovered_at": "2026-10-26T12:26:40",
-  "status": "new",
+  "status": "aborted_stale",
   "lease": null,
   "source": "cloudflare-worker",
   "body_excerpt": "**Title:** Free usage exceeded on all free models — OpenCode Desktop 1.19.4\n\n**Description:**\n\nI use OpenCode Desktop 1.19.4 on Windows.\n\nAll free models I have tested show this error:\n\n“Free usage exceeded, subscribe to Go.”\n\nThe countdown expires, but access is not restored. The timer starts again, even when I wait for it to reach zero.\n\nI also used Spark successfully until recently, but it has disappeared from my model list.\n\nI want to continue using free models without subscribing to a paid plan. Please investigate this issue.\n\nThank you.",
@@ -3581,7 +3615,8 @@
    "score": 1,
    "reason": "Billing/quota complaint about free model access, not an actionable reproducible code bug.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "abort_reason": "opencode Go/server-side usage-metering family (title matches RE_BILLING v2) — bulk cull"
  },
  "deepset-ai/haystack#13436": {
   "id": "deepset-ai/haystack#13436",
@@ -3780,7 +3815,7 @@
   "url": "https://github.com/anomalyco/opencode/issues/59147",
   "lane": "open",
   "score": 4,
-  "class": "B",
+  "class": "C",
   "blockers": [],
   "signals": {
    "body_len": 480,
@@ -3798,7 +3833,7 @@
   },
   "created_at": "2026-10-26T03:49:21Z",
   "discovered_at": "2026-10-26T12:29:32",
-  "status": "new",
+  "status": "aborted_stale",
   "lease": null,
   "source": "cloudflare-worker",
   "body_excerpt": "### Description\n\n```\nFree usage exceeded, subscribe to Go\nretrying in 72840s - attempt #1\n```\n\nUnable to use opencode at all. This is happening for all the models!!\n\n### Plugins\n\n_No response_\n\n### OpenCode version\n\n_No response_\n\n### Steps to reproduce\n\n_No response_\n\n### Screenshot\n\n<img width=\"1462\" height=\"563\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/1352586b-e84f-46dc-a303-cf504d97b446\" />\n\n### Operating System\n\nWindows 10\n\n### Terminal\n\n_No response_",
@@ -3807,7 +3842,8 @@
    "score": 2,
    "reason": "Billing/quota complaint, not an actionable reproducible bug.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "abort_reason": "opencode Go/server-side usage-metering family (title matches RE_BILLING v2) — bulk cull"
  },
  "OpenHands/OpenHands#18956": {
   "id": "OpenHands/OpenHands#18956",
@@ -3934,7 +3970,7 @@
   "url": "https://github.com/anomalyco/opencode/issues/59285",
   "lane": "open",
   "score": 4,
-  "class": "B",
+  "class": "C",
   "blockers": [],
   "signals": {
    "body_len": 258,
@@ -3955,7 +3991,7 @@
   },
   "created_at": "2026-10-26T13:34:18Z",
   "discovered_at": "2026-10-26T21:55:05",
-  "status": "new",
+  "status": "aborted_stale",
   "lease": null,
   "source": "cloudflare-worker",
   "body_excerpt": "### Description\n\nthe free tier usage always get exceeded \n\n### Plugins\n\n_No response_\n\n### OpenCode version\n\n_No response_\n\n### Steps to reproduce\n\n_No response_\n\n### Screenshot\n\n_No response_\n\n### Operating System\n\n_No response_\n\n### Terminal\n\n_No response_",
@@ -3964,7 +4000,8 @@
    "score": 2,
    "reason": "Vague billing/quota complaint with no reproduction steps, version, or OS details — not actionable per rules.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "abort_reason": "opencode Go/server-side usage-metering family (title matches RE_BILLING v2) — bulk cull"
  },
  "anomalyco/opencode#59282": {
   "id": "anomalyco/opencode#59282",
@@ -4126,7 +4163,7 @@
   "url": "https://github.com/crewAIInc/crewAI/issues/8621",
   "lane": "open",
   "score": 6,
-  "class": "A",
+  "class": "C",
   "blockers": [],
   "signals": {
    "body_len": 4000,
@@ -4146,7 +4183,7 @@
   },
   "created_at": "2026-10-26T14:14:08Z",
   "discovered_at": "2026-10-26T22:40:25",
-  "status": "new",
+  "status": "aborted_competed",
   "lease": null,
   "source": "cloudflare-worker",
   "body_excerpt": "### Description\n\nContext: \nI filed a High-Severity private security advisory (GHSA-986m-m422-92xq) 48 hours ago respecting your SECURITY.md. I also reached out directly to the core team. Because there has been no response, I am escalating this publicly per standard responsible disclosure practices.\n\nThe Architectural Gap:\nCrewAI lacks cryptographic non-repudiation for agent tool calls and inter-agent handoffs. Specifically, in server/utils/agents/aibitat/index.js, the handleExecution and handleAsyncExecution functions execute actions (fn.handler(args)) without signing the payload or verifying the origin of the request cryptographically.\n\nThe Enterprise Impact:\nThis is a critical blocker for enterprise adoption. Because the conversation history and tool outputs are not hash-linked or signed (e.g., via Dilithium5), an attacker who achieves indirect prompt injection can execute unauthorized tool calls. Incident response teams will have no mathematically verifiable proof of which sub-agent authorized the action.\n\nWithout this, enterprise CISOs cannot deploy CrewAI in production. It fails SOC2, ISO 27001, and EU AI Act audits out of the box.\n\nThe Standard (W3C Context):\nAs a participant in the W3C AI Agent Protocol Community Group, we are currently defining the standards for preimage defense and trust leases. We are building the missing trust layer for the Agentic Web (Neutral Trust Infrastructure - NTI), and we built an open-source AST scanner to measure the industry against it.\n\n### Steps to Reproduce\n\n1. pip install nti-scanner\n2. git clone https://github.com/crewAIInc/crewAI\n3. nti-scanner scan ./crewAI\n\nResult: 1,462 findings related to missing cryptographic controls. \nThe live, cryptographically signed attestation of this scan and the AST findings are public on our compliance leaderboard: https://nti-leaderboard.vercel.app\n(CrewAI currently scores 0/100 on cryptographic safety).\n\nThe Fix:\nI have already built the solution to make CrewAI the hero of enterprise AI se",
@@ -4155,7 +4192,8 @@
    "score": 1,
    "reason": "Broad security-architecture feature/standards demand, not a concrete reproducible bug or scoped fix; scanner promotion and auto-patcher request are not actionable.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "abort_reason": "draft PR already staged by abisheakp197 (10-26) + community responses — claimed"
  },
  "deepset-ai/haystack#13446": {
   "id": "deepset-ai/haystack#13446",
@@ -4513,7 +4551,7 @@
   "url": "https://github.com/anomalyco/opencode/issues/59387",
   "lane": "open",
   "score": 4,
-  "class": "B",
+  "class": "C",
   "blockers": [],
   "signals": {
    "body_len": 3591,
@@ -4533,7 +4571,7 @@
   },
   "created_at": "2026-10-26T20:02:23Z",
   "discovered_at": "2026-10-28T10:01:30",
-  "status": "new",
+  "status": "aborted_stale",
   "lease": null,
   "source": "cloudflare-worker",
   "body_excerpt": "This is the **main issue for free tier problems**. If you see any of these, you're in the right place:\n\n- `Free usage exceeded, subscribe to Go`\n- `Free usage limit reached`\n- `You've used today's free messages. They reset at ...` and the reset never happens\n- `This version of OpenCode Desktop no longer supports free models`\n- `OpenCode's free tier can only be used from within OpenCode`\n- `OpenCode 1.18.0 or newer is required to use the free tier`\n\n**Please comment here instead of opening a new issue.** We're closing duplicates and pointing them here so everything is in one place.\n\n## 1. Make sure you're on the latest OpenCode v2\n\nMost free tier reports come from **OpenCode v1** (versions `0.x` and `1.x`, for example Desktop or CLI `1.19.4`). v1 no longer supports free models and only gets fixes for critical bugs. Updating to v2 has fixed this for many people.\n\nCheck your version:\n\n- **Terminal:** `opencode --version`\n- **Desktop:** Settings → About\n\nThe latest v2 release is **2.1.4**.\n\n> [!IMPORTANT]\n> The v1 Desktop app's built-in updater keeps you on `1.x`. Download v2 manually from **https://opencode.ai/v2/docs**.\n\n### Desktop\n\nDownload v2 Desktop for macOS, Windows or Linux from **https://opencode.ai/v2/docs**, or on macOS:\n\n```sh\nbrew install --cask opencode-desktop\n```\n\n### Terminal (TUI / CLI)\n\nAll install options are listed at **https://opencode.ai/v2/docs**. The quickest on macOS and Linux:\n\n```sh\ncurl -fsSL https://opencode.ai/v2/install | bash\n```\n\nOr use a package manager:\n\n```sh\nnpm install -g @opencode/cli\nbun install -g --trust @opencode/cli\nbrew install anomalyco/tap/opencode-v2\nparu -S opencode-beta\n```\n\nv1 and v2 both use the `opencode` command. If you installed v1 with a package manager, remove it first, for example `npm uninstall -g opencode-ai`. Windows package managers (Chocolatey, Scoop) don't support v2. On Windows, use the Desktop app, npm, or a [standalone binary](https://opencode.ai/v2/docs/).\n\n### Useful docs\n\n- [Install OpenCode v2](htt",
@@ -4542,7 +4580,8 @@
    "score": 1,
    "reason": "Meta support/tracking issue for free-tier quota and versioning complaints, not a reproducible code bug; billing/quota and duplicate consolidation are C.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "abort_reason": "opencode Go/server-side usage-metering family (title matches RE_BILLING v2) — bulk cull"
  },
  "anomalyco/opencode#52178": {
   "id": "anomalyco/opencode#52178",
@@ -4582,5 +4621,78 @@
    "reason": "Reproduced, clearly scoped CORS/preflight bug affecting all inference endpoints with concrete curl evidence and a confined gateway fix.",
    "model": "deepseek-v4.1-flash"
   }
+ },
+ "vectorize-io/hindsight#6238": {
+  "id": "vectorize-io/hindsight#6238",
+  "repo": "vectorize-io/hindsight",
+  "number": 6238,
+  "title": "`memories/list` tag filter returns the untagged-memory union instead of only matching memories",
+  "url": "https://github.com/vectorize-io/hindsight/issues/6238",
+  "lane": "open",
+  "blockers": [],
+  "labels": [
+   "core"
+  ],
+  "ai_verdict": {
+   "usable": true,
+   "reason": "Concrete reproducible core filtering bug with clear expected strict tag semantics, enough detail for a regression test, and likely a small localized fix.",
+   "model": "deepseek-v4.1-flash"
+  },
+  "created_at": "2026-10-31T00:43:16Z",
+  "discovered_at": "2026-10-31T09:15:54",
+  "status": "new",
+  "lease": null,
+  "source": "cloudflare-worker",
+  "body_excerpt": "### Behavior (verified, v1.1.0)\n\n`GET /v1/default/banks/{bank}/memories/list?tags=<value>` does not return\nonly the memories carrying that tag. It returns **the union of tag-matching\nmemories and ALL untagged memories**:\n\n- `total` = (tagged count) + (untagged count)\n- the items page interleaves untagged items among tagged ones\n  (item-level `tags` fields are reliable and show the split)\n- a tag value with zero matching facts (including a nonexistent value)\n  therefore returns the bank's untagged memory count, not 0\n\n### Reproduction\n\n```\n# on a bank with 453 untagged memories and 13 domain:security memories:\n\n# control tag (zero facts) -> returns untagged count\nGET /v1/default/banks/<bank>/memories/list?tags=domain:zzzcontrol123&limit=1\n  -> total = 453\n\n# real tag -> returns tagged + untagged\nGET /v1/default/banks/<bank>/memories/list?tags=domain:security&limit=500\n  -> total = 466\n  -> of 466 items: 13 carry domain:security, 453 carry no tags\n```\n\nSame shape on three independent banks (untagged counts 44 / 453 / 10).\nThe untagged count in the response drifts as the bank writes (observed\n434 -> 453 over ~40 minutes of bank activity), confirming the second\noperand is a live untagged set, not a fixed constant.\n\n### Why this matters\n\n1. **Tag-existence checks are unsound.** `total > 0` for any tag value does\n   not prove the tag exists or carries facts; callers cannot distinguish\n   \"zero facts\" from \"untagged set nonempty\" without a control query.\n2. **Tag-population counts are overstated** by the untagged count, which\n   skews coverage/quality signals built on tag counts.\n3. The current behavior is not documented in the API reference; a caller\n   implementing standard filter semantics (empty result for zero matches)\n   will silently get wrong data rather than an empty set.\n\n### Expected behavior\n\nOne of, documented and implemented:\n\n- **(a)** `tags=X` returns only memories carrying tag X; zero matches ->\n  `total: 0` (standard filter semantics); or\n- **(b)** the untagged-union semantics are intentional (recall-style\n  behavior) — in which case document it explicitly on the endpoint and in\n  the API reference, and consider a query parameter to request strict\n  filter mode.\n\n### Workaround (client-side)\n\nQuery a guaranteed-zero control tag first to obtain the untagged count U,\nthen compute `true_tagged = total - U`; `total == U` => zero facts;\n`total < U` => unexpected semantics change. (Implemented in our\nscorecard/verify tooling.)\n\n### Environment\n\n- Hindsight server 1.1.0 (API + worker)\n- Multi-bank; observed on 3 banks with differing untagged counts\n- Item-level `tags` fields remain correct per item\n\n---\n"
+ },
+ "biomejs/biome#12791": {
+  "id": "biomejs/biome#12791",
+  "repo": "biomejs/biome",
+  "number": 12791,
+  "title": "💅 noDuplicateProperties does not support nested scss properties",
+  "url": "https://github.com/biomejs/biome/issues/12791",
+  "lane": "open",
+  "blockers": [],
+  "labels": [
+   "A-Linter",
+   "L-CSS",
+   "S-Bug-confirmed"
+  ],
+  "ai_verdict": {
+   "usable": true,
+   "reason": "Confirmed single-rule linter bug with concrete missing support for nested SCSS properties, testable and fixable locally.",
+   "model": "deepseek-v4.1-flash"
+  },
+  "created_at": "2026-10-31T00:42:53Z",
+  "discovered_at": "2026-10-31T09:15:54",
+  "status": "new",
+  "lease": null,
+  "source": "cloudflare-worker",
+  "body_excerpt": "### Environment information\n\n<details>\n\n```bash\n\nCLI:\n  Version:                      2.6.4\n  Color support:                true\n\nPlatform:\n  CPU Architecture:             aarch64\n  OS:                           macos\n\nEnvironment:\n  BIOME_DISTRIBUTION:                npm\n  BIOME_LOG_FILE:                    unset\n  BIOME_LOG_PATH:                    unset\n  BIOME_LOG_PREFIX_NAME:             unset\n  BIOME_LOG_LEVEL:                   unset\n  BIOME_LOG_KIND:                    unset\n  BIOME_CONFIG_PATH:                 unset\n  BIOME_THREADS:                     unset\n  BIOME_WATCHER_KIND:                unset\n  BIOME_WATCHER_POLLING_INTERVAL:    unset\n  BIOME_BINARY:                      unset\n  RUST_BACKTRACE:                    unset\n  NO_COLOR:                     unset\n  TERM:                         xterm-256color\n  JS_RUNTIME_VERSION:           v24.14.1\n  JS_RUNTIME_NAME:              node\n  NODE_PACKAGE_MANAGER:         pnpm/12.14.0\n\nBiome Configuration:\n  Status:                       Loaded successfully.\n  Path:                         biome.json\n  Formatter enabled:            true\n  Linter enabled:               true\n  Assist enabled:               true\n  VCS enabled:                  true\n  HTML full support enabled:    unset\n\nLinter:\n  JavaScript enabled:           true\n  JSON enabled:                 true\n  CSS enabled:                  true\n  GraphQL enabled:              true\n  Recommended:                  unset\n  Enabled rules:\n    a11y/noAccessKey\n    a11y/noAmbiguousAnchorText\n    a11y/noAriaHiddenOnFocusable\n    a11y/noAriaUnsupportedElements\n    a11y/noAutofocus\n    a11y/noDistractingElements\n    a11y/noHeaderScope\n    a11y/noInteractiveElementToNoninteractiveRole\n    a11y/noLabelWithoutControl\n    a11y/noNoninteractiveElementToInteractiveRole\n    a11y/noNoninteractiveTabindex\n    a11y/noPositiveTabindex\n    a11y/noRedundantAlt\n    a11y/noRedundantRoles\n    a11y/noStaticElementInteractions\n    a11y/noSvgWithoutTitle\n    a11y/useAltText\n    a11y/useAnchorContent\n    a11y/useAriaActivedescendantWithTabindex\n    a11y/useAriaPropsForRole\n    a11y/useAriaPropsSupportedByRole\n    a11y/useButtonType\n    a11y/useFocusableInteractive\n    a11y/useGenericFontNames\n    a11y/useHeadingContent\n    a11y/useHtmlLang\n    a11y/useIframeTitle\n    a11y/useKeyWithClickEvents\n    a11y/useKeyWithMouseEvents\n    a11y/useMediaCaption\n    a11y/useSemanticElements\n    a11y/useValidAnchor\n    a11y/useValidAriaProps\n    a11y/useValidAriaRole\n    a11y/useValidAriaValues\n    a11y/useValidAutocomplete\n    a11y/useValidLang\n    complexity/noAdjacentSpacesInRegex\n    complexity/noArguments\n    complexity/noBannedTypes\n    complexity/noCommaOperator\n    complexity/noEmptyTypeParameters\n    complexity/noExtraBooleanCast\n    complexity/noFlatMapIdentity\n    complexity/noImportantStyles\n    complexity/noStaticOnlyClass\n    complexity/noThisInStatic\n    complexity/noUselessCatch\n    complexity/noUselessConstructor\n    complexity/noUselessContinue\n    complexity/noUselessEmptyExport\n    complexity/noUselessEscapeInRegex\n    complexity/noUselessFragments\n    complexity/noUselessLabel\n    complexity/noUselessLoneBlockStatements\n    complexity/noUselessRename\n    complexity/noUselessStringRaw\n    complexity/noUselessTernary\n    complexity/noUselessThisAlias\n    complexity/noUselessTypeConstraint\n    complexity/noUselessUndefinedInitialization\n    complexity/useArrowFunction\n    complexity/useDateNow\n    complexity/useFlatMap\n    complexity/useIndexOf\n    complexity/useLiteralKeys\n    complexity/useMathMinMax\n    complexity/useNumericLiterals\n    complexity/useRegexLiterals\n    complexity/useSimpleNumberKeys\n    correctness/noConstAssign\n    correctness/noConstantCondition\n    correctness/noConstantMathMinMaxClamp\n    correctness/noConstructorReturn\n    correctness/noDuplicateArgumentNames\n    correctness/noDuplicateAttributes\n    correctness/noDuplicateEnumValueNames\n    correctness/noDuplicateFieldDefinitionNames\n    correctness/noDuplicateInputFieldNames\n    correctness/noDuplicateVariableNames\n    correctness/noEmptyCharacterClassInRegex\n    correctness/noEmptyPattern\n    correctness/noGlobalObjectCalls\n    correctness/noInnerDeclarations\n    correctness/noInvalidBuiltinInstantiation\n    correctness/noInvalidConstructorSuper\n    correctness/noInvalidDirectionInLinearGradient\n    correctness/noInvalidGridAreas\n    correctness/noInvalidPositionAtImportRule\n    correctness/noInvalidUseBeforeDeclaration\n    correctness/noMissingVarFunction\n    correctness/noNonoctalDecimalEscape\n    correctness/noPrecisionLoss\n    correctness/noSelfAssign\n    correctness/noSetterReturn\n    correctness/noStringCaseMismatch\n    correctness/noSwitchDeclarations\n    correctness/noUnknownFunction\n    correctness/noUnknownMediaFeatureName\n    correctness/noUnknownProperty\n    correctness/noUnknownPseudoClass\n    correctness/noUnknownPseudoElement\n    correctness/noUnknownTypeSelector\n    correctness/noUnknownUnit\n    correctness/noUnmatchableAnbSelector\n    correctness/noUnreachable\n    correctness/noUnreachableSuper\n    correctness/noUnsafeFinally\n    correctness/noUnsafeOptionalChaining\n    correctness/noUnusedFunctionParameters\n    correctness/noUnusedImports\n    correctness/noUnusedLabels\n    correctness/noUnusedPrivateClassMembers\n    correctness/noUnusedVariables\n    correctness/noVoidElementsWithChildren\n    correctness/noVoidTypeReturn\n    correctness/useGraphqlNamedOperations\n    correctness/useHookAtTopLevel\n    correctness/useIsNan\n    correctness/useLoneAnonymousOperation\n    correctness/useParseIntRadix\n    correctness/useValidForDirection\n    correctness/useValidTypeof\n    correctness/useYield\n    performance/noDynamicNamespaceImportAccess\n    performance/useDomNodeTextContent\n    security/noBlankTarget\n    security/noGlobalEval\n    security/noScriptUrl\n    style/noDescendingSpecificity\n    style/noExcessiveLinesPerFile\n    style/noInferrableTypes\n    style/noNonNullAssertion\n    style/noUnusedTemplateLiteral\n    style/noUselessElse\n    style/noValueAtRule\n    style/useArrayLiterals\n    style/useAsConstAssertion\n    style/useConst\n    style/useDefaultParameterLast\n    style/useDefaultSwitchClause\n    style/useDeprecatedReason\n    style/useExponentiationOperator\n    style/useExportType\n    style/useFilenamingConvention\n    style/useGraphqlNamingConvention\n    style/useImportType\n    style/useLiteralEnumMembers\n    style/useNodejsImportProtocol\n    style/useNumberNamespace\n    style/useSelfClosingElements\n    style/useShorthandFunctionType\n    style/useSingleVarDeclarator\n    style/useTemplate\n    suspicious/noApproximativeNumericConstant\n    suspicious/noAssignInExpressions\n    suspicious/noAsyncPromiseExecutor\n    suspicious/noBiomeFirstException\n    suspicious/noCatchAssign\n    suspicious/noClassAssign\n    suspicious/noCommentText\n    suspicious/noCompareNegZero\n    suspicious/noConfusingLabels\n    suspicious/noConfusingVoidType\n    suspicious/noConstEnum\n    suspicious/noControlCharactersInRegex\n    suspicious/noDebugger\n    suspicious/noDeprecatedMediaType\n    suspicious/noDocumentCookie\n    suspicious/noDoubleEquals\n    suspicious/noDuplicateAtImportRules\n    suspicious/noDuplicateCase\n    suspicious/noDuplicateClassMembers\n    suspicious/noDuplicateCustomProperties\n    suspicious/noDuplicateDependencies\n    suspicious/noDuplicateElseIf\n    suspicious/noDuplicateEnumValues\n    suspicious/noDuplicateFields\n    suspicious/noDuplicateFontNames\n    suspicious/noDuplicateJsxProps\n    suspicious/noDuplicateObjectKeys\n    suspicious/noDuplicateParameters\n    suspicious/noDuplicateProperties\n    suspicious/noDuplicateSelectorsKeyframeBlock\n    suspicious/noEmptyBlock\n    suspicious/noEmptyInterface\n    suspicious/noEmptySource\n    suspicious/noExplicitAny\n    suspicious/noExtraNonNullAssertion\n    suspicious/noFallthroughSwitchClause\n    suspicious/noFunctionAssign\n    suspicious/noGlobalAssign\n    suspicious/noGlobalIsFinite\n    suspicious/noGlobalIsNan\n    suspicious/noImplicitAny"
+ },
+ "biomejs/biome#12753": {
+  "id": "biomejs/biome#12753",
+  "repo": "biomejs/biome",
+  "number": 12753,
+  "title": "💅 noUndeclaredClasses does not respect css imports",
+  "url": "https://github.com/biomejs/biome/issues/12753",
+  "lane": "open",
+  "blockers": [],
+  "labels": [
+   "A-Linter",
+   "L-CSS",
+   "S-Bug-confirmed"
+  ],
+  "ai_verdict": {
+   "usable": true,
+   "reason": "Confirmed CSS linter bug with a concrete playground reproduction, expected behavior, and a likely localized fix/test for import resolution.",
+   "model": "deepseek-v4.1-flash"
+  },
+  "created_at": "2026-10-29T21:06:00Z",
+  "discovered_at": "2026-10-31T09:15:54",
+  "status": "new",
+  "lease": null,
+  "source": "cloudflare-worker",
+  "body_excerpt": "### Environment information\n\nIn the example `other-class` used in main.tsx and declared in other.css is flagged as not declared\n\nEDIT: updated link - the rule does not seem to work at all after opening the playground, unless I also enable the noUnusedClasses first (if I later disable it the noUndeclaredClasses keeps working somehow)\n\n### Rule name\n\nnoUndeclaredClasses\n\n### Playground link\n\nhttps://biomejs.dev/playground/#files.main.tsx=aQBtAHAAbwByAHQAIAAnAC4ALwBzAHQAeQBsAGUAcwAuAGMAcwBzACcAOwAKAAoAZQB4AHAAbwByAHQAIABjAG8AbgBzAHQAIABDAG8AbQBwAG8AbgBlAG4AdAAgAD0AIAAoACkAIAA9AD4AIAB7AAoAIAAgAHIAZQB0AHUAcgBuACAAPABkAGkAdgAgAGMAbABhAHMAcwBOAGEAbQBlAD0AIgB0AGUAeAB0AC0AcAByAGkAbQBhAHIAeQAgAG8AdABoAGUAcgAtAGMAbABhAHMAcwAiAD4ASABlAGwAbABvADwALwBkAGkAdgA%2BAAoAfQA%3D&files.styles.css=QABpAG0AcABvAHIAdAAgACIALgAvAG8AdABoAGUAcgAuAGMAcwBzACIAOwAKAAoALgB0AGUAeAB0AC0AcAByAGkAbQBhAHIAeQAgAHsACgAgACAAIAAgAGMAbwBsAG8AcgA6ACAAdgBhAHIAKAAtAC0AcAByAGkAbQBhAHIAeQApADsACgB9AAoA&files.biome.json=ewAKACAAIAAiAGYAbwByAG0AYQB0AHQAZQByACIAOgAgAHsACgAgACAAIAAgACIAZgBvAHIAbQBhAHQAVwBpAHQAaABFAHIAcgBvAHIAcwAiADoAIAB0AHIAdQBlAAoAIAAgAH0ALAAKACAAIAAiAGwAaQBuAHQAZQByACIAOgAgAHsACgAgACAAIAAgACIAcgB1AGwAZQBzACIAOgAgAHsACgAgACAAIAAgACAAIAAiAHAAcgBlAHMAZQB0ACIAOgAgACIAcgBlAGMAbwBtAG0AZQBuAGQAZQBkACIALAAKACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACIAbgB1AHIAcwBlAHIAeQAiADoAIAB7AAoAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAiAG4AbwBVAG4AdQBzAGUAZABDAGwAYQBzAHMAZQBzACIAOgAgACIAZQByAHIAbwByACIALAAKACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIgBuAG8AVQBuAGQAZQBjAGwAYQByAGUAZABDAGwAYQBzAHMAZQBzACIAOgAgACIAZQByAHIAbwByACIACgAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAB9AAoAIAAgACAAIAB9AAoAIAAgAH0ALAAKACAAIAAiAGEAcwBzAGkAcwB0ACIAOgAgAHsACgAgACAAIAAgACIAYQBjAHQAaQBvAG4AcwAiADoAIAB7AAoAIAAgACAAIAAgACAAIgBwAHIAZQBzAGUAdAAiADoAIAAiAHIAZQBjAG8AbQBtAGUAbgBkAGUAZAAiAAoAIAAgACAAIAB9AAoAIAAgAH0ALAAKACAAIAAiAGoAYQB2AGEAcwBjAHIAaQBwAHQAIgA6ACAAewAKACAAIAAgACAAIgBwAGEAcgBzAGUAcgAiADoAIAB7AAoAIAAgACAAIAAgACAAIgB1AG4AcwBhAGYAZQBQAGEAcgBhAG0AZQB0AGUAcgBEAGUAYwBvAHIAYQB0AG8AcgBzAEUAbgBhAGIAbABlAGQAIgA6ACAAdAByAHUAZQAKACAAIAAgACAAfQAsAAoAIAAgACAAIAAiAGUAeABwAGUAcgBpAG0AZQBuAHQAYQBsAEUAbQBiAGUAZABkAGUAZABTAG4AaQBwAHAAZQB0AHMARQBuAGEAYgBsAGUAZAAiADoAIAB0AHIAdQBlAAoAIAAgAH0ALAAKACAAIAAiAGMAcwBzACIAOgAgAHsACgAgACAAIAAgACIAcABhAHIAcwBlAHIAIgA6ACAAewAKACAAIAAgACAAIAAgACIAYQBsAGwAbwB3AFcAcgBvAG4AZwBMAGkAbgBlAEMAbwBtAG0AZQBuAHQAcwAiADoAIAB0AHIAdQBlACwACgAgACAAIAAgACAAIAAiAHQAYQBpAGwAdwBpAG4AZABEAGkAcgBlAGMAdABpAHYAZQBzACIAOgAgAHQAcgB1AGUACgAgACAAIAAgAH0ACgAgACAAfQAsAAoAIAAgACIAagBzAG8AbgAiADoAIAB7AAoAIAAgACAAIAAiAHAAYQByAHMAZQByACIAOgAgAHsACgAgACAAIAAgACAAIAAiAGEAbABsAG8AdwBDAG8AbQBtAGUAbgB0AHMAIgA6ACAAdAByAHUAZQAKACAAIAAgACAAfQAKACAAIAB9ACwACgAgACAAIgBoAHQAbQBsACIAOgAgAHsACgAgACAAIAAgACIAZgBvAHIAbQBhAHQAdABlAHIAIgA6ACAAewAKACAAIAAgACAAIAAgACIAZQBuAGEAYgBsAGUAZAAiADoAIAB0AHIAdQBlAAoAIAAgACAAIAB9ACwACgAgACAAIAAgACIAZQB4AHAAZQByAGkAbQBlAG4AdABhAGwARgB1AGwAbABTAHUAcABwAG8AcgB0AEUAbgBhAGIAbABlAGQAIgA6ACAAdAByAHUAZQAKACAAIAB9ACwACgAgACAAIgBtAGEAcgBrAGQAbwB3AG4AIgA6ACAAewAKACAAIAAgACAAIgBmAG8AcgBtAGEAdAB0AGUAcgAiADoAIAB7AAoAIAAgACAAIAAgACAAIgBlAG4AYQBiAGwAZQBkACIAOgAgAHQAcgB1AGUACgAgACAAIAAgAH0ACgAgACAAfQAsAAoAIAAgACIAeQBhAG0AbAAiADoAIAB7AAoAIAAgACAAIAAiAGYAbwByAG0AYQB0AHQAZQByACIAOgAgAHsACgAgACAAIAAgACAAIAAiAGUAbgBhAGIAbABlAGQAIgA6ACAAdAByAHUAZQAKACAAIAAgACAAfQAKACAAIAB9AAoAfQAKAA%3D%3D&files.other.css=LgBvAHQAaABlAHIALQBjAGwAYQBzAHMAIAB7AAoAIAAgACAAIABjAG8AbABvAHIAOgAgAHYAYQByACgALQAtAHAAcgBpAG0AYQByAHkAKQA7AAoAfQA%3D\n\n### Expected result\n\n`other-class` should not be flagged as not declared\n\n### Code of Conduct\n\n- [x] I agree to follow Biome's Code of Conduct"
  }
 }

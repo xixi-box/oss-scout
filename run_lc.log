@@ -1,0 +1,294 @@
+repair	Set up job	﻿2026-10-29T04:18:00.7025359Z Current runner version: '2.338.0'
+repair	Set up job	2026-10-29T04:18:00.7053985Z ##[group]Runner Image Provisioner
+repair	Set up job	2026-10-29T04:18:00.7054840Z Hosted Compute Agent
+repair	Set up job	2026-10-29T04:18:00.7055545Z Version: 20261021.618
+repair	Set up job	2026-10-29T04:18:00.7056198Z Commit: 21505ad2541d5be6135ed84fc33697146cf75b8e
+repair	Set up job	2026-10-29T04:18:00.7056927Z Build Date: 2026-10-21T00:45:21Z
+repair	Set up job	2026-10-29T04:18:00.7057602Z Worker ID: {91771801-edf6-4674-9448-d3bab79e04cf}
+repair	Set up job	2026-10-29T04:18:00.7058285Z Region: eastus3
+repair	Set up job	2026-10-29T04:18:00.7059422Z Cloud: Azure
+repair	Set up job	2026-10-29T04:18:00.7060014Z ##[endgroup]
+repair	Set up job	2026-10-29T04:18:00.7061505Z ##[group]Operating System
+repair	Set up job	2026-10-29T04:18:00.7062169Z Ubuntu
+repair	Set up job	2026-10-29T04:18:00.7062703Z 26.04.1
+repair	Set up job	2026-10-29T04:18:00.7063266Z LTS
+repair	Set up job	2026-10-29T04:18:00.7063764Z ##[endgroup]
+repair	Set up job	2026-10-29T04:18:00.7064326Z ##[group]Runner Image
+repair	Set up job	2026-10-29T04:18:00.7064938Z Image: ubuntu-26.04
+repair	Set up job	2026-10-29T04:18:00.7065541Z Version: 20261025.179.1
+repair	Set up job	2026-10-29T04:18:00.7066603Z Included Software: https://github.com/actions/runner-images/blob/ubuntu26/20261025.179/images/ubuntu/Ubuntu2604-Readme.md
+repair	Set up job	2026-10-29T04:18:00.7068284Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu26%2F20261025.179
+repair	Set up job	2026-10-29T04:18:00.7069443Z ##[endgroup]
+repair	Set up job	2026-10-29T04:18:00.7070673Z ##[group]GITHUB_TOKEN Permissions
+repair	Set up job	2026-10-29T04:18:00.7072873Z Contents: read
+repair	Set up job	2026-10-29T04:18:00.7073552Z Metadata: read
+repair	Set up job	2026-10-29T04:18:00.7074099Z ##[endgroup]
+repair	Set up job	2026-10-29T04:18:00.7076090Z Secret source: Actions
+repair	Set up job	2026-10-29T04:18:00.7077092Z Cache mode: write
+repair	Set up job	2026-10-29T04:18:00.7077979Z Prepare workflow directory
+repair	Set up job	2026-10-29T04:18:00.7492486Z Prepare all required actions
+repair	Set up job	2026-10-29T04:18:00.7563508Z Getting action download info
+repair	Set up job	2026-10-29T04:18:00.9850269Z Download action repository 'actions/checkout@v4' (SHA:11d5960a326750d5838078e36cf38b85af677262)
+repair	Set up job	2026-10-29T04:18:01.0798090Z Download action repository 'actions/upload-artifact@v4' (SHA:ea165f8d65b6e75b540449e92b4886f43607fa02)
+repair	Set up job	2026-10-29T04:18:01.2424674Z Complete job name: repair
+repair	Decode job payload	﻿2026-10-29T04:18:01.3161880Z ##[group]Run set -euo pipefail
+repair	Decode job payload	2026-10-29T04:18:01.3162752Z ^[[36;1mset -euo pipefail^[[0m
+repair	Decode job payload	2026-10-29T04:18:01.3163495Z ^[[36;1mprintf '%s' "$OSS_JOB_B64" | base64 -d > "$RUNNER_TEMP/job.json"^[[0m
+repair	Decode job payload	2026-10-29T04:18:01.3164357Z ^[[36;1mpython3 - <<'PY'^[[0m
+repair	Decode job payload	2026-10-29T04:18:01.3164934Z ^[[36;1mimport json, os^[[0m
+repair	Decode job payload	2026-10-29T04:18:01.3165696Z ^[[36;1mj = json.load(open(os.environ["RUNNER_TEMP"] + "/job.json"))^[[0m
+repair	Decode job payload	2026-10-29T04:18:01.3166628Z ^[[36;1mprint("mode:", j["mode"], "repo:", j["repo"], "sha:", j["base_sha"][:12])^[[0m
+repair	Decode job payload	2026-10-29T04:18:01.3167500Z ^[[36;1mwith open(os.environ["GITHUB_OUTPUT"], "a") as f:^[[0m
+repair	Decode job payload	2026-10-29T04:18:01.3168337Z ^[[36;1m    f.write(f"target_repo={j['repo']}\n")^[[0m
+repair	Decode job payload	2026-10-29T04:18:01.3169339Z ^[[36;1m    f.write(f"base_sha={j['base_sha']}\n")^[[0m
+repair	Decode job payload	2026-10-29T04:18:01.3170115Z ^[[36;1mPY^[[0m
+repair	Decode job payload	2026-10-29T04:18:01.3193658Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+repair	Decode job payload	2026-10-29T04:18:01.3194750Z env:
+repair	Decode job payload	2026-10-29T04:18:01.3271873Z   OSS_JOB_B64: eyJzY2hlbWFfdmVyc2lvbiI6IDEsICJqb2JfaWQiOiAiam9iLTBkZTU1NjMzLTA2YTYtNDg0NS1iNGIyLTA2NTgwOTRiZTM1NiIsICJpZGVtcG90ZW5jeV9rZXkiOiAicmVwYWlyOmxhbmdjaGFpbi1haS9sYW5nY2hhaW46MzUwNTY4OTUyYzRiNjVkMTMxMDA4MWQ0NWEyNTM2YjY0NDk3MTJmMDo0MTQ0OCIsICJjYW5kaWRhdGVfaWQiOiAiIiwgInJlcG8iOiAibGFuZ2NoYWluLWFpL2xhbmdjaGFpbiIsICJiYXNlX3NoYSI6ICIzNTA1Njg5NTJjNGI2NWQxMzEwMDgxZDQ1YTI1MzZiNjQ0OTcxMmYwIiwgIm1vZGUiOiAicmVwYWlyIiwgImV4ZWN1dGlvbl9zY29wZSI6ICJwcm9qZWN0X2NvbnRyaWJ1dGlvbiIsICJwb2xpY3lfc25hcHNob3RfaWQiOiAiNjFjYWM4NjU5ZTI0Nzk4YyIsICJ0aW1lb3V0X3NlY29uZHMiOiAxODAwLCAiY3B1IjogMiwgIm1lbW9yeV9tYiI6IDQwOTYsICJtYXhfZXN0aW1hdGVkX2NvbXB1dGVfdXNkIjogMC41LCAibW9kZWxfcG9saWN5IjogImZyZWVfZmlyc3QiLCAiYWxsb3dfZ2l0aHViX3dyaXRlIjogZmFsc2UsICJjcmVhdGVkX2F0IjogIiIsICJ0ZXN0X2NtZCI6IFtdLCAicnVsZXNldCI6ICIiLCAiY29udGV4dCI6ICJIdWdnaW5nRmFjZVBpcGVsaW5lLmZyb21fbW9kZWxfaWQgY3Jhc2hlcyB3aGVuIGRldmljZSBpcyBhIHN0cmluZyBvciB0b3JjaC5kZXZpY2VcblxuVVJMOiBodHRwczovL2dpdGh1Yi5jb20vbGFuZ2NoYWluLWFpL2xhbmdjaGFpbi9pc3N1ZXMvNDE0NDhcblxuSHVnZ2luZ0ZhY2VQaXBlbGluZS5mcm9tX21vZGVsX2lkIHJhaXNlcyBUeXBlRXJyb3Igd2hlbiBkZXZpY2UgaXMgYSBkZXZpY2Ugc3RyaW5nIG9yIHRvcmNoLmRldmljZSwgZS5nLiBkZXZpY2U9KioqXCJjcHVcIioqKiwgKioqXCJjdWRhOjBcIioqKiwgdGVuc29yLnRvKFwiY3B1XCIpLiBUcmFjZWJhY2s6IEZpbGUgaHVnZ2luZ2ZhY2VfcGlwZWxpbmUucHkgbGluZSAyNTMgaW4gZnJvbV9tb2RlbF9pZDogaWYgZGV2aWNlIDwgLTEgb3IgKGRldmljZSA+PSBhY2NlbGVyYXRvcl9kZXZpY2VfY291bnQpOiBUeXBlRXJyb3I6IGxlc3MgdGhhbiBub3Qgc3VwcG9ydGVkIGJldHdlZW4gaW5zdGFuY2Ugb2Ygc3RyIGFuZCBpbnQuIEV2ZXJ5IGRldmljZSBzdHJpbmcgb3IgdG9yY2guZGV2aWNlIGZhaWxzLCBldmVuIGNwdS4gU2FtZSBmb3IgY3VkYTowLCB4cHU6MSwgdG9yY2guZGV2aWNlKGN1ZGEsMCkuIEFmZmVjdHMgSHVnZ2luZ0ZhY2VQaXBlbGluZS5mcm9tX21vZGVsX2lkIGFuZCBIdWdnaW5nRmFjZUVtYmVkZGluZ3MuIEV4cGVjdGVkOiBhY2NlcHQgZGV2aWNlIHN0cmluZ3MgYW5kIHRvcmNoLmRldmljZSBieSByZXNvbHZpbmcgdGhlbSB0byBhbiBpbmRleCwgb3Igc2tpcCB0aGUgbnVtZXJpYyBib3VuZCBjaGVjayBmb3Igbm9uLWludCBkZXZpY2Ugc3BlY3MuIiwgImFpX3Rlc3RfZmlsZXMiOiB7fSwgIm1vZGVsIjogIm9wZW5jb2RlLWdvL2RlZXBzZWVrLXY0LjEtZmxhc2giLCAicHVibGlzaCI6IHsicHVzaF9yZXBvIjogInhpeGktYm94L2xhbmdjaGFpbiIsICJ1cHN0cmVhbSI6ICJsYW5nY2hhaW4tYWkvbGFuZ2NoYWluIiwgImJyYW5jaCI6ICJmaXgvaXNzdWUtNDE0NDgtMzUwNTY4OSIsICJpc3N1ZV9udW1iZXIiOiA0MTQ0OCwgInRpdGxlIjogImZpeDogSHVnZ2luZ0ZhY2VQaXBlbGluZS5mcm9tX21vZGVsX2lkIGNyYXNoZXMgd2hlbiBkZXZpY2UgaXMgYSBzdHJpbmcgb3IgdCIsICJib2R5IjogIkZpeGVzICM0MTQ0OFxuXG5Sb290IGNhdXNlOiBIdWdnaW5nRmFjZVBpcGVsaW5lLmZyb21fbW9kZWxfaWQgY3Jhc2hlcyB3aGVuIGRldmljZSBpcyBhIHN0cmluZyBvciB0b3JjaC5kZXZpY2VcblxuVmVyaWZpZWQgYnkgcnVubmluZyB0aGUgZmFpbGluZyB0ZXN0IGF0IGAzNTA1Njg5NTJjNGJgIChmYWlscykgYW5kIGFnYWluIHdpdGggdGhpcyBwYXRjaCBhcHBsaWVkIChwYXNzZXMpLiJ9fQ==
+repair	Decode job payload	2026-10-29T04:18:01.3386363Z ##[endgroup]
+repair	Decode job payload	2026-10-29T04:18:01.3702597Z mode: repair repo: langchain-ai/langchain sha: 350568952c4b
+repair	Checkout target repo at base_sha	﻿2026-10-29T04:18:01.3948441Z ##[group]Run set -euo pipefail
+repair	Checkout target repo at base_sha	2026-10-29T04:18:01.3949214Z ^[[36;1mset -euo pipefail^[[0m
+repair	Checkout target repo at base_sha	2026-10-29T04:18:01.3949808Z ^[[36;1mgit init -q "$RUNNER_TEMP/repo"^[[0m
+repair	Checkout target repo at base_sha	2026-10-29T04:18:01.3950669Z ^[[36;1mgit -C "$RUNNER_TEMP/repo" remote add origin "https://github.com/${TARGET_REPO}.git"^[[0m
+repair	Checkout target repo at base_sha	2026-10-29T04:18:01.3951620Z ^[[36;1mgit -C "$RUNNER_TEMP/repo" fetch --depth 1 origin "$BASE_SHA"^[[0m
+repair	Checkout target repo at base_sha	2026-10-29T04:18:01.3952436Z ^[[36;1mgit -C "$RUNNER_TEMP/repo" checkout --detach FETCH_HEAD^[[0m
+repair	Checkout target repo at base_sha	2026-10-29T04:18:01.3953258Z ^[[36;1mecho "checked out $(git -C "$RUNNER_TEMP/repo" rev-parse HEAD)"^[[0m
+repair	Checkout target repo at base_sha	2026-10-29T04:18:01.3971440Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+repair	Checkout target repo at base_sha	2026-10-29T04:18:01.3972076Z env:
+repair	Checkout target repo at base_sha	2026-10-29T04:18:01.3972499Z   TARGET_REPO: langchain-ai/langchain
+repair	Checkout target repo at base_sha	2026-10-29T04:18:01.3973089Z   BASE_SHA: 350568952c4b65d1310081d45a2536b6449712f0
+repair	Checkout target repo at base_sha	2026-10-29T04:18:01.3973658Z ##[endgroup]
+repair	Checkout target repo at base_sha	2026-10-29T04:18:03.1188438Z From https://github.com/langchain-ai/langchain
+repair	Checkout target repo at base_sha	2026-10-29T04:18:03.1192743Z  * branch            350568952c4b65d1310081d45a2536b6449712f0 -> FETCH_HEAD
+repair	Checkout target repo at base_sha	2026-10-29T04:18:03.3155659Z HEAD is now at 3505689 fix(anthropic): handle null cache-creation token counts (#41553)
+repair	Checkout target repo at base_sha	2026-10-29T04:18:03.3186212Z checked out 350568952c4b65d1310081d45a2536b6449712f0
+repair	Get oss-scout worker	﻿2026-10-29T04:18:03.3438249Z ##[group]Run actions/checkout@v4
+repair	Get oss-scout worker	2026-10-29T04:18:03.3439301Z with:
+repair	Get oss-scout worker	2026-10-29T04:18:03.3439864Z   path: worker
+repair	Get oss-scout worker	2026-10-29T04:18:03.3440535Z   repository: xixi-box/oss-scout
+repair	Get oss-scout worker	2026-10-29T04:18:03.3449629Z   token: ***
+repair	Get oss-scout worker	2026-10-29T04:18:03.3450220Z   ssh-strict: true
+repair	Get oss-scout worker	2026-10-29T04:18:03.3450835Z   ssh-user: git
+repair	Get oss-scout worker	2026-10-29T04:18:03.3451476Z   persist-credentials: true
+repair	Get oss-scout worker	2026-10-29T04:18:03.3452207Z   clean: true
+repair	Get oss-scout worker	2026-10-29T04:18:03.3452836Z   sparse-checkout-cone-mode: true
+repair	Get oss-scout worker	2026-10-29T04:18:03.3453641Z   fetch-depth: 1
+repair	Get oss-scout worker	2026-10-29T04:18:03.3454252Z   fetch-tags: false
+repair	Get oss-scout worker	2026-10-29T04:18:03.3454864Z   show-progress: true
+repair	Get oss-scout worker	2026-10-29T04:18:03.3455499Z   lfs: false
+repair	Get oss-scout worker	2026-10-29T04:18:03.3456335Z   submodules: false
+repair	Get oss-scout worker	2026-10-29T04:18:03.3456989Z   set-safe-directory: true
+repair	Get oss-scout worker	2026-10-29T04:18:03.3457763Z   allow-unsafe-pr-checkout: false
+repair	Get oss-scout worker	2026-10-29T04:18:03.3458551Z ##[endgroup]
+repair	Get oss-scout worker	2026-10-29T04:18:03.5853211Z Syncing repository: xixi-box/oss-scout
+repair	Get oss-scout worker	2026-10-29T04:18:03.5875317Z ##[group]Getting Git version info
+repair	Get oss-scout worker	2026-10-29T04:18:03.5879192Z Working directory is '/home/runner/work/oss-scout/oss-scout/worker'
+repair	Get oss-scout worker	2026-10-29T04:18:03.5890425Z [command]/usr/bin/git version
+repair	Get oss-scout worker	2026-10-29T04:18:03.5946250Z git version 2.56.0
+repair	Get oss-scout worker	2026-10-29T04:18:03.5976111Z ##[endgroup]
+repair	Get oss-scout worker	2026-10-29T04:18:03.5998784Z Temporarily overriding HOME='/home/runner/work/_temp/3eb9bfc7-240c-4129-b912-73818a683317' before making global git config changes
+repair	Get oss-scout worker	2026-10-29T04:18:03.6020758Z Adding repository directory to the temporary git global config as a safe directory
+repair	Get oss-scout worker	2026-10-29T04:18:03.6039845Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/oss-scout/oss-scout/worker
+repair	Get oss-scout worker	2026-10-29T04:18:03.6070370Z ##[group]Initializing the repository
+repair	Get oss-scout worker	2026-10-29T04:18:03.6070891Z [command]/usr/bin/git init /home/runner/work/oss-scout/oss-scout/worker
+repair	Get oss-scout worker	2026-10-29T04:18:03.6133666Z hint: Using 'master' as the name for the initial branch. This default branch name
+repair	Get oss-scout worker	2026-10-29T04:18:03.6143255Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+repair	Get oss-scout worker	2026-10-29T04:18:03.6160254Z hint: to use in all of your new repositories, which will suppress this warning,
+repair	Get oss-scout worker	2026-10-29T04:18:03.6180744Z hint: call:
+repair	Get oss-scout worker	2026-10-29T04:18:03.6181424Z hint:
+repair	Get oss-scout worker	2026-10-29T04:18:03.6188161Z hint: 	git config --global init.defaultBranch <name>
+repair	Get oss-scout worker	2026-10-29T04:18:03.6189230Z hint:
+repair	Get oss-scout worker	2026-10-29T04:18:03.6189991Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+repair	Get oss-scout worker	2026-10-29T04:18:03.6191172Z hint: 'development'. The just-created branch can be renamed via this command:
+repair	Get oss-scout worker	2026-10-29T04:18:03.6217433Z hint:
+repair	Get oss-scout worker	2026-10-29T04:18:03.6239732Z hint: 	git branch -m <name>
+repair	Get oss-scout worker	2026-10-29T04:18:03.6240580Z hint:
+repair	Get oss-scout worker	2026-10-29T04:18:03.6260111Z hint: Disable this message with "git config set advice.defaultBranchName false"
+repair	Get oss-scout worker	2026-10-29T04:18:03.6280250Z Initialized empty Git repository in /home/runner/work/oss-scout/oss-scout/worker/.git/
+repair	Get oss-scout worker	2026-10-29T04:18:03.6284095Z [command]/usr/bin/git remote add origin https://github.com/xixi-box/oss-scout
+repair	Get oss-scout worker	2026-10-29T04:18:03.6286218Z ##[endgroup]
+repair	Get oss-scout worker	2026-10-29T04:18:03.6287226Z ##[group]Disabling automatic garbage collection
+repair	Get oss-scout worker	2026-10-29T04:18:03.6288259Z [command]/usr/bin/git config --local gc.auto 0
+repair	Get oss-scout worker	2026-10-29T04:18:03.6290335Z ##[endgroup]
+repair	Get oss-scout worker	2026-10-29T04:18:03.6291129Z ##[group]Setting up auth
+repair	Get oss-scout worker	2026-10-29T04:18:03.6292003Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+repair	Get oss-scout worker	2026-10-29T04:18:03.6294420Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+repair	Get oss-scout worker	2026-10-29T04:18:03.6700827Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+repair	Get oss-scout worker	2026-10-29T04:18:03.6784325Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+repair	Get oss-scout worker	2026-10-29T04:18:03.7193053Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+repair	Get oss-scout worker	2026-10-29T04:18:03.7217028Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+repair	Get oss-scout worker	2026-10-29T04:18:03.7414003Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+repair	Get oss-scout worker	2026-10-29T04:18:03.7448059Z ##[endgroup]
+repair	Get oss-scout worker	2026-10-29T04:18:03.7449567Z ##[group]Fetching the repository
+repair	Get oss-scout worker	2026-10-29T04:18:03.7458436Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +468237c110b95fcfe8bf075449866b068257070d:refs/remotes/origin/main
+repair	Get oss-scout worker	2026-10-29T04:18:04.1321965Z From https://github.com/xixi-box/oss-scout
+repair	Get oss-scout worker	2026-10-29T04:18:04.1324316Z  * [new ref]         468237c110b95fcfe8bf075449866b068257070d -> origin/main
+repair	Get oss-scout worker	2026-10-29T04:18:04.1326272Z ##[endgroup]
+repair	Get oss-scout worker	2026-10-29T04:18:04.1330319Z ##[group]Determining the checkout info
+repair	Get oss-scout worker	2026-10-29T04:18:04.1349247Z ##[endgroup]
+repair	Get oss-scout worker	2026-10-29T04:18:04.1395592Z [command]/usr/bin/git sparse-checkout disable
+repair	Get oss-scout worker	2026-10-29T04:18:04.1422623Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+repair	Get oss-scout worker	2026-10-29T04:18:04.1441385Z ##[group]Checking out the ref
+repair	Get oss-scout worker	2026-10-29T04:18:04.1470079Z [command]/usr/bin/git checkout --progress --force -B main refs/remotes/origin/main
+repair	Get oss-scout worker	2026-10-29T04:18:04.1760320Z Switched to a new branch 'main'
+repair	Get oss-scout worker	2026-10-29T04:18:04.1795262Z branch 'main' set up to track 'origin/main'.
+repair	Get oss-scout worker	2026-10-29T04:18:04.1811194Z ##[endgroup]
+repair	Get oss-scout worker	2026-10-29T04:18:04.1816097Z [command]/usr/bin/git log -1 --format=%H
+repair	Get oss-scout worker	2026-10-29T04:18:04.1839915Z 468237c110b95fcfe8bf075449866b068257070d
+repair	Install worker requirements	﻿2026-10-29T04:18:04.1943844Z ##[group]Run set -euo pipefail
+repair	Install worker requirements	2026-10-29T04:18:04.1944197Z ^[[36;1mset -euo pipefail^[[0m
+repair	Install worker requirements	2026-10-29T04:18:04.1944556Z ^[[36;1mpython3 -m pip install --quiet --break-system-packages \^[[0m
+repair	Install worker requirements	2026-10-29T04:18:04.1944994Z ^[[36;1m  -r "$GITHUB_WORKSPACE/worker/requirements.txt"^[[0m
+repair	Install worker requirements	2026-10-29T04:18:04.1945464Z ^[[36;1mpython3 -c "import pytest, yaml; print('worker deps ok', pytest.__version__)"^[[0m
+repair	Install worker requirements	2026-10-29T04:18:04.1966089Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+repair	Install worker requirements	2026-10-29T04:18:04.1966474Z ##[endgroup]
+repair	Install worker requirements	2026-10-29T04:18:15.2493615Z worker deps ok 9.2.0
+repair	Install target repo dependencies	﻿2026-10-29T04:18:15.2754762Z ##[group]Run set -uo pipefail
+repair	Install target repo dependencies	2026-10-29T04:18:15.2755116Z ^[[36;1mset -uo pipefail^[[0m
+repair	Install target repo dependencies	2026-10-29T04:18:15.2755397Z ^[[36;1mcd "$RUNNER_TEMP/repo"^[[0m
+repair	Install target repo dependencies	2026-10-29T04:18:15.2755760Z ^[[36;1mPIP="python3 -m pip install --quiet --break-system-packages"^[[0m
+repair	Install target repo dependencies	2026-10-29T04:18:15.2756145Z ^[[36;1mif [ -f uv.lock ]; then^[[0m
+repair	Install target repo dependencies	2026-10-29T04:18:15.2756640Z ^[[36;1m  python3 -m pip install --quiet --break-system-packages uv && uv sync --quiet || echo "WARN: uv sync failed"^[[0m
+repair	Install target repo dependencies	2026-10-29T04:18:15.2757167Z ^[[36;1melif [ -f poetry.lock ]; then^[[0m
+repair	Install target repo dependencies	2026-10-29T04:18:15.2757739Z ^[[36;1m  python3 -m pip install --quiet --break-system-packages poetry && poetry install --quiet || echo "WARN: poetry install failed"^[[0m
+repair	Install target repo dependencies	2026-10-29T04:18:15.2758405Z ^[[36;1melif [ -f requirements.txt ]; then^[[0m
+repair	Install target repo dependencies	2026-10-29T04:18:15.2758812Z ^[[36;1m  $PIP -r requirements.txt || echo "WARN: requirements install failed"^[[0m
+repair	Install target repo dependencies	2026-10-29T04:18:15.2759501Z ^[[36;1melif [ -f pyproject.toml ]; then^[[0m
+repair	Install target repo dependencies	2026-10-29T04:18:15.2759862Z ^[[36;1m  $PIP -e . || echo "WARN: pip install -e . failed"^[[0m
+repair	Install target repo dependencies	2026-10-29T04:18:15.2760224Z ^[[36;1melse^[[0m
+repair	Install target repo dependencies	2026-10-29T04:18:15.2760547Z ^[[36;1m  echo "no Python dependency manifest; relying on stdlib + pytest"^[[0m
+repair	Install target repo dependencies	2026-10-29T04:18:15.2760990Z ^[[36;1mfi^[[0m
+repair	Install target repo dependencies	2026-10-29T04:18:15.2779023Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+repair	Install target repo dependencies	2026-10-29T04:18:15.2779806Z ##[endgroup]
+repair	Install target repo dependencies	2026-10-29T04:18:15.2817073Z no Python dependency manifest; relying on stdlib + pytest
+repair	Install OpenCode CLI	﻿2026-10-29T04:18:15.2843178Z ##[group]Run set -euo pipefail
+repair	Install OpenCode CLI	2026-10-29T04:18:15.2843510Z ^[[36;1mset -euo pipefail^[[0m
+repair	Install OpenCode CLI	2026-10-29T04:18:15.2843903Z ^[[36;1mcurl -fsSL https://opencode.ai/install | bash -s -- --no-modify-path^[[0m
+repair	Install OpenCode CLI	2026-10-29T04:18:15.2844365Z ^[[36;1mecho "$HOME/.opencode/bin" >> "$GITHUB_PATH"^[[0m
+repair	Install OpenCode CLI	2026-10-29T04:18:15.2844709Z ^[[36;1m"$HOME/.opencode/bin/opencode" --version^[[0m
+repair	Install OpenCode CLI	2026-10-29T04:18:15.2860702Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+repair	Install OpenCode CLI	2026-10-29T04:18:15.2861081Z ##[endgroup]
+repair	Install OpenCode CLI	2026-10-29T04:18:15.5804138Z ^[[0m
+repair	Install OpenCode CLI	2026-10-29T04:18:15.5805075Z ^[[0;2mInstalling ^[[0mopencode ^[[0;2mversion: ^[[0m1.19.5^[[0m
+repair	Install OpenCode CLI	2026-10-29T04:18:15.6912238Z 
+repair	Install OpenCode CLI	2026-10-29T04:18:15.7960520Z #=#=#                                                                          
+repair	Install OpenCode CLI	2026-10-29T04:18:15.9063840Z ##                                                                         3.2%
+repair	Install OpenCode CLI	2026-10-29T04:18:16.0068785Z ##################################                                        47.4%
+repair	Install OpenCode CLI	2026-10-29T04:18:16.0090095Z #######################################################################   99.2%
+repair	Install OpenCode CLI	2026-10-29T04:18:16.0115980Z ######################################################################## 100.0%
+repair	Install OpenCode CLI	2026-10-29T04:18:16.9667575Z ^[[0mAdded /home/runner/.opencode/bin to $GITHUB_PATH^[[0m
+repair	Install OpenCode CLI	2026-10-29T04:18:16.9668499Z 
+repair	Install OpenCode CLI	2026-10-29T04:18:16.9670470Z ^[[0;2m                    ^[[0m             ▄     
+repair	Install OpenCode CLI	2026-10-29T04:18:16.9683368Z ^[[0;2m█▀▀█ █▀▀█ █▀▀█ █▀▀▄ ^[[0m█▀▀▀ █▀▀█ █▀▀█ █▀▀█
+repair	Install OpenCode CLI	2026-10-29T04:18:16.9684734Z ^[[0;2m█░░█ █░░█ █▀▀▀ █░░█ ^[[0m█░░░ █░░█ █░░█ █▀▀▀
+repair	Install OpenCode CLI	2026-10-29T04:18:16.9685519Z ^[[0;2m▀▀▀▀ █▀▀▀ ▀▀▀▀ ▀  ▀ ^[[0m▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀
+repair	Install OpenCode CLI	2026-10-29T04:18:16.9685993Z 
+repair	Install OpenCode CLI	2026-10-29T04:18:16.9686116Z 
+repair	Install OpenCode CLI	2026-10-29T04:18:16.9686605Z ^[[0;2mOpenCode includes free models, to start:^[[0m
+repair	Install OpenCode CLI	2026-10-29T04:18:16.9687108Z 
+repair	Install OpenCode CLI	2026-10-29T04:18:16.9687544Z cd <project>  ^[[0;2m# Open directory^[[0m
+repair	Install OpenCode CLI	2026-10-29T04:18:16.9688232Z opencode      ^[[0;2m# Run command^[[0m
+repair	Install OpenCode CLI	2026-10-29T04:18:16.9688661Z 
+repair	Install OpenCode CLI	2026-10-29T04:18:16.9689309Z ^[[0;2mFor more information visit ^[[0mhttps://opencode.ai/docs
+repair	Install OpenCode CLI	2026-10-29T04:18:16.9689889Z 
+repair	Install OpenCode CLI	2026-10-29T04:18:16.9690015Z 
+repair	Install OpenCode CLI	2026-10-29T04:18:17.4954526Z 1.19.5
+repair	Write opencode auth	﻿2026-10-29T04:18:17.5027055Z ##[group]Run set -euo pipefail
+repair	Write opencode auth	2026-10-29T04:18:17.5027396Z ^[[36;1mset -euo pipefail^[[0m
+repair	Write opencode auth	2026-10-29T04:18:17.5027684Z ^[[36;1mmkdir -p "$HOME/.local/share/opencode"^[[0m
+repair	Write opencode auth	2026-10-29T04:18:17.5027999Z ^[[36;1mpython3 - <<'PY'^[[0m
+repair	Write opencode auth	2026-10-29T04:18:17.5028247Z ^[[36;1mimport json, os^[[0m
+repair	Write opencode auth	2026-10-29T04:18:17.5028575Z ^[[36;1mp = os.path.expanduser("~/.local/share/opencode/auth.json")^[[0m
+repair	Write opencode auth	2026-10-29T04:18:17.5029007Z ^[[36;1mos.makedirs(os.path.dirname(p), exist_ok=True)^[[0m
+repair	Write opencode auth	2026-10-29T04:18:17.5029873Z ^[[36;1mwith open(p, "w") as f:^[[0m
+repair	Write opencode auth	2026-10-29T04:18:17.5030182Z ^[[36;1m    json.dump({"opencode-go": {"type": "api",^[[0m
+repair	Write opencode auth	2026-10-29T04:18:17.5030551Z ^[[36;1m                               "key": os.environ["OPENCODE_API_KEY"]}}, f)^[[0m
+repair	Write opencode auth	2026-10-29T04:18:17.5030898Z ^[[36;1mos.chmod(p, 0o600)^[[0m
+repair	Write opencode auth	2026-10-29T04:18:17.5031149Z ^[[36;1mPY^[[0m
+repair	Write opencode auth	2026-10-29T04:18:17.5051160Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+repair	Write opencode auth	2026-10-29T04:18:17.5051517Z env:
+repair	Write opencode auth	2026-10-29T04:18:17.5051951Z   OPENCODE_API_KEY: ***
+repair	Write opencode auth	2026-10-29T04:18:17.5052245Z ##[endgroup]
+repair	Run worker	﻿2026-10-29T04:18:17.5324968Z ##[group]Run set -euo pipefail
+repair	Run worker	2026-10-29T04:18:17.5325301Z ^[[36;1mset -euo pipefail^[[0m
+repair	Run worker	2026-10-29T04:18:17.5325567Z ^[[36;1mcd "$GITHUB_WORKSPACE/worker"^[[0m
+repair	Run worker	2026-10-29T04:18:17.5325989Z ^[[36;1mPYTHONPATH="$GITHUB_WORKSPACE/worker" python3 -m scout_v2.workers.core \^[[0m
+repair	Run worker	2026-10-29T04:18:17.5326429Z ^[[36;1m  --job "$RUNNER_TEMP/job.json" \^[[0m
+repair	Run worker	2026-10-29T04:18:17.5326734Z ^[[36;1m  --out "$RUNNER_TEMP/artifacts" \^[[0m
+repair	Run worker	2026-10-29T04:18:17.5327037Z ^[[36;1m  --repo-dir "$RUNNER_TEMP/repo" \^[[0m
+repair	Run worker	2026-10-29T04:18:17.5327336Z ^[[36;1m  --backend github_actions \^[[0m
+repair	Run worker	2026-10-29T04:18:17.5327613Z ^[[36;1m  --emit-envelope^[[0m
+repair	Run worker	2026-10-29T04:18:17.5343732Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+repair	Run worker	2026-10-29T04:18:17.5344084Z env:
+repair	Run worker	2026-10-29T04:18:17.5344467Z   OPENCODE_API_KEY: ***
+repair	Run worker	2026-10-29T04:18:17.5344713Z ##[endgroup]
+repair	Run worker	2026-10-29T04:18:53.5171544Z [core] wrote /home/runner/work/_temp/artifacts/result.json outcome=failed
+repair	Run worker	2026-10-29T04:18:53.5179358Z ##OSSCOUT_RESULT##{"result": {"schema_version": 1, "job_id": "job-0de55633-06a6-4845-b4b2-0658094be356", "backend": "github_actions", "outcome": "failed", "reproduced_on_base": false, "fixed_on_patch": false, "regression_tests_passed": false, "patch_path": null, "test_report_path": null, "logs_path": "artifacts/job-0de55633-06a6-4845-b4b2-0658094be356/worker.log", "base_sha": "350568952c4b65d1310081d45a2536b6449712f0", "model_used": null, "measured_cost_usd": null, "unverified_items": ["agent produced no source change (changed=nothing, tests=none); agent said: I'll start by reading the task file."]}}
+repair	Publish (push branch + open PR)	﻿2026-10-29T04:18:53.5344178Z ##[group]Run set -euo pipefail
+repair	Publish (push branch + open PR)	2026-10-29T04:18:53.5344754Z ^[[36;1mset -euo pipefail^[[0m
+repair	Publish (push branch + open PR)	2026-10-29T04:18:53.5345193Z ^[[36;1mcd "$GITHUB_WORKSPACE/worker"^[[0m
+repair	Publish (push branch + open PR)	2026-10-29T04:18:53.5345805Z ^[[36;1mPYTHONPATH="$GITHUB_WORKSPACE/worker" python3 - <<'PY'^[[0m
+repair	Publish (push branch + open PR)	2026-10-29T04:18:53.5346428Z ^[[36;1mimport json, os, pathlib, sys^[[0m
+repair	Publish (push branch + open PR)	2026-10-29T04:18:53.5346995Z ^[[36;1msys.path.insert(0, os.environ["GITHUB_WORKSPACE"] + "/worker")^[[0m
+repair	Publish (push branch + open PR)	2026-10-29T04:18:53.5347704Z ^[[36;1mfrom scout_v2.workers.publish_remote import publish_from_env^[[0m
+repair	Publish (push branch + open PR)	2026-10-29T04:18:53.5348266Z ^[[36;1m^[[0m
+repair	Publish (push branch + open PR)	2026-10-29T04:18:53.5348660Z ^[[36;1mtmp = pathlib.Path(os.environ["RUNNER_TEMP"])^[[0m
+repair	Publish (push branch + open PR)	2026-10-29T04:18:53.5349718Z ^[[36;1mjob = json.loads((tmp / "job.json").read_text())^[[0m
+repair	Publish (push branch + open PR)	2026-10-29T04:18:53.5350519Z ^[[36;1mif not (job.get("publish") or {}):^[[0m
+repair	Publish (push branch + open PR)	2026-10-29T04:18:53.5351093Z ^[[36;1m    print("no publish config in payload; skipping")^[[0m
+repair	Publish (push branch + open PR)	2026-10-29T04:18:53.5351600Z ^[[36;1m    sys.exit(0)^[[0m
+repair	Publish (push branch + open PR)	2026-10-29T04:18:53.5351949Z ^[[36;1m^[[0m
+repair	Publish (push branch + open PR)	2026-10-29T04:18:53.5352393Z ^[[36;1mres_file = tmp / "artifacts" / "result.json"^[[0m
+repair	Publish (push branch + open PR)	2026-10-29T04:18:53.5352896Z ^[[36;1mif not res_file.is_file():^[[0m
+repair	Publish (push branch + open PR)	2026-10-29T04:18:53.5353473Z ^[[36;1m    print("no result.json; refusing to publish"); sys.exit(0)^[[0m
+repair	Publish (push branch + open PR)	2026-10-29T04:18:53.5354071Z ^[[36;1mres = json.loads(res_file.read_text())^[[0m
+repair	Publish (push branch + open PR)	2026-10-29T04:18:53.5354599Z ^[[36;1mok = (res.get("outcome") == "succeeded"^[[0m
+repair	Publish (push branch + open PR)	2026-10-29T04:18:53.5355263Z ^[[36;1m      and res.get("reproduced_on_base") and res.get("fixed_on_patch"))^[[0m
+repair	Publish (push branch + open PR)	2026-10-29T04:18:53.5355924Z ^[[36;1mif not ok:^[[0m
+repair	Publish (push branch + open PR)	2026-10-29T04:18:53.5356627Z ^[[36;1m    print(f"evidence chain not satisfied ({res.get('outcome')}); refusing to publish")^[[0m
+repair	Publish (push branch + open PR)	2026-10-29T04:18:53.5357433Z ^[[36;1m    sys.exit(0)^[[0m
+repair	Publish (push branch + open PR)	2026-10-29T04:18:53.5357871Z ^[[36;1m^[[0m
+repair	Publish (push branch + open PR)	2026-10-29T04:18:53.5358376Z ^[[36;1mout = publish_from_env(job, tmp / "repo", tmp / "artifacts")^[[0m
+repair	Publish (push branch + open PR)	2026-10-29T04:18:53.5358998Z ^[[36;1mif out and not out.get("ok"):^[[0m
+repair	Publish (push branch + open PR)	2026-10-29T04:18:53.5359784Z ^[[36;1m    print(f"publish failed: {out.get('error')}")^[[0m
+repair	Publish (push branch + open PR)	2026-10-29T04:18:53.5360340Z ^[[36;1m    sys.exit(1)^[[0m
+repair	Publish (push branch + open PR)	2026-10-29T04:18:53.5360740Z ^[[36;1mPY^[[0m
+repair	Publish (push branch + open PR)	2026-10-29T04:18:53.5382977Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+repair	Publish (push branch + open PR)	2026-10-29T04:18:53.5383327Z env:
+repair	Publish (push branch + open PR)	2026-10-29T04:18:53.5383718Z   GH_TOKEN: ***
+repair	Publish (push branch + open PR)	2026-10-29T04:18:53.5383942Z ##[endgroup]
+repair	Publish (push branch + open PR)	2026-10-29T04:18:53.5700015Z evidence chain not satisfied (failed); refusing to publish
+repair	Upload artifacts	﻿2026-10-29T04:18:53.5913227Z ##[group]Run actions/upload-artifact@v4
+repair	Upload artifacts	2026-10-29T04:18:53.5913525Z with:
+repair	Upload artifacts	2026-10-29T04:18:53.5913820Z   name: oss-result-job-0de55633-06a6-4845-b4b2-0658094be356
+repair	Upload artifacts	2026-10-29T04:18:53.5914181Z   path: /home/runner/work/_temp/artifacts/
+repair	Upload artifacts	2026-10-29T04:18:53.5914477Z   retention-days: 2
+repair	Upload artifacts	2026-10-29T04:18:53.5914718Z   if-no-files-found: warn
+repair	Upload artifacts	2026-10-29T04:18:53.5914963Z   compression-level: 6
+repair	Upload artifacts	2026-10-29T04:18:53.5915195Z   overwrite: false
+repair	Upload artifacts	2026-10-29T04:18:53.5915429Z   include-hidden-files: false
+repair	Upload artifacts	2026-10-29T04:18:53.5915679Z ##[endgroup]
+repair	Upload artifacts	2026-10-29T04:18:53.7580186Z (node:2703) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+repair	Upload artifacts	2026-10-29T04:18:53.7581585Z (Use `node --trace-deprecation ...` to show where the warning was created)
+repair	Upload artifacts	2026-10-29T04:18:53.7739916Z With the provided path, there will be 2 files uploaded
+repair	Upload artifacts	2026-10-29T04:18:53.7741939Z Artifact name is valid!
+repair	Upload artifacts	2026-10-29T04:18:53.7742528Z Root directory input is valid!
+repair	Upload artifacts	2026-10-29T04:18:53.9256154Z ##[error]Failed to CreateArtifact: Artifact storage quota has been hit. Unable to upload any new artifacts. Usage is recalculated every 6-12 hours.
+repair	Upload artifacts	More info on storage limits: https://docs.github.com/en/billing/managing-billing-for-github-actions/about-billing-for-github-actions#calculating-minute-and-storage-spending
+repair	Post Get oss-scout worker	﻿2026-10-29T04:18:53.9454515Z Post job cleanup.
+repair	Post Get oss-scout worker	2026-10-29T04:18:54.0409691Z [command]/usr/bin/git version
+repair	Post Get oss-scout worker	2026-10-29T04:18:54.0466745Z git version 2.56.0
+repair	Post Get oss-scout worker	2026-10-29T04:18:54.0554713Z Temporarily overriding HOME='/home/runner/work/_temp/3f5cf635-577c-41fe-8ed2-0644e3c6d629' before making global git config changes
+repair	Post Get oss-scout worker	2026-10-29T04:18:54.0570119Z Adding repository directory to the temporary git global config as a safe directory
+repair	Post Get oss-scout worker	2026-10-29T04:18:54.0571424Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/oss-scout/oss-scout/worker
+repair	Post Get oss-scout worker	2026-10-29T04:18:54.0573965Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+repair	Post Get oss-scout worker	2026-10-29T04:18:54.0622115Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+repair	Post Get oss-scout worker	2026-10-29T04:18:54.1001287Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+repair	Post Get oss-scout worker	2026-10-29T04:18:54.1030885Z http.https://github.com/.extraheader
+repair	Post Get oss-scout worker	2026-10-29T04:18:54.1061321Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+repair	Post Get oss-scout worker	2026-10-29T04:18:54.1106412Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+repair	Post Get oss-scout worker	2026-10-29T04:18:54.1620023Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+repair	Post Get oss-scout worker	2026-10-29T04:18:54.1685513Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+repair	Complete job	﻿2026-10-29T04:18:54.2233812Z Cleaning up orphan processes
+repair	Complete job	2026-10-29T04:18:54.2515390Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4, actions/upload-artifact@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/

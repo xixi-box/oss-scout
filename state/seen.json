@@ -3474,5 +3474,21 @@
  "anomalyco/opencode#60433": {
   "first_seen": "2026-10-30T11:07:55",
   "status": "queued"
+ },
+ "vectorize-io/hindsight#6238": {
+  "first_seen": "2026-10-31T09:15:54",
+  "status": "queued"
+ },
+ "biomejs/biome#12791": {
+  "first_seen": "2026-10-31T09:15:54",
+  "status": "queued"
+ },
+ "biomejs/biome#12753": {
+  "first_seen": "2026-10-31T09:15:54",
+  "status": "queued"
+ },
+ "vllm-project/vllm#54477": {
+  "first_seen": "2026-10-31T09:15:54",
+  "status": "unknown_repo"
  }
 }

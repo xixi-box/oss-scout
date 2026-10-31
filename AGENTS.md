@@ -41,8 +41,11 @@ worktrees/<repo>-<issueN>/  每个候选一个 worktree
 ## 2. 每日三段（每段独立提前退出）
 
 ### ① PR 监控段（最优先，几秒钟）
-对 worklog 里所有 `pr_open` 的 PR：查 CI 结论与新评论。
+`python scripts/monitor_prs.py` 扫所有 open PR，按 CI 结果和新评论分类：
+`fix_ci` / `address_review` / `answer_question` / `wait`。
 - CI 因我们的改动失败 → 读日志、修复、推送（新 commit，不 force-push）。
+- **先排除 flaky**：连真实 LLM 的测试（如 pydantic-ai 的 `test_exploration[gpt-live]`）、
+  Vercel 授权类检查，失败与我们无关，不要当成自己的 bug 去改。
 - maintainer 提修改意见 → 本轮优先落实；**48 小时内必须响应**（防烂尾第一杠杆）。
 - 被合并/被关 → 更新状态，被关要看原因记入 worklog（影响该仓库后续出价意愿）。
   **被关的 PR 要回溯到仓库规则**：2026-10-30 一天被关 3 个（astral AI 政策、
@@ -54,8 +57,13 @@ worktrees/<repo>-<issueN>/  每个候选一个 worktree
 `python discover.py`（全量 ~5 分钟）。输出摘要里 A/B 级候选入队即止，本段不做实现。
 新候选为 0 → 简短收尾（这是常态空跑，不报错）。
 
-### ③ 消费段（至多 1 个）
-优先级：**开放池 new A > 闸门池 assigned_to_me > 限制档 maintainer-confirmed**。
+### ③ 消费段（每日至多 2 个）
+优先级：**暂存 > 开放池 new A > 闸门池 assigned_to_me > 限制档 maintainer-confirmed**。
+
+**暂存机制（2026-10-30 起）**：当天额度用完之后又识别出可处理的 issue，标
+`staged` 记时间，**留到第二天优先做**。drain 的顺序是"暂存优先、组内先到先出"。
+暂存超过 **3 天**丢弃——放三天的 issue 多半已经被人修了或被关了。
+`staged_at` 一旦写下就不再刷新，否则永远等不到过期。
 流程：
 1. 复检（§0.2）。
 2. `gh repo sync xixi-box/<repo>` 同步 fork。

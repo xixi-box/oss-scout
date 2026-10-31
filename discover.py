@@ -70,7 +70,7 @@ RE_DUPLICATE = re.compile(
 # 官方 AI bot 认领信号（如 OpenHands 的 openhands-ai[bot] "I'm on it!"——官方智能体收割自家 issue 队列）
 RE_BOT_CLAIM = re.compile(r"I'?m on it|tracking my progress", re.I)
 # 计费/配额投诉簇：服务端计量问题，代码侧不可修（opencode Go 计划一类的 issue 族）
-RE_BILLING = re.compile(r"\b(quota|billing|subscription|refund|scam|re-?charge[d]?|plan limit)\b", re.I)
+RE_BILLING = re.compile(r"(quota|billing|subscription|refund|scam|re-?charge[d]?|plan limit|payment declined|declined payment|free usage|usage limit|free tier|usage exceeded|cooldown)", re.I)
 MAINTAINER_ASSOC = {"MEMBER", "OWNER", "COLLABORATOR"}
 
 
