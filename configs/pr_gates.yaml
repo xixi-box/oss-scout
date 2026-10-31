@@ -15,6 +15,27 @@ defaults:
     - "ready-for-dev"
     - "accepted"
 
+# ---- CLA（2026-10-31 核实）----
+# 三种机制，能不能自动化完全不同：
+#
+#   comment_sign   回复一条固定句子就完成签署（Arize-ai/phoenix 就是）。
+#                  可以全自动：机器人认这句话，签一次终身有效。
+#   cla-assistant  第三方 App，要人点链接走 OAuth。**无法自动化**——那一步
+#                  需要真人在网页上确认授权，agent 做不到也不该做。
+#   microsoft      microsoft/playwright 用 EasyCLA（cla.opensource.microsoft.com），
+#                  同样要网页签署。
+#
+# 对不能自动的，做法是**开 PR 前就预警**：PR 开出来也是挂着等签名，不如先
+# 提醒人去签，签完再开。这比开出去挂着强——挂着的 PR 会被 maintainer 看到
+# 一个未签 CLA 的贡献者。
+cla:
+  "Arize-ai/phoenix":        {service: comment_sign, phrase: "I have read the CLA Document and I hereby sign the CLA"}
+  "mem0ai/mem0":             {service: cla-assistant}
+  "BerriAI/litellm":         {service: cla-assistant}
+  "langfuse/langfuse":       {service: cla-assistant}
+  "microsoft/playwright":    {service: microsoft}
+  "microsoft/playwright-python": {service: microsoft}
+
 repositories:
   # ---- Agent Memory ----
   vectorize-io/hindsight:       {requires_invite: false}

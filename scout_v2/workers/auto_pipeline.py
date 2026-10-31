@@ -525,6 +525,18 @@ def candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6) -> dict:
     except Exception as e:  # noqa: BLE001
         return _abort_release(f"routing failed: {str(e)[:160]}")
     if decision.backend == "github_actions":
+        # 开 PR 前先看这个仓库要不要人工签 CLA。要人工签的仓库，PR 开出来也是
+        # 挂着 not_signed 等签名，不如现在就告诉人「先去签，签完再来」——省一轮
+        # Actions，也避免 maintainer 看到一个连 CLA 都没签的贡献者。
+        try:
+            from .cla import preflight
+            pre = preflight(root, repo)
+            if pre.get("blocking"):
+                return _abort_release(f"CLA required: {pre['detail']}")
+            if pre.get("detail"):
+                summary["steps"].append(f"cla: {pre['detail']}")
+        except Exception as e:  # noqa: BLE001 — CLA 检查失败不该阻断修复
+            log(root, "cla_check_failed", key, str(e)[:200])
         job.publish = _build_publish_cfg(repo, number, base_sha, entry)
     try:
         backend, remote_id, extra = _submit_job(root, job, eng)
@@ -576,6 +588,28 @@ def candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6) -> dict:
     summary["pr"] = pr_url
     log(root, "pr_open", key, f"{pr_url} (auto pipeline, backend={backend})")
     mark_candidate(root, key, "pr_open")
+
+    # PR 开出来之后立刻把能自动签的 CLA 签掉。phoenix 这类仓库的 CLA bot 认
+    # 一条固定口令的 issue_comment，发出去就生效；剩下要网页 OAuth 的，preflight
+    # 已经在派发前拦住了，走不到这里。
+    #
+    # 注意用 PR 号而不是 issue 号：CLA bot 认的是评论所在的 PR，两者编号不同。
+    try:
+        import re as _re
+        m = _re.search(r"/pull/(\d+)", pr_url or "")
+        pr_no = int(m.group(1)) if m else None
+        if pr_no:
+            from .cla import sign
+            res = sign(root, repo, pr_no)
+            if res.get("action") == "signed":
+                summary["steps"].append("cla signed")
+                log(root, "cla_signed", key, res.get("detail", "")[:100])
+            elif not res.get("ok"):
+                summary["steps"].append(f"cla: {res.get('action')}")
+                log(root, "cla_failed", key, str(res.get("detail"))[:200])
+    except Exception as e:  # noqa: BLE001 — 签 CLA 失败不影响已开的 PR
+        log(root, "cla_error", key, str(e)[:200])
+
     ledger.close()
     return summary
 

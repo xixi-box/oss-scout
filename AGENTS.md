@@ -106,10 +106,15 @@ weaviate）——可以进池，但描述必须自己写得像人话。
 
 1. **重读**该仓库 CONTRIBUTING.md + PR 模板（`.github/PULL_REQUEST_TEMPLATE.md`）。
 2. 看**最近 3 个被合并的外部 PR**的标题格式、描述结构、测试形态，照着做。
-3. 查 CLA/DCO：微软系仓库常有 CLA bot，首次贡献会触发。DCO 要求时**每个 commit**
-   都要有 `Signed-off-by`（发布代码已无条件加）。注意 DCO bot 校验分支上的**全部**
-   commit：事后追加一个签名空 commit 不解除红灯，唯一修法是 rebase 成单个签名
-   commit——那需要 force-push，违反 §0.3，所以只能关掉重开。
+3. 查 CLA/DCO。**DCO**：要求时每个 commit 都要有 `Signed-off-by`（发布代码已
+   无条件加）。注意 DCO bot 校验分支上的**全部** commit：事后追加一个签名空 commit
+   不解除红灯，唯一修法是 rebase 成单个签名 commit——那需要 force-push，违反 §0.3，
+   所以只能关掉重开。
+   **CLA** 分三种（`configs/pr_gates.yaml` 的 `cla:` 段已核实）：
+   - `comment_sign`（phoenix）：回一条固定口令即完成，**代码会自动签**。
+   - `cla-assistant`（mem0 / litellm / langfuse）：点链接走 OAuth，**必须人工**。
+     这种仓库开 PR 前会被 preflight 拦下并提示先去签，不会白开一个挂着 not_signed 的 PR。
+   - `microsoft` EasyCLA（playwright ×2）：同样人工。
 4. 查**结构性门槛**：有的仓库要求作者先有 N 个已合并 PR 才允许跑 CI（vllm 的
    `pre-run-check` 要求 4 个，并明写不要 AI agent 申请标签）。新账号不满足，
    这类仓库在挑选阶段就该排除，不要开 PR。

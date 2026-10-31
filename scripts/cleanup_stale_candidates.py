@@ -62,6 +62,25 @@ def main() -> int:
                        and v.get("repo") in pool
                        and (v.get("ai_verdict") or {}).get("usable") is None
                        and (v.get("ai_grade") or {}).get("grade") is None]
+    # needs_invite 是已删除的 PR 门禁留下的状态：2026-10-30 删掉 pr_invited()
+    # 之后，代码里再没有地方读这个状态，也没有地方写它——它们既不会被派发，
+    # 也不会被重新判定，纯粹是永久滞留。直接删掉（原始 issue 还在 GitHub 上，
+    # 真要找回来按 id 重新拉即可）。
+    drop_needs_invite = [k for k, v in q.items()
+                         if v.get("status") == "needs_invite"]
+    # 暂存超期的也在这里清一次，避免 drain 只是"看不见"而不是"删掉"
+    drop_expired_stage: list[str] = []
+    for k, v in q.items():
+        if v.get("status") != "staged":
+            continue
+        ts = str(v.get("staged_at") or v.get("discovered_at") or "")
+        try:
+            import datetime as _dt
+            then = _dt.datetime.strptime(ts[:19], "%Y-%m-%dT%H:%M:%S")
+            if (_dt.datetime.now() - then).days > 3:
+                drop_expired_stage.append(k)
+        except (ValueError, TypeError):
+            drop_expired_stage.append(k)      # 没有时间戳的暂存无法判龄，按过期处理
 
     print(f"pool={len(pool)} candidates={before}")
     counts: dict[str, int] = {}
@@ -71,14 +90,18 @@ def main() -> int:
         print(f"  {st:24s} {n}")
     print(f"drop (repo not in pool): {len(drop_out_of_pool)}")
     print(f"drop (in pool, never AI-judged): {len(drop_no_verdict)}")
-    for k in (drop_out_of_pool + drop_no_verdict)[:10]:
+    print(f"drop (needs_invite, gate removed): {len(drop_needs_invite)}")
+    print(f"drop (staged > 3 days): {len(drop_expired_stage)}")
+    for k in (drop_out_of_pool + drop_no_verdict + drop_needs_invite
+              + drop_expired_stage)[:10]:
         print(f"  - {k}")
 
     if args.dry_run:
         print("dry run, nothing written")
         return 0
 
-    for k in drop_out_of_pool + drop_no_verdict:
+    for k in (drop_out_of_pool + drop_no_verdict + drop_needs_invite
+              + drop_expired_stage):
         q.pop(k, None)
     fd, tmp = tempfile.mkstemp(dir=str(qpath.parent), suffix=".tmp")
     with os.fdopen(fd, "w", encoding="utf-8") as f:
