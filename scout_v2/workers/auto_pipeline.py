@@ -747,6 +747,8 @@ def _stage_candidates(root: Path, keys: list[str]) -> int:
 
 
 STAGED_STATUS = "staged"          # 今天额度用完了，留到明天再处理
+# 内部 fixture 仓库：自动 drain 永远跳过，演练走手动单条入口
+INTERNAL_REPOS = {"xixi-box/oss-scout-v2-test"}
 STAGE_TTL_DAYS = 3                # 暂存超过这个天数就丢，避免拿陈旧的 issue 去修
 
 
@@ -805,6 +807,10 @@ def drain_ai_graded(root: Path, limit: int = 3, dry_run: bool = True,
 
     max_new_claims：当日还剩几个额度。额度耗尽时今天新识别出的候选标成
     staged（留到明天），而不是留在 new 里等着被同一轮反复扫描。
+
+    内部测试仓库（fixture）不参与自动 drain：P5 演练用手动触发，演练轮也
+    烧 Actions 分钟（2026-10-31 审计发现 3 条 fixture 失败记录）。手动验证
+    走 candidate_pipeline 单条入口，不走这条。
     """
     root = _data_root(root)
     qpath = root / "queue" / "candidates.json"
@@ -813,6 +819,8 @@ def drain_ai_graded(root: Path, limit: int = 3, dry_run: bool = True,
     eligible: list[tuple[str, dict]] = []
     for key, e in q.items():
         if e.get("status") not in ACTIVE:
+            continue
+        if e.get("repo") in INTERNAL_REPOS:
             continue
         if e.get("blockers"):
             continue

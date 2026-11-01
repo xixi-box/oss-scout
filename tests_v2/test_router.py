@@ -178,7 +178,15 @@ class TestStagedCandidates:
     2026-10-30（用户裁定）：每天至多 2 个 PR。当天额度用完之后又识别出可处理的
     issue，先存着，第二天**先清暂存**；暂存空了才接当天新扫的。暂存超过 3 天
     丢弃——放三天的 issue 多半已经被人修了或关了。
+
+    时间戳一律用相对时间生成：硬编码日期会被真实时间追上（2026-11-01 实测，
+    "2026-10-29" 在两天后落进 3 天 TTL 被当过期丢弃，测试自己红掉）。
     """
+
+    @staticmethod
+    def _ts(days_ago: float) -> str:
+        import time as _t
+        return _t.strftime("%Y-%m-%dT%H:%M:%S", _t.localtime(_t.time() - days_ago * 86400))
 
     def _root(self, tmp_path, entries):
         import json as _json
@@ -197,12 +205,12 @@ class TestStagedCandidates:
         root = self._root(tmp_path, {
             "a/fresh#2": {"id": "a/fresh#2", "repo": "a/fresh", "number": 2,
                           "status": "new", "blockers": [],
-                          "discovered_at": "2026-10-30T01:00:00",
+                          "discovered_at": self._ts(0.1),
                           "ai_verdict": {"usable": True}},
             "a/old#1": {"id": "a/old#1", "repo": "a/old", "number": 1,
                         "status": "staged", "blockers": [],
-                        "staged_at": "2026-10-29T01:00:00",
-                        "discovered_at": "2026-10-29T01:00:00",
+                        "staged_at": self._ts(1.0),
+                        "discovered_at": self._ts(1.0),
                         "ai_verdict": {"usable": True}},
         })
         ready = drain_ai_graded(root, limit=1, dry_run=True)
@@ -214,7 +222,7 @@ class TestStagedCandidates:
         entries = {
             f"a/r#{i}": {"id": f"a/r#{i}", "repo": "a/r", "number": i,
                          "status": "new", "blockers": [],
-                         "discovered_at": f"2026-10-30T0{i}:00:00",
+                         "discovered_at": self._ts(0.05 * i),
                          "ai_verdict": {"usable": True}}
             for i in range(1, 4)
         }
@@ -231,7 +239,7 @@ class TestStagedCandidates:
         root = self._root(tmp_path, {
             "a/stale#1": {"id": "a/stale#1", "repo": "a/stale", "number": 1,
                           "status": "staged", "blockers": [],
-                          "staged_at": "2026-10-01T00:00:00",
+                          "staged_at": self._ts(5.0),
                           "ai_verdict": {"usable": True}},
         })
         assert drain_ai_graded(root, limit=5, dry_run=True) == []
@@ -242,13 +250,30 @@ class TestStagedCandidates:
         root = self._root(tmp_path, {
             "a/keep#1": {"id": "a/keep#1", "repo": "a/keep", "number": 1,
                          "status": "staged", "blockers": [],
-                         "staged_at": "2026-10-29T08:00:00",
+                         "staged_at": self._ts(1.5),
                          "ai_verdict": {"usable": True}},
             "a/new#2": {"id": "a/new#2", "repo": "a/new", "number": 2,
                         "status": "new", "blockers": [],
-                        "discovered_at": "2026-10-30T09:00:00",
+                        "discovered_at": self._ts(0.02),
                         "ai_verdict": {"usable": True}},
         })
         drain_ai_graded(root, limit=1, dry_run=False)
         q = self._read(root)
-        assert q["a/keep#1"]["staged_at"] == "2026-10-29T08:00:00"
+        assert q["a/keep#1"]["staged_at"] == self._ts(1.5)
+
+
+class TestInternalRepoExcluded:
+    """fixture 仓库不进自动 drain：演练轮也在烧 Actions 分钟。"""
+
+    def test_fixture_repo_not_drained(self, tmp_path):
+        import json as _json
+        from scout_v2.workers.auto_pipeline import drain_ai_graded
+        (tmp_path / "queue").mkdir(parents=True)
+        (tmp_path / "queue" / "candidates.json").write_text(_json.dumps({
+            "xixi-box/oss-scout-v2-test#9": {
+                "id": "xixi-box/oss-scout-v2-test#9",
+                "repo": "xixi-box/oss-scout-v2-test", "number": 9,
+                "status": "new", "blockers": [],
+                "ai_verdict": {"usable": True}},
+        }), encoding="utf-8")
+        assert drain_ai_graded(tmp_path, limit=5, dry_run=True) == []
