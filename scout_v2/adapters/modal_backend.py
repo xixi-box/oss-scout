@@ -13,13 +13,31 @@
 from __future__ import annotations
 
 import base64
+import contextlib
 import json
+import os
 from pathlib import Path
 from typing import Any
 
 from ..budget import BudgetGuard
 
 RESULT_MARKER = "##OSSCOUT_RESULT##"
+
+
+@contextlib.contextmanager
+def no_proxy_context():
+    """Modal SDK 走 gRPC/WebSocket，经 HTTP 代理会 "Could not connect to the
+    Modal server"（2026-11-01 试扫实录：p6_bug_hunter 三个仓库全部 submit 失败，
+    与 10-25 成功轮的唯一环境差异是容器里多了 HTTPS_PROXY）。Modal 自有传输层，
+    与宿主代理方案无关。内建在后端方法里，调用方无需（也不可能再忘）各自包裹。
+    """
+    keys = ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY",
+            "http_proxy", "https_proxy", "all_proxy")
+    saved = {k: os.environ.pop(k) for k in keys if k in os.environ}
+    try:
+        yield
+    finally:
+        os.environ.update(saved)
 
 
 class BackendDisabledError(RuntimeError):
@@ -67,7 +85,8 @@ class ModalSandboxBackend:
 
     def poll(self, remote_job_id: str) -> dict:
         sb = self._sandboxes[remote_job_id]
-        rc = sb.poll()
+        with no_proxy_context():
+            rc = sb.poll()
         if rc is None:
             return {"job_id": remote_job_id, "state": "running"}
         return {"job_id": remote_job_id, "state": "succeeded" if rc == 0 else "failed",
@@ -84,7 +103,8 @@ class ModalSandboxBackend:
 
     def collect(self, remote_job_id: str) -> dict:
         sb = self._sandboxes[remote_job_id]
-        stdout = sb.stdout.read()
+        with no_proxy_context():
+            stdout = sb.stdout.read()
         envelope = parse_envelope(stdout)
         self._release(remote_job_id)
         if envelope is None:
@@ -98,23 +118,26 @@ class ModalSandboxBackend:
     def _submit_real(self, job: dict) -> str:
         import modal
 
-        job_id = job["job_id"]
-        # context_dir 必须是项目根：Dockerfile 里 COPY scout_v2/configs/docker
-        image = modal.Image.from_dockerfile(str(self.dockerfile),
-                                            context_dir=str(self.dockerfile.resolve().parents[1]))
-        app = modal.App.lookup("oss-scout-worker", create_if_missing=True)
-        job_b64 = base64.b64encode(json.dumps(job, ensure_ascii=False).encode("utf-8")).decode()
-        # 镜像带 ENTRYPOINT：Sandbox 命令参数会追加到 entrypoint 之后（P6-A 实测教训，
-        # rc=2 = entrypoint 拿 $1/$2 当 job/out 再 exec argparse 报错）。
-        # 走 entrypoint 支持的 OSSCOUT_JOB_B64 环境变量通道，命令参数用无害占位。
-        sb = modal.Sandbox.create(
-            "/bin/true", app=app, image=image,
-            env={"OSSCOUT_JOB_B64": job_b64, **self.extra_env},
-            timeout=min(int(job.get("timeout_seconds", 1800)),
-                        self.max_task_minutes * 60),
-            cpu=job.get("cpu", 2),
-            memory=job.get("memory_mb", 4096),
-        )
+        with no_proxy_context():
+            job_id = job["job_id"]
+            # context_dir 必须是项目根：Dockerfile 里 COPY scout_v2/configs/docker
+            image = modal.Image.from_dockerfile(
+                str(self.dockerfile),
+                context_dir=str(self.dockerfile.resolve().parents[1]))
+            app = modal.App.lookup("oss-scout-worker", create_if_missing=True)
+            job_b64 = base64.b64encode(
+                json.dumps(job, ensure_ascii=False).encode("utf-8")).decode()
+            # 镜像带 ENTRYPOINT：Sandbox 命令参数会追加到 entrypoint 之后（P6-A
+            # 实测教训，rc=2 = entrypoint 拿 $1/$2 当 job/out 再 exec argparse 报错）。
+            # 走 entrypoint 支持的 OSSCOUT_JOB_B64 环境变量通道，命令参数用无害占位。
+            sb = modal.Sandbox.create(
+                "/bin/true", app=app, image=image,
+                env={"OSSCOUT_JOB_B64": job_b64, **self.extra_env},
+                timeout=min(int(job.get("timeout_seconds", 1800)),
+                            self.max_task_minutes * 60),
+                cpu=job.get("cpu", 2),
+                memory=job.get("memory_mb", 4096),
+            )
         self._sandboxes[job_id] = sb
         self.budget.reserve(job.get("max_estimated_compute_usd", 0.0))
         self._reserved[job_id] = job.get("max_estimated_compute_usd", 0.0)

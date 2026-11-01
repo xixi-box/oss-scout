@@ -174,24 +174,10 @@ def _actions_runner_repo(root: Path) -> str:
     return "xixi-box/oss-scout"
 
 
-def _no_proxy_context():
-    """Modal SDK 走 gRPC/WebSocket，经 HTTP 代理会 "Could not connect to the
-    Modal server"。提交 Sandbox / 读账单期间临时剥离代理变量。
-    用法：with _no_proxy_context(): ...
-    """
-    import contextlib
-
-    @contextlib.contextmanager
-    def _ctx():
-        keys = ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY",
-                "http_proxy", "https_proxy", "all_proxy")
-        saved = {k: os.environ.pop(k) for k in keys if k in os.environ}
-        try:
-            yield
-        finally:
-            os.environ.update(saved)
-
-    return _ctx()
+# Modal 通信不走代理的逻辑已内建进 ModalSandboxBackend（no_proxy_context）：
+# submit/poll/collect 内部自己包裹，调用方无需再包。这里保留名字作别名，
+# scripts/diag_proxy2.py 诊断脚本引用了它。
+from ..adapters.modal_backend import no_proxy_context as _no_proxy_context  # noqa: E402,F401
 
 
 def _submit_job(root: Path, job: Job, engine: PolicyEngine) -> tuple[str, str, dict]:
@@ -223,8 +209,8 @@ def _submit_job(root: Path, job: Job, engine: PolicyEngine) -> tuple[str, str, d
         be = ModalSandboxBackend(guard, dockerfile=image_path,
                                  max_task_minutes=int(mb.get("max_task_minutes", 30)),
                                  extra_env=extra_env)
-        with _no_proxy_context():   # Modal SDK 不能经 HTTP 代理
-            remote_id = be.submit(job.to_dict())
+        # Modal 后端内部已处理无代理（no_proxy_context），无需包裹
+        remote_id = be.submit(job.to_dict())
         return "modal", remote_id, {"backend_obj": be, "note": decision.reason}
 
     be = ActionsBackend(enabled=True, runner_repo=_actions_runner_repo(root),
@@ -237,8 +223,7 @@ def _collect(root: Path, backend: str, remote_id: str, extra: dict, timeout_s: i
     be = extra["backend_obj"]
     t0 = time.time()
     while True:
-        with _no_proxy_context():
-            st = be.poll(remote_id)
+        st = be.poll(remote_id)
         state = st.get("state")
         if state != "running":
             break
@@ -250,8 +235,7 @@ def _collect(root: Path, backend: str, remote_id: str, extra: dict, timeout_s: i
             return {"outcome": "timed_out",
                     "unverified_items": [f"backend did not finish in {timeout_s}s"]}
         time.sleep(15)
-    with _no_proxy_context():
-        env = be.collect(remote_id)
+    env = be.collect(remote_id)
     if not isinstance(env, dict):
         return {"result": None, "patch": None, "test_report": None, "raw": env}
     # 两个后端回来的形状不同：
