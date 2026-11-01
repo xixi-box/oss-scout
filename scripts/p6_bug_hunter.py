@@ -39,7 +39,9 @@ from scout_v2.adapters.modal_backend import (BudgetExceededError,  # noqa: E402
 from scout_v2.budget import BudgetGuard, ModalCliBilling  # noqa: E402
 from scout_v2.schemas import Job  # noqa: E402
 
-OUT_ROOT = ROOT / "state" / "bughunt"
+# 结果落 /data（持久卷）。以前写 ROOT/state（= /app/state，容器文件层），
+# 重启即失且和 bh_summary/evidence_audit 读的路径对不上（2026-11-01 实录）。
+OUT_ROOT = Path(os.environ.get("OSSCOUT_DASHBOARD_ROOT", "/data")) / "state" / "bughunt"
 
 
 def gh_retry(args: list[str], tries: int = 4) -> str | None:
