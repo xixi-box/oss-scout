@@ -36,9 +36,12 @@ SESSION_TTL = 7 * 24 * 3600
 
 VALID_LANES = ("open", "gated", "restricted", "observe")
 VALID_MODES = ("scan", "reproduce", "repair", "review", "ci")
-VALID_BACKENDS = ("modal", "actions")
-VALID_FEATURES = ("bug_hunter_light", "bug_hunter_deep_modal",
-                  "actions_backend", "opencode_models")
+VALID_BACKENDS = ("modal", "actions", "")
+# "" 作为 fallback 是合法值：2026-10-31 分工独占后，fallback 一律为空（互不兜底）
+# bug_hunter_light / bug_hunter_deep_modal 已删（2026-10-31）：设置进 yaml 也
+# 没有任何代码读它们，是能写不能用的死开关。bug hunter 的开关就是
+# configs/v2.yaml 的 budget.modal.enabled。
+VALID_FEATURES = ("actions_backend", "opencode_models")
 
 
 def _secret(root: Path) -> bytes:
@@ -127,7 +130,12 @@ def _replace_toplevel_block(text: str, key: str, new_block: str) -> str:
 
 def _set_routing(root: Path, mode: str, primary: str, fallback: str) -> None:
     """更新 configs/v2.yaml 的 routing 块：解析→改值→整块重渲染（流式），注释会丢
-    routing 块内的行注（可接受：语义由本函数与测试保证），其余注释原样保留。"""
+    routing 块内的行注（可接受：语义由本函数与测试保证），其余注释原样保留。
+
+    fallback="" 渲染成带引号的 `""`：裸 `fallback: ` 会被 safe_load 读回 None。
+    路由层把 falsy fallback 都视为"无兜底"，None 碰巧行为一致，但写进去的类型
+    读回来变了属于静默变形，显式引号防患。
+    """
     p = root / "configs" / "v2.yaml"
     data = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
     routing = data.get("routing") or {}
@@ -135,7 +143,8 @@ def _set_routing(root: Path, mode: str, primary: str, fallback: str) -> None:
     lines = ["routing:"]
     for m in ("scan", "reproduce", "repair", "review", "ci"):
         e = routing.get(m) or {"primary": "modal", "fallback": "actions"}
-        lines.append(f"  {m}:      {{primary: {e['primary']},   fallback: {e['fallback']}}}")
+        fb = e.get("fallback") or '""'
+        lines.append(f"  {m}:      {{primary: {e['primary']},   fallback: {fb}}}")
     _atomic_write_text(p, _replace_toplevel_block(
         p.read_text(encoding="utf-8"), "routing", "\n".join(lines) + "\n"))
 
@@ -506,7 +515,10 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
 
     @app.post("/api/routing")
     def api_set_routing(request: Request, mode: str = Form(...),
-                        primary: str = Form(...), fallback: str = Form(...)):
+                        primary: str = Form(...),
+                        fallback: str = Form("")):
+        # fallback 默认 ""：分工独占后空串是常态（FastAPI 对 Form("") 的空表单
+        # 值也正常收，这里显式给默认只是兼容老的看板表单不传该字段的情况）。
         if mode not in VALID_MODES:
             return JSONResponse({"detail": f"mode must be one of {VALID_MODES}"},
                                 status_code=400)

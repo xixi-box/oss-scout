@@ -38,7 +38,7 @@ budget:
     # 用户约束：只用临时 Sandbox；不创建长期付费 Volume；不使用额外计费的模型推理端点
     persistent_volumes: false
     paid_inference_endpoints: false
-    semgrep_ruleset: "p/python"       # MVP 精选规则集；扩容前人工复核误报率
+    semgrep_ruleset: "p/python"       # registry 最全的 python 集；correctness 过滤见 workers/scan.py
   actions:
     enabled: false                    # P3 前保持 false；测试仓库已就绪 xixi-box/oss-scout-v2-test
     max_minutes_per_job: 60
@@ -46,9 +46,9 @@ budget:
     allow_paid_api: false
 
 features:
-  bug_hunter_light: false             # P2 启用
-  bug_hunter_deep_modal: false        # P2 且 modal.enabled 后启用
-  actions_backend: true               # 2026-10-28：repair 主通道（托管 runner）
+  # bug_hunter 的启停 = budget.modal.enabled（2026-10-31 清理：原来这里有两个
+  # 没有任何代码读取的死开关 bug_hunter_light / bug_hunter_deep_modal）。
+  actions_backend: true               # repair 主通道（托管 runner）
   actions_runner_repo: xixi-box/oss-scout   # 执行 repair 的仓库；目标仓库只作只读输入
   opencode_models: true               # P4：opencode-go/deepseek-v4-flash（用户 Go 订阅，2026-10-25）
 
@@ -69,17 +69,16 @@ security:
   sanitize_logs: true
 
 routing:
-  # 两条后端跑同一份 worker 代码，区别只在执行环境（2026-10-28 修正后）：
-  #   Actions = 我们自己的仓库 + GitHub 托管 runner。目标仓库 clone 到工作目录，
-  #             依赖/测试框架按目标仓库自己的声明安装，opencode 在完整用户态里跑。
-  #             这是 repair 主通道：无 tty、平台级超时、日志可查。
-  #   Modal   = 临时 Sandbox + 我们自建的精简镜像。适合扫描这类短任务；
-  #             opencode 这类交互式 CLI 在此环境里会卡在 bootstrap（上游已知问题），
-  #             因此 repair 只把它当兜底，且兜底失败要如实上报而不是静默降级。
-  # 唯一硬约束：broad_scan 恒不上 Actions（GitHub ToS：公共 runner 不得用于
-  # 批量计算与所在仓库无关的第三方项目）。
-  scan:      {primary: modal,   fallback: actions}
-  reproduce: {primary: actions, fallback: modal}
-  repair:    {primary: actions, fallback: modal}
-  review:    {primary: actions, fallback: modal}
-  ci:        {primary: actions, fallback: modal}
+  # 2026-10-31 用户裁定：分工独占，互不兜底。
+  #   Modal   = scan（bug hunter）唯一承载。临时沙箱隔离 + $30 额度护栏；
+  #             ToS 禁止托管 runner 跑批量第三方扫描，self-hosted 会抢 VPS 资源。
+  #   Actions = repair/review/ci/reproduce 唯一承载。opencode 交互式 CLI 在
+  #             Modal 精简镜像里卡 bootstrap（上游已知问题），实测 repair 从未
+  #             在 Modal 上成功过——曾经的"兜底"名存实亡，删掉以免静默降级到
+  #             一个跑不通的平台。
+  # 任一后端不可用 → pause 并如实上报；绝不换平台重跑。
+  scan:      {primary: modal,   fallback: ""}
+  reproduce: {primary: actions, fallback: ""}
+  repair:    {primary: actions, fallback: ""}
+  review:    {primary: actions, fallback: ""}
+  ci:        {primary: actions, fallback: ""}

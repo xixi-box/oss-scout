@@ -519,25 +519,36 @@ class TestAuditedWrites:
         assert r.status_code == 400
 
     def test_set_routing_edits_v2_yaml(self, auth_client, fixture_root):
+        """分工独占（2026-10-31）：fallback 合法值含空串，scan 不许指向 actions。"""
         _login(auth_client)
+        # scan 的 primary 改成 actions 是违规配置吗？——路由层允许写（看板只改
+        # 配置文件），但 JobRouter 在 mode=scan 时硬性走 modal-only，写什么都
+        # 不会真落 Actions。这里验证写路径本身正常。
         r = auth_client.post("/api/routing",
-                             data={"mode": "scan", "primary": "actions",
-                                   "fallback": "modal"}, follow_redirects=False)
+                             data={"mode": "repair", "primary": "actions",
+                                   "fallback": ""}, follow_redirects=False)
         assert r.status_code == 303
         v2 = yaml.safe_load((fixture_root / "configs" / "v2.yaml").read_text(encoding="utf-8"))
-        assert v2["routing"]["scan"]["primary"] == "actions"
-        # 其余行未被破坏
         assert v2["routing"]["repair"]["primary"] == "actions"
+        assert v2["routing"]["repair"]["fallback"] == ""
+        # 其余行未被破坏
         assert v2["budget"]["modal"]["monthly_soft_cap_usd"] == 25.0
 
     def test_set_feature_toggles(self, auth_client, fixture_root):
         _login(auth_client)
         r = auth_client.post("/api/features",
-                             data={"key": "bug_hunter_light", "value": "true"},
+                             data={"key": "actions_backend", "value": "true"},
                              follow_redirects=False)
         assert r.status_code == 303
         v2 = yaml.safe_load((fixture_root / "configs" / "v2.yaml").read_text(encoding="utf-8"))
-        assert v2["features"]["bug_hunter_light"] is True
+        assert v2["features"]["actions_backend"] is True
+
+    def test_removed_dead_feature_keys_rejected(self, auth_client):
+        """bug_hunter_light / bug_hunter_deep_modal 已删：能写不能用的死开关。"""
+        _login(auth_client)
+        r = auth_client.post("/api/features",
+                             data={"key": "bug_hunter_light", "value": "true"})
+        assert r.status_code == 400
 
     def test_invalid_feature_key_rejected(self, auth_client):
         _login(auth_client)

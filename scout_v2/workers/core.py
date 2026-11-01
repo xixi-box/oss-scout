@@ -94,8 +94,14 @@ def execute(job: Job, out_dir: Path, backend: str = "local",
                           unverified_items=[f"repo fetch/checkout failed: {e}"])
     if job.mode == "scan":
         from .scan import run_scan
+        # categories 从 payload 传（逗号分隔；Job 无独立字段就共用 ruleset 旁的
+        # 环境约定）。默认 correctness——2026-10-31 实测 p/python 全集 14 条
+        # findings 全是 security 噪音（MD5/0o755/XXE），行为缺陷类才是我们要的。
+        cats = [c.strip() for c in (getattr(job, "categories", "") or "correctness").split(",")
+                if c.strip()]
         return run_scan(job, repo_dir or out_dir, out_dir,
-                        ruleset=job.ruleset or "p/python")
+                        ruleset=job.ruleset or "p/python",
+                        categories=tuple(cats) or None)
     if job.mode == "reproduce":
         from .reproduce import run_reproduce
         return run_reproduce(job, repo_dir or out_dir, out_dir,

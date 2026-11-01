@@ -46,8 +46,16 @@ def _snippet(repo_dir: Path, rel_path: str, line: int, context: int = 15) -> str
 
 def run_scan(job: Job, repo_dir: Path, out_dir: Path, *,
              ruleset: str = "p/python", max_findings: int = 50,
+             categories: tuple[str, ...] | None = ("correctness",),
              semgrep_bin: str = "semgrep", runner=None) -> Result:
-    """对固定 SHA 的仓库跑精选规则集，产出 findings.json + Result。"""
+    """对固定 SHA 的仓库跑精选规则集，产出 findings.json + Result。
+
+    categories：只保留这些 semgrep 类别的 findings。2026-10-31 实测 p/python
+    全集扫 3 个仓库出 14 条，AI 抽查 3 条全是 security 噪音（MD5/0o755/XXE）；
+    我们要的是行为缺陷（correctness），安全审计类直接在结果层丢掉——semgrep
+    每条 result 的 extra.metadata.category 标了类别，无该字段的保留（宁多勿漏，
+    由下游 AI 分析再过滤）。
+    """
     runner = runner or _run
     out_dir.mkdir(parents=True, exist_ok=True)
     rel = lambda name: f"artifacts/{job.job_id}/{name}"
@@ -73,12 +81,20 @@ def run_scan(job: Job, repo_dir: Path, out_dir: Path, *,
                       unverified_items=[f"semgrep exited {rc}: {stderr[-300:]}"])
 
     findings = []
+    dropped_by_category = 0
     try:
         raw = json.loads(stdout)
-        for r in (raw.get("results") or [])[:max_findings]:
+        for r in (raw.get("results") or []):
             path = r.get("path") or ""
             check_id = r.get("check_id") or ""
             line = int((r.get("start") or {}).get("line") or 0)
+            meta = (r.get("extra") or {}).get("metadata") or {}
+            category = str(meta.get("category") or "")
+            if categories and category and category not in categories:
+                dropped_by_category += 1
+                continue
+            if len(findings) >= max_findings:
+                break
             fp = bug_fingerprint(job.repo, path, check_id, line)
             # 连带代码片段一起回传：Sandbox 里网络通畅、仓库已在本地，
             # 这样下游 OpenCode 分析无需再 clone（部署机可能连不上 GitHub）
@@ -86,6 +102,7 @@ def run_scan(job: Job, repo_dir: Path, out_dir: Path, *,
                 "path": str(PurePosixPath(path)),
                 "line": line,
                 "rule_id": check_id,
+                "category": category,
                 "message": (r.get("extra") or {}).get("message", "")[:300],
                 "fingerprint": fp,
                 "candidate_id": bug_candidate_id(job.repo, job.base_sha, fp),
@@ -97,8 +114,10 @@ def run_scan(job: Job, repo_dir: Path, out_dir: Path, *,
                       unverified_items=[f"unparseable semgrep output: {e}"])
 
     (out_dir / "findings.json").write_text(
-        json.dumps({"schema_version": 1, "job_id": job.job_id, "repo": job.repo,
+        json.dumps({"schema_version": 2, "job_id": job.job_id, "repo": job.repo,
                     "base_sha": job.base_sha, "ruleset": ruleset,
+                    "categories": list(categories or []),
+                    "dropped_by_category": dropped_by_category,
                     "findings": findings}, ensure_ascii=False, indent=1),
         encoding="utf-8")
     # 误报率统计前，线索一律 inconclusive 而非 succeeded——防止被当成已验证证据

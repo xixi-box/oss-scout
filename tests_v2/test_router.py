@@ -47,24 +47,26 @@ class TestBroadScan:
 
 class TestReproduce:
     def test_reproduce_actions_primary(self):
-        """用户裁定：找 Bug 归 Modal，其余（含 reproduce）主选 Actions。"""
+        """用户裁定（2026-10-31）：分工独占——reproduce 主选 Actions。"""
         r = JobRouter(cfg(actions_enabled=True, actions_eligible=True,
                           modal_enabled=True, modal_budget_ok=True))
         d = r.route(job("reproduce"))
-        assert d.backend == "github_actions" and not d.fallback_used
+        assert d.backend == "github_actions"
 
-    def test_reproduce_falls_back_to_modal(self):
+    def test_reproduce_pauses_instead_of_falling_back(self):
+        """Actions 不可用 → pause，绝不静默换到 Modal（那里 opencode 跑不通）。"""
         r = JobRouter(cfg(actions_enabled=True, actions_eligible=False,
                           modal_enabled=True, modal_budget_ok=True))
         d = r.route(job("reproduce"))
-        assert d.backend == "modal" and d.fallback_used and d.ineligible
+        assert d.backend == "pause"
+        assert "ineligible" in d.reason
 
-    def test_repair_falls_back_to_modal(self):
-        """对称：repair 主选 Actions 不可用回退 Modal（原方向的反向）。"""
+    def test_repair_pauses_instead_of_falling_back(self):
+        """对称：repair 只走 Actions。Modal 兜底曾在实测里零成功。"""
         r = JobRouter(cfg(actions_enabled=True, actions_eligible=False,
                           modal_enabled=True, modal_budget_ok=True))
         d = r.route(job("repair"))
-        assert d.backend == "modal" and d.fallback_used and d.ineligible
+        assert d.backend == "pause"
 
     def test_pauses_when_both_blocked(self):
         r = JobRouter(cfg(actions_enabled=True, actions_eligible=False,
@@ -81,12 +83,19 @@ class TestReproduce:
         d = JobRouter(cfg()).route({"mode": "yolo"})
         assert d.backend == "pause" and "invalid mode" in d.reason
 
-    def test_scan_on_actions_when_modal_blocked(self):
-        """对称：scan（project_contribution）可走 Actions；broad_scan 恒拒。"""
+    def test_scan_modal_only_regardless_of_scope(self):
+        """scan 一律 Modal，连 project_contribution 也不落 Actions（2026-10-31
+        用户裁定：互不兜底；Modal 被预算挡住就 pause）。"""
         r = JobRouter(cfg(actions_enabled=True, actions_eligible=True,
                           modal_enabled=True, modal_budget_ok=False))
         d = r.route(job("scan", "project_contribution"))
-        assert d.backend == "github_actions" and d.fallback_used
+        assert d.backend == "pause" and "budget" in d.reason
+
+    def test_scan_never_actions_even_when_modal_disabled(self):
+        r = JobRouter(cfg(actions_enabled=True, actions_eligible=True,
+                          modal_enabled=False))
+        d = r.route(job("scan", "broad_scan"))
+        assert d.backend == "pause"
 
 
 class TestRepairLoopConcurrency:

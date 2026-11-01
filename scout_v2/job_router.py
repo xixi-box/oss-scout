@@ -1,13 +1,15 @@
-"""确定性 Backend Router（计划 §5；用户裁定 2026-10-25：两后端能力全对称）。
+"""确定性 Backend Router（2026-10-31 用户裁定：两后端分工互不兜底）。
 
-路由策略表（configs/v2.yaml routing）：每模式 {primary, fallback}，两条后端都可承载
-全部五种模式（同一份 worker 代码）。回退仅限平台故障/配额/资格问题，绝不因测试
-断言失败换平台重跑。
+分工（configs/v2.yaml routing）：
+- scan（bug hunter）→ 只走 Modal：临时沙箱隔离执行扫描，$30 额度护栏。
+- repair/review/ci/reproduce → 只走 GitHub Actions（我们自己的仓库）：
+  opencode 交互式 CLI 在 Modal 精简镜像里卡 bootstrap（上游已知问题），
+  实测 repair 从未在 Modal 上成功过——兜底通道名存实亡，删掉以免"静默
+  降级到一个跑不通的平台"。
+- 任一后端不可用 → pause 并如实上报，绝不换平台重跑，也不静默降级。
 
-唯一保留的不对称是合规线：execution_scope=broad_scan 恒不上 Actions——
-GitHub ToS 禁止公共 runner 批量计算与所在仓库无关的第三方项目（计划 §1/§9），
-这是策略拒绝而非能力缺失（scan/reproduce 在 project_contribution 范围内
-可走 Actions，与 Modal 同权）。
+保留的合规硬线：execution_scope=broad_scan 恒不上 Actions——GitHub ToS
+禁止公共 runner 批量计算与所在仓库无关的第三方项目（计划 §1/§9）。
 """
 from __future__ import annotations
 
@@ -16,12 +18,13 @@ from typing import Any
 
 from .schemas import MODES
 
+# 分工独占：每模式只有一条后端，没有 fallback。
 DEFAULT_ROUTING = {
-    "scan": {"primary": "modal", "fallback": "actions"},
-    "reproduce": {"primary": "actions", "fallback": "modal"},
-    "repair": {"primary": "actions", "fallback": "modal"},
-    "review": {"primary": "actions", "fallback": "modal"},
-    "ci": {"primary": "actions", "fallback": "modal"},
+    "scan": {"primary": "modal", "fallback": ""},
+    "reproduce": {"primary": "actions", "fallback": ""},
+    "repair": {"primary": "actions", "fallback": ""},
+    "review": {"primary": "actions", "fallback": ""},
+    "ci": {"primary": "actions", "fallback": ""},
 }
 
 
@@ -29,8 +32,6 @@ DEFAULT_ROUTING = {
 class RouteDecision:
     backend: str          # modal | github_actions | local | pause
     reason: str
-    fallback_used: bool = False
-    ineligible: bool = False   # 首选明确不可用（Actions 无合规工作流等）
 
 
 @dataclass
@@ -62,24 +63,25 @@ class JobRouter:
             return RouteDecision("pause",
                                  "broad_scan only applies to mode=scan")
 
-        # 合规硬线：broad_scan 恒不上 Actions（ToS），仅 Modal 可承载；Modal 不可用即暂停
-        if scope == "broad_scan":
+        # scan 模式独占 Modal——不区分 scope。bug hunter 在 ToS 上与 GitHub
+        # 托管 runner 无缘（§1/§9），self-hosted 又要抢 VPS 资源；Modal 的
+        # 临时沙箱是唯一干净通道。Modal 不可用就暂停，不落 Actions。
+        if mode == "scan":
             return self._route_modal_only(
-                "broad_scan never runs on GitHub Actions (ToS §1/§9)")
+                "scan runs on Modal only (ToS bars hosted runners; "
+                "no Actions fallback by design)")
 
         primary, fallback = self.cfg.route_for(mode)
         chain = [b for b in (primary, fallback) if b]
+        if not chain:
+            return RouteDecision("pause", f"no backend configured for mode {mode!r}")
         last_reason = ""
-        used_fallback = False
-        for i, backend in enumerate(chain):
+        for backend in chain:
             ok, reason = self._try(backend, job)
             if ok:
                 return RouteDecision(
                     "github_actions" if backend in ("github_actions", "actions") else backend,
-                    reason,
-                    fallback_used=(i > 0),
-                    ineligible=(i > 0))   # 首选被跳过 ⇒ 标记，控制器可审计回退原因
-            used_fallback = used_fallback or i > 0
+                    reason)
             last_reason = reason
         # P1 默认：仅当主选与备选都被 feature flag 关闭时，退到本地骨架执行
         if "disabled by feature flag" in last_reason and \
