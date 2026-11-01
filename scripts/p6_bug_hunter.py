@@ -182,22 +182,27 @@ def main() -> int:
             json.dumps(env.get("result", env), ensure_ascii=False, indent=1), encoding="utf-8")
         n = len(findings.get("findings", []))
         entry["findings"] = n
-        print(f"[bh] {repo}: {st.get('state')} findings={n} ({time.time()-t0:.0f}s)")
-        if n:
-            capped = dict(findings)
-            capped["findings"] = findings["findings"][:args.findings_cap]
+        entry["dropped_by_category"] = int(findings.get("dropped_by_category") or 0)
+        print(f"[bh] {repo}: {st.get('state')} findings={n} "
+              f"dropped_by_category={entry['dropped_by_category']} "
+              f"({time.time()-t0:.0f}s)")
+        # findings.json 无条件落盘：0 条 + dropped 计数同样是度量数据——
+        # "correctness 没命中"和"扫描没跑成"必须可区分（2026-11-01 实录：
+        # 只在有发现时写文件，首轮 correctness 试扫的丢弃统计整个丢了）。
+        capped = dict(findings)
+        capped["findings"] = (findings.get("findings") or [])[:args.findings_cap]
+        if capped["findings"]:
             for f in capped["findings"]:
                 f["upstream"] = dedupe_search(repo, f)
-            (dest / "findings.json").write_text(
-                json.dumps(capped, ensure_ascii=False, indent=1), encoding="utf-8")
             # OpenCode 分析首个线索（每仓库 1 个，控成本）
-            if capped["findings"]:
-                try:
-                    wd = Path(tempfile.mkdtemp(prefix=f"bh-{repo.split('/')[1]}-")) / "src"
-                    entry["opencode_analysis"] = opencode_analyze(
-                        repo, sha, capped["findings"][0], wd)
-                except Exception as e:  # noqa: BLE001
-                    entry["opencode_analysis"] = {"ok": False, "analysis": str(e)[:300]}
+            try:
+                wd = Path(tempfile.mkdtemp(prefix=f"bh-{repo.split('/')[1]}-")) / "src"
+                entry["opencode_analysis"] = opencode_analyze(
+                    repo, sha, capped["findings"][0], wd)
+            except Exception as e:  # noqa: BLE001
+                entry["opencode_analysis"] = {"ok": False, "analysis": str(e)[:300]}
+        (dest / "findings.json").write_text(
+            json.dumps(capped, ensure_ascii=False, indent=1), encoding="utf-8")
         summary["repos"].append(entry)
         metered_now = billing.metered_usage_usd()
         entry["metered_after"] = metered_now
