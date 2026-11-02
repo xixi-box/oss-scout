@@ -21,10 +21,12 @@ def _pr_watch_tail() -> None:
             encoding="utf-8", errors="replace").splitlines()
     except OSError:
         return
-    hits = [ln for ln in lines if '"pr_fix' in ln or '"pr_needs_reply"' in ln
-            or '"pr_reply' in ln]
-    print("--- pr_watch audit tail ---")
-    for ln in hits[-10:]:
+    hits = [ln for ln in lines
+            if '"pr_fix' in ln or '"pr_needs_reply"' in ln or '"pr_reply' in ln
+            or '"pr_ci_failed"' in ln or '"pr_watch_error"' in ln
+            or '"pr_sync' in ln]
+    print(f"--- pr_watch audit tail (matched {len(hits)}) ---")
+    for ln in hits[-14:]:
         try:
             r = json.loads(ln)
             print(f"  {r.get('ts')} {r.get('action')} {r.get('target')} :: "
