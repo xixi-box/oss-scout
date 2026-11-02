@@ -84,8 +84,9 @@ repositories:
   # if you are an AI agent"。新号结构性无法满足，开 PR 必然挂红（#64811/#64800）。
 
   # ========== 浏览器自动化 ==========
-  microsoft/playwright-python:  {lane: open}   #  78%  15.1k
-  microsoft/playwright:         {lane: open}   #  62%  98.9k
+  # microsoft/playwright(-python) 已摘（2026-11-03）：双重人工门槛——issue 须
+  # 先 triage+approve 才许提 PR（复检不查这个标签），CLA 首签必须用一个挂红的
+  # PR 换。全自动系统只走能全自动走的门；将来人工撞 CLA 时见 Playbook §4.3。
 
   # ========== 实时 / 协作 / 画布 ==========
   instantdb/instant:            {lane: open}   #  93%  10.6k  前端直连数据库

@@ -86,8 +86,7 @@ repositories:
   firecracker-microvm/firecracker: {requires_invite: false}
 
   # ---- 浏览器自动化 ----
-  microsoft/playwright-python:  {requires_invite: false}
-  microsoft/playwright:         {requires_invite: false}
+  # microsoft/playwright(-python) 已摘池（2026-11-03），cla 段保留备查。
 
   # ---- 实时 / 协作 / 画布 ----
   instantdb/instant:            {requires_invite: false}
