@@ -36,8 +36,32 @@ def main() -> int:
         print("pr_sync_count:", len(prs.get("prs", [])))
     except Exception:  # noqa: BLE001
         print("pr_sync_count: 0")
+    _pr_watch_tail()
     return 0
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+
+def _pr_watch_tail() -> None:
+    """最近 10 条 pr_watch 审计（pr-fix 派发结果在这里）。"""
+    import json
+    try:
+        lines = Path("/data/state/worklog.jsonl").read_text(
+            encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return
+    hits = [l for l in lines if '"pr_fix' in l or '"pr_needs_reply"' in l
+            or '"pr_reply' in l]
+    print("--- pr_watch audit tail ---")
+    for l in hits[-10:]:
+        try:
+            r = json.loads(l)
+            print(f"  {r.get('ts')} {r.get('action')} {r.get('target')} :: {str(r.get('result'))[:110]}")
+        except Exception:  # noqa: BLE001
+            print(" ", l[-140:])
+
+
+if __name__ != "__main__":
+    pass
