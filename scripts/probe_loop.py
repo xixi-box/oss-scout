@@ -21,6 +21,12 @@ def main() -> int:
         print(" ", ln[:160])
     dash = [ln for ln in wl if "dashboard_" in ln]
     print("dashboard_ audit count:", len(dash))
+    pr_marks = ("pr_ci_failed", "pr_fix", "pr_needs_reply", "pr_reply",
+                "pr_watch_error", "pr_sync")
+    prs_audit = [ln for ln in wl if any(k in ln for k in pr_marks)]
+    print("pr_* audit count:", len(prs_audit))
+    for ln in prs_audit[-6:]:
+        print("  ", ln[:170])
 
     spec_path = Path("/app/scripts/monitor_prs.py")
     if not spec_path.exists():
