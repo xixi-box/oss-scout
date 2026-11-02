@@ -432,7 +432,17 @@ def candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6) -> dict:
             from .cla import preflight
             pre = preflight(root, repo)
             if pre.get("blocking"):
-                return _abort_release(f"CLA required: {pre['detail']}")
+                # 必须写终态：留在 new 里的话，drain 每 60 秒重取一次，
+                # CLA 不签就一直刷（2026-11-02 实测 playwright#43842 每 10 分钟
+                # 重试，纯烧 API）。人签完 CLA 后在面板把它改回 new 即可恢复。
+                ledger.release_claim(key, eng.tz_name)
+                ledger.close()
+                summary["abort"] = f"CLA required: {pre['detail']}"
+                log(root, "abort", key, summary["abort"])
+                mark_candidate(root, key, "needs_cla",
+                               extra={"abort_reason": summary["abort"][:200],
+                                      "cla_sign_url": pre.get("url", "")})
+                return summary
             if pre.get("detail"):
                 summary["steps"].append(f"cla: {pre['detail']}")
         except Exception as e:  # noqa: BLE001 — CLA 检查失败不该阻断修复

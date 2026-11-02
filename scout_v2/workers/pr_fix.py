@@ -26,7 +26,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from .opencode_client import OpenCodeClient  # noqa: E402
 
 # 明确"与我们改动无关"的失败模式——派发层（monitor_prs）会先过滤一遍，
-# 这里是第二道防线：log 片段再扫一次，命中就不值得烧一轮 opencode。
+# 这里是第二道防线：检查名和 log 片段都要扫。只看摘录不够：status context
+# （check-issue-link 这类）拉不到日志，摘录为空时名字是唯一线索
+# （2026-11-02 实录：fastmcp 的 check-issue-link 就这么漏过去烧了一轮 opencode）。
 EXTERNAL_PATTERNS = (
     "Vercel",                          # 授权类
     "pre-run-check",                   # vllm：需要 4+ merged PRs
@@ -36,6 +38,7 @@ EXTERNAL_PATTERNS = (
     "[gpt-live]", "gpt-live",          # 连真实 LLM 的 flaky 测试
     "test_exploration",
     "Authorize", "Authorization required",
+    "CLA", "EasyCLA",
 )
 
 
@@ -79,10 +82,20 @@ def main() -> int:
     payload = json.loads(Path(args.fix).read_text(encoding="utf-8"))
     repo_dir = Path(args.repo_dir).resolve()
 
-    # 第二道防线：log 片段里全是外因就别烧 opencode 了
-    joined = " ".join(str(f.get("excerpt", "")) for f in payload.get("failing") or [])
+    # 第二道防线：检查名和 log 片段都查。全部命中外因才跳过——混着真实
+    # 测试失败时仍然修（那种情况下修代码是有意义的）。
+    def _external_text() -> str:
+        parts = []
+        for f in payload.get("failing") or []:
+            parts.append(str(f.get("name", "")))
+            parts.append(str(f.get("excerpt", "")))
+        return " ".join(parts)
+
+    joined = _external_text()
     external_hits = [p for p in EXTERNAL_PATTERNS if p in joined]
-    if external_hits and not payload.get("force"):
+    test_failure_marks = bool(__import__("re").search(
+        r"FAILED|AssertionError|Traceback|error\[|panic:", joined, __import__("re").I))
+    if external_hits and not test_failure_marks and not payload.get("force"):
         print(json.dumps({
             "fixed": False, "changed": 0,
             "skipped": f"external-only failures: {external_hits[:3]}",

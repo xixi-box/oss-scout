@@ -28,6 +28,27 @@ def main() -> int:
     for ln in prs_audit[-6:]:
         print("  ", ln[:170])
 
+    # 额度穿透调查：claim_days 表里的真实记录 vs 配置的上限
+    import sqlite3
+    import yaml as _y
+    try:
+        cfg = _y.safe_load(open("/data/configs/repositories.yaml", encoding="utf-8"))
+        print("configured cap:", cfg.get("defaults", {}).get("max_new_claims_per_business_day"))
+    except Exception as e:  # noqa: BLE001
+        print("cap read failed:", e)
+    db = Path("/data/state/scout_v2.sqlite3")
+    if db.exists():
+        conn = sqlite3.connect(str(db))
+        try:
+            rows = conn.execute(
+                "SELECT day, candidate_id, ts FROM claim_days "
+                "ORDER BY day DESC, ts DESC LIMIT 12").fetchall()
+            print("--- claim_days (recent) ---")
+            for day, cid, ts in rows:
+                print(f"  {day}  {cid}  @ {ts}")
+        finally:
+            conn.close()
+
     spec_path = Path("/app/scripts/monitor_prs.py")
     if not spec_path.exists():
         print("monitor_prs missing at /app/scripts")
