@@ -1,18 +1,17 @@
-import json, sys
+import json, collections
 from pathlib import Path
+
 q = json.load(open('/data/queue/candidates.json', encoding='utf-8'))
-# 今天开的 PR 对应哪些候选
-targets = ['deer-flow#7822','qdrant#11361','deer-flow#7812','milvus#54967','agentgateway#4257']
-found = []
+print("total:", len(q))
+print("--- pr_open keys ---")
 for k, v in q.items():
-    for t in targets:
-        r, n = t.split('#')
-        if k.endswith(f'/{r.split("-")[0]}#{n}') or (r.split('-')[0] in k and f'#{n}' in k):
-            found.append((k, v.get('status'), v.get('repo')))
-print('matched candidates:', len(found))
-for f in found[:10]:
-    print(' ', f)
-# 当前 new/queued 候选数
-import collections
-c = collections.Counter(v.get('status') for v in q.values())
-print('status dist:', dict(c.most_common(8)))
+    if v.get('status') == 'pr_open':
+        print(f"  {k}  repo={v.get('repo')}  nr={v.get('number')}")
+print("--- new keys (first 12) ---")
+n = 0
+for k, v in q.items():
+    if v.get('status') == 'new':
+        print(f"  {k}  repo={v.get('repo')}  nr={v.get('number')}  discovered={v.get('discovered_at')}")
+        n += 1
+        if n >= 12:
+            break
