@@ -38,6 +38,27 @@ def main() -> int:
             print("sample:", prs[0]["repository"]["nameWithOwner"])
     except Exception as e:  # noqa: BLE001
         print("my_open_prs raised:", type(e).__name__, str(e)[:200])
+        return 0
+
+    # 直接复现循环做的事：分类 3 个 PR，看 results 形状
+    import collections
+    counts = collections.Counter()
+    sample_rows = []
+    for item in prs[:6]:
+        repo = item["repository"]["nameWithOwner"]
+        num = item["number"]
+        state = m.pr_state(repo, num)
+        if not state:
+            counts["pr_state_empty"] += 1
+            continue
+        info = m.classify(state)
+        counts[info.get("action", "?")] += 1
+        if len(sample_rows) < 4:
+            sample_rows.append(f"{repo}#{num} -> {info.get('action')} "
+                               f"({info.get('reason', '')[:60]})")
+    print("classification sample (6 prs):", dict(counts))
+    for srow in sample_rows:
+        print("  ", srow)
     return 0
 
 
