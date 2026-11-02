@@ -1,8 +1,0 @@
-name: probe2
-on:
-  workflow_dispatch:
-jobs:
-  p:
-    runs-on: [self-hosted, aliyun]
-    steps:
-      - run: docker exec oss-scout python /app/scripts/_probe2.py

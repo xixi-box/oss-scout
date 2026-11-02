@@ -100,6 +100,12 @@ def recheck_candidate(repo: str, number: int, *, my_login: str = "xixi-box",
                       or pr.get("merged"))
             if state == "closed" or merged:
                 continue
+            # 自己开的 PR 不算竞争：timeline 的 cross-referenced 拿走的是
+            # source.issue，作者在 source.issue.user.login。不排除的话，我们
+            # 开出的 PR 会让同一个 issue 在后续复检里永久判成 competed。
+            author = str(((src.get("user") or {}).get("login")) or "")
+            if author and author.lower() == my_login.lower():
+                continue
             r.has_cross_ref_pr = True
             break
     import urllib.parse as _up
@@ -145,6 +151,13 @@ def recheck_candidate(repo: str, number: int, *, my_login: str = "xixi-box",
             r.errors.append(f"pr search failed for {kw!r} (non-fatal)")
             continue
         for it in res.get("items", []):
+            # 排除我们自己开的 PR：修复成功开出的 PR 会被关键词搜索命中，
+            # 不排除就会在下一轮复检里被判成"有人抢先"（2026-11-02 实测：
+            # 今天 5 个 PR 对应的候选全被标成 aborted_competed，同时额度被
+            # abort 路径归还，于是同一天连开 5 个）。
+            author = str(((it.get("user") or {}).get("login")) or "")
+            if author and author.lower() == my_login.lower():
+                continue
             title = str(it.get("title", ""))
             if not _relevant(title):
                 continue
@@ -156,6 +169,9 @@ def recheck_candidate(repo: str, number: int, *, my_login: str = "xixi-box",
         res = gh_read([f"search/issues?q={_up.quote(q, safe='')}&per_page=10"])
         if res is not None:
             for it in res.get("items", []):
+                author = str(((it.get("user") or {}).get("login")) or "")
+                if author and author.lower() == my_login.lower():
+                    continue
                 r.open_pr_hits.append(
                     f"{repo}#{it['number']}: {it.get('title', '')[:80]}")
     return r
