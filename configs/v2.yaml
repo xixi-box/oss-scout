@@ -38,7 +38,11 @@ budget:
     # 用户约束：只用临时 Sandbox；不创建长期付费 Volume；不使用额外计费的模型推理端点
     persistent_volumes: false
     paid_inference_endpoints: false
-    semgrep_ruleset: "p/python"       # registry 最全的 python 集；correctness 过滤见 workers/scan.py
+    # correctness 专用子集（semgrep-rules 仓库 python/lang/correctness/ 目录）。
+    # 2026-11-01 实测：registry p/python 全集 14 条 findings 全是 security 噪音，
+    # category=correctness 过滤后 0 命中——全集里 correctness 规则本来就稀薄。
+    # 直接指向 correctness 目录，配合 scan.py 的 category 过滤双层保险。
+    semgrep_ruleset: "https://github.com/semgrep/semgrep-rules/tree/develop/python/lang/correctness"
   actions:
     enabled: false                    # P3 前保持 false；测试仓库已就绪 xixi-box/oss-scout-v2-test
     max_minutes_per_job: 60

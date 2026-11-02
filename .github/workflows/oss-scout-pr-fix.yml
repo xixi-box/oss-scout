@@ -1,0 +1,157 @@
+name: oss-scout pr fix worker
+
+# 我们自己的 PR 上 CI 挂了、且判定与我们的改动相关时，在这个分支上跑 opencode
+# 修复并推新 commit（带签名，不 force-push）。
+#
+# 与 repair workflow 的区别：repair 面向"修一个上游 issue"（复现→补丁→开 PR）；
+# 这里面向"已开出的 PR 上补 CI"——checkout 我们 fork 的分支，修完推回同一分支，
+# 不开新 PR。触发者是 VPS 的 pr-watch 循环（monitor_prs.dispatch_pr_fix），
+# 每个 (pr, head_sha) 只派一次，防循环。
+#
+# 输入统一走 base64 JSON（log 片段里什么字符都可能有，表单直传会碎）。
+
+on:
+  workflow_dispatch:
+    inputs:
+      fix_b64:
+        description: "base64(JSON): fork_repo/branch/upstream_repo/pr_number/head_sha/failing/comments"
+        required: true
+        type: string
+      job_id:
+        description: "dedup key"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  prfix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Decode payload
+        shell: bash
+        env:
+          FIX_B64: ${{ inputs.fix_b64 }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$FIX_B64" | base64 -d > "$RUNNER_TEMP/fix.json"
+          python3 - <<'PY'
+          import json, os
+          j = json.load(open(os.environ["RUNNER_TEMP"] + "/fix.json"))
+          print("pr:", j["upstream_repo"], "#", j["pr_number"],
+                "| branch:", j["branch"], "| head:", j["head_sha"][:10])
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write(f"fork_repo={j['fork_repo']}\nbranch={j['branch']}\n")
+          PY
+
+      - name: Checkout PR branch from fork
+        shell: bash
+        env:
+          FORK_REPO: ${{ steps.job.outputs.fork_repo }}
+          BRANCH: ${{ steps.job.outputs.branch }}
+        run: |
+          set -euo pipefail
+          git init -q "$RUNNER_TEMP/repo"
+          git -C "$RUNNER_TEMP/repo" remote add origin "https://github.com/${FORK_REPO}.git"
+          git -C "$RUNNER_TEMP/repo" fetch --depth 5 origin "$BRANCH"
+          git -C "$RUNNER_TEMP/repo" checkout -B "$BRANCH" FETCH_HEAD
+          echo "checked out $(git -C "$RUNNER_TEMP/repo" rev-parse HEAD)"
+
+      - name: Get oss-scout worker
+        uses: actions/checkout@v4
+        with:
+          path: worker
+
+      - name: Install worker requirements
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet --break-system-packages \
+            -r "$GITHUB_WORKSPACE/worker/requirements.txt"
+          python3 -m pip install --quiet --break-system-packages uv poetry || true
+
+      - name: Install target repo dependencies
+        shell: bash
+        run: |
+          set -uo pipefail
+          cd "$RUNNER_TEMP/repo"
+          PIP="python3 -m pip install --quiet --break-system-packages"
+          if [ -f uv.lock ]; then
+            uv sync --quiet || echo "WARN: uv sync failed"
+          elif [ -f poetry.lock ]; then
+            poetry install --quiet || echo "WARN: poetry install failed"
+          elif [ -f package.json ]; then
+            (command -v npm >/dev/null && npm install --silent) || echo "WARN: npm install failed"
+          elif [ -f requirements.txt ]; then
+            $PIP -r requirements.txt || echo "WARN: requirements install failed"
+          elif [ -f pyproject.toml ]; then
+            $PIP -e . || echo "WARN: pip install -e . failed"
+          fi
+
+      - name: Install OpenCode CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL https://opencode.ai/install | bash -s -- --no-modify-path
+          echo "$HOME/.opencode/bin" >> "$GITHUB_PATH"
+          "$HOME/.opencode/bin/opencode" --version
+
+      - name: Write opencode auth
+        shell: bash
+        env:
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.local/share/opencode"
+          python3 - <<'PY'
+          import json, os
+          p = os.path.expanduser("~/.local/share/opencode/auth.json")
+          os.makedirs(os.path.dirname(p), exist_ok=True)
+          with open(p, "w") as f:
+              json.dump({"opencode-go": {"type": "api",
+                                         "key": os.environ["OPENCODE_API_KEY"]}}, f)
+          os.chmod(p, 0o600)
+          PY
+
+      - name: Run opencode fix
+        shell: bash
+        env:
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE/worker"
+          PYTHONPATH="$GITHUB_WORKSPACE/worker" python3 -m scout_v2.workers.pr_fix \
+            --fix "$RUNNER_TEMP/fix.json" \
+            --repo-dir "$RUNNER_TEMP/repo"
+
+      - name: Commit and push
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          FORK_REPO: ${{ steps.job.outputs.fork_repo }}
+          BRANCH: ${{ steps.job.outputs.branch }}
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/repo"
+          if git diff --quiet && git diff --cached --quiet; then
+            echo "no changes produced; nothing to push"
+            exit 0
+          fi
+          git config user.name "wangshun"
+          git config user.email "96341168+xixi-box@users.noreply.github.com"
+          git add -A
+          # PR 号从 payload 读，不拼接 inputs（job_id 是去重键不是 PR 号）
+          MSG=$(python3 - <<'PY'
+          import json, os
+          j = json.load(open(os.environ["RUNNER_TEMP"] + "/fix.json"))
+          print("fix: address CI failures on PR #%d\n\n"
+                "Signed-off-by: wangshun <96341168+xixi-box@users.noreply.github.com>"
+                % j["pr_number"])
+          PY
+          )
+          git commit -q -m "$MSG"
+          git push "https://x-access-token:$GH_TOKEN@github.com/$FORK_REPO.git" \
+            "HEAD:$BRANCH"
+          echo "pushed to $FORK_REPO@$BRANCH"

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import subprocess
 from pathlib import Path, PurePosixPath
 
@@ -42,6 +43,74 @@ def _snippet(repo_dir: Path, rel_path: str, line: int, context: int = 15) -> str
         return "\n".join(f"{i + lo + 1}: {ln}" for i, ln in enumerate(lines[lo:hi]))[:3000]
     except OSError:
         return ""
+
+
+# xfail/skip 标记：仓库**自己承认**的已知缺陷。这是密度最高的信号源——
+# 有人写了"这里有问题但我暂时不修"，且自带复现方式（那条被标记的测试）。
+# 五个独立模式，各自一个 reason 组；比一个大正则的可选前缀好排查得多
+# （第一版把标记名 "xfail" 当 reason 捕获，2026-11-01 实测）。
+_XFAIL_RES = [
+    # @pytest.mark.xfail(...reason="...") / @pytest.mark.skip(reason="...")
+    (re.compile(r'@pytest\.mark\.(xfail|skip)[^\n"]*?["\']([^"\']{8,})["\']'),
+     lambda m: m.group(1), lambda m: m.group(2)),
+    # pytest.xfail("...")
+    (re.compile(r'pytest\.xfail\s*\(\s*["\']([^"\']{8,})["\']'),
+     lambda m: "xfail", lambda m: m.group(1)),
+    # @unittest.skip("...") / skipIf(cond, "...") / skipUnless(...)
+    (re.compile(r'@(?:unittest\.)?skip(?:If|Unless)?\s*\([^)]*?["\']([^"\']{8,})["\']'),
+     lambda m: "skip", lambda m: m.group(1)),
+    # self.skipTest("...")
+    (re.compile(r'self\.skipTest\s*\(\s*["\']([^"\']{8,})["\']'),
+     lambda m: "skip", lambda m: m.group(1)),
+]
+
+
+def mine_xfail(repo_dir: Path, max_findings: int = 40) -> list[dict]:
+    """扫测试文件里的 xfail/skip 标记，产出"已知缺陷"线索。
+
+    只认带 reason 的标记（无 reason 的 skip 多半是平台跳过，不是缺陷）。
+    返回与 semgrep findings 同构的 dict 列表（rule_id 用 xfail-marker/ 前缀），
+    合并进 findings 后走同一条下游分析管道。
+    """
+    out: list[dict] = []
+    try:
+        candidates = [p for p in repo_dir.rglob("*.py")
+                      if p.name.startswith("test_") or p.name.endswith("_test.py")
+                      or "tests" in p.parts or "test" in p.parts]
+    except OSError:
+        return out
+    for path in candidates[:400]:
+        try:
+            rel = str(path.relative_to(repo_dir)).replace("\\", "/")
+            lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            continue
+        for i, ln in enumerate(lines):
+            kind = reason = None
+            for pat, kind_fn, reason_fn in _XFAIL_RES:
+                m = pat.search(ln)
+                if m:
+                    kind = kind_fn(m)
+                    reason = reason_fn(m).strip()
+                    break
+            if not kind or not reason:
+                continue          # 无 reason 的 skip 多半是平台跳过
+            fp = bug_fingerprint("xfail", rel, f"{kind}:{reason[:40]}", i + 1)
+            out.append({
+                "path": rel,
+                "line": i + 1,
+                "rule_id": f"xfail-marker/{kind}",
+                "category": "correctness",
+                "message": f"acknowledged {kind}: {reason[:200]}",
+                "fingerprint": fp,
+                "candidate_id": bug_candidate_id("xfail", "HEAD", fp),
+                "snippet": "\n".join(
+                    f"{j + 1}: {lines[j]}" for j in range(max(0, i - 3), min(len(lines), i + 4))
+                )[:1500],
+            })
+            if len(out) >= max_findings:
+                return out
+    return out
 
 
 def run_scan(job: Job, repo_dir: Path, out_dir: Path, *,
@@ -113,11 +182,17 @@ def run_scan(job: Job, repo_dir: Path, out_dir: Path, *,
                       base_sha=job.base_sha, logs_path=rel("worker.log"),
                       unverified_items=[f"unparseable semgrep output: {e}"])
 
+    # 第二信号源：xfail/skip 挖掘。仓库自己承认的缺陷，密度高于任何静态规则；
+    # 不受 categories 过滤（它们不是 semgrep 结果）。semgrep 命中排前面。
+    xfail_hits = mine_xfail(repo_dir, max_findings=max(max_findings // 2, 20))
+    findings.extend(xfail_hits)
+
     (out_dir / "findings.json").write_text(
         json.dumps({"schema_version": 2, "job_id": job.job_id, "repo": job.repo,
                     "base_sha": job.base_sha, "ruleset": ruleset,
                     "categories": list(categories or []),
                     "dropped_by_category": dropped_by_category,
+                    "xfail_count": len(xfail_hits),
                     "findings": findings}, ensure_ascii=False, indent=1),
         encoding="utf-8")
     # 误报率统计前，线索一律 inconclusive 而非 succeeded——防止被当成已验证证据

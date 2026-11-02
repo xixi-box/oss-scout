@@ -108,3 +108,61 @@ class TestClassification:
         ]})
         assert r.status_code == 200
         assert r.json()["new"] == 1
+
+
+class TestReplyDraftApi:
+    """L3：草拟自动、发送人审。send/dismiss 都要审计。"""
+
+    def test_send_requires_all_fields(self, client):
+        r = client.post("/api/pr/reply/send", data={"repo": "acme/real"})
+        assert r.status_code == 400
+
+    def test_send_posts_and_marks_sent(self, client, tmp_path, monkeypatch):
+        import subprocess as sp
+        # 预置一条草稿
+        rp = tmp_path / "state" / "pr_replies.json"
+        rp.write_text(json.dumps({"acme/real#7": {
+            "status": "draft", "draft": "Thanks, fixed in the new commit."}}),
+            encoding="utf-8")
+        posted = []
+
+        def fake_run(cmd, **k):
+            if cmd[:2] == ["gh", "pr"]:
+                posted.append(cmd)
+            return sp.CompletedProcess(cmd, 0,
+                                       "https://github.com/acme/real/pull/7#comment", "")
+
+        monkeypatch.setattr("subprocess.run", fake_run)
+        r = client.post("/api/pr/reply/send", data={
+            "repo": "acme/real", "number": 7,
+            "body": "Thanks, fixed in the new commit."})
+        assert r.status_code == 200
+        assert posted and posted[0][3] == "7"
+        data = json.loads(rp.read_text(encoding="utf-8"))
+        assert data["acme/real#7"]["status"] == "sent"
+
+    def test_send_failure_reported(self, client, tmp_path, monkeypatch):
+        import subprocess as sp
+        monkeypatch.setattr("subprocess.run", lambda cmd, **k: sp.CompletedProcess(
+            cmd, 1, "", "gh: failed"))
+        r = client.post("/api/pr/reply/send", data={
+            "repo": "acme/real", "number": 7, "body": "x"})
+        assert r.status_code == 502
+
+    def test_dismiss_marks_dismissed(self, client, tmp_path):
+        rp = tmp_path / "state" / "pr_replies.json"
+        rp.write_text(json.dumps({"acme/real#7": {"status": "draft"}}),
+                      encoding="utf-8")
+        r = client.post("/api/pr/reply/dismiss",
+                        data={"repo": "acme/real", "number": 7})
+        assert r.status_code == 200
+        data = json.loads(rp.read_text(encoding="utf-8"))
+        assert data["acme/real#7"]["status"] == "dismissed"
+
+    def test_replies_listing(self, client, tmp_path):
+        rp = tmp_path / "state" / "pr_replies.json"
+        rp.write_text(json.dumps({"acme/real#7": {"status": "draft"}}),
+                      encoding="utf-8")
+        r = client.get("/api/pr/replies")
+        assert r.status_code == 200
+        assert r.json()["replies"]["acme/real#7"]["status"] == "draft"

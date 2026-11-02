@@ -371,11 +371,28 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
                         if action == "fix_ci":
                             _audit(root, "pr_ci_failed", key,
                                    str(r.get("failing_checks"))[:200])
+                            # L1/L2：外因已过滤、按 head_sha 去重后派 opencode
+                            # 上我们的 fork 分支修。失败本身不阻塞循环。
+                            try:
+                                out = mod.dispatch_pr_fix(r["repo"], r["number"])
+                                _audit(root, "pr_fix_dispatch", key,
+                                       f"dispatched={out.get('dispatched')} "
+                                       f"reason={str(out.get('reason'))[:120]}")
+                            except Exception as e:  # noqa: BLE001
+                                _audit(root, "pr_fix_error", key, str(e)[:200])
                         elif action in ("address_review", "answer_question"):
-                            # 有人提了意见：这是 48 小时响应窗口的起点，必须留痕
+                            # L3：AI 草拟回复落盘，等人确认后经 /api/pr/reply/send
+                            # 发出。绝不自动发——astral/biome 对 AI 文字零容忍。
                             _audit(root, "pr_needs_reply", key,
                                    f"{action} from {r.get('latest_author')}: "
                                    f"{str(r.get('latest_excerpt'))[:150]}")
+                            try:
+                                draft = mod.draft_reply(r["repo"], r["number"])
+                                _audit(root, "pr_reply_drafted", key,
+                                       f"drafted={draft.get('drafted')} "
+                                       f"path=state/pr_replies.json")
+                            except Exception as e:  # noqa: BLE001
+                                _audit(root, "pr_draft_error", key, str(e)[:200])
                 except Exception as e:  # noqa: BLE001
                     try:
                         _audit(root, "pr_watch_error", "-", str(e)[:200])
@@ -874,6 +891,73 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
         out = drain_ai_graded(root, limit=1, dry_run=False)
         _audit(root, "pipeline_run", "auto", json.dumps(out, ensure_ascii=False)[:400])
         return JSONResponse({"results": out})
+
+    # ---------------- PR 回复草稿（L3）：起草自动，发送必须人过 ----------------
+
+    @app.get("/api/pr/replies")
+    def api_pr_replies():
+        """看板拉草稿列表。status: draft=待人审, sent=已发出, dismissed=放弃。"""
+        p = root / "state" / "pr_replies.json"
+        try:
+            data = json.loads(p.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            data = {}
+        return JSONResponse({"replies": data})
+
+    @app.post("/api/pr/reply/send")
+    def api_pr_reply_send(request: Request, repo: str = Form(""),
+                          number: int = Form(0), body: str = Form("")):
+        """发送一条已确认的回复。人是最后一道审——端点只接受看板上改过的文本。"""
+        repo = repo.strip()[:120]
+        body = body.strip()[:2000]
+        if not repo or not number or not body:
+            return JSONResponse({"detail": "repo/number/body required"}, status_code=400)
+        p = root.parent / "scripts" / "monitor_prs.py"
+        runner = p if p.exists() else Path(__file__).resolve().parents[1] / "scripts" / "monitor_prs.py"
+        import subprocess as _sp
+        r = _sp.run(["gh", "pr", "comment", str(number), "-R", repo,
+                     "--body", body], capture_output=True, text=True,
+                    encoding="utf-8", errors="replace", timeout=60)
+        if r.returncode != 0:
+            _audit(root, "pr_reply_send_failed", f"{repo}#{number}",
+                   (r.stderr or "")[:200])
+            return JSONResponse({"detail": (r.stderr or "gh failed")[:200]},
+                                status_code=502)
+        # 草稿标记为已发送
+        rp = root / "state" / "pr_replies.json"
+        try:
+            replies = json.loads(rp.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            replies = {}
+        entry = replies.get(f"{repo}#{number}") or {}
+        entry.update({"status": "sent", "sent_body": body,
+                      "sent_at": time.strftime("%Y-%m-%dT%H:%M:%S")})
+        replies[f"{repo}#{number}"] = entry
+        tmp = rp.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(replies, ensure_ascii=False, indent=1),
+                       encoding="utf-8")
+        os.replace(tmp, rp)
+        _audit(root, "pr_reply_sent", f"{repo}#{number}", body[:200])
+        return JSONResponse({"ok": True})
+
+    @app.post("/api/pr/reply/dismiss")
+    def api_pr_reply_dismiss(request: Request, repo: str = Form(...),
+                             number: int = Form(...)):
+        """放弃草稿（人工决定不回或自己回了）。"""
+        rp = root / "state" / "pr_replies.json"
+        try:
+            replies = json.loads(rp.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            replies = {}
+        key = f"{repo}#{number}"
+        if key in replies:
+            replies[key]["status"] = "dismissed"
+            tmp = rp.with_suffix(".json.tmp")
+            tmp.write_text(json.dumps(replies, ensure_ascii=False, indent=1),
+                           encoding="utf-8")
+            os.replace(tmp, rp)
+        _audit(root, "pr_reply_dismissed", key, "")
+        return JSONResponse({"ok": True})
 
     # ---------------- Cloudflare Worker 直推入口（KV 免费额度不够时的主通道） ----------------
     @app.post("/api/ingest/issues")
