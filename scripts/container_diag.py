@@ -22,9 +22,9 @@ def _pr_watch_tail() -> None:
     except OSError:
         return
     hits = [ln for ln in lines
-            if '"pr_fix' in ln or '"pr_needs_reply"' in ln or '"pr_reply' in ln
-            or '"pr_ci_failed"' in ln or '"pr_watch_error"' in ln
-            or '"pr_sync' in ln]
+            if 'pr_fix' in ln or 'pr_needs_reply' in ln or 'pr_reply' in ln
+            or 'pr_ci_failed' in ln or 'pr_watch_error' in ln
+            or 'pr_sync' in ln]
     print(f"--- pr_watch audit tail (matched {len(hits)}) ---")
     for ln in hits[-14:]:
         try:
