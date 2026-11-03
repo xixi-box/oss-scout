@@ -29,3 +29,11 @@ jobs:
         if: always()
         shell: bash
         run: docker exec oss-scout python /app/scripts/bh_summary.py || true
+
+      - name: AI triage (findings -> review queue)
+        if: always()
+        shell: bash
+        run: |
+          docker exec oss-scout python /app/scripts/bh_analyze.py --limit 20             2>&1 | tail -30
+          echo "=== review queue (top) ==="
+          docker exec oss-scout sh -c "head -30 /data/state/bughunt/review.md 2>/dev/null" || true
