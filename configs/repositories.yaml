@@ -59,6 +59,11 @@ repositories:
   upstash/context7:             {lane: open}   #  63%  64.0k  最新库文档
   PrefectHQ/fastmcp:            {lane: open}   #  61%  28.2k  写 server 首选
   modelcontextprotocol/registry: {lane: open}  #  57%   7.4k  官方注册表
+  # 2026-11-03 新增：不要求指派、明确支持 Fork PR
+  #   rust-sdk 是 Rust（编译慢但流程验证过，agentgateway 就是 Rust）
+  #   agentgateway 早已有我们的 PR（#4264），之前未入池导致 issue 不会被扫
+  modelcontextprotocol/rust-sdk: {lane: open}
+  agentgateway/agentgateway:    {lane: open}
 
   # ========== 可观测 / 评估 ==========
   Arize-ai/phoenix:             {lane: open}   #  86%  12.1k  trace + eval

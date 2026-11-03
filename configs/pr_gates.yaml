@@ -66,6 +66,10 @@ repositories:
   upstash/context7:             {requires_invite: false}
   PrefectHQ/fastmcp:            {requires_invite: false}
   modelcontextprotocol/registry: {requires_invite: false}
+  # 2026-11-03 新增：均未规定必须指派，且明确支持 Fork PR。
+  # agentgateway 已有我们的 PR #4264，之前未入池导致 issue 不被扫描。
+  modelcontextprotocol/rust-sdk: {requires_invite: false}
+  agentgateway/agentgateway:    {requires_invite: false}
 
   # ---- 可观测 / 评估 ----
   Arize-ai/phoenix:             {requires_invite: false}
