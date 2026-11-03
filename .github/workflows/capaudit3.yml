@@ -1,0 +1,28 @@
+name: cap audit three
+on:
+  workflow_dispatch:
+jobs:
+  c:
+    runs-on: [self-hosted, aliyun]
+    steps:
+      - run: |
+          docker exec oss-scout python -c "
+import sys, json, collections
+sys.path.insert(0, '/app')
+today = '2026-11-03'
+acts = collections.Counter()
+per_target = collections.Counter()
+for line in open('/data/state/worklog.jsonl', encoding='utf-8', errors='replace'):
+    try:
+        r = json.loads(line)
+    except Exception:
+        continue
+    if not str(r.get('ts','')).startswith(today):
+        continue
+    a = r.get('action','')
+    if a.startswith('pipeline_') or a == 'claim':
+        acts[a] += 1
+print('=== today action counts ===')
+for k, v in acts.most_common(12):
+    print(f'  {k:28s} {v}')
+"
