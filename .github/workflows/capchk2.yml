@@ -1,0 +1,8 @@
+name: cap audit
+on:
+  workflow_dispatch:
+jobs:
+  c:
+    runs-on: [self-hosted, aliyun]
+    steps:
+      - run: docker exec oss-scout python /app/scripts/cap_audit.py
