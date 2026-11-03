@@ -1,0 +1,23 @@
+name: dup check
+on:
+  workflow_dispatch:
+jobs:
+  c:
+    runs-on: [self-hosted, aliyun]
+    steps:
+      - run: |
+          docker exec oss-scout python -c "
+import sys
+sys.path.insert(0, '/app')
+from scout_v2.git_host import recheck_candidate
+for repo, num, label in [
+    ('qdrant/qdrant', 11360, 'KNOWN-DUPLICATE (→10465)'),
+    ('milvus-io/milvus', 55033, 'normal issue'),
+]:
+    r = recheck_candidate(repo, num)
+    if r is None or not r.complete:
+        print(f'{label}: recheck incomplete')
+        continue
+    print(f'{label}:')
+    print(f'  open={r.issue_open} dup={r.is_duplicate} of={r.duplicate_of} assigned={r.unassigned}')
+"
