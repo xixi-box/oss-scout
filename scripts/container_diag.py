@@ -58,7 +58,40 @@ def main() -> int:
     except Exception:  # noqa: BLE001
         print("pr_sync_count: 0")
     _pr_watch_tail()
+    _cap_audit()
     return 0
+
+
+def _cap_audit() -> None:
+    """今日 claim 计数 vs sqlite 实际占额（排查额度穿透）。"""
+    import collections
+    acts = collections.Counter()
+    per_target = collections.Counter()
+    today = __import__("datetime").datetime.now().strftime("%Y-%m-%d")
+    try:
+        lines = Path("/data/state/worklog.jsonl").read_text(
+            encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return
+    for line in lines:
+        try:
+            r = json.loads(line)
+        except Exception:  # noqa: BLE001
+            continue
+        if not str(r.get("ts", "")).startswith(today):
+            continue
+        a = str(r.get("action", ""))
+        if a == "claim" or a.startswith("pipeline_"):
+            acts[a] += 1
+            if a == "claim":
+                per_target[str(r.get("target"))] += 1
+    print(f"--- claim cap audit ({today}) ---")
+    for k, v in acts.most_common(10):
+        print(f"  {k:30s} {v}")
+    print("  repeated claims:")
+    for t, n in per_target.most_common(6):
+        if n > 1:
+            print(f"    {t:40s} x{n}")
 
 
 if __name__ == "__main__":
