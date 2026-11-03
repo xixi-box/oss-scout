@@ -41,7 +41,9 @@ jobs:
           cd cloudflare
           FLAGS=""
           if [ "${{ inputs.dry_run }}" = "true" ]; then FLAGS="--dry-run"; fi
-          npx --yes wrangler@latest deploy $FLAGS 2>&1 | tail -30
+          # 部署机 node 是 v20，wrangler 4.x 要求 >=22（EBADENGINE）。
+          # 锁 3.x：功能足够部署 Worker，且兼容 node 20。
+          npx --yes wrangler@3 deploy $FLAGS 2>&1 | tail -30
 
       - name: Verify live repo count
         if: inputs.dry_run != true
@@ -51,4 +53,4 @@ jobs:
         run: |
           set -euo pipefail
           cd cloudflare
-          npx --yes wrangler@latest deployments list 2>&1 | head -8 || true
+          npx --yes wrangler@3 deployments list 2>&1 | head -8 || true
