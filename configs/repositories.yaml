@@ -20,6 +20,8 @@
 #   langchain-ai/langchain 未指派即自动关 PR
 #   duckdb/duckdb          AI_POLICY.md：Autonomous agents are not allowed
 #   microsoft/TypeScript   CONTRIBUTING：不接 bulk, agent-driven contributions
+#   kubernetes/kubernetes  EasyCLA 需先开练习 PR；中位 123.5h
+#   redis/redis            RSALv2/SSPLv1 非 OSI 开源许可
 
 defaults:
   unknown_repo_action: hold_for_review
@@ -61,7 +63,9 @@ repositories:
   ruvnet/RuVector:                   {lane: open}   # 81分 外部42% 23.5h 6.6/wk
 
   # ========== 基础设施 / 云原生 ==========
-  kubernetes/kubernetes:             {lane: open}   # 74分 外部100% 123.5h 1.0/wk
+  # 2026-11-03 换入（原 kubernetes/kubernetes 移出：EasyCLA 要开练习 PR 才能签，
+  # 且中位 123.5h、每周仅 1 个机会，性价比低于同生态其他项目）
+  encode/uvicorn:                    {lane: open}   # 94分 外部100% 9.2h 4.6/wk
   istio/istio:                       {lane: open}   # 99分 外部95% 13.9h 11.2/wk
   envoyproxy/envoy:                  {lane: open}   # 86分 外部85% 115.5h 62.5/wk
   traefik/traefik:                   {lane: open}   # 88分 外部100% 26.5h 1.9/wk
@@ -79,7 +83,9 @@ repositories:
   clickhouse/clickhouse:             {lane: open}   # 74分 外部34% 33.2h 4.7/wk
   cockroachdb/cockroach:             {lane: open}   # 79分 外部60% 2.0h 2.0/wk
   valkey-io/valkey:                  {lane: open}   # 99分 外部99% 9.5h 9.0/wk
-  redis/redis:                       {lane: open}   # 75分 外部100% 93.2h 0.6/wk
+  # 原 redis/redis 移出：RSALv2/SSPLv1 非 OSI 认证开源许可；
+  # 池内已有其 BSD 许可的 fork（valkey-io/valkey）
+  tiangolo/fastapi:                  {lane: open}   # 94分 外部100% 22.4h 4.4/wk
   apache/kafka:                      {lane: open}   # 91分 外部100% 21.7h 2.9/wk
 
   # ========== 语言 / 工具链 ==========

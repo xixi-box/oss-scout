@@ -15,9 +15,23 @@ defaults:
     - "accepted"
 
 cla:
+  # 2026-11-03 按实际机制分类。三种处理完全不同：
+  #
+  #   comment_sign  在 PR 里回一句固定话即完成，代码可自动发 → 全自动
+  #   cla-assistant 点链接走 GitHub OAuth，一次性，需人工 → 预检拦截
+  #   microsoft     EasyCLA，PR 里回 @microsoft-github-policy-service agree → 可自动
+  #   google        网页表单（cla.developers.google.com），需人工 → 预检拦截
+  #
+  # 已核实**不需要签**的（CONTRIBUTING 里提到 CLA 但实际没启用）：
+  #   caddyserver/caddy  cla-assistant 页面 Version 为空、近期外部 PR 无 CLA bot 评论
+  #   redis/redis        CLA 嵌在正文，"贡献即视为同意"，无签署入口（已移出池）
+  "microsoft/autogen":       {service: comment_sign, phrase: "@microsoft-github-policy-service agree"}
+  "google-gemini/gemini-cli": {service: google}
+  "clickhouse/clickhouse":   {service: comment_sign, phrase: "I accept the ClickHouse Individual CLA"}
+  "logseq/logseq":           {service: comment_sign, phrase: "I have read the CLA Document and I hereby sign the CLA"}
+  "cockroachdb/cockroach":   {service: cla-assistant}
   "Arize-ai/phoenix":        {service: comment_sign, phrase: "I have read the CLA Document and I hereby sign the CLA"}
   "BerriAI/litellm":         {service: cla-assistant}
-  "microsoft/autogen":       {service: microsoft}
 
 repositories:
   python/cpython:                    {requires_invite: false}
@@ -40,7 +54,7 @@ repositories:
   HKUDS/RAG-Anything:                {requires_invite: false}
   OSU-NLP-Group/HippoRAG:            {requires_invite: false}
   ruvnet/RuVector:                   {requires_invite: false}
-  kubernetes/kubernetes:             {requires_invite: false}
+  encode/uvicorn:                    {requires_invite: false}
   istio/istio:                       {requires_invite: false}
   envoyproxy/envoy:                  {requires_invite: false}
   traefik/traefik:                   {requires_invite: false}
@@ -56,7 +70,7 @@ repositories:
   clickhouse/clickhouse:             {requires_invite: false}
   cockroachdb/cockroach:             {requires_invite: false}
   valkey-io/valkey:                  {requires_invite: false}
-  redis/redis:                       {requires_invite: false}
+  tiangolo/fastapi:                  {requires_invite: false}
   apache/kafka:                      {requires_invite: false}
   psf/black:                         {requires_invite: false}
   prettier/prettier:                 {requires_invite: false}
