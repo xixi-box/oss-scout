@@ -3529,7 +3529,7 @@
   },
   "created_at": "2026-10-25T16:14:14Z",
   "discovered_at": "2026-10-26T00:15:08",
-  "status": "new",
+  "status": "out_of_scope",
   "lease": null,
   "source": "cloudflare-worker",
   "ai_grade": {
@@ -3537,7 +3537,9 @@
    "score": 8,
    "reason": "Clear reproducible regression with explicit steps showing manual compaction uses the previous model; likely small, actionable state/model-switch fix.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "updated_at": "2026-11-03T17:08:07",
+  "abort_reason": "lane=unknown no action"
  },
  "OpenHands/OpenHands#18939": {
   "id": "OpenHands/OpenHands#18939",
@@ -3678,7 +3680,7 @@
   },
   "created_at": "2026-10-26T03:29:26Z",
   "discovered_at": "2026-10-26T12:27:15",
-  "status": "new",
+  "status": "out_of_scope",
   "lease": null,
   "source": "cloudflare-worker",
   "body_excerpt": "**Describe the bug**\nWhen `PythonCodeSplitter` falls back to the line-based secondary split for an oversized function or method, every piece gets the `start_line` / `end_line` of the whole function. A function on lines 7-47 split into 9 pieces gives 9 documents that all say `start_line=7, end_line=47`, so a retrieved piece can't be mapped back to the code it contains (e.g. for \"see lines X-Y\" citations or editor links).\n\n**To Reproduce**\n```python\nfrom haystack import Document\nfrom haystack.components.preprocessors import PythonCodeSplitter\n\nbody = \"\".join(f\"    value_{i} = compute_something_long({i}, factor={i * 3})\\n\" for i in range(30))\nsource = \"import os\\n\\n# helper\\n\\ndef big():\\n\" + body\nsplitter = PythonCodeSplitter(min_effective_lines=1, max_effective_lines=5, secondary_split_length=8, secondary_split_overlap=2)\nfor d in splitter.run(documents=[Document(content=source)])[\"documents\"]:\n    print(d.meta[\"start_line\"], d.meta[\"end_line\"], d.meta.get(\"secondary_split\"), repr(d.content.splitlines()[0]))\n```\nOutput on main (cut down):\n```\n1 1 None 'import os'\n5 35 True ''\n5 35 True '    value_2 = ...'\n5 35 True '    value_8 = ...'\n...\n```\n\n**Expected behavior**\nEach piece reports the lines it covers (`5-9`, `8-15`, `14-21`, ... with the 2-line overlap), still clamped to the function's range. The primary split already does this for the chunks it builds.\n\n**Additional context**\n`_secondary_split` deep-copies `_build_chunk_meta([unit], ...)` into every piece and doesn't use the `split_idx_start` offset that `DocumentSplitter` already gives each piece. I have a small fix with a regression test and can open a PR.\n\n**System:**\n- Haystack version: main (2.x, commit 2026-10-24)\n",
@@ -3687,7 +3689,9 @@
    "score": 9,
    "reason": "Clear reproducible metadata bug with small scoped fix and regression test offered.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "updated_at": "2026-11-03T17:07:07",
+  "abort_reason": "lane=unknown no action"
  },
  "anomalyco/opencode#59133": {
   "id": "anomalyco/opencode#59133",
@@ -3717,7 +3721,7 @@
   },
   "created_at": "2026-10-26T02:24:02Z",
   "discovered_at": "2026-10-26T12:28:28",
-  "status": "new",
+  "status": "out_of_scope",
   "lease": null,
   "source": "cloudflare-worker",
   "body_excerpt": "### Description\n\nTwo consecutive pre-promotion failures can make the session timeline move the first failure before the user prompt that triggered it.\n\nGiven durable messages `[user1, error1, user2, error2]` and both steers still pending, `visibleTimelineMessages` returns `[error1, user1, user2, error2]`. The first error no longer appears next to its own prompt.\n\nThe special case intended to keep a failed idle after its triggering input should only reorder the active failure's segment, not every pending input in the visible history.\n\n### Plugins\n\nNone found in config.\n\n### OpenCode version\n\n2.1.4 and current `dev` source\n\n### Steps to reproduce\n\n1. Admit two steers without intervening assistant work.\n2. Have the first steer end in a failed idle.\n3. Have the second steer also end in a failed idle before promotion.\n4. Inspect `visibleTimelineMessages` with both steers still pending.\n\nExpected order: `[user1, error1, user2, error2]`.\n\nActual order: `[error1, user1, user2, error2]`.\n\nThe regression test in this patch reproduces the exact ordering using two pending user messages and two failed idle markers.\n\n### Screenshot\n\nN/A\n\n### Operating System\n\nUbuntu Linux 6.8.0-142-generic x86_64\n\n### Terminal\n\ntmux (`xterm-256color`)\n",
@@ -3726,7 +3730,9 @@
    "score": 9,
    "reason": "Clear reproducible ordering bug in visibleTimelineMessages with a small scoped fix and regression test.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "updated_at": "2026-11-03T17:58:46",
+  "abort_reason": "lane=unknown no action"
  },
  "OpenHands/OpenHands#18472": {
   "id": "OpenHands/OpenHands#18472",
@@ -3756,7 +3762,7 @@
   },
   "created_at": "2026-10-15T06:03:10Z",
   "discovered_at": "2026-10-26T12:28:59",
-  "status": "new",
+  "status": "out_of_scope",
   "lease": null,
   "source": "cloudflare-worker",
   "body_excerpt": "**Operating System:** Windows\n\n**Installation Method:** From source (`npm run dev` / `npm run dev:minimal`)\n\n**Agent Canvas Version:** 1.27.1 (current `main` @ 1c75a05)\n\n**Bug Description**\n\nOn Windows, the conversation composer cannot accept Chinese from a third-party IME (Sogou, WeChat IME, QQ Pinyin, and similar). The field stays empty while composing. English types normally. Switching to the built-in Microsoft Pinyin IME makes Chinese work.\n\nThe composer is a `contenteditable` div (`data-testid=\"chat-input\"`). To keep the placeholder visible, every `input` and `blur` currently calls `clearEmptyContent()`, which assigns `innerHTML = \"\"` / `textContent = \"\"` whenever `innerText` looks empty.\n\nChinese input uses an IME composition session: pinyin is typed, a candidate is chosen, then the character is committed. During that session many third-party Windows IMEs keep the preedit in their own candidate window, so the contenteditable still looks empty. Writing `innerHTML`/`textContent` at that moment aborts the composition, so the committed character never lands.\n\nMicrosoft Pinyin typically inserts the preedit into the DOM, so the field is not treated as empty and the wipe does not run. That is why the OS IME works and third-party IMEs do not.\n\nTwo related behaviors make this worse:\n\n1. Some third-party IMEs steal focus for their candidate window, which fires `blur` and runs the same wipe.\n2. The placeholder is `.chat-input:empty:before`. While composing, the element often stays `:empty`, so the pseudo-element occupies the caret and some IMEs cannot insert composition text.\n\nEnter-to-submit already ignores `isComposing`, but some Windows IMEs leave that flag false and use `keyCode` 229 on the confirmation keystroke.\n\n**Steps to Reproduce**\n\nRun method: Agent Canvas from source on Windows 10 (`npm run dev` or the desktop app), with a third-party Chinese IME enabled.\n\n1. Open a conversation (or the home composer).\n2. Focus the chat input.\n3. Switch to a downloaded Chines",
@@ -3765,7 +3771,9 @@
    "score": 8,
    "reason": "Clear Windows IME composition bug with concrete root cause, reproduction steps, and a focused contenteditable/composer fix.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "updated_at": "2026-11-03T17:59:47",
+  "abort_reason": "lane=unknown no action"
  },
  "OpenHands/OpenHands#18955": {
   "id": "OpenHands/OpenHands#18955",
@@ -3830,7 +3838,7 @@
   },
   "created_at": "2026-10-03T06:01:17Z",
   "discovered_at": "2026-10-26T12:29:32",
-  "status": "new",
+  "status": "out_of_scope",
   "lease": null,
   "source": "cloudflare-worker",
   "body_excerpt": "While the agent is working in a chat, if I navigate to Settings and then return to the conversation, the agent later responds as if I had pasted its own previous message back into the chat (e.g. *\"the user pasted back my previous message\"*). I did not send anything. This happens consistently in affected sessions.\n\n**Root cause analysis (found by code inspection):**\n\nThe bug is a three-part chain in the desktop UI:\n\n1. **`shouldStartAgent=true` is planted in the URL permanently.** Editing a message (fork flow) navigates to `/pair?resumeSessionId=<id>&shouldStartAgent=true` (`BaseChat.tsx`, `handleSessionForked`). The param is consumed once but never removed from the URL.\n\n2. **The auto-submit guard resets on remount** (`useAutoSubmit.ts`). `hasAutoSubmittedRef` is a plain `useRef`, so it resets every time the chat component unmounts/remounts — which happens on any navigation to Settings and back (`SettingsRoute.closeSettings` uses `navigate(-1)`, restoring the same armed history entry). The effect fires whenever `chatState === ChatState.Idle`, including after ordinary turns started by normal user messages, so it re-fires on every settings round-trip once the param is in the URL.\n\n3. **The empty-message \"continue\" re-sends the last message regardless of role** (`useChatSession.ts`, `handleSubmit`):\n\n   ```ts\n   const newMessage = hasNewMessage\n     ? createUserMessage(userMessage, images)\n     : currentMessages[currentMessages.length - 1]; // last message, ANY role\n   ```\n\n   Scenario 3 in `useAutoSubmit` calls `handleSubmit({ msg: '', images: [] })`. When the agent just finished its turn, the last message is the **assistant's** reply. It is re-submitted via `acpPromptSession` → `messageToAcpPromptContent`, which serializes any message's text as a **user prompt**. From the model's perspective, the user just pasted the assistant's own reply back into the chat — hence the agent's remark.\n\n**To Reproduce**\n\n1. In a chat, edit one of your previous messages (this plants `r",
@@ -3839,7 +3847,9 @@
    "score": 9,
    "reason": "Clear, consistently reproducible bug with detailed root-cause analysis and targeted UI fix scope.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "updated_at": "2026-11-03T17:07:07",
+  "abort_reason": "lane=unknown no action"
  },
  "anomalyco/opencode#59147": {
   "id": "anomalyco/opencode#59147",
@@ -4139,7 +4149,7 @@
   },
   "created_at": "2026-10-26T13:45:14Z",
   "discovered_at": "2026-10-26T21:55:49",
-  "status": "new",
+  "status": "out_of_scope",
   "lease": null,
   "source": "cloudflare-worker",
   "body_excerpt": "### Description\n\nSubmitting a prompt while a turn is running reconfigures the **running** turn when the composer's agent differs from the turn's agent. A plan-mode turn that is mid-execution silently gains the new agent's tools, permissions, and system prompt, and the plan plugin tells the model it is no longer restricted.\n\n### Repro\n\n1. Set the composer agent to **plan** and submit a prompt (turn starts, runs for a while).\n2. While that turn is still running, switch the composer to **build** and submit the next prompt.\n3. Watch the running plan turn's next steps.\n\n### Actual\n\nThe still-running plan turn switches to build mid-flight:\n\n- build's permission rules and tool snapshot apply to the remaining steps (read-only plan work can write),\n- the system prompt is re-resolved for build,\n- the plan plugin injects a \"You are NO LONGER in Plan mode\" reminder into the running turn.\n\n### Expected\n\nThe running turn should keep the agent it started with, end to end. The composer's selection should apply to the next prompt's turn — never to a turn that is already executing.\n\n### Root cause\n\nPrompt admission does not carry an agent selection. Clients instead call `POST /api/session/:sessionID/agent` (`session.switchAgent`) eagerly on submit. `Session.switchAgent` publishes `session.agent.selected` unconditionally (no busy check), the projector persists `session.agent` immediately, and the runner re-reads the persisted agent at every step boundary (`prepareContext` → `SessionContext.select`), so the remainder of the in-flight turn runs under the new agent — including its permissions.\n\n### Related\n\n- #4156 — queued prompts picking up the running turn's mode (inverse direction)\n- #46111 — injected prompts without an agent silently switching session agent/model\n- PR #44683 — app-side queue/steer; its description notes that honoring a different selection per queued prompt \"needs per-prompt selection in the admission API (server change, out of scope here)\"\n\n### Proposed direction\n\nC",
@@ -4148,7 +4158,9 @@
    "score": 8,
    "reason": "Clear reproducible, security-relevant bug with detailed root cause and no competing work, though the fix spans multiple components.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "updated_at": "2026-11-03T17:08:07",
+  "abort_reason": "lane=unknown no action"
  },
  "anomalyco/opencode#59293": {
   "id": "anomalyco/opencode#59293",
@@ -4255,7 +4267,7 @@
   },
   "created_at": "2026-10-26T14:16:05Z",
   "discovered_at": "2026-10-26T22:40:47",
-  "status": "new",
+  "status": "out_of_scope",
   "lease": null,
   "source": "cloudflare-worker",
   "body_excerpt": "**Describe the bug**\n\n`ImageFileToImageContent` catches errors from `_encode_image_to_base64` and skips the source with a warning, but it builds and validates the `ImageContent` *outside* that `try`. A source that exists and has a non-image MIME type (for example a `.txt` file passed in a mixed batch) gets through encoding, then `ImageContent.__post_init__` raises `ValueError: text/plain is not a valid image MIME type.` and the whole `run()` call fails.\n\nThis is inconsistent with the component's own handling of unreadable/nonexistent files, which are logged and skipped, and with `DocumentToImageContent`, which now reports per-document failures instead of dropping the batch.\n\n**To Reproduce**\n\n```python\nfrom haystack.components.converters.image import ImageFileToImageContent\n\nconverter = ImageFileToImageContent()\nconverter.run(sources=[\"test/test_files/images/apple.jpg\", \"test/test_files/txt/doc_1.txt\"])\n```\n\nActual result:\n\n```text\nValueError: text/plain is not a valid image MIME type.\n```\n\nA `ByteStream` with `mime_type=\"text/plain\"` produces the same error.\n\n**Expected behavior**\n\nThe non-image source is skipped with the existing `\"Could not convert file ... Skipping it.\"` warning, and `image_contents` contains only the successfully converted image. One bad source in a batch must not discard the valid ones.\n\n**System**\n\n- Haystack `main` at `e9aa11240a`\n- Python 3.12\n- Reproduced with the repository's test dependencies\n\nRequested labels: `bug`, `P3` (this account cannot set labels on the upstream repository).\n",
@@ -4264,7 +4276,9 @@
    "score": 9,
    "reason": "Clear reproducible bug with narrow scope in error handling, expected behavior specified, and no competing work indicated.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "updated_at": "2026-11-03T17:58:46",
+  "abort_reason": "lane=unknown no action"
  },
  "deepset-ai/haystack#13448": {
   "id": "deepset-ai/haystack#13448",
@@ -4369,7 +4383,7 @@
   },
   "created_at": "2026-10-26T00:24:00Z",
   "discovered_at": "2026-10-26T23:23:43",
-  "status": "new",
+  "status": "out_of_scope",
   "lease": null,
   "source": "cloudflare-worker",
   "body_excerpt": "### Is there an existing issue for the same bug?\n\n- [x] I have searched existing issues and this is not a duplicate.\n\n### Bug Description\n\nA brand-new conversation on OpenHands Cloud can emit a `ConversationErrorEvent` with `code: LLMAuthenticationError` on the **first** LLM call — an instant 401 from the LiteLLM proxy (\"Invalid proxy server token passed … Unable to find token in cache or `LiteLLM_VerificationTokenTable`\") — even though the token is valid and the very same call succeeds seconds later via the automatic retry. The conversation then works normally, but the chat is permanently marked as failed/errored in the UI and event log, and the error is classified as **non-retryable / `user_action: settings`**, which misleads users into rotating keys and \"fixing\" settings that were never broken.\n\nWe hit this in conversation `fb292e39-465d-4d50-9879-99174dd9e72f` on OpenHands Cloud (2026-10-25). Event timeline from the conversation event log:\n\n```\n23:02:22.084  MessageEvent      user message arrives\n23:02:22.154  state             execution_status = running\n23:02:22.220  ConversationErrorEvent\n              code: LLMAuthenticationError\n              detail: litellm.AuthenticationError: AuthenticationError:\n                Litellm_proxyException - Authentication Error,\n                Invalid proxy server token passed.\n                Received API Key = sk-...8fe4,\n                Key Hash (Token) = b991ad5c550d…e984.\n                Unable to find token in cache or `LiteLLM_VerificationTokenTable`\n              classification: {kind: auth, retryable: false, user_action: settings}\n23:02:29.6    ActionEvent       first agent turn completes successfully\n                                (llm_response_id gen-1792969342-…, latency 7.28 s)\n```\n\nThe 401 arrived **136 ms** after the request went out — an instant token-lookup miss, not a timeout and not a bad key. The retry of the very same call succeeded and the conversation went on to run dozens of tool calls normally. The ",
@@ -4378,7 +4392,9 @@
    "score": 9,
    "reason": "Clear, reproducible transient-auth misclassification bug with detailed event timeline, concrete expected behavior, and a small retry/error-classification scope; related issues are distinct.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "updated_at": "2026-11-03T17:59:47",
+  "abort_reason": "lane=unknown no action"
  },
  "anomalyco/opencode#58176": {
   "id": "anomalyco/opencode#58176",
