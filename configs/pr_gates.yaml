@@ -53,7 +53,6 @@ repositories:
   prometheus/prometheus:             {requires_invite: false}
   firecracker-microvm/firecracker:   {requires_invite: false}
   dagger/dagger:                     {requires_invite: false}
-  duckdb/duckdb:                     {requires_invite: false}
   clickhouse/clickhouse:             {requires_invite: false}
   cockroachdb/cockroach:             {requires_invite: false}
   valkey-io/valkey:                  {requires_invite: false}
@@ -61,7 +60,6 @@ repositories:
   apache/kafka:                      {requires_invite: false}
   psf/black:                         {requires_invite: false}
   prettier/prettier:                 {requires_invite: false}
-  microsoft/TypeScript:              {requires_invite: false}
   nodejs/node:                       {requires_invite: false}
   pypa/pip:                          {requires_invite: false}
   pypa/pipx:                         {requires_invite: false}
@@ -70,3 +68,5 @@ repositories:
   tox-dev/tox:                       {requires_invite: false}
   python-poetry/poetry:              {requires_invite: false}
   logseq/logseq:                     {requires_invite: false}
+  yjs/yjs:                      {requires_invite: false}
+  sharkdp/bat:                  {requires_invite: false}

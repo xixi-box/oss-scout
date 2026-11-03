@@ -18,6 +18,8 @@
 #   tldraw/tldraw          外部合并率均为 0%
 #   microsoft/playwright(-python)  issue 须先 triage approve + EasyCLA
 #   langchain-ai/langchain 未指派即自动关 PR
+#   duckdb/duckdb          AI_POLICY.md：Autonomous agents are not allowed
+#   microsoft/TypeScript   CONTRIBUTING：不接 bulk, agent-driven contributions
 
 defaults:
   unknown_repo_action: hold_for_review
@@ -74,7 +76,6 @@ repositories:
   dagger/dagger:                     {lane: open}   # 77分 外部23% 15.3h 16.6/wk
 
   # ========== 数据库 ==========
-  duckdb/duckdb:                     {lane: open}   # 97分 外部100% 45.8h 70.5/wk
   clickhouse/clickhouse:             {lane: open}   # 74分 外部34% 33.2h 4.7/wk
   cockroachdb/cockroach:             {lane: open}   # 79分 外部60% 2.0h 2.0/wk
   valkey-io/valkey:                  {lane: open}   # 99分 外部99% 9.5h 9.0/wk
@@ -82,9 +83,11 @@ repositories:
   apache/kafka:                      {lane: open}   # 91分 外部100% 21.7h 2.9/wk
 
   # ========== 语言 / 工具链 ==========
+  # 2026-11-03 审计补入（替换因 AI 政策被排除的 duckdb / TypeScript）：
+  yjs/yjs:                      {lane: open}   # 74分 外部73% 27.7h 0.1/wk
+  sharkdp/bat:                  {lane: open}   # 69分 外部64% 111.3h 1.8/wk
   psf/black:                         {lane: open}   # 98分 外部91% 13.0h 22.8/wk
   prettier/prettier:                 {lane: open}   # 90分 外部59% 2.1h 11.9/wk
-  microsoft/TypeScript:              {lane: open}   # 80分 外部81% 172.6h 11.1/wk
   nodejs/node:                       {lane: open}   # 75分 外部91% 130.3h 2.2/wk
   pypa/pip:                          {lane: open}   # 93分 外部91% 28.9h 5.8/wk
   pypa/pipx:                         {lane: open}   # 100分 外部99% 0.9h 116.6/wk
