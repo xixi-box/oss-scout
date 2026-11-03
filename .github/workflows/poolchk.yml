@@ -1,8 +1,0 @@
-name: pool check
-on:
-  workflow_dispatch:
-jobs:
-  p:
-    runs-on: [self-hosted, aliyun]
-    steps:
-      - run: docker exec oss-scout grep -cE "^  [a-zA-Z0-9_.-]+/" /data/configs/repositories.yaml

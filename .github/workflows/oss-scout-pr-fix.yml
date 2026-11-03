@@ -31,6 +31,7 @@ jobs:
     timeout-minutes: 60
     steps:
       - name: Decode payload
+        id: job
         shell: bash
         env:
           FIX_B64: ${{ inputs.fix_b64 }}
