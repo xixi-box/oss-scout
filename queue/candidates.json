@@ -1134,7 +1134,7 @@
   },
   "created_at": "2026-10-25T05:16:32Z",
   "discovered_at": "2026-10-25T13:26:21",
-  "status": "new",
+  "status": "out_of_scope",
   "lease": null,
   "source": "cloudflare-worker",
   "ai_grade": {
@@ -1142,7 +1142,9 @@
    "score": 8,
    "reason": "Clear reproducible error-handling bug with concrete logs/code paths and a small, well-scoped fix to explain unexplained 403s.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "updated_at": "2026-11-01T11:17:44",
+  "abort_reason": "lane=unknown no action"
  },
  "anomalyco/opencode#58789": {
   "id": "anomalyco/opencode#58789",
@@ -1506,7 +1508,7 @@
   },
   "created_at": "2026-10-25T07:25:57Z",
   "discovered_at": "2026-10-25T15:28:01",
-  "status": "new",
+  "status": "out_of_scope",
   "lease": null,
   "source": "cloudflare-worker",
   "ai_grade": {
@@ -1514,7 +1516,9 @@
    "score": 9,
    "reason": "Clear, reproducible desktop UI bug with precise measurements and a small, self-contained hitbox/hover fix.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "updated_at": "2026-10-31T21:06:52",
+  "abort_reason": "lane=unknown no action"
  },
  "anomalyco/opencode#58919": {
   "id": "anomalyco/opencode#58919",
@@ -1617,7 +1621,7 @@
   },
   "created_at": "2026-10-25T07:44:14Z",
   "discovered_at": "2026-10-25T15:45:39",
-  "status": "new",
+  "status": "out_of_scope",
   "lease": null,
   "source": "cloudflare-worker",
   "ai_grade": {
@@ -1625,7 +1629,9 @@
    "score": 9,
    "reason": "Clear, reproducible prompt-assembly bug with a small, well-identified fix and no indicated competing work.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "updated_at": "2026-10-31T21:07:52",
+  "abort_reason": "lane=unknown no action"
  },
  "anomalyco/opencode#58661": {
   "id": "anomalyco/opencode#58661",
@@ -1690,7 +1696,7 @@
   },
   "created_at": "2026-10-25T08:26:55Z",
   "discovered_at": "2026-10-25T16:29:04",
-  "status": "new",
+  "status": "out_of_scope",
   "lease": null,
   "source": "cloudflare-worker",
   "ai_grade": {
@@ -1698,7 +1704,9 @@
    "score": 9,
    "reason": "Clear reproducible security-relevant bug where an external plugin can shadow a guarded internal policy plugin, with a small, well-scoped fix and no competing work.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "updated_at": "2026-10-31T22:21:18",
+  "abort_reason": "lane=unknown no action"
  },
  "xixi-box/oss-scout-v2-test#8": {
   "id": "xixi-box/oss-scout-v2-test#8",
@@ -1952,7 +1960,7 @@
   },
   "created_at": "2026-10-25T09:28:28Z",
   "discovered_at": "2026-10-25T17:34:37",
-  "status": "new",
+  "status": "out_of_scope",
   "lease": null,
   "source": "cloudflare-worker",
   "ai_grade": {
@@ -1960,7 +1968,9 @@
    "score": 9,
    "reason": "Clear, reproducible accessibility bug with detailed measurements and a narrow component-level fix despite a small token-design decision.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "updated_at": "2026-10-31T22:22:18",
+  "abort_reason": "lane=unknown no action"
  },
  "anomalyco/opencode#58936": {
   "id": "anomalyco/opencode#58936",
@@ -2094,7 +2104,7 @@
   },
   "created_at": "2026-10-25T09:42:22Z",
   "discovered_at": "2026-10-25T17:43:26",
-  "status": "new",
+  "status": "out_of_scope",
   "lease": null,
   "source": "cloudflare-worker",
   "ai_grade": {
@@ -2102,7 +2112,9 @@
    "score": 9,
    "reason": "Clear reproducible bug with a small fix scope: normalize image MIME type casing in the Cohere route.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "updated_at": "2026-11-01T11:00:47",
+  "abort_reason": "lane=unknown no action"
  },
  "crewAIInc/crewAI#8567": {
   "id": "crewAIInc/crewAI#8567",
@@ -2320,7 +2332,7 @@
   },
   "created_at": "2026-10-25T10:07:20Z",
   "discovered_at": "2026-10-25T18:09:35",
-  "status": "new",
+  "status": "out_of_scope",
   "lease": null,
   "source": "cloudflare-worker",
   "ai_grade": {
@@ -2328,7 +2340,9 @@
    "score": 9,
    "reason": "Clear reproducible bug with root cause and small fix scope; category filtering should be pushed server-side before the ANN fetch limit.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "updated_at": "2026-11-01T11:01:47",
+  "abort_reason": "lane=unknown no action"
  },
  "Arize-ai/phoenix#17245": {
   "id": "Arize-ai/phoenix#17245",
@@ -2394,7 +2408,7 @@
   },
   "created_at": "2026-10-25T10:25:18Z",
   "discovered_at": "2026-10-25T18:26:40",
-  "status": "new",
+  "status": "aborted_competed",
   "lease": null,
   "source": "cloudflare-worker",
   "ai_grade": {
@@ -2402,7 +2416,8 @@
    "score": 9,
    "reason": "Clear reproducible bug in two small converter functions, with a proposed tested fix and no competing work indicated.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "updated_at": "2026-11-01T11:17:53"
  },
  "anomalyco/opencode#58948": {
   "id": "anomalyco/opencode#58948",
@@ -2686,7 +2701,7 @@
   },
   "created_at": "2026-10-24T03:09:50Z",
   "discovered_at": "2026-10-25T19:40:29",
-  "status": "new",
+  "status": "out_of_scope",
   "lease": null,
   "source": "cloudflare-worker",
   "ai_grade": {
@@ -2694,7 +2709,9 @@
    "score": 9,
    "reason": "Clear lifecycle bug with concrete reproduction and acceptance criteria, small enough to fix and no competing work indicated.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "updated_at": "2026-11-02T10:54:24",
+  "abort_reason": "lane=unknown no action"
  },
  "anomalyco/opencode#58961": {
   "id": "anomalyco/opencode#58961",
@@ -2912,7 +2929,7 @@
   },
   "created_at": "2026-09-24T17:51:21Z",
   "discovered_at": "2026-10-25T20:29:09",
-  "status": "new",
+  "status": "out_of_scope",
   "lease": null,
   "source": "cloudflare-worker",
   "ai_grade": {
@@ -2920,7 +2937,9 @@
    "score": 9,
    "reason": "Clear, reproducible Windows encoding bug with a concrete root cause, minimal fix scope, and no indicated competing work.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "updated_at": "2026-11-01T11:18:44",
+  "abort_reason": "lane=unknown no action"
  },
  "crewAIInc/crewAI#7740": {
   "id": "crewAIInc/crewAI#7740",
@@ -2947,7 +2966,7 @@
   },
   "created_at": "2026-09-24T00:48:18Z",
   "discovered_at": "2026-10-25T20:29:09",
-  "status": "new",
+  "status": "out_of_scope",
   "lease": null,
   "source": "cloudflare-worker",
   "ai_grade": {
@@ -2955,7 +2974,9 @@
    "score": 9,
    "reason": "Clear, reproducible provider-specific bug with exact repro and a small retry-logic fix; no obvious competing work.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "updated_at": "2026-11-01T11:22:14",
+  "abort_reason": "lane=unknown no action"
  },
  "crewAIInc/crewAI#7691": {
   "id": "crewAIInc/crewAI#7691",
@@ -2984,7 +3005,7 @@
   },
   "created_at": "2026-09-21T17:03:00Z",
   "discovered_at": "2026-10-25T20:29:09",
-  "status": "new",
+  "status": "out_of_scope",
   "lease": null,
   "source": "cloudflare-worker",
   "ai_grade": {
@@ -2992,7 +3013,9 @@
    "score": 9,
    "reason": "Clear reproducible bug with detailed steps and a small, well-localized fix in source coercion and async resolution.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "updated_at": "2026-11-01T11:23:14",
+  "abort_reason": "lane=unknown no action"
  },
  "crewAIInc/crewAI#7332": {
   "id": "crewAIInc/crewAI#7332",
@@ -3058,7 +3081,7 @@
   },
   "created_at": "2026-09-05T18:55:52Z",
   "discovered_at": "2026-10-25T20:33:17",
-  "status": "new",
+  "status": "out_of_scope",
   "lease": null,
   "source": "cloudflare-worker",
   "ai_grade": {
@@ -3066,7 +3089,9 @@
    "score": 9,
    "reason": "Clear deterministic async race in `Memory.forget()`, with an obvious small fix to add `drain_writes()`/`_reset_lock` consistent with sibling destructive methods.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "updated_at": "2026-11-01T11:36:04",
+  "abort_reason": "lane=unknown no action"
  },
  "anomalyco/opencode#58981": {
   "id": "anomalyco/opencode#58981",
@@ -3128,7 +3153,7 @@
   },
   "created_at": "2026-10-25T13:39:01Z",
   "discovered_at": "2026-10-25T21:41:33",
-  "status": "new",
+  "status": "out_of_scope",
   "lease": null,
   "source": "cloudflare-worker",
   "ai_grade": {
@@ -3136,7 +3161,9 @@
    "score": 8,
    "reason": "Clear, small-scope session-title regression with simple reproduction and no apparent duplicate or competing work.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "updated_at": "2026-11-01T11:37:04",
+  "abort_reason": "lane=unknown no action"
  },
  "aaif-goose/goose#13132": {
   "id": "aaif-goose/goose#13132",
@@ -3163,7 +3190,7 @@
   },
   "created_at": "2026-10-25T13:42:57Z",
   "discovered_at": "2026-10-25T21:45:09",
-  "status": "new",
+  "status": "out_of_scope",
   "lease": null,
   "source": "cloudflare-worker",
   "ai_grade": {
@@ -3171,7 +3198,9 @@
    "score": 8,
    "reason": "Clear reproducible CLI panic from missing provider configuration; likely a small error-handling fix, though the report omits expected behavior/version details.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "updated_at": "2026-11-02T10:53:24",
+  "abort_reason": "lane=unknown no action"
  },
  "langfuse/langfuse#19351": {
   "id": "langfuse/langfuse#19351",
@@ -3201,7 +3230,7 @@
   },
   "created_at": "2026-10-25T13:42:54Z",
   "discovered_at": "2026-10-25T21:45:09",
-  "status": "new",
+  "status": "aborted_competed",
   "lease": null,
   "source": "cloudflare-worker",
   "ai_grade": {
@@ -3209,7 +3238,8 @@
    "score": 9,
    "reason": "Clear, reproducible Cmd+K evaluator search bug with a narrow proposed fix and no competing work.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "updated_at": "2026-11-02T10:54:35"
  },
  "crewAIInc/crewAI#5802": {
   "id": "crewAIInc/crewAI#5802",
@@ -3312,7 +3342,7 @@
   },
   "created_at": "2026-10-25T14:24:51Z",
   "discovered_at": "2026-10-25T22:26:45",
-  "status": "new",
+  "status": "out_of_scope",
   "lease": null,
   "source": "cloudflare-worker",
   "ai_grade": {
@@ -3321,7 +3351,9 @@
    "reason": "Clear reproducible strict-schema bug with provided repro, root cause, small fix, regression test, and no competing work.",
    "model": "deepseek-v4.1-flash"
   },
-  "notes": "live-checked 10-31: no claims in comments, no linked PRs to this issue; 6 days old; SchemaOptimizer strict-mode bug — TOP CANDIDATE"
+  "notes": "live-checked 10-31: no claims in comments, no linked PRs to this issue; 6 days old; SchemaOptimizer strict-mode bug — TOP CANDIDATE",
+  "updated_at": "2026-11-02T20:54:11",
+  "abort_reason": "lane=unknown no action"
  },
  "anomalyco/opencode#58995": {
   "id": "anomalyco/opencode#58995",
@@ -3460,7 +3492,7 @@
   },
   "created_at": "2026-10-25T15:50:06Z",
   "discovered_at": "2026-10-25T23:51:05",
-  "status": "new",
+  "status": "out_of_scope",
   "lease": null,
   "source": "cloudflare-worker",
   "ai_grade": {
@@ -3468,7 +3500,9 @@
    "score": 8,
    "reason": "Clear Desktop-specific regression with reproducible steps and CLI control showing it is not a true quota issue.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "updated_at": "2026-11-02T20:53:11",
+  "abort_reason": "lane=unknown no action"
  },
  "anomalyco/opencode#59013": {
   "id": "anomalyco/opencode#59013",

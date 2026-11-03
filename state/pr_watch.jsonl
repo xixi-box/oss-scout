@@ -20,3 +20,36 @@
 {"ts": "2026-10-31T09:07:35", "repo": "Arize-ai/phoenix", "number": 16545, "action": "wait", "reason": ""}
 {"ts": "2026-10-31T09:07:37", "repo": "pydantic/pydantic-ai-harness", "number": 729, "action": "wait", "reason": ""}
 {"ts": "2026-10-31T09:07:38", "repo": "xixi-box/safedock", "number": 5, "action": "wait", "reason": ""}
+{"ts": "2026-11-01T11:02:22", "repo": "PrefectHQ/fastmcp", "number": 6198, "action": "fix_ci", "reason": "failing checks: check-issue-link"}
+{"ts": "2026-11-01T11:02:24", "repo": "ruvnet/RuVector", "number": 1299, "action": "wait", "reason": ""}
+{"ts": "2026-11-01T11:02:25", "repo": "PrefectHQ/fastmcp", "number": 6195, "action": "fix_ci", "reason": "failing checks: check-issue-link"}
+{"ts": "2026-11-03T13:23:52", "repo": "milvus-io/milvus", "number": 55034, "action": "wait", "reason": ""}
+{"ts": "2026-11-03T13:23:53", "repo": "milvus-io/milvus", "number": 54998, "action": "wait", "reason": ""}
+{"ts": "2026-11-03T13:23:54", "repo": "agentgateway/agentgateway", "number": 4264, "action": "wait", "reason": ""}
+{"ts": "2026-11-03T13:23:55", "repo": "modelcontextprotocol/registry", "number": 1788, "action": "wait", "reason": ""}
+{"ts": "2026-11-03T13:23:57", "repo": "bytedance/deer-flow", "number": 7822, "action": "wait", "reason": ""}
+{"ts": "2026-11-03T13:23:58", "repo": "qdrant/qdrant", "number": 11361, "action": "wait", "reason": ""}
+{"ts": "2026-11-03T13:23:59", "repo": "bytedance/deer-flow", "number": 7812, "action": "wait", "reason": ""}
+{"ts": "2026-11-03T13:24:00", "repo": "Arize-ai/phoenix", "number": 17507, "action": "wait", "reason": ""}
+{"ts": "2026-11-03T13:24:02", "repo": "promptfoo/promptfoo", "number": 12079, "action": "wait", "reason": ""}
+{"ts": "2026-11-03T13:24:03", "repo": "PrefectHQ/fastmcp", "number": 6198, "action": "assignment_note", "reason": "assignment/claim mentioned"}
+{"ts": "2026-11-03T13:24:04", "repo": "ruvnet/RuVector", "number": 1299, "action": "wait", "reason": ""}
+{"ts": "2026-11-03T13:24:05", "repo": "PrefectHQ/fastmcp", "number": 6195, "action": "wait", "reason": ""}
+{"ts": "2026-11-03T13:24:06", "repo": "supabase/supabase", "number": 52574, "action": "wait", "reason": ""}
+{"ts": "2026-11-03T13:24:07", "repo": "PrefectHQ/fastmcp", "number": 6172, "action": "wait", "reason": ""}
+{"ts": "2026-11-03T13:24:08", "repo": "PrefectHQ/fastmcp", "number": 6171, "action": "wait", "reason": ""}
+{"ts": "2026-11-03T13:24:10", "repo": "weaviate/weaviate", "number": 13697, "action": "wait", "reason": ""}
+{"ts": "2026-11-03T13:24:11", "repo": "weaviate/weaviate", "number": 13691, "action": "wait", "reason": ""}
+{"ts": "2026-11-03T13:24:12", "repo": "volcengine/OpenViking", "number": 6826, "action": "wait", "reason": ""}
+{"ts": "2026-11-03T13:24:12", "repo": "ruvnet/RuVector", "number": 1293, "action": "wait", "reason": ""}
+{"ts": "2026-11-03T13:24:14", "repo": "pulumi/pulumi", "number": 25467, "action": "wait", "reason": ""}
+{"ts": "2026-11-03T13:24:14", "repo": "Deep-Optica/SkillsMaster", "number": 129, "action": "wait", "reason": ""}
+{"ts": "2026-11-03T13:24:16", "repo": "xixi-box/oss-scout-v2-test", "number": 10, "action": "wait", "reason": ""}
+{"ts": "2026-11-03T13:24:17", "repo": "OpenHands/software-agent-sdk", "number": 6269, "action": "fix_ci", "reason": "failing checks: Validate PR description, Validate PR description, Validate PR description"}
+{"ts": "2026-11-03T13:24:18", "repo": "wxyu-deep-optica/skill-vdr", "number": 8, "action": "wait", "reason": ""}
+{"ts": "2026-11-03T13:24:19", "repo": "wxyu-deep-optica/skill-vdr", "number": 5, "action": "wait", "reason": ""}
+{"ts": "2026-11-03T13:24:20", "repo": "wxyu-deep-optica/skill-vdr", "number": 2, "action": "wait", "reason": ""}
+{"ts": "2026-11-03T13:24:22", "repo": "pydantic/pydantic-ai", "number": 9285, "action": "fix_ci", "reason": "failing checks: Package Label"}
+{"ts": "2026-11-03T13:24:23", "repo": "Arize-ai/phoenix", "number": 16545, "action": "wait", "reason": ""}
+{"ts": "2026-11-03T13:24:24", "repo": "pydantic/pydantic-ai-harness", "number": 729, "action": "wait", "reason": ""}
+{"ts": "2026-11-03T13:24:25", "repo": "xixi-box/safedock", "number": 5, "action": "wait", "reason": ""}

@@ -233,10 +233,15 @@ def failure_is_ours(failing: list[dict]) -> tuple[bool, str]:
 
 
 def _looks_like_test_failure(text: str) -> bool:
-    """log 里有没有真实的测试/编译失败痕迹（区别于纯权限提示）。"""
+    """log 里有没有真实的测试/编译失败痕迹（区别于纯权限/标签提示）。
+
+    刻意不含 "exit code N"：每个 CI 步骤结束都有 exit code，pydantic-ai 的
+    Package Label 检查日志尾部就带 "exit code 1"，把它算进去会让外因检查
+    形同虚设（2026-11-02 实录）。"error:" 同理太宽，rust 用 error[ 精确匹配。
+    """
     return bool(re.search(
-        r"FAILED|AssertionError|Traceback|error\[|error:|Build failed|"
-        "compilation error|panic:|exit code [1-9]", text, re.I))
+        r"FAILED |AssertionError|Traceback \(most recent|error\[|"
+        "compilation error|panic:", text))
 
 
 def _attempts() -> dict:
