@@ -59,6 +59,7 @@ def main() -> int:
         print("pr_sync_count: 0")
     _pr_watch_tail()
     _cap_audit()
+    _dup_probe()
     return 0
 
 
@@ -96,3 +97,26 @@ def _cap_audit() -> None:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+
+def _dup_probe() -> None:
+    """对已知案例跑一次 duplicate 判定，确认闸门生效（只读）。"""
+    try:
+        from scout_v2.git_host import recheck_candidate
+    except Exception as e:  # noqa: BLE001
+        print("dup probe: import failed", str(e)[:100])
+        return
+    cases = [("qdrant/qdrant", 11360, "KNOWN-DUP(->10465)"),
+             ("milvus-io/milvus", 55033, "normal")]
+    print("--- duplicate probe ---")
+    for repo, num, label in cases:
+        try:
+            r = recheck_candidate(repo, num)
+        except Exception as e:  # noqa: BLE001
+            print(f"  {label}: error {str(e)[:80]}")
+            continue
+        if r is None or not r.complete:
+            print(f"  {label}: incomplete")
+            continue
+        print(f"  {label}: open={r.issue_open} dup={r.is_duplicate} "
+              f"of={r.duplicate_of}")
