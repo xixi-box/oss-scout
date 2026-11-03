@@ -19,3 +19,4 @@ lc_patch.diff
 pl_patch.diff
 .wrangler/
 cloudflare/.wrangler/
+state/tmp_*
