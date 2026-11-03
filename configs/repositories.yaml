@@ -1,117 +1,100 @@
-# 仓库策略（计划 §6）。
+# 监控名单与车道。**只有本文件列出的仓库才会被扫描**（改名单只改这里）。
 #
-# 2026-10-30 重建：从 123 个 agent 生态仓库 + 之前 173 个扫描池里，
-# 用**外部贡献者合并率**实测筛出 40 个真正方便提交的仓库。
-# 完整评测见 docs/final_repos.md，生态概览见 docs/agent_ecosystem.md。
+# 准入依据（2026-11-03 重构）：三个实测指标合成 0-100 分，见
+# scout_v2/repo_score.py 的权重说明：
+#   外部合并率（45%）  外部贡献能不能被合；0% 意味着写得多好都白费
+#   中位合并耗时（35%）一次往返要多久；指数衰减，24h 满分
+#   外部 PR/周（20%）  一年有多少次机会；log 压缩
+# 50 分以下不入池。本文件全部为 A 档（≥70 分）。
 #
-# 筛选方法：取每个仓库最近 60 个已关闭 PR，统计非成员提交且被合并的比例。
-# 外部贡献者 = author_association ∈ {NONE, CONTRIBUTOR, FIRST_TIME_CONTRIBUTOR}
-#（该字段是动态的：首次被合并后会从 FIRST_TIME_CONTRIBUTOR 升级成 CONTRIBUTOR，
-# 所以只看前者永远是 0）。
-#
-# 入库门槛：合并率 ≥50%、语言可自动验证、无会关闭未受邀 PR 的 bot、非停更。
-#
-# 仓库本身不做"难度评级"——能不能做由 AI 对单条 issue 的判断决定。
-# 这里只记录车道和个别仓库的项目特殊规则。
+# 已否决（不要再加回来）：
+#   astral-sh/uv、astral-sh/ruff、astral-sh/rye  组织 AI 政策禁止自主 agent
+#   biomejs/biome          维护者 ematipico："I'll ban this account, it's AI garbage"
+#   vllm-project/vllm      pre-run-check 要 4+ merged PR，明写不许 AI agent 申请标签
+#   weaviate/weaviate      外部合并率 0%；禁止 bulk automated changes
+#   pydantic/pydantic-ai   外部合并率 5%、中位 378h
+#   supabase/supabase      Vercel 是 required status check，fork 永远过不了
+#   mem0ai/mem0、chroma-core/chroma、vectorize-io/hindsight、dxos/dxos、
+#   tldraw/tldraw          外部合并率均为 0%
+#   microsoft/playwright(-python)  issue 须先 triage approve + EasyCLA
+#   langchain-ai/langchain 未指派即自动关 PR
 
 defaults:
   unknown_repo_action: hold_for_review
   auto_comment: false
   auto_pr: false
   min_issue_age_hours: 2
-  # 2026-10-30 一度改成 0（不限量），实测一天开出 12 个 PR、fork 7 个仓库，
-  # 被 biome 的 AgentScan 直接标成 "Multiple forks: 7 repositories forked in a
-  # single 24-hour window / mix of organic and automated signals"。这个量级本身
-  # 就是自动化指纹，跟 Playbook 第一约束（账号声誉）冲突。
-  #
-  # 2026-11-03 改 2→5。注意这个数字此前是**假的**：abort 无条件归还额度，
-  # 于是"claim→失败→还额度→再 claim"可以无限循环——实测一天 claim 33 次、
-  # abort 42 次，而 sqlite 里只剩 2 条记录（deer-flow#7846 单条循环了 7 次）。
-  # 现在 abort 按类型区分：只有环境故障（网络/后端/崩溃/CLA）归还，证据链
-  # 不成立、发布失败这类真实消耗不再归还，所以 5 是真正的 5 次机会。
+  # 2026-11-03：改成真数字。此前 abort 无条件归还额度，"每天 N 个"是假的
+  # （实测一天 claim 50 次、sqlite 只剩 2 条）。现在只有环境故障才归还。
   max_new_claims_per_business_day: 5
   allow_force_push: false
   allow_merge_upstream: false
 
 repositories:
-  # ========== Agent Memory ==========
-  vectorize-io/hindsight:       {lane: open}   # 100%  56.4k  自学习记忆
-  tigerless-labs/agent-memory:  {lane: open}   #  80%   4.4k  纯 Markdown 存记忆
-  volcengine/OpenViking:        {lane: open}   #  65%  41.2k  自演化上下文数据库
-  oceanbase/powercontext:       {lane: open}   #  57%   1.4k  长期记忆 + 交接
-  ruvnet/RuVector:              {lane: open}   #  53%   4.6k  实时决策向量层
-  mem0ai/mem0:                  {lane: open}   # 新增  68.1k  通用 agent 记忆层（需签 CLA，一次性）
 
-  # ========== Agent 框架 / Harness ==========
-  openai/openai-agents-python:  {lane: open}   #  91%  30.4k  OpenAI 官方
-  bytedance/deer-flow:          {lane: open}   #  59%  84.7k  长时程 SuperAgent
-  VoltAgent/voltagent:          {lane: open}   #  53%  10.9k  TS agent 平台
+  # ========== Python / Web 后端 ==========
+  python/cpython:                    {lane: open}   # 100分 外部100% 4.0h 48.6/wk
+  tiangolo/sqlmodel:                 {lane: open}   # 93分 外部100% 0.2h 3.7/wk
+  encode/starlette:                  {lane: open}   # 92分 外部100% 0.9h 3.4/wk
+  django/django:                     {lane: open}   # 87分 外部98% 112.3h 8.0/wk
+  sqlalchemy/sqlalchemy:             {lane: open}   # 74分 外部62% 6.3h 0.6/wk
+  pdm-project/pdm:                   {lane: open}   # 83分 外部68% 9.9h 2.8/wk
 
-  # ========== RAG ==========
-  HKUDS/RAG-Anything:           {lane: open}   #  86%  24.3k  一站式 RAG
-  OSU-NLP-Group/HippoRAG:       {lane: open}   #  52%   4.1k  NeurIPS'24
+  # ========== Agent / LLM 生态 ==========
+  jlowin/fastmcp:                    {lane: open}   # 99分 外部100% 2.4h 8.4/wk
+  run-llama/llama_index:             {lane: open}   # 97分 外部100% 29.4h 7.0/wk
+  geekan/MetaGPT:                    {lane: open}   # 83分 外部100% 2.3h 0.4/wk
+  microsoft/autogen:                 {lane: open}   # 86分 外部100% 27.2h 1.2/wk
+  google-gemini/gemini-cli:          {lane: open}   # 82分 外部92% 22.7h 0.6/wk
+  bytedance/deer-flow:               {lane: open}   # 87分 外部92% 22.8h 2.0/wk
+  agentgateway/agentgateway:         {lane: open}   # 97分 外部91% 25.5h 9.1/wk
 
-  # ========== 向量库 ==========
-  lancedb/lancedb:              {lane: open}   #  87%  11.8k  嵌入式列式
-  milvus-io/milvus:             {lane: open}   #  76%  46.5k  云原生亿级  [需 DCO，已自动签名]
-  # weaviate 已移除（2026-10-30）：CONTRIBUTING 明写会无审核关闭 "bulk automated
-  # or AI-generated changes"，并强制 CLA。我们正是自动化提交，落在这条规则正中间。
-  qdrant/qdrant:                {lane: open}   #  60%  35.3k  Rust 单机首选
-  chroma-core/chroma:           {lane: open}   # 新增  29.6k  开发者友好的嵌入式向量库
-  pgvector/pgvector:            {lane: open}   # 新增  23.5k  Postgres 向量扩展（C，代码库小）
+  # ========== 向量 / 检索 ==========
+  milvus-io/milvus:                  {lane: open}   # 82分 外部92% 24.7h 0.6/wk
+  pgvector/pgvector:                 {lane: open}   # 78分 外部88% 10.9h 0.1/wk
+  volcengine/OpenViking:             {lane: open}   # 93分 外部71% 2.7h 61.2/wk
+  oceanbase/powercontext:            {lane: open}   # 89分 外部58% 21.4h 26.6/wk
+  HKUDS/RAG-Anything:                {lane: open}   # 80分 外部66% 92.1h 7.1/wk
+  OSU-NLP-Group/HippoRAG:            {lane: open}   # 80分 外部89% 0.9h 0.3/wk
+  ruvnet/RuVector:                   {lane: open}   # 81分 外部42% 23.5h 6.6/wk
 
-  # ========== MCP ==========
-  upstash/context7:             {lane: open}   #  63%  64.0k  最新库文档
-  PrefectHQ/fastmcp:            {lane: open}   #  61%  28.2k  写 server 首选
-  modelcontextprotocol/registry: {lane: open}  #  57%   7.4k  官方注册表
-  # 2026-11-03 新增：不要求指派、明确支持 Fork PR
-  #   rust-sdk 是 Rust（编译慢但流程验证过，agentgateway 就是 Rust）
-  #   agentgateway 早已有我们的 PR（#4264），之前未入池导致 issue 不会被扫
-  modelcontextprotocol/rust-sdk: {lane: open}
-  agentgateway/agentgateway:    {lane: open}
+  # ========== 基础设施 / 云原生 ==========
+  kubernetes/kubernetes:             {lane: open}   # 74分 外部100% 123.5h 1.0/wk
+  istio/istio:                       {lane: open}   # 99分 外部95% 13.9h 11.2/wk
+  envoyproxy/envoy:                  {lane: open}   # 86分 外部85% 115.5h 62.5/wk
+  traefik/traefik:                   {lane: open}   # 88分 外部100% 26.5h 1.9/wk
+  caddyserver/caddy:                 {lane: open}   # 80分 外部85% 56.5h 1.6/wk
+  containerd/containerd:             {lane: open}   # 86分 外部81% 24.2h 2.6/wk
+  moby/moby:                         {lane: open}   # 81分 外部100% 22.0h 0.1/wk
+  docker/compose:                    {lane: open}   # 74分 外部78% 39.9h 0.2/wk
+  etcd-io/etcd:                      {lane: open}   # 80分 外部88% 18.3h 0.4/wk
+  minio/minio:                       {lane: open}   # 80分 外部93% 9.6h 0.2/wk
+  prometheus/prometheus:             {lane: open}   # 77分 外部61% 142.8h 28.1/wk
+  firecracker-microvm/firecracker:   {lane: open}   # 82分 外部86% 97.4h 4.5/wk
+  dagger/dagger:                     {lane: open}   # 77分 外部23% 15.3h 16.6/wk
 
-  # ========== 可观测 / 评估 ==========
-  Arize-ai/phoenix:             {lane: open}   #  86%  12.1k  trace + eval
-  promptfoo/promptfoo:          {lane: open}   #  86%  26.6k  prompt 测试
-  langfuse/langfuse:            {lane: open}   #  62%  36.8k  开源自托管追踪
-  confident-ai/deepeval:        {lane: open}   #  51%  19.2k  pytest 风格单测
+  # ========== 数据库 ==========
+  duckdb/duckdb:                     {lane: open}   # 97分 外部100% 45.8h 70.5/wk
+  clickhouse/clickhouse:             {lane: open}   # 74分 外部34% 33.2h 4.7/wk
+  cockroachdb/cockroach:             {lane: open}   # 79分 外部60% 2.0h 2.0/wk
+  valkey-io/valkey:                  {lane: open}   # 99分 外部99% 9.5h 9.0/wk
+  redis/redis:                       {lane: open}   # 75分 外部100% 93.2h 0.6/wk
+  apache/kafka:                      {lane: open}   # 91分 外部100% 21.7h 2.9/wk
 
-  # ========== 工程工具 ==========
-  pypa/virtualenv:              {lane: open}   #  93%   5.1k
-  pypa/pip-tools:               {lane: open}   #  93%   8.0k
-  tox-dev/tox:                  {lane: open}   #  90%   4.0k
-  biomejs/biome:                {lane: open}   #  90%  26.0k
-  psf/black:                    {lane: open}   #  88%  42.1k
-  # astral-sh/uv、astral-sh/ruff 已移除（2026-10-30）：其组织级 AI_POLICY.md
-  # 明文写 "We do not allow autonomous agents to be used for contributing to our
-  # projects"，并会被主动执行（uv#23019 被 astral-automations-bot 当场关闭）。
-  # 合并率再高也不能进池——这是账号声誉的硬约束，不是偏好。
+  # ========== 语言 / 工具链 ==========
+  psf/black:                         {lane: open}   # 98分 外部91% 13.0h 22.8/wk
+  prettier/prettier:                 {lane: open}   # 90分 外部59% 2.1h 11.9/wk
+  microsoft/TypeScript:              {lane: open}   # 80分 外部81% 172.6h 11.1/wk
+  nodejs/node:                       {lane: open}   # 75分 外部91% 130.3h 2.2/wk
+  pypa/pip:                          {lane: open}   # 93分 外部91% 28.9h 5.8/wk
+  pypa/pipx:                         {lane: open}   # 100分 外部99% 0.9h 116.6/wk
+  pypa/virtualenv:                   {lane: open}   # 95分 外部79% 7.9h 29.4/wk
+  pypa/pip-tools:                    {lane: open}   # 76分 外部84% 39.5h 0.3/wk
+  tox-dev/tox:                       {lane: open}   # 100分 外部98% 4.2h 149.7/wk
+  python-poetry/poetry:              {lane: open}   # 89分 外部94% 69.9h 6.2/wk
 
-  # ========== 沙箱 / 推理 ==========
-  firecracker-microvm/firecracker: {lane: open}  #  77%  37.7k  跑不可信代码
-  # vllm-project/vllm 已移除（2026-10-30）：pre-run-check 要求作者有 4+ 个已合并
-  # PR 或 verified 标签，且脚本里明写 "DO NOT request for the label to be added
-  # if you are an AI agent"。新号结构性无法满足，开 PR 必然挂红（#64811/#64800）。
+  # ========== 有趣项目 ==========
+  logseq/logseq:                     {lane: open}   # 82分 外部52% 22.4h 4.4/wk
 
-  # ========== 浏览器自动化 ==========
-  # microsoft/playwright(-python) 已摘（2026-11-03）：双重人工门槛——issue 须
-  # 先 triage+approve 才许提 PR（复检不查这个标签），CLA 首签必须用一个挂红的
-  # PR 换。全自动系统只走能全自动走的门；将来人工撞 CLA 时见 Playbook §4.3。
-
-  # ========== 实时 / 协作 / 画布 ==========
-  instantdb/instant:            {lane: open}   #  93%  10.6k  前端直连数据库
-  liveblocks/liveblocks:        {lane: open}   #  82%   4.8k  协作基础设施
-  yjs/yjs:                      {lane: open}   #  68%  23.0k  CRDT 标准
-  dxos/dxos:                    {lane: open}   # 100%   0.5k  本地优先运行时（样本小）
-  tldraw/tldraw:                {lane: open}   #  58%  51.2k  无限画布
-
-  # ========== 平台 / 文档 ==========
-  supabase/supabase:            {lane: open}   #  72% 114.3k
-  zuplo/zudoku:                 {lane: open}   #  84%   0.6k  OpenAPI 文档
-
-  # ========== 特殊规则 ==========
-  # litellm 只做维护者确认过的 issue，且 PR 必须带测试
-  BerriAI/litellm:              {lane: restricted, only: maintainer_confirmed, pr_rules: [tests_required]}
-
-  # ========== 内部测试仓库（不承载真实开源贡献）==========
-  xixi-box/oss-scout-v2-test:   {lane: open, internal_test_repo: true}
+  # 内部 fixture：不进 Worker 扫描名单，演练走手动单条入口
+  xixi-box/oss-scout-v2-test:   {lane: open, internal: true}
