@@ -1,0 +1,12 @@
+name: cap audit two
+on:
+  workflow_dispatch:
+jobs:
+  c:
+    runs-on: [self-hosted, aliyun]
+    steps:
+      - run: |
+          echo "=== /data/configs (实际生效) ==="
+          docker exec oss-scout grep -n "max_new_claims" /data/configs/repositories.yaml
+          echo "=== /app/configs.seed (镜像里) ==="
+          docker exec oss-scout grep -n "max_new_claims" /app/configs.seed/repositories.yaml
