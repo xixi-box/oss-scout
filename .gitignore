@@ -20,3 +20,7 @@ pl_patch.diff
 .wrangler/
 cloudflare/.wrangler/
 state/tmp_*
+consumer_fix.txt
+cron_prompt.txt
+observer_task.txt
+scripts/_*

@@ -4112,7 +4112,7 @@
   },
   "created_at": "2026-10-26T13:44:17Z",
   "discovered_at": "2026-10-26T21:55:28",
-  "status": "new",
+  "status": "out_of_scope",
   "lease": null,
   "source": "cloudflare-worker",
   "body_excerpt": "## Summary\n\nOn a Linux VPS, `opencode run` (V2, v2.1.4 and v2.0.32) hangs during initialization: no session is created, stdout stays empty, and no error is emitted. The same hang occurs with a clean `HOME` (no config, no credentials) using a free model. Direct calls to the provider API from the same host succeed, so the provider and network egress are functional.\n\nThis looks related to the V1 report in #38723 (hang before session creation; established connection to the model registry held open).\n\n## Environment\n\n- opencode version: **2.1.4** (also reproduced on **2.0.32**)\n- OS: **Ubuntu 24.04.4 LTS**, Linux 6.8 x86_64 (VPS, direct outbound access, no proxy)\n- Terminal: none — non-interactive SSH (`TERM` unset), `ssh host 'opencode run …'`\n- Shell: `/bin/bash` (server default)\n- Install/channel: `curl -fsSL https://opencode.ai/v2/install | bash` (latest channel)\n- Active plugins: none. Config contains one remote MCP server; the bug also reproduces with **no user config at all**\n\n## Reproduction\n\n1. On a clean account/home (no `~/.config/opencode`, no credentials):\n\n   ```bash\n   mkdir -p /tmp/oc-repro && cd /tmp/oc-repro\n   HOME=/tmp/oc-clean timeout 90 opencode run --auto \\\n     -m opencode/deepseek-v4.1-flash-free \"Reply with exactly: OK\"\n   echo \"exit=$?\"\n   ```\n\n2. The process stays alive with **zero stdout**; it exits only via the external `timeout` (`exit=124`).\n\n3. With a configured instance (provider key + a remote MCP server), the same command hangs the same way; the server log stops after location/MCP initialization and never reaches session creation.\n\n## Expected Behavior\n\nThe run creates a session, performs the model request, and prints the model's answer (`OK`). Direct API calls from the same machine complete in ~2 seconds.\n\n## Actual Behavior\n\n- No output, no error, no session; only an external timeout ends it.\n- Server log tail during the hang (DEBUG level):\n\n  ```text\n  message=\"location services booted\" directory=/tmp/oc-repro\n  message=\"mcp connect",
@@ -4121,7 +4121,9 @@
    "score": 9,
    "reason": "Clear reproducible CLI hang with exact repro steps, multiple affected versions, detailed logs, and no competing work; likely small initialization/timeout bug.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "updated_at": "2026-11-03T23:56:11",
+  "abort_reason": "lane=unknown no action"
  },
  "anomalyco/opencode#59289": {
   "id": "anomalyco/opencode#59289",
@@ -4306,7 +4308,7 @@
   },
   "created_at": "2026-10-26T14:17:26Z",
   "discovered_at": "2026-10-26T22:40:56",
-  "status": "new",
+  "status": "out_of_scope",
   "lease": null,
   "source": "cloudflare-worker",
   "body_excerpt": "**Describe the bug**\n\n`DocumentToImageContent` is designed to report per-document failures: invalid metadata, unsupported MIME types, unreadable PDFs and out-of-range PDF pages all become `None` in `image_contents` while the remaining documents are converted. Direct image files are the exception. When resizing is enabled (`size=...`), the image is decoded with Pillow, and a file whose bytes cannot be decoded raises `PIL.UnidentifiedImageError` out of `run()`, so every document in the batch is lost.\n\nThe PDF branch already catches its conversion errors and leaves `None` for that entry; the direct-image branch does not.\n\n**To Reproduce**\n\n```python\nfrom pathlib import Path\nimport tempfile\n\nfrom haystack import Document\nfrom haystack.components.converters.image import DocumentToImageContent\n\ncorrupt = Path(tempfile.mkdtemp()) / \"corrupt.jpg\"\ncorrupt.write_bytes(b\"not an image\")\n\nconverter = DocumentToImageContent(size=(64, 64))\nconverter.run(\n    documents=[\n        Document(content=\"\", meta={\"file_path\": \"test/test_files/images/apple.jpg\"}),\n        Document(content=\"\", meta={\"file_path\": str(corrupt)}),\n    ]\n)\n```\n\nActual result:\n\n```text\nPIL.UnidentifiedImageError: cannot identify image file <_io.BytesIO object ...>\n```\n\n**Expected behavior**\n\nThe valid image is returned, the corrupt image gets `None` in its `image_contents` slot, and a warning names the skipped document. One bad image must not discard the rest of the batch.\n\n**Additional context**\n\nWithout `size=...` the component copies the bytes without decoding them, so corrupt data is not detected there. The failure is specific to the resize path, which calls `_encode_image_to_base64` with a size and opens the image with Pillow.\n\n**System**\n\n- Haystack `main` at `e9aa11240a`\n- Python 3.12\n- `pypdfium2` and `Pillow` from the repository's test dependencies\n\nRequested labels: `bug`, `P3` (this account cannot set labels on the upstream repository).\n",
@@ -4315,7 +4317,9 @@
    "score": 9,
    "reason": "Clear reproducible bug with small targeted fix and no competing work.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "updated_at": "2026-11-03T23:57:11",
+  "abort_reason": "lane=unknown no action"
  },
  "OpenHands/OpenHands#18980": {
   "id": "OpenHands/OpenHands#18980",
@@ -4465,7 +4469,7 @@
   },
   "created_at": "2026-10-28T01:33:14Z",
   "discovered_at": "2026-10-28T10:01:30",
-  "status": "new",
+  "status": "out_of_scope",
   "lease": null,
   "source": "cloudflare-worker",
   "body_excerpt": "### Operating System\n\nWindows\n\n### Installation Method\n\nFrom source (`npm run dev` / `npm run dev:minimal`)\n\n### Agent Canvas Version\n\nmain @ 6354932 (1.34.0)\n\n### Bug Description\n\nIn a conversation that has used Plan mode, scrolling up to load older history can permanently skip a stretch of the main conversation.\n\n`useLoadOlderEvents` anchors `timestamp__lt` on `useEventStore.getState().events[0]`, the oldest event in the store. The store is shared with the planner sub-conversation, whose socket replays its whole log (`after_seq=-1`), while the main conversation only has its 50-event REST tail. When the planner started before that tail, `events[0]` is a planner event, so the older-page request asks for main events older than the planner's first event. Every main event between that point and the oldest loaded main event is never requested. The returned page is usually short, so `hasMore` flips to false and nothing retries.\n\n### Steps to Reproduce\n\nRun method: from a source checkout, `npm run dev:mock` (MSW mock mode; the same code path runs under `npm run dev`).\n\n1. `npm ci && npm run dev:mock`, open http://127.0.0.1:3001/conversations/pagination-local (the built-in 100-event pagination fixture). The REST tail loads messages 51-100.\n2. In the devtools console, add two planner events the way the planning socket handler does (`addEvent` with `isFromPlanningAgent: true`), timestamped between messages 10 and 12:\n   ```js\n   const s = window.__OH_EVENT_STORE__.getState();\n   const mk = (id, ts, text) => ({ id, timestamp: ts, source: \"agent\", isFromPlanningAgent: true,\n     llm_message: { role: \"assistant\", content: [{ type: \"text\", text }] }, activated_skills: [], extended_content: [] });\n   s.addEvent(mk(\"planner-1\", \"2026-05-13T00:10:30.000Z\", \"[Planner] Drafting PLAN.md\"));\n   s.addEvent(mk(\"planner-2\", \"2026-05-13T00:11:30.000Z\", \"[Planner] Plan ready\"));\n   ```\n3. Scroll the chat to the top.\n\nIn real use the same store state comes from reopening a long conversation ",
@@ -4474,7 +4478,9 @@
    "score": 9,
    "reason": "Clear, reproducible pagination bug with identified root cause and small likely fix scope; no duplicate or competing work indicated.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "updated_at": "2026-11-03T23:56:12",
+  "abort_reason": "lane=unknown no action"
  },
  "anomalyco/opencode#59792": {
   "id": "anomalyco/opencode#59792",
@@ -4543,7 +4549,7 @@
   },
   "created_at": "2026-10-28T01:35:53Z",
   "discovered_at": "2026-10-28T10:01:30",
-  "status": "new",
+  "status": "out_of_scope",
   "lease": null,
   "source": "cloudflare-worker",
   "body_excerpt": "### Description\n\nOn the Web UI served over **plain HTTP from a non-localhost origin** (LAN IP / hostname / Tailscale), clicking **Open file** in the side panel's new-tab view does nothing: no tab opens, no toast, no request. The console shows:\n\n```\nUncaught TypeError: crypto.randomUUID is not a function\n```\n\nReview and Terminal launchers in the same panel work. The same server and session work over `http://127.0.0.1:<port>`.\n\nRoot cause: `packages/gui-plugins/src/file/renderer.tsx` opens a new launcher tab with an unguarded `crypto.randomUUID()`:\n\nhttps://github.com/anomalyco/opencode/blob/v2.2.0/packages/gui-plugins/src/file/renderer.tsx#L170\n\n```ts\nif (selected || layout.narrow())\n  layout.open(`file:${selected ?? OPEN}`, session, { tab: \"preview\", background: options?.background })\nelse layout.open(`file:${OPEN}:${crypto.randomUUID()}`, session, { tab: \"select\" })\n```\n\n`crypto.randomUUID` exists only in secure contexts, so on an insecure origin the call throws inside the click handler before `layout.open`, and the click is silently lost. Both the `+` → “Open file” launcher and `Ctrl+Alt+P` reach this branch; narrow layouts (<768px) take the other branch and are unaffected.\n\n### Steps to reproduce\n\n1. Start the Web UI (`opencode serve`, or the background service) and open it from a non-localhost HTTP origin, e.g. `http://<LAN-IP>:<port>/` (Chrome shows “Not secure”).\n2. Open any session and open the side panel (Toggle review).\n3. Click `+` (Add tab), then **Open file**.\n4. Nothing happens; devtools shows `TypeError: crypto.randomUUID is not a function`.\n\nExpected: the file browser tab opens on any origin (id generation should not require a secure context).\n\n### Regression / history\n\n- `v2.1.4` used a fixed key (`file:open`) in `openPicker` and worked on insecure origins.\n- `#57182` (`879479b467`, “allow multiple open file tabs”) introduced `file:${OPEN}:${crypto.randomUUID()}`; `#55246` moved it to `packages/gui-plugins/src/file/renderer.tsx`. First release contai",
@@ -4552,7 +4558,9 @@
    "score": 9,
    "reason": "Clear reproducible v2.2.0 regression with root cause and a small fix using an existing guarded uuid helper; no competing work noted.",
    "model": "deepseek-v4.1-flash"
-  }
+  },
+  "updated_at": "2026-11-03T23:57:12",
+  "abort_reason": "lane=unknown no action"
  },
  "anomalyco/opencode#59789": {
   "id": "anomalyco/opencode#59789",
