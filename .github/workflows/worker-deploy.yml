@@ -1,0 +1,54 @@
+name: worker deploy
+
+# 部署 Cloudflare Worker。Worker 是独立于 Docker 镜像的部署单元：
+# REPOS / PRS 这类 vars 改动只有重新 deploy 才会生效。
+#
+# 用 npx wrangler 而不是预装：部署机只需 node。token 从 Secrets 注入，
+# 不走 wrangler login（见 cloudflare/README.md）。
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Only validate the bundle, do not publish"
+        type: boolean
+        default: false
+jobs:
+  deploy:
+    runs-on: [self-hosted, aliyun]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show planned repo list
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import re, pathlib
+          t = pathlib.Path("cloudflare/wrangler.toml").read_text(encoding="utf-8")
+          m = re.search(r'REPOS = "([^"]*)"', t)
+          items = [x.strip() for x in m.group(1).split(",") if x.strip()]
+          print(f"REPOS count: {len(items)}")
+          for r in items[-4:]:
+              print(f"  tail: {r}")
+          PY
+
+      - name: Deploy
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: 8b5f2575c2c2f0dd4d6e4eaa3d4e7530
+        run: |
+          set -euo pipefail
+          cd cloudflare
+          FLAGS=""
+          if [ "${{ inputs.dry_run }}" = "true" ]; then FLAGS="--dry-run"; fi
+          npx --yes wrangler@latest deploy $FLAGS 2>&1 | tail -30
+
+      - name: Verify live repo count
+        if: inputs.dry_run != true
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          cd cloudflare
+          npx --yes wrangler@latest deployments list 2>&1 | head -8 || true
