@@ -1,0 +1,91 @@
+"""额度语义：只有环境故障归还，真实消耗不归还；单条候选有尝试上限。
+
+2026-11-03 实录（这是本文件存在的理由）：
+  今天 claim 33 次、pipeline_abort 42 次，而 sqlite 的 claim_days 只剩 2 条。
+  因为 _abort_release 无条件调用 release_claim，于是
+      claim → 失败 → 归还额度 → 立刻能再 claim → 再失败 → …
+  可以无限循环：deer-flow#7846 一天被 claim 7 次，qdrant#11368 5 次，
+  fastmcp#6273 4 次。配置的"每天 2 个"限的是**同时占用的名额**，
+  被这个循环架空了，所以那个数字一直是假的。
+"""
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from scout_v2.state_store import ClaimLedger  # noqa: E402
+
+TZ = "Asia/Shanghai"
+
+
+class TestReleaseSemantics:
+    def test_environment_failure_gives_the_slot_back(self, tmp_path):
+        led = ClaimLedger(tmp_path / "t.db")
+        try:
+            assert led.try_claim(TZ, "a/x#1", max_per_day=5)[0]
+            # 模拟环境故障 abort：归还
+            assert led.release_claim("a/x#1", TZ) is True
+            assert led.count_today(TZ) == 0
+        finally:
+            led.close()
+
+    def test_real_attempt_keeps_the_slot(self, tmp_path):
+        """证据链失败 / 发布失败 → 不归还，否则额度计数失真。"""
+        led = ClaimLedger(tmp_path / "t.db")
+        try:
+            assert led.try_claim(TZ, "a/x#1", max_per_day=5)[0]
+            # 不调用 release_claim → 名额被真实消耗
+            assert led.count_today(TZ) == 1
+            assert led.try_claim(TZ, "a/x#2", max_per_day=5)[0]
+            assert led.count_today(TZ) == 2
+        finally:
+            led.close()
+
+    def test_cap_counts_consumed_attempts_not_concurrent(self, tmp_path):
+        """5 次机会就是 5 次：用完第 6 次拒绝，且不会因为 abort 而复活。"""
+        led = ClaimLedger(tmp_path / "t.db")
+        try:
+            for i in range(5):
+                ok, _ = led.try_claim(TZ, f"a/x#{i}", max_per_day=5)
+                assert ok, f"attempt {i} should fit under the cap of 5"
+            ok, why = led.try_claim(TZ, "a/x#99", max_per_day=5)
+            assert ok is False and "daily limit 5" in why
+            assert led.count_today(TZ) == 5
+        finally:
+            led.close()
+
+
+class TestAbortClassification:
+    """_abort_release 的 give_back 默认值和各调用点的分类。"""
+
+    def test_source_has_both_paths(self):
+        src = (Path(__file__).resolve().parents[1] / "scout_v2" / "workers"
+               / "auto_pipeline.py").read_text(encoding="utf-8")
+        assert "give_back: bool = True" in src
+        # 证据链失败必须不归还
+        assert "give_back=False)   # 成本已经付出去" in src
+        # 发布失败也必须不归还
+        assert 'summary["abort"], give_back=False' in src
+        # 环境类故障显式标注归还
+        assert src.count("give_back=True)") >= 3
+
+    def test_attempt_limit_constant(self):
+        from scout_v2.workers.auto_pipeline import MAX_ATTEMPTS_PER_CANDIDATE
+        assert 1 <= MAX_ATTEMPTS_PER_CANDIDATE <= 5
+
+
+class TestAttemptCounter:
+    def test_attempts_increment_is_persisted(self, tmp_path):
+        """mark_candidate 的 extra 要能把 attempts 写回候选条目。"""
+        from scout_v2.workers.auto_pipeline import mark_candidate
+        q = tmp_path / "queue"
+        q.mkdir(parents=True)
+        (q / "candidates.json").write_text(json.dumps({
+            "a/x#1": {"id": "a/x#1", "repo": "a/x", "number": 1, "status": "new"}
+        }), encoding="utf-8")
+        mark_candidate(tmp_path, "a/x#1", "new", extra={"attempts": 2})
+        d = json.loads((q / "candidates.json").read_text(encoding="utf-8"))
+        assert d["a/x#1"]["attempts"] == 2

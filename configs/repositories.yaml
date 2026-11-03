@@ -23,8 +23,13 @@ defaults:
   # 被 biome 的 AgentScan 直接标成 "Multiple forks: 7 repositories forked in a
   # single 24-hour window / mix of organic and automated signals"。这个量级本身
   # 就是自动化指纹，跟 Playbook 第一约束（账号声誉）冲突。
-  # 回到每天 2 条：够验证流程，又不到"批量"的观感。
-  max_new_claims_per_business_day: 2
+  #
+  # 2026-11-03 改 2→5。注意这个数字此前是**假的**：abort 无条件归还额度，
+  # 于是"claim→失败→还额度→再 claim"可以无限循环——实测一天 claim 33 次、
+  # abort 42 次，而 sqlite 里只剩 2 条记录（deer-flow#7846 单条循环了 7 次）。
+  # 现在 abort 按类型区分：只有环境故障（网络/后端/崩溃/CLA）归还，证据链
+  # 不成立、发布失败这类真实消耗不再归还，所以 5 是真正的 5 次机会。
+  max_new_claims_per_business_day: 5
   allow_force_push: false
   allow_merge_upstream: false
 

@@ -362,6 +362,18 @@ def candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6) -> dict:
         summary["steps"].append("restricted lane: maintainer-confirmed")
 
     # ---- 认领闸 ----
+    # 同一条候选今天的尝试次数上限：2026-11-03 实测 deer-flow#7846 在一天内被
+    # claim 7 次（每次 abort 都归还额度），同一份活反复烧 Actions 分钟。额度闸
+    # 管的是"总共几次机会"，这里管的是"一条候选最多试几次"。
+    attempts = int(entry.get("attempts") or 0)
+    if attempts >= MAX_ATTEMPTS_PER_CANDIDATE:
+        summary["abort"] = (f"candidate attempt limit reached "
+                            f"({attempts}/{MAX_ATTEMPTS_PER_CANDIDATE})")
+        log(root, "abort", key, summary["abort"])
+        mark_candidate(root, key, "escalated",
+                       extra={"abort_reason": summary["abort"]})
+        return summary
+
     ledger = ClaimLedger(root / "state" / "scout_v2.sqlite3")
     # 每日上限由策略层配置（max_new_claims_per_business_day，0=不限）
     ok, reason = ledger.try_claim(eng.tz_name, key,
@@ -372,14 +384,30 @@ def candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6) -> dict:
         return summary
     wl.append({"ts": time.strftime("%Y-%m-%dT%H:%M:%S"), "action": "claim",
                "target": key, "source": "auto-pipeline"})
-    summary["steps"].append("claimed (daily budget)")
+    mark_candidate(root, key, str(entry.get("status") or "new"),
+                   extra={"attempts": attempts + 1})
+    summary["steps"].append(f"claimed (attempt {attempts + 1}, daily budget)")
 
-    def _abort_release(msg: str) -> dict:
-        # 只释放这一条候选的占额，不能动别人的（见 ClaimLedger.release_claim）。
-        ledger.release_claim(key, eng.tz_name)
+    def _abort_release(msg: str, *, give_back: bool = True) -> dict:
+        """中止并（可选）归还额度。
+
+        2026-11-03 实测：今天 claim 33 次、abort 42 次，sqlite 里只剩 2 条——
+        因为每次 abort 都无条件归还额度，于是"claim→失败→还额度→再 claim"
+        可以无限循环（deer-flow#7846 循环了 7 次，每次都在烧 Actions 分钟）。
+        「每天 N 个」限的是同时占用的名额，被这种循环架空了。
+
+        归还规则——只有**环境故障**才还（那不是我们的机会没用好），
+        凡是**真实消耗了尝试**的一律不还：
+          give_back=True   网络抖动 / 后端不可达 / 崩溃 / CLA 阻塞
+          give_back=False  证据链不成立、发布失败、候选本身不可用
+        这样计数才等于"今天真正花掉了几次机会"。
+        """
+        if give_back:
+            ledger.release_claim(key, eng.tz_name)
         ledger.close()
         summary["abort"] = msg
-        log(root, "abort", key, msg + "; claim released")
+        log(root, "abort", key, msg + ("; claim released" if give_back
+                                       else "; claim kept (attempt consumed)"))
         return summary
 
     # ---- base SHA ----
@@ -392,7 +420,9 @@ def candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6) -> dict:
             break
         time.sleep(min(30, (attempt + 1) * 10))
     if head is None or head.returncode != 0:
-        return _abort_release(f"head sha failed: {(head.stderr if head else '')[:120]}")
+        return _abort_release(
+            f"head sha failed: {(head.stderr if head else '')[:120]}",
+            give_back=True)   # GitHub 抖动，不是机会用掉了
     base_sha = head.stdout.strip()
 
     # ---- 组 job 并交给后端（VPS 不 clone）----
@@ -417,13 +447,15 @@ def candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6) -> dict:
         from .repair import resolve_model
         job.model = resolve_model()
     except Exception as e:  # noqa: BLE001
-        return _abort_release(f"no model resolved: {str(e)[:160]}")
+        return _abort_release(f"no model resolved: {str(e)[:160]}",
+                             give_back=True)   # 配置/凭证问题
     # 路由器会选后端；只有 Actions 能自己写回（runner 有稳定出网 + PAT），
     # Modal 产出的补丁仍由控制器发布。这里先按路由结论决定要不要带 publish 配置。
     try:
         decision = _build_router(root, job, eng).route(job.to_dict())
     except Exception as e:  # noqa: BLE001
-        return _abort_release(f"routing failed: {str(e)[:160]}")
+        return _abort_release(f"routing failed: {str(e)[:160]}",
+                             give_back=True)   # 路由层异常
     if decision.backend == "github_actions":
         # 开 PR 前先看这个仓库要不要人工签 CLA。要人工签的仓库，PR 开出来也是
         # 挂着 not_signed 等签名，不如现在就告诉人「先去签，签完再来」——省一轮
@@ -451,7 +483,8 @@ def candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6) -> dict:
     try:
         backend, remote_id, extra = _submit_job(root, job, eng)
     except Exception as e:  # noqa: BLE001
-        return _abort_release(f"backend unavailable: {str(e)[:200]}")
+        return _abort_release(f"backend unavailable: {str(e)[:200]}",
+                             give_back=True)   # 后端故障
     summary["steps"].append(f"backend={backend} ({extra.get('note', '')})")
 
     collected = _collect(root, backend, remote_id, extra)
@@ -469,7 +502,8 @@ def candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6) -> dict:
         _r = _abort_release(
             f"evidence chain incomplete: {res.outcome} repro={res.reproduced_on_base} "
             f"fixed={res.fixed_on_patch} gate={report.errors or 'PASS'} "
-            f"patch={'yes' if patch_file else 'no'}")
+            f"patch={'yes' if patch_file else 'no'}",
+            give_back=False)   # 成本已经付出去（Actions 分钟），这次机会算用掉了
         _r["repair"] = {"backend": backend, "outcome": res.outcome,
                         "repro": res.reproduced_on_base, "fixed": res.fixed_on_patch,
                         "unverified": res.unverified_items[:3]}
@@ -493,14 +527,16 @@ def candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6) -> dict:
             summary["steps"].append("published on runner")
         else:
             summary["abort"] = f"runner publish failed: {runner_pr.get('error', '')[:180]}"
-            return _abort_release(summary["abort"])
+            return _abort_release(summary["abort"], give_back=False)
     else:
         # ---- 控制器侧发布（Modal 后端 / runner 未配置 publish）----
         pr_url = _publish_pr(root, entry, base_sha, patch_file, summary)
         if pr_url is None:
-            return _abort_release(summary.get("abort", "publish failed"))
+            return _abort_release(summary.get("abort", "publish failed"),
+                                  give_back=False)
     if not pr_url:
-        return _abort_release("publish reported success but no PR url")
+        return _abort_release("publish reported success but no PR url",
+                              give_back=False)
     summary["pr"] = pr_url
     log(root, "pr_open", key, f"{pr_url} (auto pipeline, backend={backend})")
     mark_candidate(root, key, "pr_open")
@@ -741,6 +777,9 @@ def _stage_candidates(root: Path, keys: list[str]) -> int:
 
 
 STAGED_STATUS = "staged"          # 今天额度用完了，留到明天再处理
+# 同一条候选一天内最多试几次。额度闸管总额，这里管单条别无限重试
+# （2026-11-03 实测 deer-flow#7846 一天被 claim 7 次）。
+MAX_ATTEMPTS_PER_CANDIDATE = 3
 # 内部 fixture 仓库：自动 drain 永远跳过，演练走手动单条入口
 INTERNAL_REPOS = {"xixi-box/oss-scout-v2-test"}
 STAGE_TTL_DAYS = 3                # 暂存超过这个天数就丢，避免拿陈旧的 issue 去修
