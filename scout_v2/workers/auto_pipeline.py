@@ -327,6 +327,20 @@ def candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6) -> dict:
         mark_candidate(root, key, "aborted_competed")
         return summary
 
+    # 被判重复的 issue 不碰：真正的战场在主 issue 上，修这条等于开第二个平行 PR。
+    # 2026-11-03 实录 qdrant#11360 → 判为 #10465 的 duplicate，而 #10465 已有
+    # #10470 在推进；我们几小时后被 cloud bot 关掉，白烧一轮修复。
+    # 这条独立于"是否 open"：GitHub 上可以先标 duplicate 再关闭，中间有窗口期。
+    if recheck.is_duplicate:
+        target = (f"#{recheck.duplicate_of}" if recheck.duplicate_of
+                  else "an earlier issue")
+        summary["abort"] = f"issue is a duplicate of {target}"
+        log(root, "abort", key, summary["abort"])
+        mark_candidate(root, key, "aborted_duplicate",
+                       extra={"abort_reason": summary["abort"],
+                              "duplicate_of": recheck.duplicate_of})
+        return summary
+
     # 这里原本有一道 pr_invited() 检查（查仓库要不要 invite label 才许开 PR）。
     # 2026-10-30 删除：门禁已经在**挑选仓库**这一步完成了 —— 会关闭未受邀 PR 的
     # 仓库根本不进 configs/repositories.yaml，也就不会被发现。留着它是对 39 个

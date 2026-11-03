@@ -21,6 +21,16 @@ RE_CLAIM = re.compile(
 )
 MAINTAINER_ASSOC = {"MEMBER", "OWNER", "COLLABORATOR"}
 
+# "duplicate of #123" / "dupe of #123" / "same as #123" / "dup: #123"
+# 只认明确指向另一条 issue 的措辞。两个排除：
+#   - 否定句 "not a duplicate of #123"、"no longer a dupe of #123"
+#   - 句号/换行之后的新句子（避免跨句误配）
+_RE_DUPLICATE_OF = re.compile(
+    r"\b(?:duplicate|dupe|dup|same)\s*(?:of|as|:)?\s*#(\d{1,7})\b", re.I)
+_RE_DUPLICATE_NEGATED = re.compile(
+    r"\b(?:not|never|no\s+longer|isn'?t|wasn'?t)\s+(?:a\s+)?"
+    r"(?:duplicate|dupe|dup)\s*(?:of|as|:)?\s*#\d{1,7}", re.I)
+
 
 def gh_read(args: list[str], max_retries: int = 2) -> Any | None:
     """只读 gh api 调用。尊重 Retry-After 语义的退避；失败返回 None。"""
@@ -50,6 +60,11 @@ class RecheckResult:
     has_claim_signal: bool = False
     has_cross_ref_pr: bool = False
     open_pr_hits: list[str] = field(default_factory=list)  # 按根因关键词搜到的 open PR
+    # 2026-11-03 实录：qdrant#11361 修对了 bug，但关联的 #11360 已被标成 #10465
+    # 的 duplicate，真正的修复战场在 #10465（已有 #10470 在推进）。PR 开出几小时
+    # 就被 cloud bot 关掉。把"被判重复"和"指向的主 issue"显式记下来。
+    is_duplicate: bool = False
+    duplicate_of: int | None = None     # 主 issue 编号（正文 "duplicate of #N"）
     errors: list[str] = field(default_factory=list)
 
 
@@ -71,6 +86,22 @@ def recheck_candidate(repo: str, number: int, *, my_login: str = "xixi-box",
     assignees = [a.get("login", "") for a in issue.get("assignees") or []]
     r.unassigned = not assignees
     r.assigned_to_me = my_login in assignees
+    # 被判重复：state_reason 是权威信号；正文里的 "duplicate of #N" 给出主 issue。
+    # 注意这条与"是否 open"独立——GitHub 上可以先标 duplicate 后关闭，也可能
+    # 保持 open 一段时间，我们正好在那个窗口里撞进去过（qdrant#11360）。
+    if str(issue.get("state_reason") or "").lower() == "duplicate":
+        r.is_duplicate = True
+    body_text = str(issue.get("body") or "")
+    m_dup = _RE_DUPLICATE_OF.search(body_text)
+    # 否定句不算："This is not a duplicate of #123" 是开发者在排除重复。
+    # 有否定就整条不认，比逐句匹配更保守——宁可漏一个 duplicate，也不要把
+    # 正常的 issue 当成重复跳过。
+    if m_dup and not _RE_DUPLICATE_NEGATED.search(body_text):
+        r.is_duplicate = True
+        try:
+            r.duplicate_of = int(m_dup.group(1))
+        except (TypeError, ValueError):
+            r.duplicate_of = None
     for c in comments:
         login = (c.get("user") or {}).get("login", "")
         if login.endswith("[bot]") or login.endswith("bot"):
