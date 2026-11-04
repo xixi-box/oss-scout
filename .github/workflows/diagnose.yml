@@ -17,3 +17,56 @@ jobs:
         # 仓库公开后 token 从文件移到了 secrets（CF_API_TOKEN / CF_INGEST_TOKEN）。
         # 脚本只打印"有没有"，不打印值。
         run: docker exec oss-scout python /app/scripts/container_diag.py
+
+      - name: Live state dump (read-only)
+        run: |
+          docker exec oss-scout python3 - <<'PY'
+          import json, collections
+          from pathlib import Path
+          root = Path("/data")
+
+          def tail(path, n=12, contains=None):
+              try:
+                  lines = Path(path).read_text(encoding="utf-8",
+                                               errors="replace").splitlines()
+              except OSError:
+                  return []
+              if contains:
+                  lines = [l for l in lines if contains in l]
+              return lines[-n:]
+
+          print("=== seen.json freshness ===")
+          try:
+              seen = json.loads((root / "state" / "seen.json")
+                                .read_text(encoding="utf-8"))
+              firsts = sorted((v or {}).get("first_seen", "") for v in seen.values())
+              print("entries:", len(seen), "| oldest:", firsts[0] if firsts else "-",
+                    "| newest:", firsts[-1] if firsts else "-")
+          except Exception as e:
+              print("seen read failed:", str(e)[:120])
+
+          print("=== worklog: ingest/bitable/feishu (last 20) ===")
+          for ln in tail(root / "state" / "worklog.jsonl", 400):
+              if any(k in ln for k in ("ingest", "bitable", "feishu_cb",
+                                        "feishu_card", "pr_reply")):
+                  print(ln[:240])
+
+          print("=== pr_replies.json statuses ===")
+          try:
+              rp = json.loads((root / "state" / "pr_replies.json")
+                              .read_text(encoding="utf-8"))
+              for k, v in rp.items():
+                  print(" ", k, "->", v.get("status"),
+                        "| fix:", v.get("fix_state"),
+                        "| sent_at:", v.get("sent_at", ""))
+          except Exception as e:
+              print("read failed:", str(e)[:120])
+
+          print("=== pr_sync (worker primary channel) ===")
+          try:
+              ps = json.loads((root / "state" / "pr_sync.json")
+                              .read_text(encoding="utf-8"))
+              print("at:", ps.get("at"), "| prs:", len(ps.get("prs", [])))
+          except Exception as e:
+              print("read failed:", str(e)[:120])
+          PY
