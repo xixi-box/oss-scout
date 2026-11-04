@@ -25,6 +25,10 @@ from fastapi.templating import Jinja2Templates
 
 from . import data as D
 
+# 看板公网入口（飞书卡片按钮跳转用），与 scout_v2.notify 保持同一来源
+NOTIFY_DASHBOARD_URL = (os.environ.get("DASHBOARD_PUBLIC_URL")
+                        or "https://oss.wangshun.work").rstrip("/")
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -103,6 +107,57 @@ def _atomic_write_text(path: Path, text: str) -> None:
     tmp.write_text(text, encoding="utf-8")
     yaml.safe_load(tmp.read_text(encoding="utf-8"))  # 校验
     os.replace(tmp, path)
+
+
+def _notify_draft(root: Path, r: dict, draft: dict) -> None:
+    """把"AI 草稿待人审"推给飞书，人可在卡片里改完一键发。
+
+    优先走自建应用卡片（含可编辑输入框 + form_submit 按钮，回调
+    /feishu/callback 直接发 GitHub）；应用未配置时回退到 webhook 卡片，
+    按钮只能跳看板——自定义机器人没有应用身份，收不到按钮点击。
+    通知失败绝不影响主流程。
+    """
+    repo, number = str(r.get("repo") or ""), int(r.get("number") or 0)
+    key = f"{repo}#{number}"
+    entry = draft.get("entry") or {}
+    text = str(entry.get("draft") or draft.get("draft") or "")
+    if not text:
+        return
+    try:
+        from scout_v2 import feishu_app
+
+        if feishu_app.app_configured():
+            chat = feishu_app.find_group_chat_id()
+            if chat:
+                card = feishu_app.build_reply_card(
+                    repo=repo, number=number,
+                    issue_title=str(r.get("pr_title") or f"{repo}#{number}"),
+                    source_author=str(r.get("latest_author") or "unknown"),
+                    source_comment=str(r.get("latest_body")
+                                       or entry.get("source_comment") or ""),
+                    root_cause=str(entry.get("root_cause") or ""),
+                    draft=text)
+                ok, err = feishu_app.send_card_to_chat(chat, card)
+                _audit(root, "feishu_card", key,
+                       "sent" if ok else f"failed: {err[:150]}")
+                if ok:
+                    return
+        from scout_v2.notify import feishu_send_card
+
+        feishu_send_card(
+            f"💬 有回复草稿待人审：{key}",
+            f"**来自** {r.get('latest_author') or '?'}："
+            f"{str(r.get('latest_excerpt'))[:150]}\n"
+            "**AI 草稿**：\n" + text[:600] +
+            "\n\n→ 应用未接入，点按钮去看板编辑发送",
+            button_text="打开 PR 管理页",
+            button_url=f"{NOTIFY_DASHBOARD_URL}/prs",
+            template="orange")
+    except Exception as e:  # noqa: BLE001 — 通知永远不影响主流程
+        try:
+            _audit(root, "feishu_card_error", key, str(e)[:200])
+        except Exception:  # noqa: BLE001
+            pass
 
 
 def _set_lane(root: Path, repo: str, lane: str) -> None:
@@ -369,7 +424,7 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
                     except Exception:  # noqa: BLE001
                         pass
 
-                    from scout_v2.notify import feishu_send, feishu_send_card
+                    from scout_v2.notify import feishu_send
                     for r in results:
                         key = f"{r['repo']}#{r['number']}"
                         action = r.get("action")
@@ -390,22 +445,19 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
                             except Exception as e:  # noqa: BLE001
                                 _audit(root, "pr_fix_error", key, str(e)[:200])
                         elif action in ("address_review", "answer_question"):
-                            # L3：AI 草拟回复落盘，等人确认后经 /api/pr/reply/send
-                            # 发送。绝不自动发——astral/biome 对 AI 文字零容忍。
+                            # L3：AI 草拟回复落盘，等人确认后发送。绝不自动发——
+                            # astral/biome 对 AI 文字零容忍。
                             _audit(root, "pr_needs_reply", key,
                                    f"{action} from {r.get('latest_author')}: "
                                    f"{str(r.get('latest_excerpt'))[:150]}")
                             try:
-                                draft = mod.draft_reply(r["repo"], r["number"])
+                                draft = mod.draft_reply(r["repo"], r["number"],
+                                                        context=r)
                                 _audit(root, "pr_reply_drafted", key,
                                        f"drafted={draft.get('drafted')} "
                                        f"path=state/pr_replies.json")
                                 if draft.get("drafted"):
-                                    feishu_send(
-                                        f"💬 有回复草稿待人审：{key}",
-                                        f"来自 {r.get('latest_author')}："
-                                        f"{str(r.get('latest_excerpt'))[:120]}\n"
-                                        "→ PR 管理页可编辑并发送")
+                                    _notify_draft(root, r, draft)
                             except Exception as e:  # noqa: BLE001
                                 _audit(root, "pr_draft_error", key, str(e)[:200])
                 except Exception as e:  # noqa: BLE001
@@ -1038,18 +1090,17 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
         _mark_reply(f"{repo}#{number}", "sent", sent_body=reply_text,
                     sent_at=time.strftime("%Y-%m-%dT%H:%M:%S"))
         _audit(root, "feishu_cb_sent", f"{repo}#{number}", reply_text[:200])
-        # 回传新卡片：把表单替换成"已发送"确认
+        # 回传新卡片：把表单替换成"已发送"确认（卡片 1.0：组件用 tag）
         return JSONResponse({
             "toast": {"type": "success", "content": "已发送 ✓"},
             "card": {
-                "schema": "2.0",
-                "config": {"update_multi": True},
+                "config": {"wide_screen_mode": True, "update_multi": True},
                 "header": {"title": {"tag": "plain_text",
                           "content": f"✅ 已回复 {repo}#{num_s}"}, "template": "green"},
-                "body": {"elements": [
-                    {"type": "markdown",
-                     "content": "回复已以 xixi-box 身份发出：\n\n" + reply_text[:800]},
-                ]},
+                "elements": [
+                    {"tag": "div", "text": {"tag": "lark_md",
+                     "content": "回复已以 xixi-box 身份发出：\n\n" + reply_text[:800]}},
+                ],
             },
         })
 

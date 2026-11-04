@@ -75,7 +75,7 @@ def my_open_prs(limit: int = 50) -> list[dict]:
 def pr_state(repo: str, number: int) -> dict:
     raw = _gh(["pr", "view", str(number), "-R", repo, "--json",
                "state,mergeable,reviewDecision,comments,statusCheckRollup,"
-               "createdAt,isDraft"])
+               "createdAt,isDraft,title,body,url"])
     try:
         return json.loads(raw) if raw else {}
     except json.JSONDecodeError:
@@ -126,6 +126,10 @@ def classify(pr: dict) -> dict:
                            if (c.get("author") or {}).get("login") not in ("xixi-box",)]),
         "latest_author": (latest.get("author") or {}).get("login") if latest else None,
         "latest_excerpt": body[:300],
+        "latest_body": body[:1500],
+        "pr_title": str(pr.get("title") or ""),
+        "pr_url": str(pr.get("url") or ""),
+        "pr_body": str(pr.get("body") or "")[:2000],
         "review_decision": pr.get("reviewDecision") or "",
         "draft": bool(pr.get("isDraft")),
     }
@@ -326,7 +330,7 @@ REPLIES_FILE = ROOT / "state" / "pr_replies.json"
 
 def _thread(repo: str, number: int, limit: int = 10) -> list[dict]:
     raw = _gh(["api", f"repos/{repo}/issues/{number}/comments",
-               "--jq", '.[] | "\(.created_at)|\(.user.login)|\(.body)"'])
+               "--jq", r'.[] | "\(.created_at)|\(.user.login)|\(.body)"'])
     out = []
     for line in (raw or "").splitlines():
         parts = line.split("|", 2)
@@ -336,11 +340,25 @@ def _thread(repo: str, number: int, limit: int = 10) -> list[dict]:
     return out[-limit:]
 
 
-def draft_reply(repo: str, number: int, *, force: bool = False) -> dict:
+def _root_cause(pr_body: str) -> str:
+    """从 PR 描述里抽 Root cause 段（Playbook §5：根因只来自真实产出）。"""
+    m = re.search(r"^#*\s*Root cause:?\s*$(.+?)(?=^#*\s*\w|\Z)",
+                  pr_body or "", re.I | re.M | re.S)
+    if not m:
+        m = re.search(r"Root cause:\s*(.+?)(?:\n\n|\Z)", pr_body or "",
+                      re.I | re.S)
+    return re.sub(r"\s+", " ", m.group(1)).strip()[:300] if m else ""
+
+
+def draft_reply(repo: str, number: int, *, force: bool = False,
+                context: dict | None = None) -> dict:
     """AI 起草对最新未回评论的回复，存 state/pr_replies.json。
 
     只起草不发送：外发文字过审是人的事（Playbook §2①，astral/biome 前车之鉴）。
     同一 PR 已有未发送草稿且评论没更新时跳过（省一次模型调用）。
+
+    context（可选）来自 classify() 的同一份 PR 数据，用于给飞书卡片补上
+    issue 标题/根因/对方原话——免得为了发一张卡片再拉一遍 GitHub。
     """
     try:
         replies = json.loads(REPLIES_FILE.read_text(encoding="utf-8"))
@@ -354,7 +372,8 @@ def draft_reply(repo: str, number: int, *, force: bool = False) -> dict:
     prev = replies.get(key) or {}
     if (not force and prev.get("status") == "draft"
             and prev.get("for_comment") == latest.get("created_at")):
-        return {"drafted": False, "reason": "draft already current"}
+        return {"drafted": False, "reason": "draft already current",
+                "key": key, "draft": prev.get("draft")}
 
     # 只带我们上一次发言之后的内容：更早的上下文模型不需要全部
     try:
@@ -389,11 +408,16 @@ def draft_reply(repo: str, number: int, *, force: bool = False) -> dict:
                     "for_comment": latest.get("created_at"),
                     "to_author": latest.get("author"),
                     "draft": detail.strip()[:1200],
+                    "pr_title": str((context or {}).get("pr_title") or "")[:200],
+                    "pr_url": str((context or {}).get("pr_url") or ""),
+                    "root_cause": _root_cause(
+                        str((context or {}).get("pr_body") or "")),
+                    "source_comment": str(latest.get("body") or "")[:800],
                     "drafted_at": time.strftime("%Y-%m-%dT%H:%M:%S")}
     REPLIES_FILE.parent.mkdir(parents=True, exist_ok=True)
     REPLIES_FILE.write_text(json.dumps(replies, ensure_ascii=False, indent=1),
                             encoding="utf-8")
-    return {"drafted": True, "key": key}
+    return {"drafted": True, "key": key, "entry": replies[key]}
 
 
 def _record(info: dict) -> None:

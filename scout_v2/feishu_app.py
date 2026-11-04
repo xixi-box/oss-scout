@@ -21,6 +21,7 @@ from __future__ import annotations
 import json
 import os
 import time
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -89,21 +90,43 @@ def tenant_token() -> str:
     return tok
 
 
+def list_chats() -> tuple[list[dict], str]:
+    """机器人所在的群列表。返回 (items, error)——error 非空说明查不到原因。
+
+    常见错误是缺 `im:chat:readonly` 权限（应用未开通时 99991672）。把原因
+    带出去，免得"发不出卡片"被误判成"机器人和群不存在"。
+    """
+    tok = tenant_token()
+    if not tok:
+        return [], "no tenant token (check FEISHU_APP_ID/SECRET)"
+    try:
+        body = _request("GET",
+                        "https://open.feishu.cn/open-apis/im/v1/chats?page_size=50",
+                        token=tok)
+    except urllib.error.HTTPError as e:
+        try:
+            detail = json.loads(e.read().decode("utf-8", "replace"))
+        except Exception:  # noqa: BLE001
+            detail = {}
+        return [], f"HTTP {e.code}: {detail.get('msg') or e.reason}"
+    except Exception as e:  # noqa: BLE001
+        return [], str(e)[:200]
+    if body.get("code") not in (0, None):
+        return [], f"code={body.get('code')} {body.get('msg')}"
+    return list(body.get("data", {}).get("items") or []), ""
+
+
 def find_group_chat_id() -> str | None:
-    """找到机器人所在的第一个群（可配 FEISHU_CHAT_ID 固定指定）。"""
+    """找到机器人所在的第一个群（可配 FEISHU_CHAT_ID 固定指定）。
+
+    FEISHU_CHAT_ID 优先——设了它就不需要 `im:chat:readonly` 权限，
+    只留发消息的 `im:message`。
+    """
     fixed = (os.environ.get("FEISHU_CHAT_ID") or "").strip()
     if fixed:
         return fixed
-    tok = tenant_token()
-    if not tok:
-        return None
-    try:
-        body = _request("GET", "https://open.feishu.cn/open-apis/im/v1/chats?page_size=20",
-                        token=tok)
-        items = body.get("data", {}).get("items") or []
-        return str(items[0]["chat_id"]) if items else None
-    except Exception:  # noqa: BLE001
-        return None
+    items, _err = list_chats()
+    return str(items[0]["chat_id"]) if items else None
 
 
 def build_reply_card(repo: str, number: int, issue_title: str,
@@ -111,43 +134,44 @@ def build_reply_card(repo: str, number: int, issue_title: str,
                      root_cause: str, draft: str) -> dict:
     """构造"可编辑回复"卡片：显示上下文 + 多行输入 + 一键提交。
 
-    提交按钮走 form_submit，点击后飞书回调 /feishu/callback，
-    由回调端把编辑后的文本发到 GitHub。
+    用卡片 1.0（`im/v1/messages` 的经典结构）：组件由 `tag` 声明，
+    `type` 只表示按钮样式。form 内的按钮用 `action_type: form_submit`，
+    点击后飞书回调 /feishu/callback，由回调端把编辑后的文本发到 GitHub。
     """
     excerpt = str(source_comment or "")[:400].replace("\n", " ")
     rc = str(root_cause or "")[:300]
     return {
-        "schema": "2.0",
-        "config": {"update_multi": True},
+        "config": {"wide_screen_mode": True, "update_multi": True},
         "header": {
             "title": {"tag": "plain_text",
                       "content": f"💬 回复草稿待审：{repo}#{number}"},
             "template": "orange",
         },
-        "body": {
-            "direction": "vertical",
-            "elements": [
-                {"type": "markdown",
-                 "content": (f"**issue**：{issue_title}  `#{number}`\n\n"
-                             f"**我们的根因**：{rc or '见 PR 描述'}")},
-                {"type": "markdown",
-                 "content": (f"**对方评论（{source_author}）**：\n{excerpt}")},
-                {"type": "hr"},
-                {"type": "markdown", "content": "**AI 草拟的回复（可直接改）**"},
-                {"type": "form", "name": "form_reply", "elements": [
-                    {"type": "input", "name": "reply_text",
-                     "default_value": str(draft)[:1500],
-                     "placeholder": {"tag": "plain_text",
-                                     "content": "编辑后点下方一键发送"},
-                     "width": "default"},
-                    {"type": "button", "action_type": "form_submit",
-                     "name": "send_reply", "text": {"tag": "plain_text",
-                     "content": "一键发送到 GitHub"}, "type": "primary",
-                     "size": "medium",
-                     "value": {"do": "send", "repo": repo, "number": str(number)}},
-                ]},
-            ],
-        },
+        "elements": [
+            {"tag": "div", "text": {"tag": "lark_md",
+                                    "content": (f"**仓库**：{repo}#{number}\n"
+                                                f"**issue**：{issue_title}")}},
+            {"tag": "div", "text": {"tag": "lark_md",
+                                    "content": f"**我们的修法（根因）**：{rc or '见 PR 描述'}"}},
+            {"tag": "div", "text": {"tag": "lark_md",
+                                    "content": (f"**对方评论（{source_author}）**：\n"
+                                                f"{excerpt}")}},
+            {"tag": "hr"},
+            {"tag": "div", "text": {"tag": "lark_md",
+                                    "content": "**AI 草拟的回复（可直接改，改完点发送）**"}},
+            {"tag": "form", "name": "form_reply", "elements": [
+                {"tag": "input", "name": "reply_text",
+                 "default_value": str(draft)[:1500],
+                 "placeholder": {"tag": "plain_text",
+                                 "content": "在此修改回复内容"},
+                 "max_length": 2000},
+                {"tag": "button", "action_type": "form_submit",
+                 "name": "send_reply",
+                 "text": {"tag": "plain_text", "content": "一键发送到 GitHub"},
+                 "type": "primary",
+                 "value": {"do": "send", "repo": repo, "number": str(number)}},
+            ]},
+        ],
     }
 
 
