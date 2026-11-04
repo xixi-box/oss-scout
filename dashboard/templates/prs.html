@@ -9,6 +9,50 @@
 {% if any_unknown %}
 <div class="banner warn">部分仓库 gh 查询失败 → 显示"未知"（TLS 抖动 / 未登录 / 限流），自动重试中</div>
 {% endif %}
+
+{% if pending_replies %}
+<div class="card mt" id="reply-drafts">
+  <h2>回复草稿（AI 起草 · <strong>待人审发送</strong>）</h2>
+  <p class="small muted">AI 只起草，绝不自动发送。可直接编辑文本，点「发送」以本账号发出。</p>
+  {% for d in pending_replies %}
+  <div class="card draft-item" style="margin:10px 0;padding:10px" data-key="{{ d.key }}">
+    <div class="small" style="margin-bottom:6px">
+      <strong>{{ d.repo }}#{{ d.number }}</strong>
+      <span class="chip">对方：{{ d.to_author or "maintainer" }}</span>
+      <span class="muted">起草于 {{ d.drafted_at }}</span>
+    </div>
+    <textarea class="reply-text" style="width:100%;min-height:90px;font-family:inherit">{{ d.draft }}</textarea>
+    <div style="margin-top:6px;display:flex;gap:8px;align-items:center">
+      <button class="send-reply" data-key="{{ d.key }}">发送</button>
+      <button class="dismiss-reply" data-key="{{ d.key }}">放弃</button>
+      <span class="reply-msg small muted"></span>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+<script>
+function replyAction(btn, url, doneMsg) {
+  const card = btn.closest('.draft-item');
+  const key = btn.dataset.key;
+  const [repo, num] = key.split('#');
+  const fd = new FormData();
+  fd.set('repo', repo);
+  fd.set('number', num.replace(/\D/g, ''));
+  fd.set('body', card.querySelector('.reply-text').value);
+  const msg = card.querySelector('.reply-msg');
+  msg.textContent = '处理中…';
+  fetch(url, {method: 'POST', body: fd, credentials: 'same-origin'})
+    .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status);
+                 msg.textContent = doneMsg; setTimeout(() => location.reload(), 800); })
+    .catch(e => { msg.textContent = '失败：' + e; });
+}
+document.querySelectorAll('.send-reply').forEach(b =>
+  b.addEventListener('click', () => replyAction(b, '/api/pr/reply/send', '已发送 ✓')));
+document.querySelectorAll('.dismiss-reply').forEach(b =>
+  b.addEventListener('click', () => replyAction(b, '/api/pr/reply/dismiss', '已放弃')));
+</script>
+{% endif %}
+
 {% if not repo_prs %}
 <div class="card"><p class="muted">worklog / artifacts 中未发现自有仓库（xixi-box/*）</p></div>
 {% endif %}

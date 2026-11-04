@@ -712,10 +712,27 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
         if external is None:
             any_unknown = True
         my_login = ds.me_login()
+
+        # AI 起草的回复队列：只有 status=draft 的才展示（sent/dismissed 不再打扰）。
+        # 起草是自动的，**发送永远是人审后点击**——对外文字零自动化。
+        pending_replies: list[dict] = []
+        rp = root / "state" / "pr_replies.json"
+        try:
+            replies = json.loads(rp.read_text(encoding="utf-8"))
+            for key, r in replies.items():
+                if r.get("status") != "draft":
+                    continue
+                repo_part, _, num_part = key.rpartition("#")
+                pending_replies.append({**r, "key": key, "repo": repo_part,
+                                        "number": num_part})
+        except (OSError, json.JSONDecodeError):
+            pass
+
         return render(request, "prs.html", {
             "repo_prs": repo_prs, "any_unknown": any_unknown,
             "external_prs": external, "my_login": my_login,
             "merge_history": ds.merge_history(), "active": "/prs",
+            "pending_replies": pending_replies,
             "settings": D.dashboard_settings(ds),
         })
 

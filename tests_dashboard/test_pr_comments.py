@@ -166,3 +166,28 @@ class TestReplyDraftApi:
         r = client.get("/api/pr/replies")
         assert r.status_code == 200
         assert r.json()["replies"]["acme/real#7"]["status"] == "draft"
+
+
+class TestDraftsOnPrsPage:
+    """「起草之后我怎么知道」——草稿必须出现在 PR 管理页顶部，可编辑可发送。"""
+
+    def test_pending_draft_shown_on_prs_page(self, client, tmp_path):
+        rp = tmp_path / "state" / "pr_replies.json"
+        rp.write_text(json.dumps({"acme/real#7": {
+            "status": "draft",
+            "to_author": "maintainer",
+            "drafted_at": "2026-11-04T01:00:00",
+            "draft": "Thanks! Fixed in the new commit."}}), encoding="utf-8")
+        r = client.get("/prs")
+        assert r.status_code == 200
+        assert "回复草稿" in r.text
+        assert "Thanks! Fixed in the new commit." in r.text
+        assert "acme/real#7" in r.text
+
+    def test_sent_draft_not_shown_as_pending(self, client, tmp_path):
+        rp = tmp_path / "state" / "pr_replies.json"
+        rp.write_text(json.dumps({"acme/real#7": {
+            "status": "sent", "draft": "already sent"}}), encoding="utf-8")
+        r = client.get("/prs")
+        assert r.status_code == 200
+        assert "already sent" not in r.text
