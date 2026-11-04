@@ -169,9 +169,11 @@ def build_reply_card(repo: str, number: int, issue_title: str,
         "pending": "⏳ **代码修改正在流水线里执行**，完成后这张卡片会更新",
         "ready": ("✅ **已修改并提交**（暂存在分支上，还没动 PR —— "
                   "点下方按钮时一起推送）"),
+        "pushed": "✅ **已修改并推送**（commit 已在 PR 上，按钮只发回复）",
     }.get(fix_state, "")
-    button_text = ("发送回复并推送修改" if fix_state in ("ready", "pending")
-                   else "一键发送回复")
+    button_text = {"ready": "发送回复并推送修改",
+                   "pending": "发送回复并推送修改"}.get(fix_state,
+                                                        "一键发送回复")
 
     elements: list[dict] = [
         {"tag": "div", "text": {"tag": "lark_md",

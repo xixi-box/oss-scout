@@ -317,3 +317,10 @@ class TestCardLinkAndState:
     def test_status_line_absent_when_no_fix(self):
         blob = self._all_text(self._card(fix_state="none"))
         assert "已修改并提交" not in blob
+
+    def test_already_pushed_says_so_and_only_sends(self):
+        """改动若已经在 PR 分支上（例如本轮之前推的），不能谎称"待推送"。"""
+        blob = self._all_text(self._card(fix_state="pushed"))
+        assert "已修改并推送" in blob
+        assert "一键发送回复" in blob
+        assert "发送回复并推送修改" not in blob

@@ -24,3 +24,13 @@ consumer_fix.txt
 cron_prompt.txt
 observer_task.txt
 scripts/_*
+
+# 运行时状态：容器里的 /data/state 才是权威副本。
+# 这些文件曾进过 git，结果本地一份、线上另一份——看板读到的草稿可能
+# 和飞书实际发出去的不是同一条。
+state/pr_replies.json
+state/pr_replies.json.tmp
+state/pr_fix_attempted.json
+state/pr_classify_cache.json
+state/pr_sync.json
+state/seen.json
