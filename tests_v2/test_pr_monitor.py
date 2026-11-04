@@ -388,3 +388,52 @@ class TestReviewPrompt:
                              "failing": [{"name": "tests", "excerpt": "FAILED x"}]})
         assert "CI is failing" in p
         assert "tests" in p
+
+
+class TestReplyTargetIsExternal:
+    """起草的对象必须是别人的最新发言，不能是我们自己的话。
+
+    2026-11-04 实录：回复发出后 thread[-1] 是我们自己的评论，下一轮
+    draft_reply 会对着自己的话再起草一遍，卡片把我们的措辞标成
+    "对方评论（ndeloof）"。
+    """
+
+    def test_draft_targets_last_external_comment(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(mp, "REPLIES_FILE", tmp_path / "replies.json")
+        monkeypatch.setattr(mp, "_thread", lambda r, n, limit=10: [
+            {"created_at": "2026-11-04T08:52:08Z", "author": "ndeloof",
+             "body": "please also add a regression test at the Matches level"},
+            {"created_at": "2026-11-04T11:02:04Z", "author": "xixi-box",
+             "body": "Updated the test and added the regression case."},
+        ])
+        monkeypatch.setattr(mp, "_model", lambda: ("", ""))
+        out = mp.draft_reply("docker/compose", 14450, force=True)
+        # 无模型 key 时会失败，但失败原因必须建立在"对方评论"上：
+        # 落盘的 for_comment/作者都还没写，所以只看 reason 不含 own-words 误判
+        assert out["drafted"] is False
+        assert "no model" in out["reason"]
+
+    def test_only_our_comments_means_no_draft(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(mp, "REPLIES_FILE", tmp_path / "replies.json")
+        monkeypatch.setattr(mp, "_thread", lambda r, n, limit=10: [
+            {"created_at": "2026-11-04T11:02:04Z", "author": "xixi-box",
+             "body": "our own reply"}])
+        out = mp.draft_reply("docker/compose", 14450)
+        assert out["drafted"] is False
+        assert out["reason"] == "only our own comments"
+
+    def test_latest_external_comment_skips_ours(self, monkeypatch):
+        monkeypatch.setattr(mp, "_thread", lambda r, n, limit=30: [
+            {"created_at": "t1", "author": "ndeloof", "body": "review"},
+            {"created_at": "t2", "author": "xixi-box", "body": "our reply"},
+            {"created_at": "t3", "author": "someone-else", "body": "me too"},
+            {"created_at": "t4", "author": "xixi-box", "body": "our reply 2"},
+        ])
+        got = mp.latest_external_comment("docker/compose", 14450)
+        assert got["author"] == "someone-else"
+        assert got["body"] == "me too"
+
+    def test_latest_external_comment_none_when_all_ours(self, monkeypatch):
+        monkeypatch.setattr(mp, "_thread", lambda r, n, limit=30: [
+            {"created_at": "t1", "author": "xixi-box", "body": "ours"}])
+        assert mp.latest_external_comment("docker/compose", 14450) is None

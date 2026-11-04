@@ -575,6 +575,23 @@ def _thread(repo: str, number: int, limit: int = 10) -> list[dict]:
     return out[-limit:]
 
 
+MY_LOGINS = ("xixi-box",)
+
+
+def latest_external_comment(repo: str, number: int) -> dict | None:
+    """对方（非我们）在这条 PR 上的最新发言。
+
+    任何要展示"对方评论"的地方都必须走这里，不能用 comments[-1]：
+    我们发出回复之后，最后一条就是我们自己的措辞，再把它标成
+    "对方评论"就是张冠李戴（2026-11-04 实录）。
+    """
+    thread = _thread(repo, number, limit=30)
+    for c in reversed(thread):
+        if str(c.get("author") or "") not in MY_LOGINS:
+            return c
+    return None
+
+
 def _root_cause(pr_body: str) -> str:
     """从 PR 描述里抽 Root cause 段（Playbook §5：根因只来自真实产出）。"""
     m = re.search(r"^#*\s*Root cause:?\s*$(.+?)(?=^#*\s*\w|\Z)",
@@ -601,25 +618,27 @@ def draft_reply(repo: str, number: int, *, force: bool = False,
         replies = {}
     key = f"{repo}#{number}"
     thread = _thread(repo, number)
+    # 回复的对象必须是**别人**的最新发言。我们发出回复后，thread[-1] 就是
+    # 我们自己的话——不排除的话，下一轮会对着自己的回复再起草一遍，
+    # 卡片上也会把我们的措辞标成对方评论（2026-11-04 实录）。
+    external = [c for c in thread
+                if str(c.get("author") or "") not in ("xixi-box",)]
     if not thread:
         return {"drafted": False, "reason": "no comments"}
-    latest = thread[-1]
+    if not external:
+        return {"drafted": False, "reason": "only our own comments"}
+    latest = external[-1]
     prev = replies.get(key) or {}
     if (not force and prev.get("status") == "draft"
             and prev.get("for_comment") == latest.get("created_at")):
         return {"drafted": False, "reason": "draft already current",
                 "key": key, "draft": prev.get("draft")}
 
-    # 只带我们上一次发言之后的内容：更早的上下文模型不需要全部
-    try:
-        from scout_v2.workers.repair import resolve_model
-        model = resolve_model()
-    except Exception as e:  # noqa: BLE001
-        return {"drafted": False, "reason": f"no model: {e}"}
-    from scout_v2.workers.issue_scorer import GoClient, load_scorer_config
-    cfg = load_scorer_config(ROOT)
-    if not cfg.get("api_key"):
-        return {"drafted": False, "reason": "no scorer api_key"}
+    # 模型配置只从 _model() 走：分类和起草共用一处，测试也只 stub 一处
+    key, model = _model()
+    if not key:
+        return {"drafted": False, "reason": "no model key"}
+    from scout_v2.workers.issue_scorer import GoClient
 
     convo = "\n".join(f"[{c['author']}] {c['body'][:COMMENT_TEXT_LIMIT]}"
                       for c in thread[-6:])
@@ -634,8 +653,7 @@ def draft_reply(repo: str, number: int, *, force: bool = False,
         f"Conversation on {repo}#{number}:\n{convo}\n\n"
         "Reply with ONLY the reply text.")
 
-    client = GoClient(key=cfg["api_key"], model=cfg.get("model", "deepseek-v4.1-flash"),
-                      timeout=180)
+    client = GoClient(key=key, model=model, timeout=180)
     ok, detail = client.chat(prompt)
     if not ok:
         return {"drafted": False, "reason": f"model error: {detail[:120]}"}

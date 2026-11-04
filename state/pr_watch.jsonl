@@ -692,3 +692,51 @@
 {"ts": "2026-11-04T19:08:49", "repo": "Arize-ai/phoenix", "number": 17507, "action": "address_review", "reason": "Bot's Request changes review requires the contributor to make the requested changes. (cached)"}
 {"ts": "2026-11-04T19:08:51", "repo": "Arize-ai/phoenix", "number": 17507, "action": "address_review", "reason": "Bot's Request changes review requires the contributor to make the requested changes. (cached)"}
 {"ts": "2026-11-04T19:08:51", "repo": "Arize-ai/phoenix", "number": 17507, "action": "address_review", "reason": "Bot's Request changes review requires the contributor to make the requested changes. (cached)"}
+{"ts": "2026-11-04T20:29:48", "repo": "ClickHouse/ClickHouse", "number": 129144, "action": "wait", "reason": "Bot confirms all committers signed CLA; no action requested. (cached)"}
+{"ts": "2026-11-04T20:29:49", "repo": "ClickHouse/ClickHouse", "number": 129144, "action": "wait", "reason": "Bot confirms all committers signed CLA; no action requested. (cached)"}
+{"ts": "2026-11-04T20:29:50", "repo": "ClickHouse/ClickHouse", "number": 129144, "action": "wait", "reason": "Bot confirms all committers signed CLA; no action requested. (cached)"}
+{"ts": "2026-11-04T20:29:51", "repo": "ClickHouse/ClickHouse", "number": 129144, "action": "wait", "reason": "Bot confirms all committers signed CLA; no action requested. (cached)"}
+{"ts": "2026-11-04T20:29:52", "repo": "docker/compose", "number": 14450, "action": "address_review", "reason": "Update failing test expectation and add Matches-level regression test. (cached)"}
+{"ts": "2026-11-04T20:29:52", "repo": "docker/compose", "number": 14450, "action": "address_review", "reason": "Update failing test expectation and add Matches-level regression test. (cached)"}
+{"ts": "2026-11-04T20:29:53", "repo": "docker/compose", "number": 14450, "action": "address_review", "reason": "Update failing test expectation and add Matches-level regression test. (cached)"}
+{"ts": "2026-11-04T20:29:59", "repo": "docker/compose", "number": 14450, "action": "address_review", "reason": "Update failing test expectation and add Matches-level regression test. (cached)"}
+{"ts": "2026-11-04T20:30:02", "repo": "milvus-io/milvus", "number": 55034, "action": "wait", "reason": "Bot reports all CI stages passed; no action requested. (cached)"}
+{"ts": "2026-11-04T20:30:07", "repo": "milvus-io/milvus", "number": 54998, "action": "wait", "reason": "Bot reports CI passed with coverage warning; no action requested. (cached)"}
+{"ts": "2026-11-04T20:30:09", "repo": "milvus-io/milvus", "number": 54998, "action": "wait", "reason": "Bot reports CI passed with coverage warning; no action requested. (cached)"}
+{"ts": "2026-11-04T20:30:12", "repo": "agentgateway/agentgateway", "number": 4264, "action": "wait", "reason": ""}
+{"ts": "2026-11-04T20:30:12", "repo": "agentgateway/agentgateway", "number": 4264, "action": "wait", "reason": ""}
+{"ts": "2026-11-04T20:30:13", "repo": "agentgateway/agentgateway", "number": 4264, "action": "wait", "reason": ""}
+{"ts": "2026-11-04T20:30:14", "repo": "modelcontextprotocol/registry", "number": 1788, "action": "wait", "reason": ""}
+{"ts": "2026-11-04T20:30:15", "repo": "modelcontextprotocol/registry", "number": 1788, "action": "wait", "reason": ""}
+{"ts": "2026-11-04T20:30:15", "repo": "modelcontextprotocol/registry", "number": 1788, "action": "wait", "reason": ""}
+{"ts": "2026-11-04T20:30:16", "repo": "milvus-io/milvus", "number": 54998, "action": "wait", "reason": "Bot reports CI passed with coverage warning; no action requested. (cached)"}
+{"ts": "2026-11-04T20:30:16", "repo": "bytedance/deer-flow", "number": 7822, "action": "wait", "reason": ""}
+{"ts": "2026-11-04T20:30:16", "repo": "bytedance/deer-flow", "number": 7822, "action": "wait", "reason": ""}
+{"ts": "2026-11-04T20:30:17", "repo": "bytedance/deer-flow", "number": 7812, "action": "wait", "reason": "Bot notice confirming all committers signed the CLA; no action requested. (cached)"}
+{"ts": "2026-11-04T20:30:18", "repo": "bytedance/deer-flow", "number": 7812, "action": "wait", "reason": "Bot notice confirming all committers signed the CLA; no action requested. (cached)"}
+{"ts": "2026-11-04T20:30:19", "repo": "bytedance/deer-flow", "number": 7822, "action": "wait", "reason": ""}
+{"ts": "2026-11-04T20:30:19", "repo": "agentgateway/agentgateway", "number": 4264, "action": "wait", "reason": ""}
+{"ts": "2026-11-04T20:30:21", "repo": "bytedance/deer-flow", "number": 7812, "action": "wait", "reason": "Bot notice confirming all committers signed the CLA; no action requested. (cached)"}
+{"ts": "2026-11-04T20:30:21", "repo": "Arize-ai/phoenix", "number": 17507, "action": "address_review", "reason": "Bot's Request changes review requires the contributor to make the requested changes. (cached)"}
+{"ts": "2026-11-04T20:30:21", "repo": "Arize-ai/phoenix", "number": 17507, "action": "address_review", "reason": "Bot's Request changes review requires the contributor to make the requested changes. (cached)"}
+{"ts": "2026-11-04T20:30:23", "repo": "modelcontextprotocol/registry", "number": 1788, "action": "wait", "reason": ""}
+{"ts": "2026-11-04T20:30:24", "repo": "Arize-ai/phoenix", "number": 17507, "action": "address_review", "reason": "Bot's Request changes review requires the contributor to make the requested changes. (cached)"}
+{"ts": "2026-11-04T20:30:25", "repo": "promptfoo/promptfoo", "number": 12079, "action": "wait", "reason": "Codecov bot reports coverage status only; no action requested. (cached)"}
+{"ts": "2026-11-04T20:30:25", "repo": "promptfoo/promptfoo", "number": 12079, "action": "wait", "reason": "Codecov bot reports coverage status only; no action requested. (cached)"}
+{"ts": "2026-11-04T20:30:25", "repo": "bytedance/deer-flow", "number": 7822, "action": "wait", "reason": ""}
+{"ts": "2026-11-04T20:30:27", "repo": "promptfoo/promptfoo", "number": 12079, "action": "wait", "reason": "Codecov bot reports coverage status only; no action requested. (cached)"}
+{"ts": "2026-11-04T20:30:28", "repo": "PrefectHQ/fastmcp", "number": 6198, "action": "assignment_note", "reason": "Bot says PR awaits maintainer assignment; no contributor action, don't request assignment. (cached)"}
+{"ts": "2026-11-04T20:30:29", "repo": "bytedance/deer-flow", "number": 7812, "action": "wait", "reason": "Bot notice confirming all committers signed the CLA; no action requested. (cached)"}
+{"ts": "2026-11-04T20:30:29", "repo": "PrefectHQ/fastmcp", "number": 6198, "action": "assignment_note", "reason": "Bot says PR awaits maintainer assignment; no contributor action, don't request assignment. (cached)"}
+{"ts": "2026-11-04T20:30:31", "repo": "ruvnet/RuVector", "number": 1299, "action": "wait", "reason": ""}
+{"ts": "2026-11-04T20:30:31", "repo": "ruvnet/RuVector", "number": 1299, "action": "wait", "reason": ""}
+{"ts": "2026-11-04T20:30:31", "repo": "PrefectHQ/fastmcp", "number": 6198, "action": "assignment_note", "reason": "Bot says PR awaits maintainer assignment; no contributor action, don't request assignment. (cached)"}
+{"ts": "2026-11-04T20:30:33", "repo": "Arize-ai/phoenix", "number": 17507, "action": "address_review", "reason": "Bot's Request changes review requires the contributor to make the requested changes. (cached)"}
+{"ts": "2026-11-04T20:30:33", "repo": "PrefectHQ/fastmcp", "number": 6195, "action": "wait", "reason": "Codex review failed to complete; no concrete change requested, just a retry notice. (cached)"}
+{"ts": "2026-11-04T20:30:33", "repo": "PrefectHQ/fastmcp", "number": 6195, "action": "wait", "reason": "Codex review failed to complete; no concrete change requested, just a retry notice. (cached)"}
+{"ts": "2026-11-04T20:30:34", "repo": "ruvnet/RuVector", "number": 1299, "action": "wait", "reason": ""}
+{"ts": "2026-11-04T20:30:36", "repo": "promptfoo/promptfoo", "number": 12079, "action": "wait", "reason": "Codecov bot reports coverage status only; no action requested. (cached)"}
+{"ts": "2026-11-04T20:30:36", "repo": "PrefectHQ/fastmcp", "number": 6195, "action": "wait", "reason": "Codex review failed to complete; no concrete change requested, just a retry notice. (cached)"}
+{"ts": "2026-11-04T20:30:37", "repo": "PrefectHQ/fastmcp", "number": 6198, "action": "assignment_note", "reason": "Bot says PR awaits maintainer assignment; no contributor action, don't request assignment. (cached)"}
+{"ts": "2026-11-04T20:30:39", "repo": "ruvnet/RuVector", "number": 1299, "action": "wait", "reason": ""}
+{"ts": "2026-11-04T20:30:42", "repo": "PrefectHQ/fastmcp", "number": 6195, "action": "wait", "reason": "Codex review failed to complete; no concrete change requested, just a retry notice. (cached)"}
