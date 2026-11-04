@@ -494,7 +494,8 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
         return tpl.TemplateResponse(request, name, ctx, status_code=status_code)
 
     # ---------------- 认证 ----------------
-    PUBLIC_PATHS = ("/login", "/static", "/favicon.ico", "/api/ingest/")
+    PUBLIC_PATHS = ("/login", "/static", "/favicon.ico", "/api/ingest/",
+                    "/feishu/callback")
 
     @app.middleware("http")
     async def auth_middleware(request: Request, call_next):
@@ -936,6 +937,32 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
             data = {}
         return JSONResponse({"replies": data})
 
+    def _post_pr_comment(repo: str, number: int, body: str) -> tuple[bool, str]:
+        """以本账号向 GitHub 发 PR 评论。返回 (ok, detail)。"""
+        import subprocess as sp
+        try:
+            r = sp.run(["gh", "api", f"repos/{repo}/issues/{number}/comments",
+                        "-X", "POST", "-f", f"body={body}"],
+                       capture_output=True, text=True,
+                       encoding="utf-8", errors="replace", timeout=60)
+        except (sp.TimeoutExpired, OSError) as e:
+            return False, str(e)[:200]
+        return r.returncode == 0, (r.stderr or "")[:200]
+
+    def _mark_reply(key: str, status: str, **extra) -> None:
+        rp = root / "state" / "pr_replies.json"
+        try:
+            replies = json.loads(rp.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            replies = {}
+        entry = replies.get(key) or {}
+        entry.update({"status": status, **extra})
+        replies[key] = entry
+        tmp = rp.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(replies, ensure_ascii=False, indent=1),
+                       encoding="utf-8")
+        os.replace(tmp, rp)
+
     @app.post("/api/pr/reply/send")
     def api_pr_reply_send(request: Request, repo: str = Form(""),
                           number: int = Form(0), body: str = Form("")):
@@ -946,36 +973,91 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
             return JSONResponse({"detail": "repo/number/body required"}, status_code=400)
         p = root.parent / "scripts" / "monitor_prs.py"
         runner = p if p.exists() else Path(__file__).resolve().parents[1] / "scripts" / "monitor_prs.py"
-        import subprocess as _sp
-        r = _sp.run(["gh", "pr", "comment", str(number), "-R", repo,
-                     "--body", body], capture_output=True, text=True,
-                    encoding="utf-8", errors="replace", timeout=60)
-        if r.returncode != 0:
-            _audit(root, "pr_reply_send_failed", f"{repo}#{number}",
-                   (r.stderr or "")[:200])
-            return JSONResponse({"detail": (r.stderr or "gh failed")[:200]},
-                                status_code=502)
-        # 草稿标记为已发送
-        rp = root / "state" / "pr_replies.json"
-        try:
-            replies = json.loads(rp.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            replies = {}
-        entry = replies.get(f"{repo}#{number}") or {}
-        entry.update({"status": "sent", "sent_body": body,
-                      "sent_at": time.strftime("%Y-%m-%dT%H:%M:%S")})
-        replies[f"{repo}#{number}"] = entry
-        tmp = rp.with_suffix(".json.tmp")
-        tmp.write_text(json.dumps(replies, ensure_ascii=False, indent=1),
-                       encoding="utf-8")
-        os.replace(tmp, rp)
+        ok, detail = _post_pr_comment(repo, number, body)
+        if not ok:
+            _audit(root, "pr_reply_send_failed", f"{repo}#{number}", detail)
+            return JSONResponse({"detail": detail or "gh failed"}, status_code=502)
+        _mark_reply(f"{repo}#{number}", "sent", sent_body=body,
+                    sent_at=time.strftime("%Y-%m-%dT%H:%M:%S"))
         _audit(root, "pr_reply_sent", f"{repo}#{number}", body[:200])
         return JSONResponse({"ok": True})
+
+    # ---------------- 飞书卡片回调（卡片里一键发送） ----------------
+
+    @app.post("/feishu/callback")
+    async def feishu_callback(request: Request):
+        """飞书卡片动作回调：回复草稿卡片里的「一键发送」走这里。
+
+        URL 验证（首次配置回调时飞书发的 challenge）在这里原样回显；
+        表单提交（form_submit）解析编辑后的 reply_text，以本账号发到 GitHub，
+        并把草稿标记为 sent。verification token 用于校验请求确实来自飞书。
+        """
+        import sys as _sys
+        try:
+            body = json.loads((await request.body()) or b"{}")
+        except Exception:  # noqa: BLE001
+            return JSONResponse({"detail": "bad json"}, status_code=400)
+
+        # 1) 回调地址验证：飞书要求原样回显 challenge
+        if body.get("type") == "url_verification":
+            uv = body.get("url_verification") or body
+            return JSONResponse({"challenge": uv.get("challenge")})
+
+        # 2) 校验来源：verification token（自建应用凭证页可见）
+        #    fail-closed：token 未配置时拒绝所有卡片动作——这个端点能以我们
+        #    名义发 GitHub 评论，不能在未设防的状态下暴露在公网。
+        event = body.get("event") or body
+        token_in = (event.get("token") or body.get("token") or "")
+        want = (os.environ.get("FEISHU_VERIFICATION_TOKEN")
+                or D.feishu_verification_token(ds) or "")
+        if not want:
+            _audit(root, "feishu_cb_reject", "-", "verification token not configured")
+            return JSONResponse({"detail": "callback verification not configured"},
+                                status_code=503)
+        if token_in != want:
+            _audit(root, "feishu_cb_reject", "-", "token mismatch")
+            return JSONResponse({"detail": "forbidden"}, status_code=403)
+
+        # 3) 解析 form_submit：卡片 form 里的 reply_text + 按钮带的 repo/number
+        action = (event.get("action") or {})
+        form_value = action.get("form_value") or {}
+        value = action.get("value") or {}
+        repo = str(value.get("repo") or form_value.get("repo") or "").strip()
+        num_s = str(value.get("number") or form_value.get("number") or "").strip()
+        reply_text = str(form_value.get("reply_text")
+                         or value.get("reply_text") or "").strip()[:2000]
+        if not repo or not num_s.isdigit() or not reply_text:
+            return JSONResponse({"detail": "missing repo/number/reply_text"},
+                                status_code=400)
+        number = int(num_s)
+        ok, detail = _post_pr_comment(repo, number, reply_text)
+        if not ok:
+            _audit(root, "feishu_cb_send_failed", f"{repo}#{number}", detail)
+            return JSONResponse({"toast": {"type": "error",
+                                           "content": "发送失败：" + detail[:80]}})
+        _mark_reply(f"{repo}#{number}", "sent", sent_body=reply_text,
+                    sent_at=time.strftime("%Y-%m-%dT%H:%M:%S"))
+        _audit(root, "feishu_cb_sent", f"{repo}#{number}", reply_text[:200])
+        # 回传新卡片：把表单替换成"已发送"确认
+        return JSONResponse({
+            "toast": {"type": "success", "content": "已发送 ✓"},
+            "card": {
+                "schema": "2.0",
+                "config": {"update_multi": True},
+                "header": {"title": {"tag": "plain_text",
+                          "content": f"✅ 已回复 {repo}#{num_s}"}, "template": "green"},
+                "body": {"elements": [
+                    {"type": "markdown",
+                     "content": "回复已以 xixi-box 身份发出：\n\n" + reply_text[:800]},
+                ]},
+            },
+        })
 
     @app.post("/api/pr/reply/dismiss")
     def api_pr_reply_dismiss(request: Request, repo: str = Form(...),
                              number: int = Form(...)):
         """放弃草稿（人工决定不回或自己回了）。"""
+        _mark_reply_key = f"{repo}#{number}"
         rp = root / "state" / "pr_replies.json"
         try:
             replies = json.loads(rp.read_text(encoding="utf-8"))

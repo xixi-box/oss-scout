@@ -127,7 +127,7 @@ class TestReplyDraftApi:
         posted = []
 
         def fake_run(cmd, **k):
-            if cmd[:2] == ["gh", "pr"]:
+            if cmd[:2] == ["gh", "api"]:
                 posted.append(cmd)
             return sp.CompletedProcess(cmd, 0,
                                        "https://github.com/acme/real/pull/7#comment", "")
@@ -137,7 +137,7 @@ class TestReplyDraftApi:
             "repo": "acme/real", "number": 7,
             "body": "Thanks, fixed in the new commit."})
         assert r.status_code == 200
-        assert posted and posted[0][3] == "7"
+        assert posted and any("/issues/7/comments" in str(a) for a in posted[0])
         data = json.loads(rp.read_text(encoding="utf-8"))
         assert data["acme/real#7"]["status"] == "sent"
 

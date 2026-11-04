@@ -679,6 +679,26 @@ def opencode_state(ds):
         return {"ok": None, "model": "", "checked_at": ""}
 
 
+def feishu_verification_token(ds) -> str:
+    """飞书卡片回调的 verification token。
+
+    来源（按序）：环境变量 FEISHU_VERIFICATION_TOKEN →
+    /data/state/feishu_app.json 的 verification_token 字段。
+    未配置返回空串——回调接口在未配置时会拒绝所有卡片动作（503），
+    防止匿名端点以我们名义发评论。
+    """
+    tok = (os.environ.get("FEISHU_VERIFICATION_TOKEN") or "").strip()
+    if tok:
+        return tok
+    data_root = os.environ.get("OSSCOUT_DASHBOARD_ROOT", "/data")
+    try:
+        d = json.loads((Path(data_root) / "state" / "feishu_app.json")
+                       .read_text(encoding="utf-8"))
+        return str(d.get("verification_token") or "").strip()
+    except Exception:  # noqa: BLE001
+        return ""
+
+
 def cloudflare_cfg(ds) -> dict:
     """Cloudflare 配置。密钥优先取环境变量，文件里只放非密结构。
 
