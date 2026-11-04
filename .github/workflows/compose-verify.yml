@@ -16,4 +16,4 @@ jobs:
       - name: Run watch package tests
         run: |
           set -o pipefail
-          go test ./pkg/watch/ -run 'TestNewDockerPatternMatcher|TestDockerPathMatcher_MatchesAllowList' -v 2>&1 | tail -50
+          go test ./pkg/watch/ 2>&1 | tail -40
