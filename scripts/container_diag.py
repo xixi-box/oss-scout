@@ -83,7 +83,28 @@ def main() -> int:
     _pr_watch_tail()
     _cap_audit()
     _dup_probe()
+    _feishu_probe()
     return 0
+
+
+def _feishu_probe() -> None:
+    """飞书应用接线：凭证是否注入 + 能否找到群（只打印布尔与群名）。"""
+    sys.path.insert(0, "/app")
+    print("--- feishu app ---")
+    for k in ("FEISHU_APP_ID", "FEISHU_APP_SECRET",
+              "FEISHU_VERIFICATION_TOKEN", "FEISHU_CHAT_ID"):
+        print(f"  {k} set:", bool(os.environ.get(k)))
+    try:
+        from scout_v2 import feishu_app
+    except Exception as e:  # noqa: BLE001
+        print("  import failed:", str(e)[:120])
+        return
+    print("  app_configured:", feishu_app.app_configured())
+    items, err = feishu_app.list_chats()
+    print("  chats visible:", len(items), ("err=" + err[:160]) if err else "")
+    for it in items[:5]:
+        print(f"    {it.get('chat_id')}  {it.get('name')}")
+    print("  resolved chat:", feishu_app.find_group_chat_id() or "NONE")
 
 
 def _cap_audit() -> None:
