@@ -3,11 +3,11 @@ on:
   workflow_dispatch:
     inputs:
       pattern:
-        description: "grep pattern for /data/state/worklog.jsonl"
+        description: "search expression executed inside the container"
         required: true
         type: string
 jobs:
   grep:
     runs-on: [self-hosted, aliyun]
     steps:
-      - run: docker exec oss-scout sh -c "grep -c '${{ inputs.pattern }}' /data/state/worklog.jsonl; echo '--- tail ---'; grep '${{ inputs.pattern }}' /data/state/worklog.jsonl | tail -12"
+      - run: docker exec oss-scout sh -lc "${{ inputs.pattern }}"
