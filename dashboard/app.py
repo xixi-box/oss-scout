@@ -365,6 +365,7 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
                     except Exception:  # noqa: BLE001
                         pass
 
+                    from scout_v2.notify import feishu_send
                     for r in results:
                         key = f"{r['repo']}#{r['number']}"
                         action = r.get("action")
@@ -378,11 +379,15 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
                                 _audit(root, "pr_fix_dispatch", key,
                                        f"dispatched={out.get('dispatched')} "
                                        f"reason={str(out.get('reason'))[:120]}")
+                                if out.get("dispatched"):
+                                    feishu_send(
+                                        f"🔧 CI 挂红，已派自动修复：{key}",
+                                        f"失败检查：{', '.join(r.get('failing_checks') or [])[:120]}")
                             except Exception as e:  # noqa: BLE001
                                 _audit(root, "pr_fix_error", key, str(e)[:200])
                         elif action in ("address_review", "answer_question"):
                             # L3：AI 草拟回复落盘，等人确认后经 /api/pr/reply/send
-                            # 发出。绝不自动发——astral/biome 对 AI 文字零容忍。
+                            # 发送。绝不自动发——astral/biome 对 AI 文字零容忍。
                             _audit(root, "pr_needs_reply", key,
                                    f"{action} from {r.get('latest_author')}: "
                                    f"{str(r.get('latest_excerpt'))[:150]}")
@@ -391,6 +396,12 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
                                 _audit(root, "pr_reply_drafted", key,
                                        f"drafted={draft.get('drafted')} "
                                        f"path=state/pr_replies.json")
+                                if draft.get("drafted"):
+                                    feishu_send(
+                                        f"💬 有回复草稿待人审：{key}",
+                                        f"来自 {r.get('latest_author')}："
+                                        f"{str(r.get('latest_excerpt'))[:120]}\n"
+                                        "→ PR 管理页可编辑并发送")
                             except Exception as e:  # noqa: BLE001
                                 _audit(root, "pr_draft_error", key, str(e)[:200])
                 except Exception as e:  # noqa: BLE001

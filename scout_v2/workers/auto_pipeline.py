@@ -316,6 +316,10 @@ def candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6) -> dict:
         n = int(entry.get("recheck_failures") or 0) + 1
         mark_candidate(root, key, "escalated" if n >= 3 else "recheck_failed",
                        extra={"recheck_failures": n})
+        if n >= 3:
+            from ..notify import feishu_send
+            feishu_send(f"⚠️ 候选升级转人工：{key}",
+                        f"复检连续失败 {n} 次：{summary.get('abort', '')[:150]}")
         return summary
     if not recheck.issue_open or not recheck.unassigned or recheck.has_claim_signal \
             or recheck.has_cross_ref_pr or recheck.open_pr_hits:
@@ -386,6 +390,8 @@ def candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6) -> dict:
         log(root, "abort", key, summary["abort"])
         mark_candidate(root, key, "escalated",
                        extra={"abort_reason": summary["abort"]})
+        from ..notify import feishu_send
+        feishu_send(f"⚠️ 候选尝试超限转人工：{key}", summary["abort"][:150])
         return summary
 
     ledger = ClaimLedger(root / "state" / "scout_v2.sqlite3")
@@ -554,6 +560,8 @@ def candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6) -> dict:
     summary["pr"] = pr_url
     log(root, "pr_open", key, f"{pr_url} (auto pipeline, backend={backend})")
     mark_candidate(root, key, "pr_open")
+    from ..notify import feishu_send
+    feishu_send(f"🚀 新 PR 开出：{key}", f"{pr_title} {pr_url}")
 
     # PR 开出来之后立刻把能自动签的 CLA 签掉。phoenix 这类仓库的 CLA bot 认
     # 一条固定口令的 issue_comment，发出去就生效；剩下要网页 OAuth 的，preflight
