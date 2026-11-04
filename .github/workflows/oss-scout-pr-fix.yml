@@ -206,8 +206,14 @@ jobs:
       - name: Record result for the dashboard
         if: always()
         shell: bash
+        # 注意：一个 step 只能有一个 env 键。GitHub 的解析器拒绝重复键，
+        # PyYAML 却静默容忍（取后者）——2026-11-04 这里的重复 env 让
+        # 文件被 GitHub 判为非法，每次 push 都多一个红叉，且 review 修复
+        # 的 workflow_dispatch 一起瘫痪。
         env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          INGEST_TOKEN: ${{ secrets.CF_INGEST_TOKEN }}
+          DASHBOARD_URL: ${{ secrets.DASHBOARD_PUBLIC_URL }}
+          PUSHED_SHA: ${{ steps.stage.outputs.pushed_sha }}
         run: |
           set -uo pipefail
           python3 - <<'PY'
@@ -222,7 +228,7 @@ jobs:
           res = json.loads(m.group(1).strip().split("\n")[0]) if m else {}
 
           # 把结果送回看板，好让飞书卡片从"进行中"变成"可发送"。
-          # 失败只是状态没更新，不影响已经暂存好的提交。
+          # 失败只是状态没更新，不影响已经推送好的提交。
           payload = {"repo": j["upstream_repo"], "number": j["pr_number"],
                      "kind": j.get("kind") or "ci",
                      "test_ok": res.get("test_ok"),
@@ -247,7 +253,4 @@ jobs:
           except Exception as e:
               print("callback failed:", str(e)[:200])
           PY
-        env:
-          INGEST_TOKEN: ${{ secrets.CF_INGEST_TOKEN }}
-          DASHBOARD_URL: ${{ secrets.DASHBOARD_PUBLIC_URL }}
           PUSHED_SHA: ${{ steps.stage.outputs.pushed_sha }}

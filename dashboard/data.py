@@ -950,7 +950,10 @@ def cloudflare_last_pull(ds) -> str:
 # ---------- Dashboard 运行参数（前端可改，落 configs/dashboard.yaml） ----------
 
 DASHBOARD_DEFAULTS = {
-    "cf_pull_seconds": 20,        # Cloudflare KV 拉取间隔（20s = 4320 次读/天，占 10 万额度 4%）
+    # KV 的 list 是独立配额（免费档仅 1000 次/天），不算在读额度里。每次
+    # pull 都要 list 一次 pending 键：20s = 4320 次/天会直接打爆配额
+    # （2026-11-04 Cloudflare 429 实录）。300s = 288 次/天，占配额不到三成。
+    "cf_pull_seconds": 300,
     "pr_refresh_seconds": 120,    # PR 列表自动刷新间隔
     "gh_cache_ttl": 300,          # gh 外部命令结果缓存秒数
     "auto_repair_seconds": 300,   # 自动修复轮询间隔（0=关闭）；每日认领上限仍由 ClaimLedger 强制
@@ -969,7 +972,9 @@ def dashboard_settings(ds) -> dict:
 
 def cf_pull_seconds(ds) -> int:
     try:
-        return max(10, int(dashboard_settings(ds)["cf_pull_seconds"]))
+        # 下限 240s：老配置文件里持久化的 20 会在 list 配额上打爆 429，
+        # 默认值只对"配置文件里没写这个键"的新实例生效。
+        return max(240, int(dashboard_settings(ds)["cf_pull_seconds"]))
     except Exception:  # noqa: BLE001
         return DASHBOARD_DEFAULTS["cf_pull_seconds"]
 

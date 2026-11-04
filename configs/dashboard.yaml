@@ -14,7 +14,7 @@ auto_repair_seconds: 60
 
 # Cloudflare KV 拉取间隔（秒）。现在是 Worker 直接 POST 到 /api/ingest，
 # 这条轮询只作为 KV 兜底通道的补充。
-cf_pull_seconds: 20
+cf_pull_seconds: 300
 
 # GitHub 数据缓存 TTL（秒）
 gh_cache_ttl: 300

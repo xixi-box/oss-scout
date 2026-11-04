@@ -704,3 +704,92 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+
+# ---- 飞书多维表格的数据源：所有 PR 一行一条 ----
+
+def all_my_prs(limit: int = 100) -> list[dict]:
+    """我们开出去的全部 PR（open + closed + merged），搜索接口一次拿一类。
+
+    closed 和 merged 共用 `--state closed`，结果的 state 字段能区分二者；
+    所以只打两次搜索。搜索结果不带仓库全名时从 repository.nameWithOwner 取。
+    """
+    out: dict = {}
+    for state in ("open", "closed"):
+        raw = _gh(["search", "prs", "--author", "@me", "--state", state,
+                   "--limit", str(limit),
+                   "--json", "repository,number,title,state,url,createdAt,"
+                             "updatedAt,closedAt"])
+        try:
+            items = json.loads(raw) if raw else []
+        except json.JSONDecodeError:
+            items = []
+        for it in items:
+            key = (it["repository"]["nameWithOwner"], str(it["number"]))
+            out[key] = {
+                "repo": it["repository"]["nameWithOwner"],
+                "number": int(it["number"]),
+                "title": it.get("title") or "",
+                "state": str(it.get("state") or "").lower(),
+                "url": it.get("url") or "",
+                "created_at": it.get("createdAt") or "",
+                "updated_at": it.get("updatedAt") or "",
+                "closed_at": it.get("closedAt") or "",
+            }
+    return list(out.values())
+
+
+def build_pr_rows(root) -> list[dict]:
+    """多维表格的行：GitHub 全量 PR ⊕ 本地动作/回复/修改状态。
+
+    本地状态是增强，不是来源——GitHub 拉不到（如网络抖动）时行照样产出，
+    只是增强列为空。
+    """
+    rows = all_my_prs()
+    if not rows:
+        return []
+
+    # pr_watch.jsonl：每个 PR 最近一次动作
+    watch: dict = {}
+    try:
+        for line in (root / "state" / "pr_watch.jsonl") \
+                .read_text(encoding="utf-8").splitlines():
+            try:
+                rec = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            key = (str(rec.get("repo")), str(rec.get("number")))
+            watch[key] = rec          # 后写覆盖先写
+    except OSError:
+        pass
+
+    # pr_replies.json：回复草稿状态
+    replies: dict = {}
+    try:
+        data = json.loads((root / "state" / "pr_replies.json")
+                          .read_text(encoding="utf-8"))
+        for key, entry in data.items():
+            replies[key] = entry
+    except (OSError, json.JSONDecodeError):
+        pass
+
+    for row in rows:
+        key = (row["repo"], str(row["number"]))
+        rec = watch.get(key) or {}
+        row["action"] = str(rec.get("action") or "unknown")
+        note_parts = [str(rec.get("reason") or "").strip()]
+
+        entry = replies.get(f"{row['repo']}#{row['number']}") or {}
+        rstatus = str(entry.get("status") or "")
+        row["reply_status"] = {"draft": "待审", "sent": "已发送",
+                               "dismissed": "已放弃"}.get(rstatus, "")
+        fstate = str(entry.get("fix_state") or "")
+        row["fix_state"] = {"pending": "进行中", "pushed": "已推送",
+                            "failed": "失败"}.get(fstate, "")
+        if entry.get("sent_body"):
+            note_parts.append("已发回复：" + str(entry["sent_body"])[:120])
+        if entry.get("fix_test_result"):
+            note_parts.append(str(entry["fix_test_result"])[:120])
+        row["note"] = "；".join(p for p in note_parts if p)[:600]
+
+    return rows

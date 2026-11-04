@@ -515,6 +515,20 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
                                     _notify_draft(root, r, draft)
                             except Exception as e:  # noqa: BLE001
                                 _audit(root, "pr_draft_error", key, str(e)[:200])
+
+                    # PR 记录同步进飞书多维表格（随监控循环，15 分钟一轮）。
+                    # 数据源是全量 PR + 本地状态，和上面的逐 PR 通知互不干扰；
+                    # 失败只留审计，不影响监控循环。
+                    try:
+                        from scout_v2 import feishu_bitable
+                        if feishu_bitable.configured(root):
+                            rows = mod.build_pr_rows(root)
+                            if rows:
+                                out = feishu_bitable.sync_rows(root, rows)
+                                _audit(root, "bitable_sync", f"{len(rows)} rows",
+                                       json.dumps(out, ensure_ascii=False))
+                    except Exception as e:  # noqa: BLE001
+                        _audit(root, "bitable_sync_error", "-", str(e)[:200])
                 except Exception as e:  # noqa: BLE001
                     try:
                         _audit(root, "pr_watch_error", "-", str(e)[:200])
@@ -525,7 +539,13 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
         _thr.Thread(target=_loop, daemon=True).start()
 
     def _cf_poll_loop():
-        """按配置间隔（默认 20s）从 CF KV 拉取 Worker 发现（失败静默，下轮重试）。"""
+        """从 CF KV 拉取 Worker 发现的**兜底**通道（主通道是 Worker 直接 POST）。
+
+        为什么是 5 分钟而不是 20 秒：每次拉取都要调 KV 的 list 接口，而 list
+        是独立计费的配额——免费档只有 1000 次/天。20s 轮询 = 4320 次/天，
+        直接把配额打爆（2026-11-04 实录：Cloudflare 429，list 全天不可用）。
+        这里的角色只是"Worker POST 失败时的捞回"，5 分钟延迟完全可接受。
+        """
         import threading as _th
         import time as _t
         def _loop():
@@ -539,8 +559,7 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
                             encoding="utf-8")
                 except Exception:  # noqa: BLE001
                     pass
-                # 间隔可前端配置（configs/dashboard.yaml）；默认 20s
-                # KV 读额度 10 万/天，20s 轮询 = 4320 次/天，仅占 4%
+                # 默认 300s = 288 次 list/天，占 list 配额不到三成
                 _t.sleep(D.cf_pull_seconds(ds))
         _th.Thread(target=_loop, daemon=True).start()
 
@@ -1108,6 +1127,30 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
         _audit(root, "pr_fix_result", key,
                f"pushed={pushed} test={str(body.get('test_result'))[:80]}")
         return JSONResponse({"ok": True})
+
+    @app.post("/api/pr/bitable/sync")
+    def api_pr_bitable_sync():
+        """手动触发一次多维表格同步（也在 pr_watch 循环里 15 分钟一次）。"""
+        import importlib.util
+        from scout_v2 import feishu_bitable
+        if not feishu_bitable.configured(root):
+            return JSONResponse({"detail": "feishu app not configured"},
+                                status_code=503)
+        try:
+            import importlib.util
+            spec = importlib.util.spec_from_file_location(
+                "monitor_prs",
+                Path(__file__).resolve().parents[1] / "scripts" / "monitor_prs.py")
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            rows = mod.build_pr_rows(root)
+            out = feishu_bitable.sync_rows(root, rows)
+            _audit(root, "bitable_sync_manual", f"{len(rows)} rows",
+                   json.dumps(out, ensure_ascii=False))
+            return JSONResponse({"ok": True, "rows": len(rows), **out})
+        except Exception as e:  # noqa: BLE001
+            _audit(root, "bitable_sync_error", "-", str(e)[:200])
+            return JSONResponse({"detail": str(e)[:200]}, status_code=502)
 
     @app.post("/api/pr/reply/send")
     def api_pr_reply_send(request: Request, repo: str = Form(""),
