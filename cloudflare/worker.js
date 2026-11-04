@@ -16,10 +16,6 @@ const EXCLUDED_LABELS = ["invalid", "wontfix", "duplicate", "question", "stale",
   "awaiting more info", "awaiting-more-info", "needs more info", "needs-repro",
   "documentation"];
 
-// 补扫只认最近的 issue：太老的可修概率急剧下降（早被别人认领或修复），
-// 而且补扫每轮都跑，不设龄上限会把仓库里所有历史 issue 反复送进评分。
-const BACKFILL_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
-
 function collectIssue(issues, repo, it) {
   if (it.pull_request || (it.assignees && it.assignees.length)) return;
   const labels = (it.labels || []).map(l => (typeof l === "string" ? l : l.name));
@@ -33,13 +29,6 @@ function collectIssue(issues, repo, it) {
     // 环境说明。4000 常常在代码块中间截断，把可修的 issue 判成"信息不足"。
     body_excerpt: (it.body || "").slice(0, 8000),
   });
-}
-
-// 补扫专用：拿到的是"最近创建"列表而不是增量，龄上限在这里卡。
-function collectBackfillIssue(issues, repo, it, now) {
-  const age = now.getTime() - new Date(it.created_at).getTime();
-  if (age > BACKFILL_MAX_AGE_MS || age < 0) return;
-  collectIssue(issues, repo, it);
 }
 
 function ghHeaders(token) {
@@ -90,31 +79,8 @@ async function pollOnce(env) {
       errors.push(`${repo}: ${String(e).slice(0, 80)}`);
     }
   }
-
-  // 补扫（round-robin）：`since` 水位只向前看，仓库新加入池子时，水位之前的
-  // 既有 issue 永远不会被看到——除非它们后来又被更新。agentgateway#4256 就
-  // 是这么漏掉的：issue 比"仓库进池子"早了半天，之后没人再更新它，等维护者
-  // 指派/关闭时已经过了我们能接手的窗口。每分钟补扫一个仓库（50 仓一轮
-  // ≈50 分钟），每天多花 ~1440 次 API 调用（限额 5000/h，无压力），任何
-  // 仓库进池后半小时内就有完整的最近-issue 视野。
-  if (repos.length) {
-    const rr = repos[now.getUTCMinutes() % repos.length];
-    try {
-      const r = await fetch(
-        `https://api.github.com/repos/${rr}/issues?state=open&sort=created` +
-        `&direction=desc&per_page=20`,
-        { headers: ghHeaders(env.GH_TOKEN) });
-      if (r.ok) {
-        for (const it of await r.json()) {
-          collectBackfillIssue(issues, rr, it, now);
-        }
-      } else {
-        errors.push(`${rr} (backfill): HTTP ${r.status}`);
-      }
-    } catch (e) {
-      errors.push(`${rr} (backfill): ${String(e).slice(0, 80)}`);
-    }
-  }
+  // 不做补扫：新仓库进池只看增量。新增仓库是低频动作，进池当天手动
+  // 扫一遍（或等 issue 自然更新）就够了，不值得为它每分钟多打一次 API。
 
   // 诊断键：降频到每 30 分钟 或 有错误时写。
   // KV 免费档仅 1000 write/天——原来每分钟写 = 1440/天，单这一项就超额（2026-10-25 实测 2139）。
