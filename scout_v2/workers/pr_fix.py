@@ -100,6 +100,78 @@ def build_prompt(payload: dict) -> str:
     return "\n".join(parts)
 
 
+def _run(cmd: list[str], cwd: Path, timeout: int = 1500) -> tuple[int, str]:
+    try:
+        r = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True,
+                           encoding="utf-8", errors="replace", timeout=timeout)
+        return r.returncode, (r.stdout or "") + (r.stderr or "")
+    except FileNotFoundError:
+        return 127, f"{cmd[0]} not installed"
+    except subprocess.TimeoutExpired:
+        return 124, f"timeout after {timeout}s"
+
+
+def _verify(repo_dir: Path, changed: list[str],
+            payload: dict) -> tuple[bool, str]:
+    """跑能跑的测试，返回 (是否可信, 描述)。
+
+    判断依据是仓库形态而非失败清单里的名字——CI 的检查名常常不带路径
+    （"validate (lint)"），靠它猜测试文件只会猜错。
+
+    返回 False 时调用方**不得推送**：一个没验证过的补丁推到别人 PR 上，
+    比不推更糟。
+    """
+    logs = repo_dir.parent / "prfix-test.log"
+    if not changed:
+        return True, "no-change"
+
+    # Go：跑改动文件所在的包。docker/compose 这类仓库只有这样才验得到。
+    if (repo_dir / "go.mod").exists():
+        # 统一成 posix 分隔符：go 的 import path 不认反斜杠，Windows 上
+        # 直接拼 Path.parent 会得到 ./pkg\watch/，go test 会报找不到包。
+        pkgs = sorted({Path(l[3:].strip()).parent.as_posix() for l in changed
+                       if l.strip().endswith(".go")})
+        if not pkgs:
+            return True, "go: no package changed"
+        targets = [f"./{p}/" if p and p != "." else "./" for p in pkgs]
+        rc, out = _run(["go", "test", *targets], repo_dir)
+        if rc != 0:
+            logs.write_text(out[-9000:], encoding="utf-8", errors="replace")
+        return rc == 0, f"go test {targets} rc={rc}"
+
+    # Python：优先跑失败清单里的节点，否则跑改动文件对应的测试模块
+    if (repo_dir / "pyproject.toml").exists() or (repo_dir / "setup.cfg").exists() \
+            or (repo_dir / "pytest.ini").exists():
+        nodes = [f.get("name", "") for f in payload.get("failing") or []
+                 if "::" in f.get("name", "")]
+        sel = ([n.split("::")[0] for n in nodes[:3]] if nodes
+               else [l[3:].strip() for l in changed if l.strip().endswith(".py")][:5])
+        if not sel:
+            return True, "python: no target"
+        rc, out = _run(["python3", "-m", "pytest", "-x", "-q", *sel], repo_dir)
+        if rc != 0:
+            logs.write_text(out[-9000:], encoding="utf-8", errors="replace")
+        return rc == 0, f"pytest {sel} rc={rc}"
+
+    # Node：有 test 脚本就跑一遍
+    pkg = repo_dir / "package.json"
+    if pkg.exists():
+        import json as _json
+        try:
+            scripts = (_json.loads(pkg.read_text(encoding="utf-8"))
+                       .get("scripts") or {})
+        except Exception:  # noqa: BLE001
+            scripts = {}
+        if "test" in scripts:
+            rc, out = _run(["npm", "test", "--silent"], repo_dir)
+            if rc != 0:
+                logs.write_text(out[-9000:], encoding="utf-8", errors="replace")
+            return rc == 0, f"npm test rc={rc}"
+
+    # 认不出怎么测：如实标记未验证，不假装通过
+    return False, "unverified: no test runner detected"
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--fix", required=True, help="path to fix.json payload")
@@ -142,25 +214,12 @@ def main() -> int:
                         errors="replace")
     changed = [l for l in (st.stdout or "").splitlines() if l.strip()]
 
-    # 本地能验证就验证：找失败清单里名字像测试的，跑 pytest 节点
-    test_nodes = [f.get("name", "") for f in payload.get("failing") or []
-                  if "::" in f.get("name", "")]
-    test_result = "not-run"
-    if test_nodes and (repo_dir / "pyproject.toml").exists() or \
-            test_nodes and (repo_dir / "setup.cfg").exists():
-        sel = [n.split("::")[0] for n in test_nodes[:3]]
-        r = subprocess.run(["python3", "-m", "pytest", "-x", "-q", *sel],
-                           cwd=repo_dir, capture_output=True, text=True,
-                           encoding="utf-8", errors="replace", timeout=1500)
-        test_result = f"rc={r.returncode}"
-        if r.returncode != 0:
-            (repo_dir / ".." / "prfix-test.log").write_text(
-                (r.stdout or "")[-8000:] + (r.stderr or "")[-2000:],
-                encoding="utf-8", errors="replace")
+    test_ok, test_result = _verify(repo_dir, changed, payload)
 
     result = {
-        "fixed": bool(changed) and ok,
+        "fixed": bool(changed) and ok and test_ok,
         "opencode_ok": ok,
+        "test_ok": test_ok,
         "changed_files": changed[:20],
         "test_result": test_result,
         "output_tail": str(out.get("output", ""))[-1500:],

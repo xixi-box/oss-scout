@@ -99,6 +99,28 @@ jobs:
           echo "$HOME/.opencode/bin" >> "$GITHUB_PATH"
           "$HOME/.opencode/bin/opencode" --version
 
+      # 仓库有 go.mod 就装 Go：worker 用 go test 验证改动，
+      # 没工具链就只能标 unverified，那样补丁推不出去。
+      - name: Detect Go toolchain need
+        id: go
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f "$RUNNER_TEMP/repo/go.mod" ]; then
+            VER=$(sed -n 's/^go \([0-9][0-9.]*\).*/\1/p' "$RUNNER_TEMP/repo/go.mod" | head -1)
+            echo "needs=yes" >> "$GITHUB_OUTPUT"
+            echo "version=$VER" >> "$GITHUB_OUTPUT"
+            echo "go.mod wants go$VER"
+          else
+            echo "needs=no" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-go@v5
+        if: steps.go.outputs.needs == 'yes'
+        with:
+          go-version: ${{ steps.go.outputs.version }}
+          check-latest: true
+
       - name: Write opencode auth
         shell: bash
         env:
@@ -125,7 +147,7 @@ jobs:
           cd "$GITHUB_WORKSPACE/worker"
           PYTHONPATH="$GITHUB_WORKSPACE/worker" python3 -m scout_v2.workers.pr_fix \
             --fix "$RUNNER_TEMP/fix.json" \
-            --repo-dir "$RUNNER_TEMP/repo"
+            --repo-dir "$RUNNER_TEMP/repo" | tee "$RUNNER_TEMP/prfix.json"
 
       - name: Commit and push
         shell: bash
@@ -140,6 +162,20 @@ jobs:
             echo "no changes produced; nothing to push"
             exit 0
           fi
+          # worker 按仓库形态跑过测试（go test / pytest / npm test）。验证不过
+          # 或认不出怎么验证就不推——把没验过的补丁推到别人 PR 上比不推更糟。
+          python3 - <<'PY'
+          import json, os, re, sys
+          out = open(os.environ["RUNNER_TEMP"] + "/prfix.json", encoding="utf-8").read()
+          m = re.search(r"##OSSCOUT_PRFIX##(.*)", out, re.S)
+          if not m:
+              sys.exit("worker produced no result marker; refusing to push")
+          res = json.loads(m.group(1).strip().split("\n")[0])
+          print("worker result:", {k: res.get(k) for k in
+                                   ("fixed", "test_ok", "test_result")})
+          if not res.get("test_ok"):
+              sys.exit("tests did not pass or could not run -> refusing to push")
+          PY
           git config user.name "wangshun"
           git config user.email "96341168+xixi-box@users.noreply.github.com"
           git add -A
@@ -147,9 +183,11 @@ jobs:
           MSG=$(python3 - <<'PY'
           import json, os
           j = json.load(open(os.environ["RUNNER_TEMP"] + "/fix.json"))
-          print("fix: address CI failures on PR #%d\n\n"
-                "Signed-off-by: wangshun <96341168+xixi-box@users.noreply.github.com>"
-                % j["pr_number"])
+          kind = j.get("kind") or "ci"
+          subject = (("fix: address review on PR #%d" if kind == "review"
+                      else "fix: address CI failures on PR #%d") % j["pr_number"])
+          print(subject + "\n\n"
+                "Signed-off-by: wangshun <96341168+xixi-box@users.noreply.github.com>")
           PY
           )
           git commit -q -m "$MSG"
