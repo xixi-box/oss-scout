@@ -220,3 +220,56 @@ class TestDraftNotificationFallback:
                              {"repo": "a/b", "number": 1, "latest_author": "x",
                               "latest_excerpt": "y", "pr_title": "t"},
                              {"entry": {"draft": "d"}})
+
+
+class TestCommentIsNotTruncated:
+    """评审内容不能被静默截断。
+
+    2026-11-04 实录（docker/compose#14450）：ndeloof 的 740 字评审被 [:400]
+    切在 `["!/rep` 处，卡片上只剩前半段客套，"One blocking point: ..." 和
+    "Please also add a regression test ..." 两条要求全都不见了。人看到的是
+    半句话，AI 起草时也少看了 240 字。
+    """
+
+    REVIEW = (
+        "Thanks, removing the `*` special case is the right fix: I checked that "
+        "with `*` then `!src`, `data/log`, `.env` and `node_modules/...` are now "
+        "ignored while `src/**` is not, and deny-lists are unchanged.\n"
+        "\n"
+        "One blocking point: `TestNewDockerPatternMatcher/Wildcard_with_exclusion` "
+        "asserts the behavior this PR removes, and it now fails. It needs to be "
+        'updated to expect `["/repo/*", "!/repo/file.txt"]`.\n'
+        "\n"
+        "Please also add a regression test for the allow-list at the `Matches` "
+        "level (e.g. `*` then `!src`: `data/log` ignored, `src/index.js` not), "
+        "since the existing test only looks at the parsed patterns.")
+
+    def _text(self, comment):
+        card = feishu_app.build_reply_card(
+            "docker/compose", 14450, "title", "ndeloof", comment, "rc", "draft")
+        return "\n".join(e["text"]["content"] for e in card["elements"]
+                         if e.get("tag") == "div")
+
+    def test_realistic_review_survives_intact(self):
+        text = self._text(self.REVIEW)
+        assert len(self.REVIEW) > 400, "fixture must exceed the old 400-char cut"
+        # 两条要求都必须出现
+        assert "blocking point" in text.lower()
+        assert "Matches" in text
+        assert "src/index.js" in text
+
+    def test_nothing_is_dropped_for_a_long_but_normal_review(self):
+        assert self.REVIEW in self._text(self.REVIEW)
+
+    def test_newlines_are_preserved(self):
+        """分条评审压成一行后，读的人分不清哪句是一条要求。"""
+        text = self._text(self.REVIEW)
+        assert "\n" in text
+        assert "Thank" in text and "blocking point" in text
+
+    def test_pathological_comment_is_marked_as_cut(self):
+        """真超长时明示被截断，不让人以为对方只说了半句。"""
+        huge = "x" * 5000
+        text = self._text(huge)
+        assert "此处显示前" in text
+        assert "5000" in text       # 报出原文长度

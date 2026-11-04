@@ -685,3 +685,4 @@
 {"ts": "2026-11-04T15:05:55", "action": "dashboard_auto_repair", "target": "anomalyco/opencode#59792", "result": "{\"id\": \"anomalyco/opencode#59792\", \"steps\": [], \"abort\": \"lane=unknown no action\"}", "source": "web-ui"}
 {"ts": "2026-11-04T15:07:35", "action": "dashboard_auto_repair", "target": "anomalyco/opencode#59293", "result": "{\"id\": \"anomalyco/opencode#59293\", \"steps\": [], \"abort\": \"lane=unknown no action\"}", "source": "web-ui"}
 {"ts": "2026-11-04T16:43:00", "action": "dashboard_pr_sync_failed", "target": "0 prs", "result": "not configured", "source": "web-ui"}
+{"ts": "2026-11-04T17:38:51", "action": "dashboard_pr_watch_error", "target": "-", "result": "name '_ACTIONS' is not defined", "source": "web-ui"}

@@ -28,6 +28,11 @@ from pathlib import Path
 _TOKEN_CACHE: tuple[float, str] = (0.0, "")
 _TOKEN_TTL = 100 * 60          # tenant_access_token 有效期 2h，提前 20min 刷新
 
+# 卡片里展示对方评论的上限。飞书单条消息有体积上限，但这里取的是一个
+# 远高于常见评审长度的值——真实 review 通常 300~1500 字，宁可多显示也不要
+# 在 400 字处静默切断（那会让人以为对方只说了半句）。
+_COMMENT_SHOWN = 2000
+
 
 def _app_credentials() -> tuple[str, str]:
     app_id = (os.environ.get("FEISHU_APP_ID") or "").strip()
@@ -142,7 +147,16 @@ def build_reply_card(repo: str, number: int, issue_title: str,
     fix_dispatched=True 时在标题上标明"代码改动已在流水线里推"，因为
     此时按钮只负责发回复，不该让人以为还得自己动手改代码。
     """
-    excerpt = str(source_comment or "")[:400].replace("\n", " ")
+    # 保留换行：评审内容是分条的（"One blocking point: ..." / "Please also ..."），
+    # 压成一行后结构全丢，读的人要靠猜哪句是一条要求。
+    # 2026-11-04 实录：740 字的评审被 [:400] 切掉后两条要求都不见了。
+    raw = str(source_comment or "").strip()
+    if len(raw) > _COMMENT_SHOWN:
+        excerpt = (raw[:_COMMENT_SHOWN].rstrip()
+                   + f"\n\n…（原文 {len(raw)} 字，此处显示前 {_COMMENT_SHOWN} 字，"
+                     f"完整内容见 PR 页）")
+    else:
+        excerpt = raw
     rc = str(root_cause or "")[:300]
     title = (f"✅ 改动已推送 · 回复待审：{repo}#{number}" if fix_dispatched
              else f"💬 回复草稿待审：{repo}#{number}")

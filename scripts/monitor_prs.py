@@ -118,6 +118,13 @@ def _model() -> tuple[str, str]:
         return "", ""
 
 
+# 评论正文的传输上限。取大值而非"够用就行"：截断一次就可能漏掉一条要求，
+# 2026-11-04 实录（docker/compose#14450）——维护者 740 字的评审被 [:500]
+# 切掉后半段，起草出的回复漏了"加 Matches 级回归测试"这条明确要求。
+# 这个值只防病态输入（粘贴整份日志），正常 review 一律完整传递。
+COMMENT_TEXT_LIMIT = 8000
+
+# 评论分类的合法取值。模型输出必须落在其中，否则当作解析失败走规则兜底。
 _ACTIONS = ("wait", "address_review", "answer_question", "assignment_note")
 
 # 纯流程性 bot：它们的发言是模板通知，没有对话价值（changeset 提醒、
@@ -327,8 +334,8 @@ def classify(pr: dict) -> dict:
         "unanswered": len([c for c in recent
                            if (c.get("author") or {}).get("login") not in ("xixi-box",)]),
         "latest_author": (latest.get("author") or {}).get("login") if latest else None,
-        "latest_excerpt": body[:300],
-        "latest_body": body[:1500],
+        "latest_excerpt": body[:300],          # 一行提示用；全文见 latest_body
+        "latest_body": body[:COMMENT_TEXT_LIMIT],
         "pr_title": str(pr.get("title") or ""),
         "pr_url": str(pr.get("url") or ""),
         "pr_body": str(pr.get("body") or "")[:2000],
@@ -561,7 +568,7 @@ def _thread(repo: str, number: int, limit: int = 10) -> list[dict]:
         parts = line.split("|", 2)
         if len(parts) == 3:
             out.append({"created_at": parts[0], "author": parts[1],
-                        "body": parts[2][:1500]})
+                        "body": parts[2][:COMMENT_TEXT_LIMIT]})
     return out[-limit:]
 
 
@@ -611,7 +618,8 @@ def draft_reply(repo: str, number: int, *, force: bool = False,
     if not cfg.get("api_key"):
         return {"drafted": False, "reason": "no scorer api_key"}
 
-    convo = "\n".join(f"[{c['author']}] {c['body'][:500]}" for c in thread[-6:])
+    convo = "\n".join(f"[{c['author']}] {c['body'][:COMMENT_TEXT_LIMIT]}"
+                      for c in thread[-6:])
     prompt = (
         "You maintain an open-source contribution bot. A maintainer or bot replied "
         "on our pull request. Draft the reply a polite human contributor would "
@@ -637,7 +645,7 @@ def draft_reply(repo: str, number: int, *, force: bool = False,
                     "pr_url": str((context or {}).get("pr_url") or ""),
                     "root_cause": _root_cause(
                         str((context or {}).get("pr_body") or "")),
-                    "source_comment": str(latest.get("body") or "")[:800],
+                    "source_comment": str(latest.get("body") or "")[:COMMENT_TEXT_LIMIT],
                     "drafted_at": time.strftime("%Y-%m-%dT%H:%M:%S")}
     REPLIES_FILE.parent.mkdir(parents=True, exist_ok=True)
     REPLIES_FILE.write_text(json.dumps(replies, ensure_ascii=False, indent=1),
