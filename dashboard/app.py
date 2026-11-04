@@ -516,16 +516,34 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
                             except Exception as e:  # noqa: BLE001
                                 _audit(root, "pr_draft_error", key, str(e)[:200])
 
-                    # PR 记录同步进飞书多维表格（随监控循环，15 分钟一轮）。
-                    # 数据源是全量 PR + 本地状态，和上面的逐 PR 通知互不干扰；
+                    # 飞书多维表格：三张表随监控循环同步（15 分钟一轮）。
+                    # 数据源都是本地文件 + gh，互相独立，单表失败不影响其余；
                     # 失败只留审计，不影响监控循环。
                     try:
-                        from scout_v2 import feishu_bitable
-                        if feishu_bitable.configured(root):
-                            rows = mod.build_pr_rows(root)
-                            if rows:
-                                out = feishu_bitable.sync_rows(root, rows)
-                                _audit(root, "bitable_sync", f"{len(rows)} rows",
+                        from scout_v2 import feishu_bitable as FB
+                        if FB.configured(root):
+                            pr_rows = mod.build_pr_rows(root)
+                            if pr_rows:
+                                out = FB.sync_rows(root, pr_rows)
+                                _audit(root, "bitable_sync_pr", f"{len(pr_rows)} rows",
+                                       json.dumps(out, ensure_ascii=False))
+                            repo_rows = mod.build_repo_rows(root)
+                            if repo_rows:
+                                out = FB.sync_table(
+                                    root, repo_rows, table_name=FB.REPO_TABLE_NAME,
+                                    fields=FB.REPO_FIELDS,
+                                    to_fields=FB.repo_row_to_fields,
+                                    binding_key="repo_table_id")
+                                _audit(root, "bitable_sync_repos", f"{len(repo_rows)} rows",
+                                       json.dumps(out, ensure_ascii=False))
+                            scan_rows = mod.build_scan_rows(root)
+                            if scan_rows:
+                                out = FB.sync_table(
+                                    root, scan_rows, table_name=FB.SCAN_TABLE_NAME,
+                                    fields=FB.SCAN_FIELDS,
+                                    to_fields=FB.scan_row_to_fields,
+                                    binding_key="scan_table_id")
+                                _audit(root, "bitable_sync_scan", f"{len(scan_rows)} rows",
                                        json.dumps(out, ensure_ascii=False))
                     except Exception as e:  # noqa: BLE001
                         _audit(root, "bitable_sync_error", "-", str(e)[:200])
@@ -1143,11 +1161,27 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
                 Path(__file__).resolve().parents[1] / "scripts" / "monitor_prs.py")
             mod = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(mod)
-            rows = mod.build_pr_rows(root)
-            out = feishu_bitable.sync_rows(root, rows)
-            _audit(root, "bitable_sync_manual", f"{len(rows)} rows",
-                   json.dumps(out, ensure_ascii=False))
-            return JSONResponse({"ok": True, "rows": len(rows), **out})
+            results = {}
+            pr_rows = mod.build_pr_rows(root)
+            results["pr"] = feishu_bitable.sync_rows(root, pr_rows)
+            results["pr"]["rows"] = len(pr_rows)
+            repo_rows = mod.build_repo_rows(root)
+            results["repos"] = feishu_bitable.sync_table(
+                root, repo_rows, table_name=feishu_bitable.REPO_TABLE_NAME,
+                fields=feishu_bitable.REPO_FIELDS,
+                to_fields=feishu_bitable.repo_row_to_fields,
+                binding_key="repo_table_id")
+            results["repos"]["rows"] = len(repo_rows)
+            scan_rows = mod.build_scan_rows(root)
+            results["scan"] = feishu_bitable.sync_table(
+                root, scan_rows, table_name=feishu_bitable.SCAN_TABLE_NAME,
+                fields=feishu_bitable.SCAN_FIELDS,
+                to_fields=feishu_bitable.scan_row_to_fields,
+                binding_key="scan_table_id")
+            results["scan"]["rows"] = len(scan_rows)
+            _audit(root, "bitable_sync_manual", "3 tables",
+                   json.dumps(results, ensure_ascii=False)[:300])
+            return JSONResponse({"ok": True, **results})
         except Exception as e:  # noqa: BLE001
             _audit(root, "bitable_sync_error", "-", str(e)[:200])
             return JSONResponse({"detail": str(e)[:200]}, status_code=502)

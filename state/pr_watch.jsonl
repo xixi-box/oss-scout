@@ -865,3 +865,84 @@
 {"ts": "2026-11-04T22:41:53", "repo": "volcengine/OpenViking", "number": 6826, "action": "wait", "reason": ""}
 {"ts": "2026-11-04T22:41:56", "repo": "ruvnet/RuVector", "number": 1293, "action": "wait", "reason": ""}
 {"ts": "2026-11-04T22:41:56", "repo": "ruvnet/RuVector", "number": 1293, "action": "wait", "reason": ""}
+{"ts": "2026-11-04T23:00:47", "repo": "ClickHouse/ClickHouse", "number": 129144, "action": "wait", "reason": "Bot confirms all committers signed CLA; no action requested. (cached)"}
+{"ts": "2026-11-04T23:00:48", "repo": "ClickHouse/ClickHouse", "number": 129144, "action": "wait", "reason": "Bot confirms all committers signed CLA; no action requested. (cached)"}
+{"ts": "2026-11-04T23:00:49", "repo": "ClickHouse/ClickHouse", "number": 129144, "action": "wait", "reason": "Bot confirms all committers signed CLA; no action requested. (cached)"}
+{"ts": "2026-11-04T23:00:49", "repo": "ClickHouse/ClickHouse", "number": 129144, "action": "wait", "reason": "Bot confirms all committers signed CLA; no action requested. (cached)"}
+{"ts": "2026-11-04T23:00:50", "repo": "docker/compose", "number": 14450, "action": "address_review", "reason": "Update failing test expectation and add Matches-level regression test. (cached)"}
+{"ts": "2026-11-04T23:00:50", "repo": "docker/compose", "number": 14450, "action": "address_review", "reason": "Update failing test expectation and add Matches-level regression test. (cached)"}
+{"ts": "2026-11-04T23:00:51", "repo": "docker/compose", "number": 14450, "action": "address_review", "reason": "Update failing test expectation and add Matches-level regression test. (cached)"}
+{"ts": "2026-11-04T23:00:51", "repo": "docker/compose", "number": 14450, "action": "address_review", "reason": "Update failing test expectation and add Matches-level regression test. (cached)"}
+{"ts": "2026-11-04T23:00:58", "repo": "milvus-io/milvus", "number": 55034, "action": "wait", "reason": "Bot reports all CI stages passed; no action requested. (cached)"}
+{"ts": "2026-11-04T23:00:59", "repo": "milvus-io/milvus", "number": 55034, "action": "wait", "reason": "Bot reports all CI stages passed; no action requested. (cached)"}
+{"ts": "2026-11-04T23:01:00", "repo": "milvus-io/milvus", "number": 55034, "action": "wait", "reason": "Bot reports all CI stages passed; no action requested. (cached)"}
+{"ts": "2026-11-04T23:01:00", "repo": "milvus-io/milvus", "number": 54998, "action": "wait", "reason": "Bot reports CI passed with coverage warning; no action requested. (cached)"}
+{"ts": "2026-11-04T23:01:01", "repo": "milvus-io/milvus", "number": 54998, "action": "wait", "reason": "Bot reports CI passed with coverage warning; no action requested. (cached)"}
+{"ts": "2026-11-04T23:01:01", "repo": "milvus-io/milvus", "number": 55034, "action": "wait", "reason": "Bot reports all CI stages passed; no action requested. (cached)"}
+{"ts": "2026-11-04T23:01:02", "repo": "milvus-io/milvus", "number": 54998, "action": "wait", "reason": "Bot reports CI passed with coverage warning; no action requested. (cached)"}
+{"ts": "2026-11-04T23:01:02", "repo": "agentgateway/agentgateway", "number": 4264, "action": "wait", "reason": ""}
+{"ts": "2026-11-04T23:01:03", "repo": "agentgateway/agentgateway", "number": 4264, "action": "wait", "reason": ""}
+{"ts": "2026-11-04T23:01:04", "repo": "milvus-io/milvus", "number": 54998, "action": "wait", "reason": "Bot reports CI passed with coverage warning; no action requested. (cached)"}
+{"ts": "2026-11-04T23:01:05", "repo": "agentgateway/agentgateway", "number": 4264, "action": "wait", "reason": ""}
+{"ts": "2026-11-04T23:01:05", "repo": "modelcontextprotocol/registry", "number": 1788, "action": "wait", "reason": ""}
+{"ts": "2026-11-04T23:01:06", "repo": "modelcontextprotocol/registry", "number": 1788, "action": "wait", "reason": ""}
+{"ts": "2026-11-04T23:01:07", "repo": "agentgateway/agentgateway", "number": 4264, "action": "wait", "reason": ""}
+{"ts": "2026-11-04T23:01:08", "repo": "modelcontextprotocol/registry", "number": 1788, "action": "wait", "reason": ""}
+{"ts": "2026-11-04T23:01:08", "repo": "bytedance/deer-flow", "number": 7822, "action": "wait", "reason": ""}
+{"ts": "2026-11-04T23:01:09", "repo": "bytedance/deer-flow", "number": 7822, "action": "wait", "reason": ""}
+{"ts": "2026-11-04T23:01:09", "repo": "modelcontextprotocol/registry", "number": 1788, "action": "wait", "reason": ""}
+{"ts": "2026-11-04T23:01:11", "repo": "bytedance/deer-flow", "number": 7822, "action": "wait", "reason": ""}
+{"ts": "2026-11-04T23:01:11", "repo": "bytedance/deer-flow", "number": 7812, "action": "wait", "reason": "Bot notice confirming all committers signed the CLA; no action requested. (cached)"}
+{"ts": "2026-11-04T23:01:12", "repo": "bytedance/deer-flow", "number": 7812, "action": "wait", "reason": "Bot notice confirming all committers signed the CLA; no action requested. (cached)"}
+{"ts": "2026-11-04T23:01:12", "repo": "bytedance/deer-flow", "number": 7822, "action": "wait", "reason": ""}
+{"ts": "2026-11-04T23:01:13", "repo": "bytedance/deer-flow", "number": 7812, "action": "wait", "reason": "Bot notice confirming all committers signed the CLA; no action requested. (cached)"}
+{"ts": "2026-11-04T23:01:14", "repo": "Arize-ai/phoenix", "number": 17507, "action": "address_review", "reason": "Bot's Request changes review requires the contributor to make the requested changes. (cached)"}
+{"ts": "2026-11-04T23:01:14", "repo": "Arize-ai/phoenix", "number": 17507, "action": "address_review", "reason": "Bot's Request changes review requires the contributor to make the requested changes. (cached)"}
+{"ts": "2026-11-04T23:01:14", "repo": "bytedance/deer-flow", "number": 7812, "action": "wait", "reason": "Bot notice confirming all committers signed the CLA; no action requested. (cached)"}
+{"ts": "2026-11-04T23:01:15", "repo": "Arize-ai/phoenix", "number": 17507, "action": "address_review", "reason": "Bot's Request changes review requires the contributor to make the requested changes. (cached)"}
+{"ts": "2026-11-04T23:01:17", "repo": "promptfoo/promptfoo", "number": 12079, "action": "wait", "reason": "Codecov bot reports coverage status only; no action requested. (cached)"}
+{"ts": "2026-11-04T23:01:17", "repo": "Arize-ai/phoenix", "number": 17507, "action": "address_review", "reason": "Bot's Request changes review requires the contributor to make the requested changes. (cached)"}
+{"ts": "2026-11-04T23:01:17", "repo": "promptfoo/promptfoo", "number": 12079, "action": "wait", "reason": "Codecov bot reports coverage status only; no action requested. (cached)"}
+{"ts": "2026-11-04T23:01:22", "repo": "ruvnet/RuVector", "number": 1299, "action": "wait", "reason": ""}
+{"ts": "2026-11-04T23:01:23", "repo": "ruvnet/RuVector", "number": 1299, "action": "wait", "reason": ""}
+{"ts": "2026-11-04T23:01:24", "repo": "PrefectHQ/fastmcp", "number": 6195, "action": "wait", "reason": "Codex review failed to complete; no concrete change requested, just a retry notice. (cached)"}
+{"ts": "2026-11-04T23:01:24", "repo": "PrefectHQ/fastmcp", "number": 6195, "action": "wait", "reason": "Codex review failed to complete; no concrete change requested, just a retry notice. (cached)"}
+{"ts": "2026-11-04T23:01:25", "repo": "PrefectHQ/fastmcp", "number": 6195, "action": "wait", "reason": "Codex review failed to complete; no concrete change requested, just a retry notice. (cached)"}
+{"ts": "2026-11-04T23:01:30", "repo": "PrefectHQ/fastmcp", "number": 6172, "action": "wait", "reason": "Bot review failed; only offers optional retry, no concrete change requested. (cached)"}
+{"ts": "2026-11-04T23:01:30", "repo": "PrefectHQ/fastmcp", "number": 6195, "action": "wait", "reason": "Codex review failed to complete; no concrete change requested, just a retry notice. (cached)"}
+{"ts": "2026-11-04T23:01:30", "repo": "PrefectHQ/fastmcp", "number": 6172, "action": "wait", "reason": "Bot review failed; only offers optional retry, no concrete change requested. (cached)"}
+{"ts": "2026-11-04T23:01:30", "repo": "PrefectHQ/fastmcp", "number": 6172, "action": "wait", "reason": "Bot review failed; only offers optional retry, no concrete change requested. (cached)"}
+{"ts": "2026-11-04T23:01:32", "repo": "PrefectHQ/fastmcp", "number": 6172, "action": "wait", "reason": "Bot review failed; only offers optional retry, no concrete change requested. (cached)"}
+{"ts": "2026-11-04T23:01:32", "repo": "PrefectHQ/fastmcp", "number": 6171, "action": "wait", "reason": "Bot reports its review failed and offers a retry; no code change requested. (cached)"}
+{"ts": "2026-11-04T23:01:32", "repo": "PrefectHQ/fastmcp", "number": 6171, "action": "wait", "reason": "Bot reports its review failed and offers a retry; no code change requested. (cached)"}
+{"ts": "2026-11-04T23:01:33", "repo": "PrefectHQ/fastmcp", "number": 6171, "action": "wait", "reason": "Bot reports its review failed and offers a retry; no code change requested. (cached)"}
+{"ts": "2026-11-04T23:01:34", "repo": "volcengine/OpenViking", "number": 6826, "action": "wait", "reason": ""}
+{"ts": "2026-11-04T23:01:34", "repo": "PrefectHQ/fastmcp", "number": 6171, "action": "wait", "reason": "Bot reports its review failed and offers a retry; no code change requested. (cached)"}
+{"ts": "2026-11-04T23:01:34", "repo": "volcengine/OpenViking", "number": 6826, "action": "wait", "reason": ""}
+{"ts": "2026-11-04T23:01:35", "repo": "ruvnet/RuVector", "number": 1293, "action": "wait", "reason": ""}
+ ""}
+{"ts": "2026-11-04T23:01:35", "repo": "volcengine/OpenViking", "number": 6826, "action": "wait", "reason": ""}
+{"ts": "2026-11-04T23:01:35", "repo": "ruvnet/RuVector", "number": 1293, "action": "wait", "reason": ""}
+{"ts": "2026-11-04T23:01:37", "repo": "ruvnet/RuVector", "number": 1293, "action": "wait", "reason": ""}
+{"ts": "2026-11-04T23:01:37", "repo": "ruvnet/RuVector", "number": 1293, "action": "wait", "reason": ""}
+{"ts": "2026-11-04T23:01:51", "repo": "pulumi/pulumi", "number": 25467, "action": "wait", "reason": "Bot status notice says PR awaits maintainer action; no contributor change requested."}
+{"ts": "2026-11-04T23:01:57", "repo": "xixi-box/oss-scout-v2-test", "number": 10, "action": "wait", "reason": ""}
+{"ts": "2026-11-04T23:01:59", "repo": "pulumi/pulumi", "number": 25467, "action": "wait", "reason": "Bot reports PR is waiting for maintainer and lists maintainer commands; no contributor action requested."}
+{"ts": "2026-11-04T23:02:00", "repo": "pulumi/pulumi", "number": 25467, "action": "wait", "reason": "Bot notice lists maintainer commands; no contributor action requested."}
+{"ts": "2026-11-04T23:02:02", "repo": "Deep-Optica/SkillsMaster", "number": 129, "action": "wait", "reason": ""}
+{"ts": "2026-11-04T23:02:02", "repo": "pulumi/pulumi", "number": 25467, "action": "wait", "reason": "Bot notice says PR is waiting for maintainer action and lists available commands."}
+{"ts": "2026-11-04T23:02:02", "repo": "Deep-Optica/SkillsMaster", "number": 129, "action": "wait", "reason": ""}
+{"ts": "2026-11-04T23:02:04", "repo": "OpenHands/software-agent-sdk", "number": 6269, "action": "wait", "reason": "Review ping only; all green and asks for review, no action needed."}
+{"ts": "2026-11-04T23:02:10", "repo": "OpenHands/software-agent-sdk", "number": 6269, "action": "wait", "reason": "Review ping only; all green and asks for review, no action needed. (cached)"}
+{"ts": "2026-11-04T23:02:10", "repo": "xixi-box/oss-scout-v2-test", "number": 10, "action": "wait", "reason": ""}
+{"ts": "2026-11-04T23:02:10", "repo": "wxyu-deep-optica/skill-vdr", "number": 5, "action": "wait", "reason": ""}
+{"ts": "2026-11-04T23:02:11", "repo": "wxyu-deep-optica/skill-vdr", "number": 2, "action": "wait", "reason": ""}
+{"ts": "2026-11-04T23:02:11", "repo": "OpenHands/software-agent-sdk", "number": 6269, "action": "wait", "reason": "Review ping only; all green and asks for review, no action needed. (cached)"}
+{"ts": "2026-11-04T23:02:12", "repo": "wxyu-deep-optica/skill-vdr", "number": 8, "action": "wait", "reason": ""}
+{"ts": "2026-11-04T23:02:12", "repo": "OpenHands/software-agent-sdk", "number": 6269, "action": "wait", "reason": "Review ping only; all green and asks for review, no action needed. (cached)"}
+{"ts": "2026-11-04T23:02:12", "repo": "wxyu-deep-optica/skill-vdr", "number": 5, "action": "wait", "reason": ""}
+{"ts": "2026-11-04T23:02:13", "repo": "pydantic/pydantic-ai", "number": 9285, "action": "fix_ci", "reason": "failing checks: Package Label"}
+{"ts": "2026-11-04T23:02:13", "repo": "wxyu-deep-optica/skill-vdr", "number": 5, "action": "wait", "reason": ""}
+{"ts": "2026-11-04T23:02:13", "repo": "wxyu-deep-optica/skill-vdr", "number": 8, "action": "wait", "reason": ""}
+{"ts": "2026-11-04T23:02:13", "repo": "wxyu-deep-optica/skill-vdr", "number": 2, "action": "wait", "reason": ""}
+{"ts": "2026-11-04T23:02:14", "repo": "wxyu-deep-optica/skill-vdr", "number": 2, "action": "wait", "reason": ""}

@@ -25,7 +25,37 @@ from pathlib import Path
 from . import feishu_app
 
 TABLE_NAME = "PR 记录"
+REPO_TABLE_NAME = "仓库池"
 STATE_FILE = "feishu_bitable.json"
+
+# 「仓库池」表：监控名单 + 池审计（语言/stars/最近 push）。评分列等
+# pool_rates 把指标落盘后再补。
+
+# 「扫描发现」表：seen.json 的镜像——Worker 扫到的每个 issue 和它的去向
+# （入队 / 被规则否决 / 低分 / 未知仓库）。回答"这个 issue 为什么没被处理"。
+SCAN_TABLE_NAME = "扫描发现"
+SCAN_FIELDS = [
+    {"field_name": "键", "type": 1},
+    {"field_name": "仓库", "type": 1},
+    {"field_name": "issue号", "type": 2},
+    {"field_name": "状态", "type": 1},
+    {"field_name": "原因", "type": 1},
+    {"field_name": "链接", "type": 15},
+    {"field_name": "发现时间", "type": 5},
+]
+REPO_FIELDS = [
+    {"field_name": "键", "type": 1},
+    {"field_name": "仓库", "type": 1},
+    {"field_name": "owner", "type": 1},
+    {"field_name": "车道", "type": 3, "property": {"options": [
+        {"name": "open"}, {"name": "gated"}, {"name": "restricted"}]}},
+    {"field_name": "语言", "type": 1},
+    {"field_name": "stars", "type": 2},
+    {"field_name": "最近push", "type": 1},
+    {"field_name": "内部", "type": 3, "property": {"options": [
+        {"name": "是"}]}},
+    {"field_name": "备注", "type": 1},
+]
 
 # 字段类型：1 文本 2 数字 3 单选 5 日期时间 15 超链接
 FIELDS = [
@@ -124,8 +154,9 @@ def row_to_fields(row: dict) -> dict:
     return f
 
 
-def find_or_create_table(app_token: str) -> str:
-    """返回 PR 记录表的 table_id，没有就建。"""
+def find_or_create_table(app_token: str, table_name: str = TABLE_NAME,
+                         fields: list | None = None) -> str:
+    """按名字找表，没有就按字段规格建。"""
     tok = feishu_app.tenant_token()
     body = feishu_app._request(
         "GET", f"https://open.feishu.cn/open-apis/bitable/v1/apps/{app_token}/tables"
@@ -133,11 +164,11 @@ def find_or_create_table(app_token: str) -> str:
     if body.get("code") not in (0, None):
         raise RuntimeError(f"list tables: {str(body)[:200]}")
     for t in (body.get("data") or {}).get("items") or []:
-        if t.get("name") == TABLE_NAME:
+        if t.get("name") == table_name:
             return str(t["table_id"])
     created = feishu_app._request(
         "POST", f"https://open.feishu.cn/open-apis/bitable/v1/apps/{app_token}/tables",
-        {"table": {"name": TABLE_NAME, "fields": FIELDS}}, token=tok)
+        {"table": {"name": table_name, "fields": fields or FIELDS}}, token=tok)
     if created.get("code") != 0:
         raise RuntimeError(f"create table: {str(created)[:300]}")
     return str((created.get("data") or {}).get("table_id"))
@@ -193,10 +224,61 @@ def _fingerprint(fields: dict) -> str:
     return json.dumps(fields, ensure_ascii=False, sort_keys=True, default=str)
 
 
-def sync_rows(root: Path, rows: list[dict], *, force: bool = False) -> dict:
-    """把行同步进多维表格。返回 {created, updated, skipped, error}。
+def repo_row_to_fields(row: dict) -> dict:
+    f = {
+        "键": row["repo"],
+        "仓库": row["repo"],
+        "owner": str(row["repo"]).split("/", 1)[0],
+    }
+    if row.get("lane"):
+        f["车道"] = str(row["lane"])
+    if row.get("lang"):
+        f["语言"] = str(row["lang"])
+    if isinstance(row.get("stars"), int):
+        f["stars"] = row["stars"]
+    if row.get("pushed"):
+        f["最近push"] = str(row["pushed"])[:10]
+    if row.get("internal"):
+        f["内部"] = "是"
+    if row.get("note"):
+        f["备注"] = str(row["note"])[:800]
+    return f
 
-    绑定（app_token/table_id）已缓存就直接用；没有就现场发现。
+
+def scan_row_to_fields(row: dict) -> dict:
+    repo, _, num = str(row.get("key") or "").partition("#")
+    f = {
+        "键": row.get("key") or "",
+        "仓库": repo,
+    }
+    if num.isdigit():
+        f["issue号"] = int(num)
+        f["链接"] = {"text": f"{repo}#{num}",
+                     "link": f"https://github.com/{repo}/issues/{num}"}
+    if row.get("status"):
+        f["状态"] = str(row["status"])
+    if row.get("why"):
+        f["原因"] = str(row["why"])[:500]
+    if row.get("first_seen"):
+        ms = _iso_to_ms(str(row["first_seen"]).replace(" ", "T"))
+        if ms:
+            f["发现时间"] = ms
+    return f
+
+
+def sync_rows(root: Path, rows: list[dict], *, force: bool = False) -> dict:
+    """把 PR 行同步进「PR 记录」表。见 sync_table()。"""
+    return sync_table(root, rows, table_name=TABLE_NAME, fields=FIELDS,
+                      to_fields=row_to_fields, binding_key="pr_table_id",
+                      force=force)
+
+
+def sync_table(root: Path, rows: list[dict], *, table_name: str, fields: list,
+               to_fields, binding_key: str, force: bool = False) -> dict:
+    """把行 upsert 进指定表；表和字段不存在就建。返回计数摘要。
+
+    同一个 base 里可挂多张表（PR 记录 / 仓库池 / 候选池…），每张表用自己的
+    binding_key 缓存 table_id。键列恒为"键"（repo#number 或 repo 本身）。
     """
     binding = load_binding(root)
     app_token = _binding_app_token(root)
@@ -204,14 +286,15 @@ def sync_rows(root: Path, rows: list[dict], *, force: bool = False) -> dict:
         raise RuntimeError(
             "no bitable app_token — 设 FEISHU_BITABLE_APP_TOKEN，或把表格链接"
             "里的 token 存进 state/feishu_bitable.json")
-    table_id = binding.get("table_id") or find_or_create_table(app_token)
-    save_binding(root, {"app_token": app_token, "table_id": table_id})
+    table_id = binding.get(binding_key) or find_or_create_table(
+        app_token, table_name, fields)
+    save_binding(root, {"app_token": app_token, binding_key: table_id})
 
     tok = feishu_app.tenant_token()
     existing = load_records(app_token, table_id)
+    all_fields = [to_fields(r) for r in rows]
     to_create, to_update = [], []
-    for row in rows:
-        fields = row_to_fields(row)
+    for fields in all_fields:
         key = fields["键"]
         hit = existing.get(key)
         if hit is None:
@@ -237,7 +320,7 @@ def sync_rows(root: Path, rows: list[dict], *, force: bool = False) -> dict:
     # 只在拿到非空行集时执行——GitHub 全挂时 rows 为空，那不能当"全部剔除"。
     pruned = 0
     if rows:
-        incoming = {f"{r['repo']}#{r['number']}" for r in rows}
+        incoming = {f["键"] for f in all_fields}
         stale = [hit["record_id"] for key, hit in existing.items()
                  if key not in incoming]
         for i in range(0, len(stale), 500):

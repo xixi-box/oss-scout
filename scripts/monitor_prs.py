@@ -812,3 +812,71 @@ def build_pr_rows(root) -> list[dict]:
         row["note"] = "；".join(p for p in note_parts if p)[:600]
 
     return [r for r in rows if not ledger_excludes(r)]
+
+
+def build_repo_rows(root) -> list[dict]:
+    """「仓库池」表的行：监控名单 ⊕ 池审计（语言/stars/最近 push）。
+
+    两个来源都是本地文件（configs/repositories.yaml + state/pool_audit.json），
+    零 GitHub 调用——池子变化本来就低频，审计文件跑 audit_pool 时刷新。
+    """
+    import yaml
+    cfg_path = root / "configs" / "repositories.yaml"
+    if not cfg_path.exists():
+        cfg_path = ROOT / "configs" / "repositories.yaml"
+    cfg = yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {}
+    repos = cfg.get("repositories") or {}
+
+    audit: dict = {}
+    for path in (root / "state" / "pool_audit.json",
+                 ROOT / "state" / "pool_audit.json"):
+        try:
+            for item in json.loads(path.read_text(encoding="utf-8")) or []:
+                audit[str(item.get("repo") or "")] = item
+            break
+        except (OSError, json.JSONDecodeError):
+            continue
+
+    rows = []
+    for repo, spec in repos.items():
+        spec = spec or {}
+        a = audit.get(repo) or {}
+        rows.append({
+            "repo": repo,
+            "lane": spec.get("lane") or "open",
+            "internal": bool(spec.get("internal")),
+            "lang": a.get("lang") or "",
+            "stars": a.get("stars"),
+            "pushed": a.get("pushed") or "",
+            "note": "；".join(str(x) for x in (a.get("gate_workflows") or []))[:400],
+        })
+    return rows
+
+
+def build_scan_rows(root) -> list[dict]:
+    """「扫描发现」表的行：seen.json 全量镜像。
+
+    这是发现层的总账——Worker 扫到的每个 issue 都在，含被规则否决和
+    低分淘汰的。排序按发现时间倒序，表里最新的在最上面（飞书默认视图
+    按插入顺序，所以行的顺序不影响，但便于调试）。
+    """
+    seen_path = root / "state" / "seen.json"
+    if not seen_path.exists():
+        seen_path = ROOT / "state" / "seen.json"
+    try:
+        seen = json.loads(seen_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    rows = []
+    for key, v in seen.items():
+        v = v or {}
+        if "#" not in key:
+            continue
+        rows.append({
+            "key": key,
+            "status": str(v.get("status") or ""),
+            "why": str(v.get("why") or ""),
+            "first_seen": str(v.get("first_seen") or ""),
+        })
+    rows.sort(key=lambda r: r["first_seen"], reverse=True)
+    return rows

@@ -171,10 +171,12 @@ class TestSyncDiff:
         assert out["updated"] == 1 and out["created"] == 0
 
     def test_binding_is_cached(self, fake, tmp_path):
+        """table_id 按表名各存一份（base 里有多张表，互相不覆盖）。"""
         fb.sync_rows(tmp_path, [_row()])
         binding = json.loads((tmp_path / "state" / "feishu_bitable.json")
                              .read_text(encoding="utf-8"))
-        assert binding == {"app_token": "app1", "table_id": "tbl1"}
+        assert binding["app_token"] == "app1"
+        assert binding["pr_table_id"] == "tbl1"
 
     def test_closed_rows_are_kept_never_deleted(self, fake, tmp_path):
         fb.sync_rows(tmp_path, [_row(state="open")])
