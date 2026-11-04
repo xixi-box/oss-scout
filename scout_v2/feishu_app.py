@@ -193,6 +193,13 @@ def build_reply_card(repo: str, number: int, issue_title: str,
         {"tag": "form", "name": "form_reply", "elements": [
             {"tag": "input", "name": "reply_text",
              "default_value": str(draft)[:1000],
+             # 单行输入框写评审回复太挤（实测 378 字的草稿只能看到开头一行）。
+             # multiline_text + rows 给足可视高度，auto_resize 让长文本自己撑开。
+             "input_type": "multiline_text",
+             "rows": 6,
+             "auto_resize": True,
+             "max_rows": 12,
+             "width": "fill",
              "placeholder": {"tag": "plain_text",
                              "content": "在此修改回复内容"},
              # 飞书 input 的 max_length 上限就是 1000，超了整张卡 400
@@ -213,6 +220,57 @@ def build_reply_card(repo: str, number: int, issue_title: str,
             "template": "orange",
         },
         "elements": elements,
+    }
+
+
+def update_card_message(message_id: str, card: dict) -> tuple[bool, str]:
+    """原地更新已发出的卡片（im/v1/messages PATCH）。
+
+    点击发送后，飞书只会用回调响应里的卡片替换**那一条**消息；如果响应
+    丢了（网络、超时），或者我们想让这张卡片在之后继续反映真实状态，
+    就需要主动 PATCH 一次。卡片必须发出时带 update_multi=true。
+    """
+    if not message_id:
+        return False, "no message_id"
+    tok = tenant_token()
+    if not tok:
+        return False, "no tenant token"
+    payload = {"content": json.dumps(card, ensure_ascii=False)}
+    try:
+        body = _request(
+            "PATCH",
+            f"https://open.feishu.cn/open-apis/im/v1/messages/{message_id}",
+            payload, token=tok)
+        ok = body.get("code") == 0
+        return ok, ("" if ok else str(body)[:300])
+    except urllib.error.HTTPError as e:
+        try:
+            parsed = json.loads(e.read().decode("utf-8", "replace"))
+            return False, f"HTTP {e.code}: {parsed.get('msg') or ''}"[:300]
+        except Exception:  # noqa: BLE001
+            return False, f"HTTP {e.code}"
+    except Exception as e:  # noqa: BLE001
+        return False, str(e)[:300]
+
+
+def build_sent_card(repo: str, number: int, reply_text: str,
+                    *, pr_url: str = "") -> dict:
+    """"已回复"确认卡片：替换掉输入表单，留下发出去了什么。"""
+    link = pr_url or f"https://github.com/{repo}/pull/{number}"
+    return {
+        "config": {"wide_screen_mode": True, "update_multi": True},
+        "header": {
+            "title": {"tag": "plain_text",
+                      "content": f"✅ 已回复 {repo}#{number}"},
+            "template": "green",
+        },
+        "elements": [
+            {"tag": "div", "text": {"tag": "lark_md",
+                                    "content": f"**仓库**：[{repo}#{number}]({link})"}},
+            {"tag": "div", "text": {"tag": "lark_md",
+                                    "content": "**已发出的回复**：\n"
+                                               + str(reply_text)[:900]}},
+        ],
     }
 
 

@@ -1200,17 +1200,20 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
         # 回传新卡片：把表单替换成"已发送"确认。
         # 飞书要求 card 包一层 {"type": "raw", "data": {...}}；直接返回裸
         # card 对象不会更新卡片，点击后仍停在旧的输入框上。
-        summary = "回复已以 xixi-box 身份发出：\n\n" + reply_text[:800]
+        from scout_v2.feishu_app import build_sent_card, update_card_message
+        sent_card = build_sent_card(repo, number, reply_text)
+        # 除了回传，再主动 PATCH 一次原消息。回调响应若超时或丢失，
+        # 卡片会一直停在输入框状态，人不知道到底发没发出去。
+        msg_id = str(body.get("open_message_id")
+                     or (body.get("event") or {}).get("context", {})
+                     .get("open_message_id") or "")
+        if msg_id:
+            ok_upd, err = update_card_message(msg_id, sent_card)
+            _audit(root, "feishu_card_update", key,
+                   "ok" if ok_upd else f"failed: {err[:120]}")
         return JSONResponse({
             "toast": {"type": "success", "content": "已发送 ✓"},
-            "card": {"type": "raw", "data": {
-                "config": {"wide_screen_mode": True, "update_multi": True},
-                "header": {"title": {"tag": "plain_text",
-                          "content": f"✅ 已回复 {repo}#{num_s}"}, "template": "green"},
-                "elements": [
-                    {"tag": "div", "text": {"tag": "lark_md", "content": summary}},
-                ],
-            }},
+            "card": {"type": "raw", "data": sent_card},
         })
 
     @app.post("/api/pr/reply/dismiss")

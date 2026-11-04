@@ -321,3 +321,67 @@ class TestCardLinkAndState:
         blob = self._all_text(self._card(fix_state="none"))
         assert "已修改" not in blob
 
+
+
+class TestInputIsMultiline:
+    """草稿动辄三四百字，单行输入框只能看到开头一行，改不动。"""
+
+    def _input(self):
+        card = feishu_app.build_reply_card(
+            "a/b", 1, "t", "m", "c", "rc", "x" * 300)
+        return [n for n in _walk(card) if n.get("tag") == "input"][0]
+
+    def test_input_is_multiline(self):
+        assert self._input()["input_type"] == "multiline_text"
+
+    def test_has_visible_rows(self):
+        inp = self._input()
+        assert inp.get("rows", 0) >= 4
+
+    def test_grows_with_content(self):
+        assert self._input().get("auto_resize") is True
+        assert self._input().get("max_rows", 0) > 6
+
+    def test_max_length_still_within_feishu_limit(self):
+        assert self._input()["max_length"] <= 1000
+
+
+class TestSentCard:
+    def test_sent_card_replaces_the_form(self):
+        card = feishu_app.build_sent_card("a/b", 7, "thanks!")
+        assert card["header"]["template"] == "green"
+        tags = [e.get("tag") for e in card["elements"]]
+        assert "form" not in tags, "sent card must not keep the input form"
+        assert "thanks!" in json.dumps(card, ensure_ascii=False)
+
+    def test_sent_card_links_to_pr(self):
+        blob = json.dumps(feishu_app.build_sent_card(
+            "docker/compose", 14450, "x",
+            pr_url="https://github.com/docker/compose/pull/14450"),
+            ensure_ascii=False)
+        assert "[/pull/14450" in blob or "docker/compose#14450](" in blob
+
+
+class TestCardUpdate:
+    """发送后要主动 PATCH 原消息，否则回调响应丢了卡片就停在输入框。"""
+
+    def test_patch_uses_message_id(self, monkeypatch):
+        monkeypatch.setattr(feishu_app, "tenant_token", lambda: "tok")
+        seen = {}
+
+        def fake_request(method, url, payload=None, token=None):
+            seen.update(method=method, url=url, payload=payload)
+            return {"code": 0, "msg": "ok"}
+
+        monkeypatch.setattr(feishu_app, "_request", fake_request)
+        ok, err = feishu_app.update_card_message("om_123", {"elements": []})
+        assert ok is True and err == ""
+        assert seen["method"] == "PATCH"
+        assert "om_123" in seen["url"]
+        # content 必须是序列化后的字符串
+        assert isinstance(seen["payload"]["content"], str)
+
+    def test_missing_message_id_is_reported(self):
+        ok, err = feishu_app.update_card_message("", {"elements": []})
+        assert ok is False
+        assert "message_id" in err
