@@ -485,10 +485,8 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
                                        f"reason={str(fix_out.get('reason'))[:120]}")
                                 if fix_out.get("dispatched"):
                                     # 先标 pending：卡片要能说"正在改"，
-                                    # 等 workflow 回调再翻成 ready
+                                    # 等 workflow 回调再翻成 pushed
                                     _mark_reply(key, "draft", fix_state="pending",
-                                                fix_branch=str(
-                                                    fix_out.get("staging_branch") or ""),
                                                 fix_fork=str(
                                                     fix_out.get("fork_repo") or ""))
                             except Exception as e:  # noqa: BLE001
@@ -1058,51 +1056,6 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
             return False, str(e)[:200]
         return r.returncode == 0, (r.stderr or "")[:200]
 
-    def _push_staged_if_any(key: str) -> tuple[bool | None, str]:
-        """把暂存分支上的改动快进到 PR 分支。返回 (是否推送过, 描述)。
-
-        None = 没有暂存改动（纯回复场景），False = 尝试了但失败。
-        推送用 fast-forward：暂存分支是 PR 分支的直接后代，所以不需要
-        force-push（Playbook §0.3 永不 force-push 用户仓库的 PR 分支）。
-        """
-        import subprocess as sp
-
-        rp = root / "state" / "pr_replies.json"
-        try:
-            entry = json.loads(rp.read_text(encoding="utf-8")).get(key) or {}
-        except (OSError, json.JSONDecodeError):
-            return None, ""
-        if entry.get("fix_state") != "ready":
-            return None, ""
-        branch = str(entry.get("fix_branch") or "")
-        sha = str(entry.get("fix_sha") or "")
-        fork = str(entry.get("fix_fork") or "")
-        if not (branch and fork):
-            return None, ""
-        repo, _, num = key.partition("#")
-        if not str(num).isdigit():
-            return None, ""
-        # 目标是 fork 上的 PR 分支；上游 PR 会跟着 fork 分支自动更新
-        target = branch
-        try:
-            r = sp.run(["git", "ls-remote", "--heads",
-                        f"https://github.com/{fork}.git", target],
-                       capture_output=True, text=True, timeout=60)
-            if r.returncode != 0:
-                return False, f"ls-remote failed: {(r.stderr or '')[:120]}"
-            # 用 GitHub API 做快进引用更新，避免本地 clone
-            out = sp.run(["gh", "api", "-X", "PATCH",
-                          f"repos/{fork}/git/refs/heads/{target}",
-                          "-f", f"sha={sha}", "-F", "force=false"],
-                         capture_output=True, text=True, timeout=60)
-            if out.returncode != 0:
-                detail = (out.stderr or out.stdout or "")[:200]
-                return False, f"ref update failed: {detail}"
-            _audit(root, "pr_fix_pushed", key, f"{fork}@{target} -> {sha[:12]}")
-            return True, f"{sha[:7]} → {target}"
-        except Exception as e:  # noqa: BLE001
-            return False, str(e)[:150]
-
     def _mark_reply(key: str, status: str, **extra) -> None:
         rp = root / "state" / "pr_replies.json"
         try:
@@ -1141,21 +1094,19 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
         if not repo or not isinstance(num, int):
             return JSONResponse({"detail": "repo/number required"}, status_code=400)
         key = f"{repo}#{num}"
-        staged = bool(body.get("staged", body.get("test_ok")))
-        extra = {"fix_state": "ready" if staged else "failed",
+        pushed = bool(body.get("pushed", body.get("test_ok")))
+        extra = {"fix_state": "pushed" if pushed else "failed",
                  "fix_test_result": str(body.get("test_result") or "")[:200],
                  "fix_changed": [str(c)[:120] for c in
                                  (body.get("changed_files") or [])][:10],
-                 "fix_staged_at": time.strftime("%Y-%m-%dT%H:%M:%S")}
-        if body.get("staging_sha"):
-            extra["fix_sha"] = str(body["staging_sha"])
-        if body.get("staging_branch"):
-            extra["fix_branch"] = str(body["staging_branch"])
+                 "fix_done_at": time.strftime("%Y-%m-%dT%H:%M:%S")}
+        if body.get("pushed_sha"):
+            extra["fix_sha"] = str(body["pushed_sha"])
         if body.get("fork_repo"):
             extra["fix_fork"] = str(body["fork_repo"])
         _mark_reply(key, "draft", **extra)
         _audit(root, "pr_fix_result", key,
-               f"staged={staged} test={str(body.get('test_result'))[:80]}")
+               f"pushed={pushed} test={str(body.get('test_result'))[:80]}")
         return JSONResponse({"ok": True})
 
     @app.post("/api/pr/reply/send")
@@ -1227,16 +1178,10 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
         number = int(num_s)
         key = f"{repo}#{number}"
 
-        # 有暂存改动就先推：这是整条链路上唯一动别人 PR 的时刻，
-        # 由人点按钮触发。推送失败就不发评论——那条评论会声称"已改好"，
-        # 而实际上没有。
-        pushed, push_detail = _push_staged_if_any(key)
-        if pushed is False:
-            _audit(root, "feishu_cb_push_failed", key, push_detail)
-            return JSONResponse({"toast": {
-                "type": "error",
-                "content": "推送修改失败，回复未发送：" + push_detail[:90]}})
-
+        # 代码修改已经在 pr-fix 那一步自动推送过了，这里只负责发回复。
+        # 人审的边界是"对外文字"，不是代码——但回复里若声称改了什么，
+        # 那个改动必须真的已经在 PR 上，否则就是撒谎。fix_state 只用于
+        # 卡片展示，不阻塞发送。
         ok, detail = _post_pr_comment(repo, number, reply_text)
         if not ok:
             _audit(root, "feishu_cb_send_failed", key, detail)
@@ -1247,8 +1192,6 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
         _audit(root, "feishu_cb_sent", key, reply_text[:200])
         # 回传新卡片：把表单替换成"已发送"确认（卡片 1.0：组件用 tag）
         summary = "回复已以 xixi-box 身份发出：\n\n" + reply_text[:800]
-        if pushed:
-            summary = f"✅ 修改已推送（{push_detail}）\n\n" + summary
         return JSONResponse({
             "toast": {"type": "success", "content": "已发送 ✓"},
             "card": {

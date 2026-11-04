@@ -149,7 +149,7 @@ jobs:
             --fix "$RUNNER_TEMP/fix.json" \
             --repo-dir "$RUNNER_TEMP/repo" | tee "$RUNNER_TEMP/prfix.json"
 
-      - name: Commit to a staging branch
+      - name: Commit and push to the PR branch
         id: stage
         shell: bash
         env:
@@ -171,12 +171,12 @@ jobs:
           out = open(os.environ["RUNNER_TEMP"] + "/prfix.json", encoding="utf-8").read()
           m = re.search(r"##OSSCOUT_PRFIX##(.*)", out, re.S)
           if not m:
-              sys.exit("worker produced no result marker; refusing to stage")
+              sys.exit("worker produced no result marker; refusing to push")
           res = json.loads(m.group(1).strip().split("\n")[0])
           print("worker result:", {k: res.get(k) for k in
                                    ("fixed", "test_ok", "test_result")})
           if not res.get("test_ok"):
-              sys.exit("tests did not pass or could not run -> refusing to stage")
+              sys.exit("tests did not pass or could not run -> refusing to push")
           PY
           git config user.name "wangshun"
           git config user.email "96341168+xixi-box@users.noreply.github.com"
@@ -193,19 +193,17 @@ jobs:
           )
           git commit -q -m "$MSG"
 
-          # 关键：推到**暂存分支**，不碰 PR 分支。
-          # 这条链路的所有权是"人点一下按钮才动别人的 PR"，所以自动化只
-          # 负责把改动做好、验好、放在旁边；推送由 /feishu/callback 完成。
-          STAGING="${BRANCH}-staged"
-          git push --force \
+          # 直接推 PR 分支：代码修改不需要人放行（验过的补丁就是该推的）。
+          # 人只对"对外文字"负责——回复在飞书卡片里等人点发送。
+          git push \
             "https://x-access-token:$GH_TOKEN@github.com/$FORK_REPO.git" \
-            "HEAD:refs/heads/$STAGING"
+            "HEAD:$BRANCH"
           SHA=$(git rev-parse HEAD)
-          echo "staged $SHA on $FORK_REPO@$STAGING"
-          echo "staging_sha=$SHA" >> "$GITHUB_OUTPUT"
-          echo "outcome=staged" >> "$GITHUB_OUTPUT"
+          echo "pushed $SHA to $FORK_REPO@$BRANCH"
+          echo "pushed_sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "outcome=pushed" >> "$GITHUB_OUTPUT"
 
-      - name: Record staging result for the dashboard
+      - name: Record result for the dashboard
         if: always()
         shell: bash
         env:
@@ -230,9 +228,8 @@ jobs:
                      "test_ok": res.get("test_ok"),
                      "test_result": res.get("test_result"),
                      "changed_files": res.get("changed_files") or [],
-                     "staged": bool(res.get("changed_files")) and bool(res.get("test_ok")),
-                     "staging_sha": os.environ.get("STAGING_SHA", ""),
-                     "staging_branch": j["branch"] + "-staged",
+                     "pushed": bool(res.get("changed_files")) and bool(res.get("test_ok")),
+                     "pushed_sha": os.environ.get("PUSHED_SHA", ""),
                      "fork_repo": j["fork_repo"]}
           token = os.environ.get("INGEST_TOKEN", "")
           url = (os.environ.get("DASHBOARD_URL", "") or "").rstrip("/") \
@@ -253,4 +250,4 @@ jobs:
         env:
           INGEST_TOKEN: ${{ secrets.CF_INGEST_TOKEN }}
           DASHBOARD_URL: ${{ secrets.DASHBOARD_PUBLIC_URL }}
-          STAGING_SHA: ${{ steps.stage.outputs.staging_sha }}
+          PUSHED_SHA: ${{ steps.stage.outputs.pushed_sha }}

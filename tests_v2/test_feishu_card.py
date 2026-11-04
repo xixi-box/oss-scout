@@ -298,29 +298,26 @@ class TestCardLinkAndState:
         blob = self._all_text(card)
         assert "https://github.com/docker/compose/pull/14450" in blob
 
-    def test_fix_ready_says_modified_and_button_pushes(self):
-        card = self._card(fix_state="ready")
-        blob = self._all_text(card)
-        assert "已修改并提交" in blob
-        assert "发送回复并推送修改" in blob
+    def test_fix_pushed_is_reported(self):
+        blob = self._all_text(self._card(fix_state="pushed"))
+        assert "已修改并推送" in blob
 
     def test_fix_pending_says_in_progress(self):
         blob = self._all_text(self._card(fix_state="pending"))
-        assert "正在流水线里执行" in blob
-        assert "发送回复并推送修改" in blob
+        assert "代码修改进行中" in blob
 
-    def test_no_fix_button_only_sends_reply(self):
-        blob = self._all_text(self._card(fix_state="none"))
-        assert "一键发送回复" in blob
-        assert "发送回复并推送修改" not in blob
+    def test_fix_failed_is_reported(self):
+        blob = self._all_text(self._card(fix_state="failed"))
+        assert "未完成" in blob
+
+    def test_button_always_only_sends(self):
+        """代码修改自动推送；人对文字负责，所以按钮只发回复。"""
+        for st in ("none", "pending", "pushed", "failed"):
+            blob = self._all_text(self._card(fix_state=st))
+            assert "一键发送回复" in blob, st
+            assert "推送修改" not in blob, st
 
     def test_status_line_absent_when_no_fix(self):
         blob = self._all_text(self._card(fix_state="none"))
-        assert "已修改并提交" not in blob
+        assert "已修改" not in blob
 
-    def test_already_pushed_says_so_and_only_sends(self):
-        """改动若已经在 PR 分支上（例如本轮之前推的），不能谎称"待推送"。"""
-        blob = self._all_text(self._card(fix_state="pushed"))
-        assert "已修改并推送" in blob
-        assert "一键发送回复" in blob
-        assert "发送回复并推送修改" not in blob

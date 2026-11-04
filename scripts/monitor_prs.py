@@ -544,9 +544,9 @@ def dispatch_pr_fix(repo: str, number: int, *, dry_run: bool = False,
                      "reason": why if ok else "dispatch failed"}
     _save_attempts(attempts)
     return {"dispatched": ok, "reason": why, "job_id": job_id, "kind": kind,
-            # 改动落在 fork 的 ${branch}-staged 上，等人在飞书点按钮才快进
+            # 改动会被 pr-fix 直接推到这个 fork 分支的 PR 分支上
             "fork_repo": payload["fork_repo"],
-            "staging_branch": f"{payload['branch']}-staged"}
+            "branch": payload["branch"]}
 
 
 def _save_attempts(data: dict) -> None:

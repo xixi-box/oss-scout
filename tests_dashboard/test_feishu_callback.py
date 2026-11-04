@@ -184,21 +184,19 @@ class TestReplySendApi:
         assert data["acme/real#7"]["status"] == "dismissed"
 
 
-class TestPushBeforeComment:
-    """点"发送"时如果暂存了改动，必须先推、再发评论。
+class TestSendOnlyPostsComment:
+    """按钮只发回复：代码修改由 pr-fix 自动推送，不需要人放行。
 
-    顺序不能反：评论会声称"已按你说的改好了"。推送失败还发出去，就是
-    对维护者说了假话——比不发糟得多。
+    这条边界是刻意的——人审的是"对外文字"，代码改动只要验过就该推。
+    所以点击时不做任何 git 操作，只发一条评论。
     """
 
-    def _with_staged(self, tmp_path):
+    def _with_fix(self, tmp_path, state):
         rp = tmp_path / "state" / "pr_replies.json"
         rp.write_text(json.dumps({"acme/real#7": {
-            "status": "draft", "draft": "x",
-            "fix_state": "ready",
-            "fix_branch": "fix/1-abc-staged",
-            "fix_sha": "c" * 40,
-            "fix_fork": "xixi-box/real"}}), encoding="utf-8")
+            "status": "draft", "draft": "x", "fix_state": state,
+            "fix_sha": "c" * 40, "fix_fork": "xixi-box/real"}}),
+            encoding="utf-8")
 
     def _submit(self, client):
         return cb(client, {"event": {
@@ -207,52 +205,8 @@ class TestPushBeforeComment:
                 "value": {"do": "send", "repo": "acme/real", "number": "7"},
                 "form_value": {"reply_text": "thanks, done"}}}})
 
-    def test_push_happens_before_comment(self, client, tmp_path, monkeypatch):
-        self._with_staged(tmp_path)
-        import subprocess as sp
-        order = []
-
-        def fake_run(cmd, **k):
-            joined = " ".join(cmd)
-            if "git/refs/heads" in joined:
-                order.append("push")
-                return sp.CompletedProcess(cmd, 0, "{}", "")
-            if "/issues/7/comments" in joined:
-                order.append("comment")
-                return sp.CompletedProcess(cmd, 0, "https://x", "")
-            return sp.CompletedProcess(cmd, 0, "", "")
-
-        monkeypatch.setattr(sp, "run", fake_run)
-        r = self._submit(client)
-        assert r.status_code == 200
-        assert order == ["push", "comment"], order
-
-    def test_push_failure_blocks_the_comment(self, client, tmp_path, monkeypatch):
-        self._with_staged(tmp_path)
-        import subprocess as sp
-        called = []
-
-        def fake_run(cmd, **k):
-            joined = " ".join(cmd)
-            if "git/refs/heads" in joined:
-                return sp.CompletedProcess(cmd, 1, "", "protected branch")
-            called.append(joined)
-            return sp.CompletedProcess(cmd, 0, "", "")
-
-        monkeypatch.setattr(sp, "run", fake_run)
-        r = self._submit(client)
-        assert r.status_code == 200                     # 卡片要能回话
-        assert r.json()["toast"]["type"] == "error"
-        assert not any("comments" in c for c in called), "comment must not be posted"
-        # 草稿仍待发，不能标成 sent
-        data = json.loads((tmp_path / "state" / "pr_replies.json")
-                          .read_text(encoding="utf-8"))
-        assert data["acme/real#7"]["status"] == "draft"
-
-    def test_plain_reply_skips_push(self, client, tmp_path, monkeypatch):
-        rp = tmp_path / "state" / "pr_replies.json"
-        rp.write_text(json.dumps({"acme/real#7": {
-            "status": "draft", "draft": "x"}}), encoding="utf-8")
+    def test_no_git_operations_on_send(self, client, tmp_path, monkeypatch):
+        self._with_fix(tmp_path, "pushed")
         import subprocess as sp
         seen = []
 
@@ -263,8 +217,20 @@ class TestPushBeforeComment:
         monkeypatch.setattr(sp, "run", fake_run)
         r = self._submit(client)
         assert r.status_code == 200
-        assert not any("refs/heads" in c for c in seen)
         assert any("/issues/7/comments" in c for c in seen)
+        assert not any("refs/heads" in c for c in seen),             "send must not touch git refs"
+
+    def test_send_works_even_when_fix_failed(self, client, tmp_path, monkeypatch):
+        """改代码失败了也不该堵住回复——人可以说"我看过了，先回这句"。"""
+        self._with_fix(tmp_path, "failed")
+        import subprocess as sp
+        monkeypatch.setattr(sp, "run", lambda cmd, **k: sp.CompletedProcess(
+            cmd, 0, "https://x", ""))
+        r = self._submit(client)
+        assert r.status_code == 200
+        data = json.loads((tmp_path / "state" / "pr_replies.json")
+                          .read_text(encoding="utf-8"))
+        assert data["acme/real#7"]["status"] == "sent"
 
 
 class TestFixResultEndpoint:
@@ -275,7 +241,7 @@ class TestFixResultEndpoint:
         # 测试环境 cloudflare.yaml 里 ingest_token 是 "t"
         assert r.status_code == 403
 
-    def test_records_staged_state(self, client, tmp_path):
+    def test_records_pushed_state(self, client, tmp_path):
         rp = tmp_path / "state" / "pr_replies.json"
         rp.write_text(json.dumps({"a/b#1": {"status": "draft"}}), encoding="utf-8")
         r = client.post("/api/pr/reply/fix-result",
@@ -283,12 +249,20 @@ class TestFixResultEndpoint:
                         json={"repo": "a/b", "number": 1, "test_ok": True,
                               "test_result": "go test rc=0",
                               "changed_files": ["pkg/watch/x_test.go"],
-                              "staging_sha": "d" * 40,
-                              "staging_branch": "fix/1-abc-staged",
+                              "pushed": True,
+                              "pushed_sha": "d" * 40,
                               "fork_repo": "xixi-box/b"})
         assert r.status_code == 200
         data = json.loads(rp.read_text(encoding="utf-8"))
         e = data["a/b#1"]
-        assert e["fix_state"] == "ready"
+        assert e["fix_state"] == "pushed"
         assert e["fix_sha"] == "d" * 40
-        assert e["fix_branch"] == "fix/1-abc-staged"
+
+    def test_failed_fix_is_not_reported_as_pushed(self, client, tmp_path):
+        rp = tmp_path / "state" / "pr_replies.json"
+        rp.write_text(json.dumps({"a/b#1": {"status": "draft"}}), encoding="utf-8")
+        client.post("/api/pr/reply/fix-result", headers={"X-Ingest-Token": "t"},
+                    json={"repo": "a/b", "number": 1, "pushed": False,
+                          "test_ok": False, "test_result": "rc=1"})
+        e = json.loads(rp.read_text(encoding="utf-8"))["a/b#1"]
+        assert e["fix_state"] == "failed"
