@@ -5,19 +5,5 @@ jobs:
   t:
     runs-on: [self-hosted, aliyun]
     steps:
-      - run: |
-          docker exec oss-scout python -c "
-import sys
-sys.path.insert(0, '/app')
-from scout_v2.notify import feishu_send_card
-ok = feishu_send_card(
-    '✅ 飞书通知接入成功',
-    'oss-scout 流水线通知已就绪。之后这些事件会推到这里：\n'
-    '· **回复草稿待人审**（点下方按钮直达看板发送）\n'
-    '· CI 挂红并已派自动修复\n'
-    '· 新 PR 开出 / 候选升级转人工',
-    button_text='打开 PR 管理页',
-    button_url='https://oss.wangshun.work/prs',
-    force=True)
-print('sent:', ok)
-"
+      - name: Send test card
+        run: docker exec oss-scout python /app/scripts/feishu_probe.py
