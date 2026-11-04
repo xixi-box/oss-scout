@@ -1,0 +1,17 @@
+name: compose-test-probe
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: xixi-box/compose
+          ref: fix/issue-14447-91316c8
+          fetch-depth: 1
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Run watch package tests
+        run: go test ./pkg/watch/ -run 'TestNewDockerPatternMatcher|TestDockerPathMatcher_MatchesAllowList' -v 2>&1 | tail -60
