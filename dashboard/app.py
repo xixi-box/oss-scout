@@ -154,7 +154,9 @@ def _notify_draft(root: Path, r: dict, draft: dict) -> None:
                     root_cause=str(entry.get("root_cause") or ""),
                     draft=text,
                     fix_state=fix_state,
-                    pr_url=pr_url)
+                    pr_url=pr_url,
+                    source_kind=str(entry.get("source_kind") or "issue"),
+                    comment_id=entry.get("source_comment_id"))
                 ok, err = feishu_app.send_card_to_chat(chat, card)
                 _audit(root, "feishu_card", key,
                        f"fix_state={fix_state} "
@@ -1081,11 +1083,23 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
             data = {}
         return JSONResponse({"replies": data})
 
-    def _post_pr_comment(repo: str, number: int, body: str) -> tuple[bool, str]:
-        """以本账号向 GitHub 发 PR 评论。返回 (ok, detail)。"""
+    def _post_pr_comment(repo: str, number: int, body: str,
+                         kind: str = "issue",
+                         comment_id: int | str | None = None) -> tuple[bool, str]:
+        """以本账号向 GitHub 发 PR 评论。返回 (ok, detail)。
+
+        kind="inline" 且带 comment_id → 回到那条行内评论的线程里
+        （pulls/{n}/comments/{id}/replies）；否则进 issue 层。
+        行内发言行内回、行外发言行外回——发错层对话就断线了。
+        """
         import subprocess as sp
+        if kind == "inline" and str(comment_id or "").isdigit():
+            endpoint = (f"repos/{repo}/pulls/{number}/comments/"
+                        f"{comment_id}/replies")
+        else:
+            endpoint = f"repos/{repo}/issues/{number}/comments"
         try:
-            r = sp.run(["gh", "api", f"repos/{repo}/issues/{number}/comments",
+            r = sp.run(["gh", "api", endpoint,
                         "-X", "POST", "-f", f"body={body}"],
                        capture_output=True, text=True,
                        encoding="utf-8", errors="replace", timeout=60)
@@ -1194,15 +1208,26 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
         body = body.strip()[:2000]
         if not repo or not number or not body:
             return JSONResponse({"detail": "repo/number/body required"}, status_code=400)
-        p = root.parent / "scripts" / "monitor_prs.py"
-        runner = p if p.exists() else Path(__file__).resolve().parents[1] / "scripts" / "monitor_prs.py"
-        ok, detail = _post_pr_comment(repo, number, body)
+        # 行内/行外由落库的来源决定（草稿生成时记录），表单不传就从 state 读
+        try:
+            stored = json.loads((root / "state" / "pr_replies.json")
+                                .read_text(encoding="utf-8")).get(
+                f"{repo}#{number}") or {}
+        except (OSError, json.JSONDecodeError):
+            stored = {}
+        kind = str(stored.get("source_kind") or "issue")
+        cid = stored.get("source_comment_id")
+        ok, detail = _post_pr_comment(repo, number, body,
+                                      kind=kind, comment_id=cid)
         if not ok:
             _audit(root, "pr_reply_send_failed", f"{repo}#{number}", detail)
             return JSONResponse({"detail": detail or "gh failed"}, status_code=502)
         _mark_reply(f"{repo}#{number}", "sent", sent_body=body,
-                    sent_at=time.strftime("%Y-%m-%dT%H:%M:%S"))
-        _audit(root, "pr_reply_sent", f"{repo}#{number}", body[:200])
+                    sent_at=time.strftime("%Y-%m-%dT%H:%M:%S"),
+                    sent_kind=kind if kind == "inline" else "issue",
+                    sent_comment_id=str(cid) if cid else None)
+        _audit(root, "pr_reply_sent", f"{repo}#{number}",
+               f"kind={kind} " + body[:160])
         return JSONResponse({"ok": True})
 
     # ---------------- 飞书卡片回调（卡片里一键发送） ----------------
@@ -1261,19 +1286,25 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
                                 status_code=400)
         number = int(num_s)
         key = f"{repo}#{number}"
+        reply_kind = str(value.get("kind") or "issue")
+        reply_cid = str(value.get("comment_id") or "")
 
         # 代码修改已经在 pr-fix 那一步自动推送过了，这里只负责发回复。
         # 人审的边界是"对外文字"，不是代码——但回复里若声称改了什么，
         # 那个改动必须真的已经在 PR 上，否则就是撒谎。fix_state 只用于
         # 卡片展示，不阻塞发送。
-        ok, detail = _post_pr_comment(repo, number, reply_text)
+        ok, detail = _post_pr_comment(repo, number, reply_text,
+                                      kind=reply_kind, comment_id=reply_cid)
         if not ok:
             _audit(root, "feishu_cb_send_failed", key, detail)
             return JSONResponse({"toast": {"type": "error",
                                            "content": "发送失败：" + detail[:80]}})
         _mark_reply(key, "sent", sent_body=reply_text,
-                    sent_at=time.strftime("%Y-%m-%dT%H:%M:%S"))
-        _audit(root, "feishu_cb_sent", key, reply_text[:200])
+                    sent_at=time.strftime("%Y-%m-%dT%H:%M:%S"),
+                    sent_kind=reply_kind if reply_kind == "inline" else "issue",
+                    sent_comment_id=reply_cid or None)
+        _audit(root, "feishu_cb_sent", key,
+               f"kind={reply_kind} cid={reply_cid or '-'} " + reply_text[:160])
         # 回传新卡片：把表单替换成"已发送"确认。
         # 飞书要求 card 包一层 {"type": "raw", "data": {...}}；直接返回裸
         # card 对象不会更新卡片，点击后仍停在旧的输入框上。

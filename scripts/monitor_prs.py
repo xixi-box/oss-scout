@@ -587,16 +587,19 @@ def _thread(repo: str, number: int, limit: int = 10) -> list[dict]:
     一条"必须改代码"的 review 被静默漏了两天。pulls/{n}/comments 才是
     行内评论的家。两个端点是不同的集合，不会重复。
     """
-    jq = r'.[] | "\(.created_at)|\(.user.login)|\(.body)"'
+    jq = r'.[] | "\(.created_at)|\(.user.login)|\(.id)|\(.body)"'
     out = []
-    for endpoint in (f"repos/{repo}/issues/{number}/comments",
-                     f"repos/{repo}/pulls/{number}/comments"):
+    for source, endpoint in (
+            ("issue", f"repos/{repo}/issues/{number}/comments"),
+            ("inline", f"repos/{repo}/pulls/{number}/comments")):
         raw = _gh(["api", f"{endpoint}?per_page=100", "--jq", jq])
         for line in (raw or "").splitlines():
-            parts = line.split("|", 2)
-            if len(parts) == 3:
+            parts = line.split("|", 3)
+            if len(parts) == 4:
                 out.append({"created_at": parts[0], "author": parts[1],
-                            "body": parts[2][:COMMENT_TEXT_LIMIT]})
+                            "comment_id": int(parts[2]) if parts[2].isdigit() else None,
+                            "body": parts[3][:COMMENT_TEXT_LIMIT],
+                            "source": source})
     out.sort(key=lambda c: c["created_at"])
     return out[-limit:]
 
@@ -668,9 +671,11 @@ def draft_reply(repo: str, number: int, *, force: bool = False,
         return {"drafted": False, "reason": "already replied; waiting on them",
                 "key": key}
 
-    # 模型配置只从 _model() 走：分类和起草共用一处，测试也只 stub 一处
-    key, model = _model()
-    if not key:
+    # 模型配置只从 _model() 走：分类和起草共用一处，测试也只 stub 一处。
+    # 变量名绝不能叫 key——上面 key 是回复的落库键（repo#number），
+    # 曾被这里覆盖成 API key，草稿全写到错键下、看板永远读不到。
+    api_key, model = _model()
+    if not api_key:
         return {"drafted": False, "reason": "no model key"}
     from scout_v2.workers.issue_scorer import GoClient
 
@@ -687,7 +692,7 @@ def draft_reply(repo: str, number: int, *, force: bool = False,
         f"Conversation on {repo}#{number}:\n{convo}\n\n"
         "Reply with ONLY the reply text.")
 
-    client = GoClient(key=key, model=model, timeout=180)
+    client = GoClient(key=api_key, model=model, timeout=180)
     ok, detail = client.chat(prompt)
     if not ok:
         return {"drafted": False, "reason": f"model error: {detail[:120]}"}
@@ -701,6 +706,10 @@ def draft_reply(repo: str, number: int, *, force: bool = False,
                     "root_cause": _root_cause(
                         str((context or {}).get("pr_body") or "")),
                     "source_comment": str(latest.get("body") or "")[:COMMENT_TEXT_LIMIT],
+                    # 行内评论要回到行内线程回复（pulls comments/{id}/replies），
+                    # 行外的进 issue 层。发送端按这两个字段选端点。
+                    "source_kind": str(latest.get("source") or "issue"),
+                    "source_comment_id": latest.get("comment_id"),
                     "drafted_at": time.strftime("%Y-%m-%dT%H:%M:%S")}
     REPLIES_FILE.parent.mkdir(parents=True, exist_ok=True)
     REPLIES_FILE.write_text(json.dumps(replies, ensure_ascii=False, indent=1),

@@ -454,14 +454,17 @@ class TestInlineComments:
         def fake_gh(args, timeout=90):
             calls.append(args[1])
             if "/pulls/" in args[1]:
-                return ("2026-11-04T14:09:43Z|keithmattix|"
+                return ("2026-11-04T14:09:43Z|keithmattix|12345|"
                         "use cfg instead of passing windows")
-            return "2026-11-02T17:15:23Z|someone|first comment"
+            return "2026-11-02T17:15:23Z|someone|987|first comment"
 
         monkeypatch.setattr(mp, "_gh", fake_gh)
         thread = mp._thread("agentgateway/agentgateway", 4264)
-        authors = [c["author"] for c in thread]
-        assert "keithmattix" in authors and "someone" in authors
+        inline = [c for c in thread if c["source"] == "inline"]
+        issue = [c for c in thread if c["source"] == "issue"]
+        assert inline and inline[0]["author"] == "keithmattix"
+        assert inline[0]["comment_id"] == 12345
+        assert issue and issue[0]["comment_id"] == 987
         # 两个端点都被拉了
         assert any("/pulls/" in c for c in calls)
         assert any("/issues/" in c for c in calls)
@@ -473,7 +476,7 @@ class TestInlineComments:
         def fake_gh(args, timeout=90):
             joined = " ".join(args)
             if "/pulls/" in joined:
-                return ("2026-11-04T14:09:43Z|keithmattix|"
+                return ("2026-11-04T14:09:43Z|keithmattix|12345|"
                         "please use cfg instead of the flag")
             return json.dumps({
                 "comments": [{"author": {"login": "old"}, "body": "hi",
@@ -531,3 +534,56 @@ class TestAlreadyRepliedGate:
         monkeypatch.setattr(mp, "_model", lambda: ("", ""))
         out = mp.draft_reply("docker/compose", 14450, force=True)
         assert out["reason"] == "no model key"   # 走到了模型那步
+
+
+class TestReplyTargetRouting:
+    """行内发言行内回、行外发言行外回——发送端按草稿来源选端点。"""
+
+    def test_draft_records_inline_source(self, monkeypatch, tmp_path):
+        replies = tmp_path / "state" / "pr_replies.json"
+        replies.parent.mkdir(parents=True, exist_ok=True)
+        monkeypatch.setattr(mp, "REPLIES_FILE", replies)
+        monkeypatch.setattr(mp, "_thread", lambda r, n, limit=10: [
+            {"created_at": "2026-11-04T14:09:43Z", "author": "keithmattix",
+             "comment_id": 12345, "source": "inline", "body": "use cfg"},
+        ])
+        monkeypatch.setattr(mp, "_model", lambda: ("k", "m"))
+
+        class Fake:
+            def __init__(self, **k):
+                pass
+
+            def chat(self, prompt, max_tokens=200):
+                return True, "Sure, switching to cfg."
+
+        monkeypatch.setattr("scout_v2.workers.issue_scorer.GoClient", Fake)
+        out = mp.draft_reply("agentgateway/agentgateway", 4264, force=True)
+        assert out["drafted"] is True
+        entry = json.loads(replies.read_text(encoding="utf-8")
+                           )["agentgateway/agentgateway#4264"]
+        assert entry["source_kind"] == "inline"
+        assert entry["source_comment_id"] == 12345
+
+    def test_draft_records_issue_source(self, monkeypatch, tmp_path):
+        replies = tmp_path / "state" / "pr_replies.json"
+        replies.parent.mkdir(parents=True, exist_ok=True)
+        monkeypatch.setattr(mp, "REPLIES_FILE", replies)
+        monkeypatch.setattr(mp, "_thread", lambda r, n, limit=10: [
+            {"created_at": "2026-11-02T17:15:23Z", "author": "ndeloof",
+             "comment_id": 777, "source": "issue", "body": "please do X"},
+        ])
+        monkeypatch.setattr(mp, "_model", lambda: ("k", "m"))
+
+        class Fake:
+            def __init__(self, **k):
+                pass
+
+            def chat(self, prompt, max_tokens=200):
+                return True, "Done."
+
+        monkeypatch.setattr("scout_v2.workers.issue_scorer.GoClient", Fake)
+        mp.draft_reply("docker/compose", 1, force=True)
+        entry = json.loads(replies.read_text(encoding="utf-8")
+                           )["docker/compose#1"]
+        assert entry["source_kind"] == "issue"
+        assert entry["source_comment_id"] == 777

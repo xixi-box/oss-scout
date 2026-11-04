@@ -137,7 +137,8 @@ def find_group_chat_id() -> str | None:
 def build_reply_card(repo: str, number: int, issue_title: str,
                      source_author: str, source_comment: str,
                      root_cause: str, draft: str,
-                     *, fix_state: str = "none", pr_url: str = "") -> dict:
+                     *, fix_state: str = "none", pr_url: str = "",
+                     source_kind: str = "issue", comment_id: int | None = None) -> dict:
     """构造"可编辑回复"卡片：上下文 + 多行输入 + 一键提交。
 
     用卡片 1.0（`im/v1/messages` 的经典结构）：组件由 `tag` 声明，
@@ -208,7 +209,11 @@ def build_reply_card(repo: str, number: int, issue_title: str,
              "name": "send_reply",
              "text": {"tag": "plain_text", "content": button_text},
              "type": "primary",
-             "value": {"do": "send", "repo": repo, "number": str(number)}},
+             # 回复去哪由被回复评论的来源决定：行内评论回行内线程，
+             # issue 层评论进 issue 层——发错层会让对话断线。
+             "value": {"do": "send", "repo": repo, "number": str(number),
+                       "kind": source_kind or "issue",
+                       "comment_id": str(comment_id or "")}},
         ]},
     ]
 

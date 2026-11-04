@@ -320,3 +320,81 @@ class TestTokenLocation:
         body = r.json()
         assert body["card"]["type"] == "raw"
         assert "elements" in body["card"]["data"]
+
+
+class TestInlineReplyRouting:
+    """行内发言行内回：回调按卡片按钮带的 kind/comment_id 选端点。"""
+
+    def _submit_with(self, client, value):
+        return cb(client, card_click(value, {"reply_text": "done"}))
+
+    def test_inline_kind_uses_replies_endpoint(self, client, tmp_path):
+        rp = tmp_path / "state" / "pr_replies.json"
+        rp.write_text(json.dumps({"acme/real#7": {"status": "draft"}}),
+                      encoding="utf-8")
+        import subprocess as sp
+        seen = []
+
+        def fake_run(cmd, **k):
+            seen.append(" ".join(cmd))
+            return sp.CompletedProcess(cmd, 0, "https://x", "")
+
+        import unittest.mock as m
+        with m.patch.object(sp, "run", fake_run):
+            r = self._submit_with(client, {"do": "send", "repo": "acme/real",
+                                           "number": "7", "kind": "inline",
+                                           "comment_id": "12345"})
+        assert r.status_code == 200
+        assert any("pulls/7/comments/12345/replies" in c for c in seen), seen
+        assert not any("/issues/7/comments" in c for c in seen)
+        data = json.loads(rp.read_text(encoding="utf-8"))
+        assert data["acme/real#7"]["sent_kind"] == "inline"
+        assert data["acme/real#7"]["sent_comment_id"] == "12345"
+
+    def test_issue_kind_stays_issue_level(self, client, tmp_path):
+        rp = tmp_path / "state" / "pr_replies.json"
+        rp.write_text(json.dumps({"acme/real#7": {"status": "draft"}}),
+                      encoding="utf-8")
+        import subprocess as sp
+        seen = []
+
+        def fake_run(cmd, **k):
+            seen.append(" ".join(cmd))
+            return sp.CompletedProcess(cmd, 0, "https://x", "")
+
+        import unittest.mock as m
+        with m.patch.object(sp, "run", fake_run):
+            r = self._submit_with(client, {"do": "send", "repo": "acme/real",
+                                           "number": "7", "kind": "issue",
+                                           "comment_id": ""})
+        assert r.status_code == 200
+        assert any("/issues/7/comments" in c for c in seen)
+        assert not any("replies" in c for c in seen)
+
+    def test_missing_kind_defaults_to_issue(self, client, tmp_path):
+        rp = tmp_path / "state" / "pr_replies.json"
+        rp.write_text(json.dumps({"acme/real#7": {"status": "draft"}}),
+                      encoding="utf-8")
+        import subprocess as sp
+        seen = []
+
+        def fake_run(cmd, **k):
+            seen.append(" ".join(cmd))
+            return sp.CompletedProcess(cmd, 0, "https://x", "")
+
+        import unittest.mock as m
+        with m.patch.object(sp, "run", fake_run):
+            r = self._submit_with(client, {"do": "send", "repo": "acme/real",
+                                           "number": "7"})
+        assert r.status_code == 200
+        assert any("/issues/7/comments" in c for c in seen)
+
+    def test_card_button_carries_source(self):
+        from scout_v2 import feishu_app
+        card = feishu_app.build_reply_card(
+            "a/b", 1, "t", "m", "c", "rc", "d",
+            source_kind="inline", comment_id=12345)
+        btn = [n for n in card["elements"]
+               if n.get("tag") == "form"][0]["elements"][1]
+        assert btn["value"]["kind"] == "inline"
+        assert btn["value"]["comment_id"] == "12345"

@@ -70,8 +70,11 @@ class TestReplyCard:
         btns = [n for n in _walk(self.card())
                 if n.get("tag") == "button" and n.get("action_type") == "form_submit"]
         assert len(btns) == 1
-        assert btns[0]["value"] == {"do": "send", "repo": "acme/widget",
-                                    "number": "42"}
+        # kind/comment_id 随按钮带给回调，决定回复落在哪一层
+        assert btns[0]["value"]["do"] == "send"
+        assert btns[0]["value"]["repo"] == "acme/widget"
+        assert btns[0]["value"]["number"] == "42"
+        assert btns[0]["value"]["kind"] == "issue"
 
     def test_long_input_is_truncated_not_rejected(self):
         """超长草稿不能把整张卡片弄成非法 JSON（飞书 input 上限 1000）。"""

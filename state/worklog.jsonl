@@ -686,3 +686,7 @@
 {"ts": "2026-11-04T15:07:35", "action": "dashboard_auto_repair", "target": "anomalyco/opencode#59293", "result": "{\"id\": \"anomalyco/opencode#59293\", \"steps\": [], \"abort\": \"lane=unknown no action\"}", "source": "web-ui"}
 {"ts": "2026-11-04T16:43:00", "action": "dashboard_pr_sync_failed", "target": "0 prs", "result": "not configured", "source": "web-ui"}
 {"ts": "2026-11-04T17:38:51", "action": "dashboard_pr_watch_error", "target": "-", "result": "name '_ACTIONS' is not defined", "source": "web-ui"}
+{"ts": "2026-11-05T00:04:08", "action": "dashboard_pr_sync_failed", "target": "3 prs", "result": "not configured", "source": "web-ui"}
+{"ts": "2026-11-05T00:04:08", "action": "dashboard_pr_needs_reply", "target": "docker/compose#14450", "result": "address_review from ndeloof: Thanks, removing the `*` special case is the right fix: I checked that with `*` then `!src`, `data/log`, `.env` and `node_modules/...` are now ignored", "source": "web-ui"}
+{"ts": "2026-11-05T00:04:08", "action": "dashboard_pr_review_fix_dispatch", "target": "docker/compose#14450", "result": "dispatched=False kind=None reason=pr head unavailable", "source": "web-ui"}
+{"ts": "2026-11-05T00:04:08", "action": "dashboard_pr_reply_drafted", "target": "docker/compose#14450", "result": "drafted=False fix_kind=review", "source": "web-ui"}
