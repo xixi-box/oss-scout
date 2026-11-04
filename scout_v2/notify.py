@@ -81,7 +81,7 @@ def feishu_send(title: str, text: str = "", *, force: bool = False) -> bool:
 def feishu_send_card(header: str, md_body: str, *,
                      button_text: str | None = None,
                      button_url: str | None = None,
-                     template: str = "blue") -> bool:
+                     template: str = "blue", force: bool = False) -> bool:
     """发一条交互卡片（支持 lark_md 与 URL 跳转按钮）。
 
     webhook 自定义机器人只能处理 URL 跳转按钮（回调按钮需要开放平台应用），
