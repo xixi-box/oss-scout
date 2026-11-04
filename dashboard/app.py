@@ -181,6 +181,10 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
             pass
         return None
 
+    # 看板公网入口（飞书通知按钮跳转用）
+    DASHBOARD_URL = (os.environ.get("DASHBOARD_PUBLIC_URL")
+                     or "https://oss.wangshun.work").rstrip("/")
+
     # ---- 修复派发器（ingest 与轮询共用）----
     # pipeline 是长任务（几十分钟），不能让 HTTP 请求或轮询等它：
     # 每条候选一个 daemon 线程，inflight 表 + 锁防重复派发。
@@ -365,7 +369,7 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
                     except Exception:  # noqa: BLE001
                         pass
 
-                    from scout_v2.notify import feishu_send
+                    from scout_v2.notify import feishu_send, feishu_send_card
                     for r in results:
                         key = f"{r['repo']}#{r['number']}"
                         action = r.get("action")

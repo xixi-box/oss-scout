@@ -23,6 +23,10 @@ from pathlib import Path
 _LAST_SENT = 0.0
 _COOLDOWN_S = 5.0
 
+# 看板公网入口（飞书卡片按钮跳转用）。可用环境变量覆盖。
+DASHBOARD_URL = (os.environ.get("DASHBOARD_PUBLIC_URL")
+                 or "https://oss.wangshun.work").rstrip("/")
+
 
 def _webhook_url() -> str:
     url = (os.environ.get("FEISHU_WEBHOOK_URL") or "").strip()
@@ -72,3 +76,62 @@ def feishu_send(title: str, text: str = "", *, force: bool = False) -> bool:
             return bool(ok)
     except Exception:  # noqa: BLE001 — 通知失败不影响主流程
         return False
+
+
+def feishu_send_card(header: str, md_body: str, *,
+                     button_text: str | None = None,
+                     button_url: str | None = None,
+                     template: str = "blue") -> bool:
+    """发一条交互卡片（支持 lark_md 与 URL 跳转按钮）。
+
+    webhook 自定义机器人只能处理 URL 跳转按钮（回调按钮需要开放平台应用），
+    所以"点击直达"的形态是：点按钮 → 打开看板对应页面 → 人在看板上完成动作。
+    失败回退为纯文本消息（保证消息可达），再失败才返回 False。
+    """
+    global _LAST_SENT
+    url = _webhook_url()
+    if not url:
+        return False
+    if not force and (time.monotonic() - _LAST_SENT) < _COOLDOWN_S:
+        return False
+    try:
+        import json as _json
+        import urllib.request
+
+        elements: list[dict] = [{"tag": "div",
+                                 "text": {"tag": "lark_md", "content": md_body}}]
+        if button_text and button_url:
+            elements.append({"tag": "action", "actions": [{
+                "tag": "button",
+                "text": {"tag": "plain_text", "content": button_text},
+                "type": "primary",
+                "url": button_url,
+            }]})
+        payload = _json.dumps({
+            "msg_type": "interactive",
+            "card": {
+                "config": {"wide_screen_mode": True},
+                "header": {"template": template,
+                           "title": {"tag": "plain_text", "content": header}},
+                "elements": elements,
+            },
+        }, ensure_ascii=False).encode("utf-8")
+
+        req = urllib.request.Request(
+            url, data=payload, method="POST",
+            headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            body = _json.loads(resp.read().decode("utf-8", "replace"))
+            ok = (body.get("code") in (0, None)
+                  or body.get("StatusCode") == 0
+                  or body.get("msg") in ("success", None))
+            _LAST_SENT = time.monotonic()
+            if not ok:
+                # 卡片被拒（旧版 bot 等）→ 回退纯文本，至少消息可达
+                return feishu_send(header, md_body, force=True)
+            return True
+    except Exception:  # noqa: BLE001 — 通知失败不影响主流程
+        try:
+            return feishu_send(header, md_body, force=True)
+        except Exception:  # noqa: BLE001
+            return False
