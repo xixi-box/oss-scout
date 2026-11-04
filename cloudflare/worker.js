@@ -16,6 +16,32 @@ const EXCLUDED_LABELS = ["invalid", "wontfix", "duplicate", "question", "stale",
   "awaiting more info", "awaiting-more-info", "needs more info", "needs-repro",
   "documentation"];
 
+// 补扫只认最近的 issue：太老的可修概率急剧下降（早被别人认领或修复），
+// 而且补扫每轮都跑，不设龄上限会把仓库里所有历史 issue 反复送进评分。
+const BACKFILL_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+
+function collectIssue(issues, repo, it) {
+  if (it.pull_request || (it.assignees && it.assignees.length)) return;
+  const labels = (it.labels || []).map(l => (typeof l === "string" ? l : l.name));
+  if (labels.some(l => EXCLUDED_LABELS.includes(l.toLowerCase()))) return;
+  issues.push({
+    repo, number: it.number, title: it.title, url: it.html_url,
+    created_at: it.created_at, updated_at: it.updated_at,
+    labels, reactions: (it.reactions && it.reactions.total_count) || 0,
+    comments: it.comments || 0,
+    // 8000：AI 评分要判断"这个 issue 能不能自动修"，依据是复现步骤、预期行为、
+    // 环境说明。4000 常常在代码块中间截断，把可修的 issue 判成"信息不足"。
+    body_excerpt: (it.body || "").slice(0, 8000),
+  });
+}
+
+// 补扫专用：拿到的是"最近创建"列表而不是增量，龄上限在这里卡。
+function collectBackfillIssue(issues, repo, it, now) {
+  const age = now.getTime() - new Date(it.created_at).getTime();
+  if (age > BACKFILL_MAX_AGE_MS || age < 0) return;
+  collectIssue(issues, repo, it);
+}
+
 function ghHeaders(token) {
   return {
     "Authorization": `Bearer ${token}`,
@@ -58,21 +84,35 @@ async function pollOnce(env) {
       ok_repos++;
       const list = await r.json();
       for (const it of list) {
-        if (it.pull_request || (it.assignees && it.assignees.length)) continue;
-        const labels = (it.labels || []).map(l => (typeof l === "string" ? l : l.name));
-        if (labels.some(l => EXCLUDED_LABELS.includes(l.toLowerCase()))) continue;
-        issues.push({
-          repo, number: it.number, title: it.title, url: it.html_url,
-          created_at: it.created_at, updated_at: it.updated_at,
-          labels, reactions: (it.reactions && it.reactions.total_count) || 0,
-          comments: it.comments || 0,
-          // 8000：AI 评分要判断"这个 issue 能不能自动修"，依据是复现步骤、预期行为、
-          // 环境说明。4000 常常在代码块中间截断，把可修的 issue 判成"信息不足"。
-          body_excerpt: (it.body || "").slice(0, 8000),
-        });
+        collectIssue(issues, repo, it);
       }
     } catch (e) {
       errors.push(`${repo}: ${String(e).slice(0, 80)}`);
+    }
+  }
+
+  // 补扫（round-robin）：`since` 水位只向前看，仓库新加入池子时，水位之前的
+  // 既有 issue 永远不会被看到——除非它们后来又被更新。agentgateway#4256 就
+  // 是这么漏掉的：issue 比"仓库进池子"早了半天，之后没人再更新它，等维护者
+  // 指派/关闭时已经过了我们能接手的窗口。每分钟补扫一个仓库（50 仓一轮
+  // ≈50 分钟），每天多花 ~1440 次 API 调用（限额 5000/h，无压力），任何
+  // 仓库进池后半小时内就有完整的最近-issue 视野。
+  if (repos.length) {
+    const rr = repos[now.getUTCMinutes() % repos.length];
+    try {
+      const r = await fetch(
+        `https://api.github.com/repos/${rr}/issues?state=open&sort=created` +
+        `&direction=desc&per_page=20`,
+        { headers: ghHeaders(env.GH_TOKEN) });
+      if (r.ok) {
+        for (const it of await r.json()) {
+          collectBackfillIssue(issues, rr, it, now);
+        }
+      } else {
+        errors.push(`${rr} (backfill): HTTP ${r.status}`);
+      }
+    } catch (e) {
+      errors.push(`${rr} (backfill): ${String(e).slice(0, 80)}`);
     }
   }
 
