@@ -20,6 +20,7 @@ Playbook §2① 早就写了这一段的职责（CI 失败要修、maintainer �
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -456,11 +457,19 @@ def _attempts() -> dict:
         return {}
 
 
-def dispatch_pr_fix(repo: str, number: int, *, dry_run: bool = False) -> dict:
-    """对挂红的 PR 派一轮 pr-fix。返回 {dispatched, reason, ...}。
+def dispatch_pr_fix(repo: str, number: int, *, dry_run: bool = False,
+                    kind: str = "ci", review_comment: str = "",
+                    review_author: str = "") -> dict:
+    """对挂红的 PR（或需按 review 改的 PR）派一轮 opencode 修复。
 
-    去重键 = (repo, number, head_sha)：派一次就记；修复推了新 commit、head
-    变了才允许对新的失败再派。外因不派、非我们的 fork 不派、已在修的不派。
+    kind="ci"       CI 挂红，修到绿
+    kind="review"   维护者提了具体修改要求，落实要求
+
+    两者走同一条流水线（checkout 我们的 fork 分支 → 改 → 带签名提交推送），
+    区别只在 payload 里带什么指令、以及去重键——CI 按 head_sha 去重（推新
+    commit 才算新一轮），review 按评论内容去重（同一条要求只落实一次）。
+
+    返回 {dispatched, reason, ...}。外因不派、非我们的 fork 不派、已修过不派。
     """
     head = pr_head(repo, number)
     if not head:
@@ -470,18 +479,30 @@ def dispatch_pr_fix(repo: str, number: int, *, dry_run: bool = False) -> dict:
         return {"dispatched": False, "reason": "head not on our fork"}
 
     head_sha = head.get("headRefOid", "")
-    key = f"{repo}#{number}@{head_sha[:12]}"
+    if kind == "review":
+        # review 类去重不能用 head_sha：同一条意见在推 commit 之前会被反复看到
+        digest = hashlib.sha1(
+            f"{repo}#{number}:{review_comment}".encode()).hexdigest()[:12]
+        key = f"{repo}#{number}@review:{digest}"
+    else:
+        key = f"{repo}#{number}@{head_sha[:12]}"
     attempts = _attempts()
     if key in attempts:
         return {"dispatched": False, "reason": f"already attempted: {key}"}
 
-    failing = failing_details(repo, number)
-    ours, why = failure_is_ours(failing)
-    if not ours:
-        attempts[key] = {"ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
-                         "dispatched": False, "reason": why}
-        _save_attempts(attempts)
-        return {"dispatched": False, "reason": why}
+    if kind == "ci":
+        failing = failing_details(repo, number)
+        ours, why = failure_is_ours(failing)
+        if not ours:
+            attempts[key] = {"ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                             "dispatched": False, "reason": why}
+            _save_attempts(attempts)
+            return {"dispatched": False, "reason": why}
+    else:
+        if not review_comment.strip():
+            return {"dispatched": False, "reason": "empty review comment"}
+        failing = []
+        why = f"review request from {review_author or 'maintainer'}"
 
     if dry_run:
         return {"dispatched": False, "reason": f"dry-run: would fix ({why})"}
@@ -499,20 +520,23 @@ def dispatch_pr_fix(repo: str, number: int, *, dry_run: bool = False) -> dict:
     payload = {"fork_repo": f"xixi-box/{repo.split('/')[1]}",
                "branch": head.get("headRefName", ""),
                "upstream_repo": repo, "pr_number": number,
-               "head_sha": head_sha,
-               "failing": failing[:6], "comments": comments}
+               "head_sha": head_sha, "kind": kind,
+               "failing": failing[:6], "comments": comments,
+               "review_comment": review_comment[:4000] if kind == "review" else "",
+               "review_author": review_author if kind == "review" else ""}
     import base64 as _b64
     fix_b64 = _b64.b64encode(json.dumps(payload, ensure_ascii=False).encode()).decode()
-    job_id = f"prfix-{repo.replace('/', '-')}-{number}-{head_sha[:8]}"
+    job_id = f"prfix-{repo.replace('/', '-')}-{number}-{key.rsplit('@', 1)[-1][:12]}"
     # _gh 失败返回 ""，但 workflow run 成功时 stdout 也是空——用 run_gh 拿 rc
     rc = run_gh(["workflow", "run", "oss-scout-pr-fix.yml", "-R", "xixi-box/oss-scout",
                  "-f", f"fix_b64={fix_b64}", "-f", f"job_id={job_id}"], timeout=60)
     ok = rc == 0
     attempts[key] = {"ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
                      "dispatched": ok,
+                     "kind": kind,
                      "reason": why if ok else "dispatch failed"}
     _save_attempts(attempts)
-    return {"dispatched": ok, "reason": why, "job_id": job_id}
+    return {"dispatched": ok, "reason": why, "job_id": job_id, "kind": kind}
 
 
 def _save_attempts(data: dict) -> None:

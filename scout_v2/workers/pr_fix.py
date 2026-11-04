@@ -43,7 +43,34 @@ EXTERNAL_PATTERNS = (
 
 
 def build_prompt(payload: dict) -> str:
-    """组装给 opencode 的修复指令。失败清单与 bot 意见都来自 payload。"""
+    """组装给 opencode 的修复指令。
+
+    kind="ci"      失败清单与 bot 意见来自 payload，修到绿
+    kind="review"  维护者原话是任务书，逐条落实
+    """
+    if (payload.get("kind") or "ci") == "review":
+        author = payload.get("review_author") or "a maintainer"
+        request = str(payload.get("review_comment") or "")[:4000]
+        return "\n".join([
+            "A maintainer reviewed this PR and asked for changes.",
+            "This checkout IS the PR branch. Implement exactly what they asked.",
+            "",
+            f"Review from {author}:",
+            request,
+            "",
+            "Rules:",
+            "- Do what the review asks, nothing more. No opportunistic refactors.",
+            "- If it points at a test that encodes the old behaviour, update that",
+            "  test to the behaviour they describe.",
+            "- If it asks for a new regression test, write one that would FAIL on",
+            "  the pre-PR code -- a test that passes both ways proves nothing.",
+            "- Match the surrounding test style in the repo.",
+            "- Run the affected test package if the environment allows. If you",
+            "  cannot run it, say so plainly instead of claiming success.",
+            "- Do NOT reformat unrelated code, bump versions, or touch CI config.",
+            "- Use --auto semantics: keep going until done, no questions.",
+        ])
+
     failing = payload.get("failing") or []
     fl = "\n".join(f"- {f.get('name', '?')}: {str(f.get('excerpt', ''))[:600]}"
                    for f in failing[:6])

@@ -289,3 +289,102 @@ class TestCommentClassification:
             {"author": {"login": "m"}, "body": "ping again",
              "createdAt": "2026-11-04T02:00:00Z"}]})
         assert len(calls) == 2
+
+
+class TestReviewDispatch:
+    """维护者提修改要求 → 派 opencode 落实到 PR 分支。
+
+    与 CI 修复同一条流水线，但去重键不同：CI 按 head_sha（推新 commit 才是
+    新一轮），review 按评论内容（同一条要求只落实一次，否则会反复重做）。
+    """
+
+    HEAD = {"isCrossRepository": True,
+            "headRepositoryOwner": {"login": "xixi-box"},
+            "headRefName": "fix/issue-1-abc", "headRefOid": "a" * 40}
+
+    def _setup(self, monkeypatch, tmp_path, *, tracked=False):
+        monkeypatch.setattr(mp, "pr_head", lambda r, n: dict(self.HEAD))
+        monkeypatch.setattr(mp, "ATTEMPTS_FILE", tmp_path / "attempts.json")
+        monkeypatch.setattr(mp, "_gh", lambda *a, **k: "")
+        monkeypatch.setattr(mp, "failing_details", lambda r, n: [])
+        monkeypatch.setattr(mp, "failure_is_ours",
+                            lambda f: (False, "no failures"))
+        runs = []
+        monkeypatch.setattr(mp, "run_gh",
+                            lambda args, timeout=90: runs.append(args) or 0)
+        return runs
+
+    def test_review_kind_dispatches_despite_no_ci_failure(
+            self, monkeypatch, tmp_path):
+        """CI 全绿但维护者要求改代码时，仍然要派活。"""
+        runs = self._setup(monkeypatch, tmp_path)
+        out = mp.dispatch_pr_fix("acme/real", 7, kind="review",
+                                 review_comment="please add a regression test",
+                                 review_author="maint")
+        assert out["dispatched"] is True
+        assert out["kind"] == "review"
+        assert runs, "expected a workflow dispatch"
+
+    def test_same_review_is_not_dispatched_twice(self, monkeypatch, tmp_path):
+        self._setup(monkeypatch, tmp_path)
+        kw = dict(kind="review", review_comment="please add a test",
+                  review_author="maint")
+        assert mp.dispatch_pr_fix("acme/real", 7, **kw)["dispatched"] is True
+        second = mp.dispatch_pr_fix("acme/real", 7, **kw)
+        assert second["dispatched"] is False
+        assert "already attempted" in second["reason"]
+
+    def test_different_review_dispatches_again(self, monkeypatch, tmp_path):
+        self._setup(monkeypatch, tmp_path)
+        mp.dispatch_pr_fix("acme/real", 7, kind="review",
+                           review_comment="add a test", review_author="m")
+        out = mp.dispatch_pr_fix("acme/real", 7, kind="review",
+                                 review_comment="also update the changelog",
+                                 review_author="m")
+        assert out["dispatched"] is True
+
+    def test_empty_review_is_rejected(self, monkeypatch, tmp_path):
+        self._setup(monkeypatch, tmp_path)
+        out = mp.dispatch_pr_fix("acme/real", 7, kind="review",
+                                 review_comment="  ", review_author="m")
+        assert out["dispatched"] is False
+
+    def test_ci_kind_still_skips_external_failures(self, monkeypatch, tmp_path):
+        """泛化不能把 CI 那条路径的外因过滤弄丢。"""
+        self._setup(monkeypatch, tmp_path)
+        monkeypatch.setattr(mp, "failure_is_ours",
+                            lambda f: (False, "external check by name"))
+        out = mp.dispatch_pr_fix("acme/real", 7, kind="ci")
+        assert out["dispatched"] is False
+        assert "external" in out["reason"]
+
+    def test_non_fork_head_is_never_dispatched(self, monkeypatch, tmp_path):
+        self._setup(monkeypatch, tmp_path)
+        monkeypatch.setattr(mp, "pr_head", lambda r, n: {
+            "isCrossRepository": False,
+            "headRepositoryOwner": {"login": "docker"},
+            "headRefName": "x", "headRefOid": "b" * 40})
+        out = mp.dispatch_pr_fix("acme/real", 7, kind="review",
+                                 review_comment="change it")
+        assert out["dispatched"] is False
+        assert "fork" in out["reason"]
+
+
+class TestReviewPrompt:
+    """review 类任务的 prompt 必须写明"改什么"，而不是让模型猜。"""
+
+    def test_prompt_carries_the_review_verbatim(self):
+        from scout_v2.workers import pr_fix as pf
+        p = pf.build_prompt({"kind": "review", "review_author": "ndeloof",
+                             "review_comment": "update the failing test to expect "
+                                              "[\"/repo/*\", \"!/repo/file.txt\"]"})
+        assert "ndeloof" in p
+        assert "!/repo/file.txt" in p
+        assert "regression test" in p.lower()
+
+    def test_ci_prompt_unchanged_for_ci_payloads(self):
+        from scout_v2.workers import pr_fix as pf
+        p = pf.build_prompt({"kind": "ci",
+                             "failing": [{"name": "tests", "excerpt": "FAILED x"}]})
+        assert "CI is failing" in p
+        assert "tests" in p

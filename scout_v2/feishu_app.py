@@ -131,21 +131,26 @@ def find_group_chat_id() -> str | None:
 
 def build_reply_card(repo: str, number: int, issue_title: str,
                      source_author: str, source_comment: str,
-                     root_cause: str, draft: str) -> dict:
+                     root_cause: str, draft: str,
+                     *, fix_dispatched: bool = False) -> dict:
     """构造"可编辑回复"卡片：显示上下文 + 多行输入 + 一键提交。
 
     用卡片 1.0（`im/v1/messages` 的经典结构）：组件由 `tag` 声明，
     `type` 只表示按钮样式。form 内的按钮用 `action_type: form_submit`，
     点击后飞书回调 /feishu/callback，由回调端把编辑后的文本发到 GitHub。
+
+    fix_dispatched=True 时在标题上标明"代码改动已在流水线里推"，因为
+    此时按钮只负责发回复，不该让人以为还得自己动手改代码。
     """
     excerpt = str(source_comment or "")[:400].replace("\n", " ")
     rc = str(root_cause or "")[:300]
+    title = (f"✅ 改动已推送 · 回复待审：{repo}#{number}" if fix_dispatched
+             else f"💬 回复草稿待审：{repo}#{number}")
     return {
         "config": {"wide_screen_mode": True, "update_multi": True},
         "header": {
-            "title": {"tag": "plain_text",
-                      "content": f"💬 回复草稿待审：{repo}#{number}"},
-            "template": "orange",
+            "title": {"tag": "plain_text", "content": title},
+            "template": "green" if fix_dispatched else "orange",
         },
         "elements": [
             {"tag": "div", "text": {"tag": "lark_md",

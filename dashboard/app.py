@@ -109,7 +109,8 @@ def _atomic_write_text(path: Path, text: str) -> None:
     os.replace(tmp, path)
 
 
-def _notify_draft(root: Path, r: dict, draft: dict) -> None:
+def _notify_draft(root: Path, r: dict, draft: dict,
+                  *, fix_dispatched: bool = False) -> None:
     """把"AI 草稿待人审"推给飞书，人可在卡片里改完一键发。
 
     优先走自建应用卡片（含可编辑输入框 + form_submit 按钮，回调
@@ -136,7 +137,8 @@ def _notify_draft(root: Path, r: dict, draft: dict) -> None:
                     source_comment=str(r.get("latest_body")
                                        or entry.get("source_comment") or ""),
                     root_cause=str(entry.get("root_cause") or ""),
-                    draft=text)
+                    draft=text,
+                    fix_dispatched=fix_dispatched)
                 ok, err = feishu_app.send_card_to_chat(chat, card)
                 _audit(root, "feishu_card", key,
                        "sent" if ok else f"failed: {err[:150]}")
@@ -144,8 +146,10 @@ def _notify_draft(root: Path, r: dict, draft: dict) -> None:
                     return
         from scout_v2.notify import feishu_send_card
 
+        state = ("✅ 改动已自动推送，回复待审" if fix_dispatched
+                 else "💬 回复草稿待人审")
         feishu_send_card(
-            f"💬 有回复草稿待人审：{key}",
+            f"{state}：{key}",
             f"**来自** {r.get('latest_author') or '?'}："
             f"{str(r.get('latest_excerpt'))[:150]}\n"
             "**AI 草稿**：\n" + text[:600] +
@@ -444,9 +448,38 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
                                         f"失败检查：{', '.join(r.get('failing_checks') or [])[:120]}")
                             except Exception as e:  # noqa: BLE001
                                 _audit(root, "pr_fix_error", key, str(e)[:200])
-                        elif action in ("address_review", "answer_question"):
-                            # L3：AI 草拟回复落盘，等人确认后发送。绝不自动发——
-                            # astral/biome 对 AI 文字零容忍。
+                        elif action == "address_review":
+                            # 维护者提了具体修改要求 → 先派 opencode 落实，
+                            # 再起草回复说明改了什么。草稿仍待人审才发。
+                            # 顺序有意义：回复里要写"改了什么"，得先改完。
+                            _audit(root, "pr_needs_reply", key,
+                                   f"{action} from {r.get('latest_author')}: "
+                                   f"{str(r.get('latest_excerpt'))[:150]}")
+                            fix_out = {}
+                            try:
+                                fix_out = mod.dispatch_pr_fix(
+                                    r["repo"], r["number"], kind="review",
+                                    review_comment=str(r.get("latest_body") or ""),
+                                    review_author=str(r.get("latest_author") or ""))
+                                _audit(root, "pr_review_fix_dispatch", key,
+                                       f"dispatched={fix_out.get('dispatched')} "
+                                       f"reason={str(fix_out.get('reason'))[:120]}")
+                            except Exception as e:  # noqa: BLE001
+                                _audit(root, "pr_review_fix_error", key, str(e)[:200])
+                            try:
+                                draft = mod.draft_reply(r["repo"], r["number"],
+                                                        context=r)
+                                _audit(root, "pr_reply_drafted", key,
+                                       f"drafted={draft.get('drafted')} "
+                                       f"fix_dispatched={bool(fix_out.get('dispatched'))}")
+                                if draft.get("drafted"):
+                                    _notify_draft(root, r, draft,
+                                                  fix_dispatched=bool(
+                                                      fix_out.get("dispatched")))
+                            except Exception as e:  # noqa: BLE001
+                                _audit(root, "pr_draft_error", key, str(e)[:200])
+                        elif action == "answer_question":
+                            # 只问问题、没要求改代码 → 只起草回复
                             _audit(root, "pr_needs_reply", key,
                                    f"{action} from {r.get('latest_author')}: "
                                    f"{str(r.get('latest_excerpt'))[:150]}")
@@ -454,8 +487,7 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
                                 draft = mod.draft_reply(r["repo"], r["number"],
                                                         context=r)
                                 _audit(root, "pr_reply_drafted", key,
-                                       f"drafted={draft.get('drafted')} "
-                                       f"path=state/pr_replies.json")
+                                       f"drafted={draft.get('drafted')}")
                                 if draft.get("drafted"):
                                     _notify_draft(root, r, draft)
                             except Exception as e:  # noqa: BLE001
