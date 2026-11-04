@@ -1,0 +1,8 @@
+name: feishu-card-probe
+on:
+  workflow_dispatch:
+jobs:
+  send:
+    runs-on: [self-hosted, aliyun]
+    steps:
+      - run: docker exec oss-scout python /app/scripts/feishu_app_probe.py
