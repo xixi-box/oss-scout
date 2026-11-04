@@ -20,7 +20,7 @@ jobs:
 
       - name: Live state dump (read-only)
         run: |
-          docker exec oss-scout python3 - <<'PY'
+          docker exec -i oss-scout python3 - <<'PY'
           import json, collections
           from pathlib import Path
           root = Path("/data")
