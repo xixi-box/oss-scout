@@ -8,6 +8,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import importlib.util  # noqa: E402
 
@@ -15,6 +17,16 @@ _SPEC = importlib.util.spec_from_file_location(
     "monitor_prs", Path(__file__).resolve().parents[1] / "scripts" / "monitor_prs.py")
 mp = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(mp)
+
+
+@pytest.fixture(autouse=True)
+def _no_model(monkeypatch):
+    """默认关掉模型调用：单测不该联网，也不该因为模型抖动而随机红。
+
+    评论分类现在是 AI 优先、规则兜底；这里强制走兜底路径，规则行为照测。
+    AI 分支在 TestCommentClassification 里单独打桩。
+    """
+    monkeypatch.setattr(mp, "_model", lambda: ("", ""))
 
 
 def _pr(comments=(), rollup=(), **kw):
@@ -141,3 +153,139 @@ class TestPleasantry:
                                 "could someone review?")
         # 加了诉求词就不再是客套（please 是真的在要求做事）
         assert not mp.is_pleasantry("Hey @OpenHands/maintainers bump please")
+
+
+class TestCommentClassification:
+    """评论分类：模型判断意图，规则只兜底。
+
+    2026-11-04 实录：分类器此前是纯正则，「All green, could someone review?」
+    和「All green, but the test fails」只差一个词，靠正则区分不了。
+    """
+
+    def test_model_verdict_is_used(self, monkeypatch):
+        monkeypatch.setattr(mp, "_model", lambda: ("k", "m"))
+
+        class Fake:
+            def __init__(self, **k):
+                pass
+
+            def chat(self, prompt, max_tokens=200):
+                return True, "ACTION: wait\nREASON: review ping, no ask"
+
+        monkeypatch.setattr(
+            "scout_v2.workers.issue_scorer.GoClient", Fake)
+        got = mp.classify_comment("All green, could someone review?")
+        assert got["ok"] is True
+        assert got["action"] == "wait"
+        assert "ping" in got["reason"]
+
+    def test_unparseable_output_falls_back(self, monkeypatch):
+        monkeypatch.setattr(mp, "_model", lambda: ("k", "m"))
+
+        class Fake:
+            def __init__(self, **k):
+                pass
+
+            def chat(self, prompt, max_tokens=200):
+                return True, "I think this is probably fine?"
+
+        monkeypatch.setattr("scout_v2.workers.issue_scorer.GoClient", Fake)
+        got = mp.classify_comment("something")
+        assert got["ok"] is False
+
+    def test_model_error_falls_back(self, monkeypatch):
+        monkeypatch.setattr(mp, "_model", lambda: ("k", "m"))
+
+        class Fake:
+            def __init__(self, **k):
+                pass
+
+            def chat(self, prompt, max_tokens=200):
+                return False, "HTTP 503"
+
+        monkeypatch.setattr("scout_v2.workers.issue_scorer.GoClient", Fake)
+        got = mp.classify_comment("something")
+        assert got["ok"] is False
+
+    def test_no_key_falls_back(self):
+        got = mp.classify_comment("anything")   # autouse fixture 无 key
+        assert got["ok"] is False
+
+    def test_model_unavailable_never_silently_waits(self, monkeypatch):
+        """模型挂了必须退回规则，不能把"模型不可用"当成"不用管"。"""
+        got = mp.classify(_pr(comments=[_comment(
+            "maintainer", "please add a test for the empty case")]))
+        assert got["action"] == "address_review"
+
+    def test_model_verdict_drives_action(self, monkeypatch):
+        monkeypatch.setattr(mp, "_model", lambda: ("k", "m"))
+
+        class Fake:
+            def __init__(self, **k):
+                pass
+
+            def chat(self, prompt, max_tokens=200):
+                return True, "ACTION: answer_question\nREASON: asks why the exception is swallowed"
+
+        monkeypatch.setattr("scout_v2.workers.issue_scorer.GoClient", Fake)
+        got = mp.classify(_pr(comments=[_comment(
+            "maintainer", "All green here, but why does this swallow the exception?")]))
+        assert got["action"] == "answer_question"
+
+    def test_verdict_is_cached_per_comment(self, monkeypatch, tmp_path):
+        """同一轮 15 分钟扫描里不该重复调用模型。"""
+        calls = []
+
+        class Fake:
+            def __init__(self, **k):
+                pass
+
+            def chat(self, prompt, max_tokens=200):
+                calls.append(prompt)
+                return True, "ACTION: wait\nREASON: ping"
+
+        monkeypatch.setattr(mp, "_model", lambda: ("k", "m"))
+        monkeypatch.setattr("scout_v2.workers.issue_scorer.GoClient", Fake)
+        monkeypatch.setattr(mp, "CLASSIFY_CACHE", tmp_path / "cache.json")
+        monkeypatch.setattr(mp, "_cache_load", lambda: _load())
+        monkeypatch.setattr(mp, "_cache_put", lambda k, v: _put(k, v))
+        store: dict = {}
+        _load, _put = (lambda: dict(store)), (lambda k, v: store.__setitem__(k, v))
+
+        pr = _pr(comments=[{"author": {"login": "maint"},
+                            "body": "all green, could someone review?",
+                            "createdAt": "2026-11-04T01:00:00Z"}],
+                 repo="a/b", number=1, title="t")
+
+        mp.classify(pr)
+        mp.classify(pr)          # 第二轮：同一条评论
+        assert len(calls) == 1, f"expected 1 model call, got {len(calls)}"
+
+    def test_new_comment_bypasses_cache(self, monkeypatch):
+        """评论更新后必须重新判定，不能被旧结论挡住。"""
+        calls = []
+
+        class Fake:
+            def __init__(self, **k):
+                pass
+
+            def chat(self, prompt, max_tokens=200):
+                calls.append(prompt)
+                return True, "ACTION: wait\nREASON: ping"
+
+        monkeypatch.setattr(mp, "_model", lambda: ("k", "m"))
+        monkeypatch.setattr("scout_v2.workers.issue_scorer.GoClient", Fake)
+        store: dict = {}
+        monkeypatch.setattr(mp, "_cache_load", lambda: dict(store))
+        monkeypatch.setattr(mp, "_cache_put",
+                            lambda k, v: store.__setitem__(k, v))
+
+        base = {"repo": "a/b", "number": 1, "title": "t", "statusCheckRollup": [],
+                "reviewDecision": "", "isDraft": False}
+        mp.classify({**base, "comments": [
+            {"author": {"login": "m"}, "body": "ping",
+             "createdAt": "2026-11-04T01:00:00Z"}]})
+        mp.classify({**base, "comments": [
+            {"author": {"login": "m"}, "body": "ping again",
+             "createdAt": "2026-11-04T02:00:00Z"}]})
+        assert len(calls) == 2

@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import time
@@ -65,16 +66,160 @@ _RE_REVIEWISH = re.compile(
 
 
 def is_pleasantry(body: str) -> bool:
-    """判断一条评论是不是纯客套/催 review（无可执行诉求）。
+    """判断一条评论是不是纯客套/催 review（规则兜底用）。
 
-    两道条件同时成立才算：出现催办词，且没有任何诉求词。反过来漏判一次
-    只是多起草一封草稿（不影响正确性），误判成客套会真的漏掉维护者意见，
-    所以诉求词表取得宽。
+    只在模型不可用时使用。两道条件同时成立才算：出现催办词，且没有任何
+    诉求词。反过来漏判一次只是多起草一封草稿（不影响正确性），误判成
+    客套会真的漏掉维护者意见，所以诉求词表取得宽。
     """
     text = _RE_MENTION.sub(" ", str(body or "")).strip()
     if not text or len(text) > 400:
         return False
     return bool(_RE_PING.search(text)) and not _RE_ACTIONABLE.search(text)
+
+
+CLASSIFY_PROMPT = """A maintainer or bot just commented on our pull request.
+Decide what the contributor behind this PR should do next.
+
+Classify into exactly one:
+  wait              -- nothing to do. Review pings ("all green, could someone
+                       review?"), bot notices, approvals, thanks, or comments
+                       that only restate status. Answering these adds noise.
+  address_review    -- they asked for a concrete change (code, tests,
+                       changelog, naming, revert).
+  answer_question   -- they asked something only a human can answer, or
+                       reported a problem they need explained.
+  assignment_note   -- the comment is about who is assigned / whether the PR is
+                       still wanted.
+
+Judge intent, not keywords. "All green here, but why does this swallow the
+exception?" is answer_question, not wait. "Thanks!" alone is wait.
+
+Pull request: {repo}#{number}
+Title: {title}
+
+Comment from {author}:
+{body}
+
+Answer with exactly two lines:
+ACTION: <one of the four words>
+REASON: <max 15 words, what the comment actually asks>"""
+
+
+def _model() -> tuple[str, str]:
+    """(api_key, model) 用于评论分类。缺失时返回空串让调用方走规则兜底。"""
+    try:
+        from scout_v2.workers.issue_scorer import load_scorer_config
+        cfg = load_scorer_config(ROOT)
+        return str(cfg.get("api_key") or ""), str(cfg.get("model")
+                                                      or "deepseek-v4.1-flash")
+    except Exception:  # noqa: BLE001
+        return "", ""
+
+
+_ACTIONS = ("wait", "address_review", "answer_question", "assignment_note")
+
+# 纯流程性 bot：它们的发言是模板通知，没有对话价值（changeset 提醒、
+# 覆盖率报告、artifacts 清理）。注意不包括"已被人认领"这类——那要留痕。
+_NOISE_BOT_RE = re.compile(
+    r"changeset-bot|dependabot|renovate|codecov|github-actions|"
+    r"pre-commit-ci|netlify|vercel|sonarcloud|stale", re.I)
+
+
+def _is_noise_bot(author: str, body: str) -> bool:
+    if not str(author or "").endswith("[bot]"):
+        return False
+    if not _NOISE_BOT_RE.search(author):
+        return False
+    # bot 发的是"认领/冲突"信息时仍然要留痕，交给后面的规则判
+    return not PATTERNS[4][1].search(body or "")
+
+# 分类结果缓存：key = "repo#num@created_at"。
+# 监控每 15 分钟扫一遍所有 open PR，没有缓存就是每轮重判同一批评论。
+# 只看最新一条评论，所以缓存键带上它的时间戳就够——新评论自然是新键。
+CLASSIFY_CACHE = Path(os.environ.get("OSSCOUT_DASHBOARD_ROOT", str(ROOT))) \
+    / "state" / "pr_classify_cache.json"
+_CACHE_MAX = 500
+
+
+def _cache_load() -> dict:
+    try:
+        return json.loads(CLASSIFY_CACHE.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def _cache_put(key: str, verdict: dict) -> None:
+    if not key:
+        return
+    try:
+        data = _cache_load()
+        data[key] = verdict
+        if len(data) > _CACHE_MAX:      # 只留最近的，文件不能无限长
+            for k in list(data)[:len(data) - _CACHE_MAX]:
+                data.pop(k, None)
+        CLASSIFY_CACHE.parent.mkdir(parents=True, exist_ok=True)
+        tmp = CLASSIFY_CACHE.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+        os.replace(tmp, CLASSIFY_CACHE)
+    except OSError:
+        pass
+
+
+def classify_comment(body: str, *, repo: str = "", number: int = 0,
+                     title: str = "", author: str = "") -> dict:
+    """用模型判断一条评论的意图。返回 {"ok", "action", "reason"}。
+
+    ok=False 表示模型不可用/输出不合法——调用方必须回退规则判定，
+    绝不能让"模型挂了"变成"这条评论不用管"。
+    """
+    text = str(body or "").strip()
+    if not text:
+        return {"ok": True, "action": "wait", "reason": "no comment"}
+    if len(text) > 4000:
+        text = text[:4000]
+    key, model = _model()
+    if not key:
+        return {"ok": False, "action": "wait", "reason": "no model key"}
+    try:
+        from scout_v2.workers.issue_scorer import GoClient
+        client = GoClient(key=key, model=model, timeout=60)
+        ok, detail = client.chat(CLASSIFY_PROMPT.format(
+            repo=repo or "?", number=number, title=title or "?",
+            author=author or "?", body=text), max_tokens=120)
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "action": "wait", "reason": f"model error: {e}"[:120]}
+    if not ok:
+        return {"ok": False, "action": "wait", "reason": f"model error: {detail}"[:120]}
+
+    m_action = re.search(r"ACTION:\s*([a-z_]+)", detail, re.I)
+    m_reason = re.search(r"REASON:\s*(.+)", detail, re.I)
+    action = (m_action.group(1).lower() if m_action else "")
+    if action not in _ACTIONS:
+        return {"ok": False, "action": "wait",
+                "reason": f"unparseable model output: {detail[:80]}"}
+    reason = (m_reason.group(1).strip() if m_reason else "")[:160]
+    return {"ok": True, "action": action, "reason": reason}
+
+
+def _classify_by_rules(body: str, latest: dict) -> tuple[str, str]:
+    """模型不可用时的保守兜底：能判的都判，判不了就当 review 处理。
+
+    方向选得明确——多起草一封草稿只是白花一次模型调用，漏掉维护者的
+    修改意见会让 PR 烂尾。
+    """
+    author = (latest.get("author") or {}).get("login")
+    if is_pleasantry(body):
+        return "wait", "pleasantry / review ping (rule fallback)"
+    if PATTERNS[2][1].search(body):
+        return "address_review", f"review from {author} (rule fallback)"
+    if _RE_REVIEWISH.search(body):
+        return "answer_question", "question about the change (rule fallback)"
+    if PATTERNS[3][1].search(body):
+        return "answer_question", "maintainer asked for information (rule fallback)"
+    if PATTERNS[4][1].search(body):
+        return "assignment_note", "assignment/claim mentioned (rule fallback)"
+    return "wait", "no actionable ask (rule fallback)"
 
 
 def _gh(args: list[str], timeout: int = 90) -> str:
@@ -140,21 +285,37 @@ def classify(pr: dict) -> dict:
     body = str((latest or {}).get("body") or "")
 
     action, reason = "wait", ""
+    latest_author = str(((latest or {}).get("author") or {}).get("login") or "")
     if failing:
+        # CI 失败是确定性信号，不需要模型判断
         action, reason = "fix_ci", f"failing checks: {', '.join(failing[:4])}"
-    elif latest and is_pleasantry(body):
-        # 催 review / 打招呼：没有诉求可落实，回一段技术解释是自说自话
-        action, reason = "wait", "pleasantry / review ping (no actionable ask)"
-    elif latest and PATTERNS[2][1].search(body):
-        action = "address_review"
-        reason = f"review from {(latest.get('author') or {}).get('login')}"
-    elif latest and _RE_REVIEWISH.search(body):
-        action = "answer_question"
-        reason = "maintainer asked a question about the change"
-    elif latest and PATTERNS[3][1].search(body):
-        action, reason = "answer_question", "maintainer asked for information"
-    elif latest and PATTERNS[4][1].search(body):
-        action, reason = "assignment_note", "assignment/claim mentioned"
+    elif latest and _is_noise_bot(latest_author, body):
+        # 机器人通知（changeset/dependabot/artifacts）按定义没有对话价值，
+        # 也省一次模型调用。真正的 CI 结论走上面的 statusCheckRollup；
+        # "已被他人认领"这类 bot 消息要留痕，不能在这里吞掉。
+        action, reason = "wait", f"bot notice from {latest_author}"
+    elif latest:
+        # 评论性质由模型判断，规则只做兜底。
+        # 2026-11-04 教训：「All green, could someone review?」和
+        # 「All green, but the test fails」对人是一眼的事，对正则只差一个词。
+        # 缓存键含评论时间戳：同一轮 15 分钟扫描之间不重复调用模型。
+        ckey = (f"{pr.get('repo') or pr.get('pr_url') or ''}#"
+                f"{pr.get('number') or ''}@{latest.get('createdAt') or ''}")
+        cached = _cache_load().get(ckey) if latest.get("createdAt") else None
+        if cached:
+            action, reason = cached["action"], cached["reason"] + " (cached)"
+        else:
+            ai = classify_comment(body, repo=str(pr.get("repo") or ""),
+                                  number=int(pr.get("number") or 0),
+                                  title=str(pr.get("title") or ""),
+                                  author=str((latest.get("author") or {})
+                                             .get("login") or ""))
+            action, reason = ai["action"], ai["reason"]
+            if not ai["ok"]:
+                # 模型不可用 → 退回规则判定（保守方向：宁可多判 review）
+                action, reason = _classify_by_rules(body, latest)
+            elif latest.get("createdAt"):
+                _cache_put(ckey, {"action": action, "reason": reason})
     elif pending:
         action, reason = "wait", f"{pending} checks in progress"
     return {

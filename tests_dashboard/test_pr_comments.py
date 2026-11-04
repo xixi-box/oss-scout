@@ -23,6 +23,20 @@ from fastapi.testclient import TestClient  # noqa: E402
 TOKEN = "test-ingest-token"
 
 
+@pytest.fixture(autouse=True)
+def _offline_classifier(monkeypatch):
+    """评论分类默认走规则兜底：单测不联网，也不该随模型抖动而红。"""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "monitor_prs",
+        Path(__file__).resolve().parents[1] / "scripts" / "monitor_prs.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    monkeypatch.setattr(mod, "_model", lambda: ("", ""))
+    monkeypatch.setattr(mod, "_cache_load", lambda: {})
+
+
 @pytest.fixture()
 def client(tmp_path: Path) -> TestClient:
     (tmp_path / "state").mkdir(parents=True)

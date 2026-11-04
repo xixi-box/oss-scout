@@ -1229,8 +1229,10 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
                 spec.loader.exec_module(mod)
                 cls = mod.classify({
                     "comments": [{"author": {"login": ev.get("author", "")},
-                                  "body": ev.get("body", "")}],
+                                  "body": ev.get("body", ""),
+                                  "createdAt": cid}],
                     "statusCheckRollup": [],
+                    "repo": repo, "number": num, "title": "",
                 })
                 action = cls.get("action", "wait")
             except Exception:  # noqa: BLE001
