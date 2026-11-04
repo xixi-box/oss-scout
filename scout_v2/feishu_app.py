@@ -161,10 +161,11 @@ def build_reply_card(repo: str, number: int, issue_title: str,
                                     "content": "**AI 草拟的回复（可直接改，改完点发送）**"}},
             {"tag": "form", "name": "form_reply", "elements": [
                 {"tag": "input", "name": "reply_text",
-                 "default_value": str(draft)[:1500],
+                 "default_value": str(draft)[:1000],
                  "placeholder": {"tag": "plain_text",
                                  "content": "在此修改回复内容"},
-                 "max_length": 2000},
+                 # 飞书 input 的 max_length 上限就是 1000，超了整张卡 400
+                 "max_length": 1000},
                 {"tag": "button", "action_type": "form_submit",
                  "name": "send_reply",
                  "text": {"tag": "plain_text", "content": "一键发送到 GitHub"},
@@ -182,10 +183,19 @@ def send_card_to_chat(chat_id: str, card: dict) -> tuple[bool, str]:
     try:
         body = _request(
             "POST",
-            f"https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=chat_id",
+            "https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=chat_id",
             {"receive_id": chat_id, "msg_type": "interactive", "content":
              json.dumps(card, ensure_ascii=False)}, token=tok)
         ok = body.get("code") == 0
         return ok, ("" if ok else str(body)[:300])
+    except urllib.error.HTTPError as e:
+        # 飞书把"卡片非法"的原因放在错误体里（如 max_length exceed）。
+        # 只报 "HTTP Error 400" 等于让人再去猜一轮，这里把原因带出去。
+        try:
+            detail = e.read().decode("utf-8", "replace")
+            parsed = json.loads(detail)
+            return False, f"HTTP {e.code}: {parsed.get('msg') or detail[:200]}"
+        except Exception:  # noqa: BLE001
+            return False, f"HTTP {e.code}"
     except Exception as e:  # noqa: BLE001
         return False, str(e)[:300]

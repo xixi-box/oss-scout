@@ -74,10 +74,11 @@ class TestReplyCard:
                                     "number": "42"}
 
     def test_long_input_is_truncated_not_rejected(self):
-        """超长草稿不能把整张卡片弄成非法 JSON（飞书有字段长度上限）。"""
+        """超长草稿不能把整张卡片弄成非法 JSON（飞书 input 上限 1000）。"""
         card = self.card(draft="x" * 5000, source_comment="y" * 5000)
         inputs = [n for n in _walk(card) if n.get("tag") == "input"]
-        assert len(inputs[0]["default_value"]) <= 1500
+        assert len(inputs[0]["default_value"]) <= 1000
+        assert inputs[0]["max_length"] <= 1000
 
 
 class TestChatLookup:
@@ -127,6 +128,26 @@ class TestSendCard:
         ok, err = feishu_app.send_card_to_chat("oc_x", {"a": 1})
         assert ok is True
         assert err == ""
+
+    def test_http_error_body_is_surfaced(self, monkeypatch):
+        """飞书把"卡片非法"的真相放在错误体里；只报 HTTP 400 等于让人再猜一轮。"""
+        import io
+        import urllib.error
+
+        monkeypatch.setattr(feishu_app, "tenant_token", lambda: "tok")
+
+        def bad(*a, **k):
+            raise urllib.error.HTTPError(
+                "u", 400, "Bad Request", {}, io.BytesIO(json.dumps(
+                    {"code": 230099,
+                     "msg": "Failed to create card content, "
+                            "ErrMsg: max_length exceed the default maximum 1000"}
+                ).encode()))
+
+        monkeypatch.setattr(feishu_app.urllib.request, "urlopen", bad)
+        ok, err = feishu_app.send_card_to_chat("oc_x", {"a": 1})
+        assert ok is False
+        assert "max_length" in err
 
 
 class TestDraftNotificationFallback:
