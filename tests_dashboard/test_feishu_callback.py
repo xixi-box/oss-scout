@@ -59,6 +59,22 @@ def cb(client: TestClient, payload):
     return client.post("/feishu/callback", json=payload)
 
 
+def card_click(action_value, form_value, token=TOKEN):
+    """真实的 card.action.trigger 报文（schema 2.0）。
+
+    verification token 在 header.token；event.token 是"更新卡片凭证"，
+    两者不是同一个东西——曾经混用导致每次真实点击都 403。
+    """
+    return {"schema": "2.0",
+            "header": {"event_id": "e1", "token": token,
+                       "event_type": "card.action.trigger"},
+            "event": {"operator": {"open_id": "ou_x"},
+                      "token": "card-update-credential",
+                      "action": {"value": action_value,
+                                 "tag": "button",
+                                 "form_value": form_value}}}
+
+
 class TestChallenge:
     def test_challenge_echoed(self, client):
         r = cb(client, {"type": "url_verification",
@@ -70,14 +86,12 @@ class TestChallenge:
 class TestAuth:
     def test_wrong_token_rejected(self, client, monkeypatch):
         monkeypatch.setenv("FEISHU_VERIFICATION_TOKEN", TOKEN)
-        r = cb(client, {"event": {"token": "wrong", "action": {"value": {},
-                                                               "form_value": {}}}})
+        r = cb(client, card_click({}, {}, token="wrong"))
         assert r.status_code == 403
 
     def test_unconfigured_rejects(self, client_unconfigured):
         """fail-closed：token 未配置时拒绝所有卡片动作（这个端点能发 GitHub 评论）。"""
-        r = cb(client_unconfigured, {"event": {"action": {"value": {},
-                                                         "form_value": {}}}})
+        r = cb(client_unconfigured, card_click({}, {}))
         assert r.status_code == 503
 
 
@@ -96,11 +110,9 @@ class TestFormSubmit:
 
         import subprocess as sp_mod
         monkeypatch.setattr(sp_mod, "run", fake_run)
-        r = cb(client, {"event": {
-            "token": TOKEN,
-            "action": {
-                "value": {"do": "send", "repo": "acme/real", "number": "7"},
-                "form_value": {"reply_text": "edited by human in feishu"}}}})
+        r = cb(client, card_click(
+            {"do": "send", "repo": "acme/real", "number": "7"},
+            {"reply_text": "edited by human in feishu"}))
         assert r.status_code == 200
         assert calls and any("/issues/7/comments" in str(a) for a in calls[0])
         data = json.loads(rp.read_text(encoding="utf-8"))
@@ -108,9 +120,7 @@ class TestFormSubmit:
         assert data["acme/real#7"]["sent_body"] == "edited by human in feishu"
 
     def test_missing_fields_rejected(self, client):
-        r = cb(client, {"event": {"token": TOKEN,
-                                  "action": {"value": {"repo": "acme/real"},
-                                             "form_value": {}}}})
+        r = cb(client, card_click({"repo": "acme/real"}, {}))
         assert r.status_code == 400
 
 
@@ -199,11 +209,9 @@ class TestSendOnlyPostsComment:
             encoding="utf-8")
 
     def _submit(self, client):
-        return cb(client, {"event": {
-            "token": TOKEN,
-            "action": {
-                "value": {"do": "send", "repo": "acme/real", "number": "7"},
-                "form_value": {"reply_text": "thanks, done"}}}})
+        return cb(client, card_click(
+            {"do": "send", "repo": "acme/real", "number": "7"},
+            {"reply_text": "thanks, done"}))
 
     def test_no_git_operations_on_send(self, client, tmp_path, monkeypatch):
         self._with_fix(tmp_path, "pushed")
@@ -266,3 +274,49 @@ class TestFixResultEndpoint:
                           "test_ok": False, "test_result": "rc=1"})
         e = json.loads(rp.read_text(encoding="utf-8"))["a/b#1"]
         assert e["fix_state"] == "failed"
+
+
+class TestTokenLocation:
+    """verification token 只在 header.token。
+
+    2026-11-04 实录：飞书已经打进来了，日志里三次 403。原因是回调只查
+    body.token / event.token，而 2.0 卡片回调把验证 token 放在 header.token，
+    event.token 是"更新卡片凭证"（30 分钟、限 2 次）——两者完全不同。
+    """
+
+    def test_header_token_is_accepted(self, client, tmp_path):
+        rp = tmp_path / "state" / "pr_replies.json"
+        rp.write_text(json.dumps({"acme/real#7": {"status": "draft"}}),
+                      encoding="utf-8")
+        import subprocess as sp
+        import unittest.mock as m
+        with m.patch.object(sp, "run", lambda cmd, **k: sp.CompletedProcess(
+                cmd, 0, "https://x", "")):
+            r = cb(client, card_click(
+                {"do": "send", "repo": "acme/real", "number": "7"},
+                {"reply_text": "ok"}))
+        assert r.status_code == 200
+
+    def test_event_token_alone_is_rejected(self, client):
+        """event.token 是更新卡片的凭证，不能拿来当验证依据。"""
+        payload = card_click({"do": "send", "repo": "acme/real", "number": "7"},
+                             {"reply_text": "x"})
+        payload["header"]["token"] = ""
+        r = cb(client, payload)
+        assert r.status_code == 403
+
+    def test_response_wraps_card_as_raw(self, client, tmp_path):
+        """卡片更新要求 card={type:"raw", data:{...}}；裸 card 不会生效。"""
+        rp = tmp_path / "state" / "pr_replies.json"
+        rp.write_text(json.dumps({"acme/real#7": {"status": "draft"}}),
+                      encoding="utf-8")
+        import subprocess as sp
+        import unittest.mock as m
+        with m.patch.object(sp, "run", lambda cmd, **k: sp.CompletedProcess(
+                cmd, 0, "https://x", "")):
+            r = cb(client, card_click(
+                {"do": "send", "repo": "acme/real", "number": "7"},
+                {"reply_text": "ok"}))
+        body = r.json()
+        assert body["card"]["type"] == "raw"
+        assert "elements" in body["card"]["data"]

@@ -1149,11 +1149,16 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
             uv = body.get("url_verification") or body
             return JSONResponse({"challenge": uv.get("challenge")})
 
-        # 2) 校验来源：verification token（自建应用凭证页可见）
+        # 2) 校验来源：卡片回调的验证 token 在 header.token。
+        #    注意 event.token 是"更新卡片用的凭证"（30 分钟、限 2 次更新），
+        #    不是验证 token——早期实现拿它比对，导致每个真实点击都 403
+        #    （2026-11-04 实录：飞书确实打进来了，日志里三次 403）。
         #    fail-closed：token 未配置时拒绝所有卡片动作——这个端点能以我们
         #    名义发 GitHub 评论，不能在未设防的状态下暴露在公网。
-        event = body.get("event") or body
-        token_in = (event.get("token") or body.get("token") or "")
+        header = body.get("header") or {}
+        event = body.get("event") or {}
+        token_in = (header.get("token") or body.get("token")
+                    or event.get("token") or "")
         want = (os.environ.get("FEISHU_VERIFICATION_TOKEN")
                 or D.feishu_verification_token(ds) or "")
         if not want:
@@ -1161,7 +1166,9 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
             return JSONResponse({"detail": "callback verification not configured"},
                                 status_code=503)
         if token_in != want:
-            _audit(root, "feishu_cb_reject", "-", "token mismatch")
+            _audit(root, "feishu_cb_reject", "-",
+                   f"token mismatch (len in={len(str(token_in))} "
+                   f"want={len(str(want))})")
             return JSONResponse({"detail": "forbidden"}, status_code=403)
 
         # 3) 解析 form_submit：卡片 form 里的 reply_text + 按钮带的 repo/number
@@ -1190,18 +1197,20 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
         _mark_reply(key, "sent", sent_body=reply_text,
                     sent_at=time.strftime("%Y-%m-%dT%H:%M:%S"))
         _audit(root, "feishu_cb_sent", key, reply_text[:200])
-        # 回传新卡片：把表单替换成"已发送"确认（卡片 1.0：组件用 tag）
+        # 回传新卡片：把表单替换成"已发送"确认。
+        # 飞书要求 card 包一层 {"type": "raw", "data": {...}}；直接返回裸
+        # card 对象不会更新卡片，点击后仍停在旧的输入框上。
         summary = "回复已以 xixi-box 身份发出：\n\n" + reply_text[:800]
         return JSONResponse({
             "toast": {"type": "success", "content": "已发送 ✓"},
-            "card": {
+            "card": {"type": "raw", "data": {
                 "config": {"wide_screen_mode": True, "update_multi": True},
                 "header": {"title": {"tag": "plain_text",
                           "content": f"✅ 已回复 {repo}#{num_s}"}, "template": "green"},
                 "elements": [
                     {"tag": "div", "text": {"tag": "lark_md", "content": summary}},
                 ],
-            },
+            }},
         })
 
     @app.post("/api/pr/reply/dismiss")
