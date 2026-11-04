@@ -273,3 +273,47 @@ class TestCommentIsNotTruncated:
         text = self._text(huge)
         assert "此处显示前" in text
         assert "5000" in text       # 报出原文长度
+
+
+class TestCardLinkAndState:
+    """卡片要能点仓库直达 PR；按钮文案要说明它到底做什么。"""
+
+    def _card(self, **kw):
+        args = dict(repo="docker/compose", number=14450, issue_title="t",
+                    source_author="ndeloof", source_comment="c",
+                    root_cause="rc", draft="reply")
+        args.update(kw)
+        return feishu_app.build_reply_card(**args)
+
+    def _all_text(self, card):
+        return json.dumps(card, ensure_ascii=False)
+
+    def test_repo_is_a_hyperlink_to_the_pr(self):
+        card = self._card(pr_url="https://github.com/docker/compose/pull/14450")
+        blob = self._all_text(card)
+        assert "[docker/compose#14450](https://github.com/docker/compose/pull/14450)" in blob
+
+    def test_link_falls_back_to_canonical_url(self):
+        card = self._card()
+        blob = self._all_text(card)
+        assert "https://github.com/docker/compose/pull/14450" in blob
+
+    def test_fix_ready_says_modified_and_button_pushes(self):
+        card = self._card(fix_state="ready")
+        blob = self._all_text(card)
+        assert "已修改并提交" in blob
+        assert "发送回复并推送修改" in blob
+
+    def test_fix_pending_says_in_progress(self):
+        blob = self._all_text(self._card(fix_state="pending"))
+        assert "正在流水线里执行" in blob
+        assert "发送回复并推送修改" in blob
+
+    def test_no_fix_button_only_sends_reply(self):
+        blob = self._all_text(self._card(fix_state="none"))
+        assert "一键发送回复" in blob
+        assert "发送回复并推送修改" not in blob
+
+    def test_status_line_absent_when_no_fix(self):
+        blob = self._all_text(self._card(fix_state="none"))
+        assert "已修改并提交" not in blob

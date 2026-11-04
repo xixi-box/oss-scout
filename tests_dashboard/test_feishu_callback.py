@@ -182,3 +182,113 @@ class TestReplySendApi:
         assert r.status_code == 200
         data = json.loads(rp.read_text(encoding="utf-8"))
         assert data["acme/real#7"]["status"] == "dismissed"
+
+
+class TestPushBeforeComment:
+    """点"发送"时如果暂存了改动，必须先推、再发评论。
+
+    顺序不能反：评论会声称"已按你说的改好了"。推送失败还发出去，就是
+    对维护者说了假话——比不发糟得多。
+    """
+
+    def _with_staged(self, tmp_path):
+        rp = tmp_path / "state" / "pr_replies.json"
+        rp.write_text(json.dumps({"acme/real#7": {
+            "status": "draft", "draft": "x",
+            "fix_state": "ready",
+            "fix_branch": "fix/1-abc-staged",
+            "fix_sha": "c" * 40,
+            "fix_fork": "xixi-box/real"}}), encoding="utf-8")
+
+    def _submit(self, client):
+        return cb(client, {"event": {
+            "token": TOKEN,
+            "action": {
+                "value": {"do": "send", "repo": "acme/real", "number": "7"},
+                "form_value": {"reply_text": "thanks, done"}}}})
+
+    def test_push_happens_before_comment(self, client, tmp_path, monkeypatch):
+        self._with_staged(tmp_path)
+        import subprocess as sp
+        order = []
+
+        def fake_run(cmd, **k):
+            joined = " ".join(cmd)
+            if "git/refs/heads" in joined:
+                order.append("push")
+                return sp.CompletedProcess(cmd, 0, "{}", "")
+            if "/issues/7/comments" in joined:
+                order.append("comment")
+                return sp.CompletedProcess(cmd, 0, "https://x", "")
+            return sp.CompletedProcess(cmd, 0, "", "")
+
+        monkeypatch.setattr(sp, "run", fake_run)
+        r = self._submit(client)
+        assert r.status_code == 200
+        assert order == ["push", "comment"], order
+
+    def test_push_failure_blocks_the_comment(self, client, tmp_path, monkeypatch):
+        self._with_staged(tmp_path)
+        import subprocess as sp
+        called = []
+
+        def fake_run(cmd, **k):
+            joined = " ".join(cmd)
+            if "git/refs/heads" in joined:
+                return sp.CompletedProcess(cmd, 1, "", "protected branch")
+            called.append(joined)
+            return sp.CompletedProcess(cmd, 0, "", "")
+
+        monkeypatch.setattr(sp, "run", fake_run)
+        r = self._submit(client)
+        assert r.status_code == 200                     # 卡片要能回话
+        assert r.json()["toast"]["type"] == "error"
+        assert not any("comments" in c for c in called), "comment must not be posted"
+        # 草稿仍待发，不能标成 sent
+        data = json.loads((tmp_path / "state" / "pr_replies.json")
+                          .read_text(encoding="utf-8"))
+        assert data["acme/real#7"]["status"] == "draft"
+
+    def test_plain_reply_skips_push(self, client, tmp_path, monkeypatch):
+        rp = tmp_path / "state" / "pr_replies.json"
+        rp.write_text(json.dumps({"acme/real#7": {
+            "status": "draft", "draft": "x"}}), encoding="utf-8")
+        import subprocess as sp
+        seen = []
+
+        def fake_run(cmd, **k):
+            seen.append(" ".join(cmd))
+            return sp.CompletedProcess(cmd, 0, "https://x", "")
+
+        monkeypatch.setattr(sp, "run", fake_run)
+        r = self._submit(client)
+        assert r.status_code == 200
+        assert not any("refs/heads" in c for c in seen)
+        assert any("/issues/7/comments" in c for c in seen)
+
+
+class TestFixResultEndpoint:
+    """workflow 回报"改动已暂存"，卡片据此从 pending 翻成 ready。"""
+
+    def test_requires_token(self, client):
+        r = client.post("/api/pr/reply/fix-result", json={"repo": "a/b", "number": 1})
+        # 测试环境 cloudflare.yaml 里 ingest_token 是 "t"
+        assert r.status_code == 403
+
+    def test_records_staged_state(self, client, tmp_path):
+        rp = tmp_path / "state" / "pr_replies.json"
+        rp.write_text(json.dumps({"a/b#1": {"status": "draft"}}), encoding="utf-8")
+        r = client.post("/api/pr/reply/fix-result",
+                        headers={"X-Ingest-Token": "t"},
+                        json={"repo": "a/b", "number": 1, "test_ok": True,
+                              "test_result": "go test rc=0",
+                              "changed_files": ["pkg/watch/x_test.go"],
+                              "staging_sha": "d" * 40,
+                              "staging_branch": "fix/1-abc-staged",
+                              "fork_repo": "xixi-box/b"})
+        assert r.status_code == 200
+        data = json.loads(rp.read_text(encoding="utf-8"))
+        e = data["a/b#1"]
+        assert e["fix_state"] == "ready"
+        assert e["fix_sha"] == "d" * 40
+        assert e["fix_branch"] == "fix/1-abc-staged"

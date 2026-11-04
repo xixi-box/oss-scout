@@ -543,7 +543,10 @@ def dispatch_pr_fix(repo: str, number: int, *, dry_run: bool = False,
                      "kind": kind,
                      "reason": why if ok else "dispatch failed"}
     _save_attempts(attempts)
-    return {"dispatched": ok, "reason": why, "job_id": job_id, "kind": kind}
+    return {"dispatched": ok, "reason": why, "job_id": job_id, "kind": kind,
+            # 改动落在 fork 的 ${branch}-staged 上，等人在飞书点按钮才快进
+            "fork_repo": payload["fork_repo"],
+            "staging_branch": f"{payload['branch']}-staged"}
 
 
 def _save_attempts(data: dict) -> None:

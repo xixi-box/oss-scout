@@ -149,7 +149,8 @@ jobs:
             --fix "$RUNNER_TEMP/fix.json" \
             --repo-dir "$RUNNER_TEMP/repo" | tee "$RUNNER_TEMP/prfix.json"
 
-      - name: Commit and push
+      - name: Commit to a staging branch
+        id: stage
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
@@ -159,7 +160,8 @@ jobs:
           set -euo pipefail
           cd "$RUNNER_TEMP/repo"
           if git diff --quiet && git diff --cached --quiet; then
-            echo "no changes produced; nothing to push"
+            echo "no changes produced"
+            echo "outcome=nochange" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           # worker 按仓库形态跑过测试（go test / pytest / npm test）。验证不过
@@ -169,17 +171,16 @@ jobs:
           out = open(os.environ["RUNNER_TEMP"] + "/prfix.json", encoding="utf-8").read()
           m = re.search(r"##OSSCOUT_PRFIX##(.*)", out, re.S)
           if not m:
-              sys.exit("worker produced no result marker; refusing to push")
+              sys.exit("worker produced no result marker; refusing to stage")
           res = json.loads(m.group(1).strip().split("\n")[0])
           print("worker result:", {k: res.get(k) for k in
                                    ("fixed", "test_ok", "test_result")})
           if not res.get("test_ok"):
-              sys.exit("tests did not pass or could not run -> refusing to push")
+              sys.exit("tests did not pass or could not run -> refusing to stage")
           PY
           git config user.name "wangshun"
           git config user.email "96341168+xixi-box@users.noreply.github.com"
           git add -A
-          # PR 号从 payload 读，不拼接 inputs（job_id 是去重键不是 PR 号）
           MSG=$(python3 - <<'PY'
           import json, os
           j = json.load(open(os.environ["RUNNER_TEMP"] + "/fix.json"))
@@ -191,6 +192,65 @@ jobs:
           PY
           )
           git commit -q -m "$MSG"
-          git push "https://x-access-token:$GH_TOKEN@github.com/$FORK_REPO.git" \
-            "HEAD:$BRANCH"
-          echo "pushed to $FORK_REPO@$BRANCH"
+
+          # 关键：推到**暂存分支**，不碰 PR 分支。
+          # 这条链路的所有权是"人点一下按钮才动别人的 PR"，所以自动化只
+          # 负责把改动做好、验好、放在旁边；推送由 /feishu/callback 完成。
+          STAGING="${BRANCH}-staged"
+          git push --force \
+            "https://x-access-token:$GH_TOKEN@github.com/$FORK_REPO.git" \
+            "HEAD:refs/heads/$STAGING"
+          SHA=$(git rev-parse HEAD)
+          echo "staged $SHA on $FORK_REPO@$STAGING"
+          echo "staging_sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "outcome=staged" >> "$GITHUB_OUTPUT"
+
+      - name: Record staging result for the dashboard
+        if: always()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: |
+          set -uo pipefail
+          python3 - <<'PY'
+          import json, os, re, urllib.request
+          base = os.environ["RUNNER_TEMP"]
+          j = json.load(open(base + "/fix.json"))
+          try:
+              out = open(base + "/prfix.json", encoding="utf-8").read()
+          except OSError:
+              out = ""
+          m = re.search(r"##OSSCOUT_PRFIX##(.*)", out, re.S)
+          res = json.loads(m.group(1).strip().split("\n")[0]) if m else {}
+
+          # 把结果送回看板，好让飞书卡片从"进行中"变成"可发送"。
+          # 失败只是状态没更新，不影响已经暂存好的提交。
+          payload = {"repo": j["upstream_repo"], "number": j["pr_number"],
+                     "kind": j.get("kind") or "ci",
+                     "test_ok": res.get("test_ok"),
+                     "test_result": res.get("test_result"),
+                     "changed_files": res.get("changed_files") or [],
+                     "staged": bool(res.get("changed_files")) and bool(res.get("test_ok")),
+                     "staging_sha": os.environ.get("STAGING_SHA", ""),
+                     "staging_branch": j["branch"] + "-staged",
+                     "fork_repo": j["fork_repo"]}
+          token = os.environ.get("INGEST_TOKEN", "")
+          url = (os.environ.get("DASHBOARD_URL", "") or "").rstrip("/") \
+              + "/api/pr/reply/fix-result"
+          if not token or not url.startswith("http"):
+              print("no ingest token/url; skipping callback")
+              raise SystemExit(0)
+          req = urllib.request.Request(
+              url, data=json.dumps(payload).encode(), method="POST",
+              headers={"Content-Type": "application/json",
+                       "X-Ingest-Token": token})
+          try:
+              with urllib.request.urlopen(req, timeout=30) as r:
+                  print("callback:", r.status, r.read()[:200])
+          except Exception as e:
+              print("callback failed:", str(e)[:200])
+          PY
+        env:
+          INGEST_TOKEN: ${{ secrets.CF_INGEST_TOKEN }}
+          DASHBOARD_URL: ${{ secrets.DASHBOARD_PUBLIC_URL }}
+          STAGING_SHA: ${{ steps.stage.outputs.staging_sha }}

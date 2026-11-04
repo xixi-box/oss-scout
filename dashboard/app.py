@@ -109,9 +109,13 @@ def _atomic_write_text(path: Path, text: str) -> None:
     os.replace(tmp, path)
 
 
-def _notify_draft(root: Path, r: dict, draft: dict,
-                  *, fix_dispatched: bool = False) -> None:
+def _notify_draft(root: Path, r: dict, draft: dict) -> None:
     """把"AI 草稿待人审"推给飞书，人可在卡片里改完一键发。
+
+    卡片的状态取自 state/pr_replies.json 的 fix_state：
+      无 / "none"  纯回复，按钮只发评论
+      "pending"    改动在流水线里跑，按钮会等结果
+      "ready"      改动已提交到暂存分支，按钮发评论 + 推送
 
     优先走自建应用卡片（含可编辑输入框 + form_submit 按钮，回调
     /feishu/callback 直接发 GitHub）；应用未配置时回退到 webhook 卡片，
@@ -124,6 +128,17 @@ def _notify_draft(root: Path, r: dict, draft: dict,
     text = str(entry.get("draft") or draft.get("draft") or "")
     if not text:
         return
+
+    fix_state = "none"
+    try:
+        stored = json.loads((root / "state" / "pr_replies.json")
+                            .read_text(encoding="utf-8")).get(key) or {}
+        fix_state = str(stored.get("fix_state") or "none")
+    except (OSError, json.JSONDecodeError):
+        pass
+
+    pr_url = str(r.get("pr_url") or entry.get("pr_url")
+                 or f"https://github.com/{repo}/pull/{number}")
     try:
         from scout_v2 import feishu_app
 
@@ -138,16 +153,19 @@ def _notify_draft(root: Path, r: dict, draft: dict,
                                        or entry.get("source_comment") or ""),
                     root_cause=str(entry.get("root_cause") or ""),
                     draft=text,
-                    fix_dispatched=fix_dispatched)
+                    fix_state=fix_state,
+                    pr_url=pr_url)
                 ok, err = feishu_app.send_card_to_chat(chat, card)
                 _audit(root, "feishu_card", key,
-                       "sent" if ok else f"failed: {err[:150]}")
+                       f"fix_state={fix_state} "
+                       + ("sent" if ok else f"failed: {err[:150]}"))
                 if ok:
                     return
         from scout_v2.notify import feishu_send_card
 
-        state = ("✅ 改动已自动推送，回复待审" if fix_dispatched
-                 else "💬 回复草稿待人审")
+        state = {"ready": "✅ 已修改并提交（待你确认后推送）",
+                 "pending": "⏳ 代码修改进行中",
+                 }.get(fix_state, "💬 回复草稿待人审")
         feishu_send_card(
             f"{state}：{key}",
             f"**来自** {r.get('latest_author') or '?'}："
@@ -463,7 +481,16 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
                                     review_author=str(r.get("latest_author") or ""))
                                 _audit(root, "pr_review_fix_dispatch", key,
                                        f"dispatched={fix_out.get('dispatched')} "
+                                       f"kind={fix_out.get('kind')} "
                                        f"reason={str(fix_out.get('reason'))[:120]}")
+                                if fix_out.get("dispatched"):
+                                    # 先标 pending：卡片要能说"正在改"，
+                                    # 等 workflow 回调再翻成 ready
+                                    _mark_reply(key, "draft", fix_state="pending",
+                                                fix_branch=str(
+                                                    fix_out.get("staging_branch") or ""),
+                                                fix_fork=str(
+                                                    fix_out.get("fork_repo") or ""))
                             except Exception as e:  # noqa: BLE001
                                 _audit(root, "pr_review_fix_error", key, str(e)[:200])
                             try:
@@ -471,11 +498,9 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
                                                         context=r)
                                 _audit(root, "pr_reply_drafted", key,
                                        f"drafted={draft.get('drafted')} "
-                                       f"fix_dispatched={bool(fix_out.get('dispatched'))}")
+                                       f"fix_kind=review")
                                 if draft.get("drafted"):
-                                    _notify_draft(root, r, draft,
-                                                  fix_dispatched=bool(
-                                                      fix_out.get("dispatched")))
+                                    _notify_draft(root, r, draft)
                             except Exception as e:  # noqa: BLE001
                                 _audit(root, "pr_draft_error", key, str(e)[:200])
                         elif action == "answer_question":
@@ -1033,6 +1058,51 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
             return False, str(e)[:200]
         return r.returncode == 0, (r.stderr or "")[:200]
 
+    def _push_staged_if_any(key: str) -> tuple[bool | None, str]:
+        """把暂存分支上的改动快进到 PR 分支。返回 (是否推送过, 描述)。
+
+        None = 没有暂存改动（纯回复场景），False = 尝试了但失败。
+        推送用 fast-forward：暂存分支是 PR 分支的直接后代，所以不需要
+        force-push（Playbook §0.3 永不 force-push 用户仓库的 PR 分支）。
+        """
+        import subprocess as sp
+
+        rp = root / "state" / "pr_replies.json"
+        try:
+            entry = json.loads(rp.read_text(encoding="utf-8")).get(key) or {}
+        except (OSError, json.JSONDecodeError):
+            return None, ""
+        if entry.get("fix_state") != "ready":
+            return None, ""
+        branch = str(entry.get("fix_branch") or "")
+        sha = str(entry.get("fix_sha") or "")
+        fork = str(entry.get("fix_fork") or "")
+        if not (branch and fork):
+            return None, ""
+        repo, _, num = key.partition("#")
+        if not str(num).isdigit():
+            return None, ""
+        # 目标是 fork 上的 PR 分支；上游 PR 会跟着 fork 分支自动更新
+        target = branch
+        try:
+            r = sp.run(["git", "ls-remote", "--heads",
+                        f"https://github.com/{fork}.git", target],
+                       capture_output=True, text=True, timeout=60)
+            if r.returncode != 0:
+                return False, f"ls-remote failed: {(r.stderr or '')[:120]}"
+            # 用 GitHub API 做快进引用更新，避免本地 clone
+            out = sp.run(["gh", "api", "-X", "PATCH",
+                          f"repos/{fork}/git/refs/heads/{target}",
+                          "-f", f"sha={sha}", "-F", "force=false"],
+                         capture_output=True, text=True, timeout=60)
+            if out.returncode != 0:
+                detail = (out.stderr or out.stdout or "")[:200]
+                return False, f"ref update failed: {detail}"
+            _audit(root, "pr_fix_pushed", key, f"{fork}@{target} -> {sha[:12]}")
+            return True, f"{sha[:7]} → {target}"
+        except Exception as e:  # noqa: BLE001
+            return False, str(e)[:150]
+
     def _mark_reply(key: str, status: str, **extra) -> None:
         rp = root / "state" / "pr_replies.json"
         try:
@@ -1046,6 +1116,47 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
         tmp.write_text(json.dumps(replies, ensure_ascii=False, indent=1),
                        encoding="utf-8")
         os.replace(tmp, rp)
+
+    @app.post("/api/pr/reply/fix-result")
+    async def api_pr_reply_fix_result(request: Request):
+        """pr-fix workflow 回报结果：改动已提交到暂存分支（未推 PR）。
+
+        鉴权用与 Worker 相同的 X-Ingest-Token——这是内部通道，不接受匿名。
+        写入后飞书卡片会从"进行中"变成"可发送"。
+        """
+        cfg = D.cloudflare_cfg(ds)
+        expect = (cfg.get("ingest_token") or "").strip()
+        got = request.headers.get("X-Ingest-Token", "").strip()
+        if not expect:
+            return JSONResponse({"detail": "ingest_token not configured"},
+                                status_code=503)
+        if not hmac.compare_digest(got, expect):
+            return JSONResponse({"detail": "forbidden"}, status_code=403)
+        try:
+            body = json.loads((await request.body()) or b"{}")
+        except Exception:  # noqa: BLE001
+            return JSONResponse({"detail": "bad json"}, status_code=400)
+        repo = str(body.get("repo") or "").strip()
+        num = body.get("number")
+        if not repo or not isinstance(num, int):
+            return JSONResponse({"detail": "repo/number required"}, status_code=400)
+        key = f"{repo}#{num}"
+        staged = bool(body.get("staged", body.get("test_ok")))
+        extra = {"fix_state": "ready" if staged else "failed",
+                 "fix_test_result": str(body.get("test_result") or "")[:200],
+                 "fix_changed": [str(c)[:120] for c in
+                                 (body.get("changed_files") or [])][:10],
+                 "fix_staged_at": time.strftime("%Y-%m-%dT%H:%M:%S")}
+        if body.get("staging_sha"):
+            extra["fix_sha"] = str(body["staging_sha"])
+        if body.get("staging_branch"):
+            extra["fix_branch"] = str(body["staging_branch"])
+        if body.get("fork_repo"):
+            extra["fix_fork"] = str(body["fork_repo"])
+        _mark_reply(key, "draft", **extra)
+        _audit(root, "pr_fix_result", key,
+               f"staged={staged} test={str(body.get('test_result'))[:80]}")
+        return JSONResponse({"ok": True})
 
     @app.post("/api/pr/reply/send")
     def api_pr_reply_send(request: Request, repo: str = Form(""),
@@ -1114,15 +1225,30 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
             return JSONResponse({"detail": "missing repo/number/reply_text"},
                                 status_code=400)
         number = int(num_s)
+        key = f"{repo}#{number}"
+
+        # 有暂存改动就先推：这是整条链路上唯一动别人 PR 的时刻，
+        # 由人点按钮触发。推送失败就不发评论——那条评论会声称"已改好"，
+        # 而实际上没有。
+        pushed, push_detail = _push_staged_if_any(key)
+        if pushed is False:
+            _audit(root, "feishu_cb_push_failed", key, push_detail)
+            return JSONResponse({"toast": {
+                "type": "error",
+                "content": "推送修改失败，回复未发送：" + push_detail[:90]}})
+
         ok, detail = _post_pr_comment(repo, number, reply_text)
         if not ok:
-            _audit(root, "feishu_cb_send_failed", f"{repo}#{number}", detail)
+            _audit(root, "feishu_cb_send_failed", key, detail)
             return JSONResponse({"toast": {"type": "error",
                                            "content": "发送失败：" + detail[:80]}})
-        _mark_reply(f"{repo}#{number}", "sent", sent_body=reply_text,
+        _mark_reply(key, "sent", sent_body=reply_text,
                     sent_at=time.strftime("%Y-%m-%dT%H:%M:%S"))
-        _audit(root, "feishu_cb_sent", f"{repo}#{number}", reply_text[:200])
+        _audit(root, "feishu_cb_sent", key, reply_text[:200])
         # 回传新卡片：把表单替换成"已发送"确认（卡片 1.0：组件用 tag）
+        summary = "回复已以 xixi-box 身份发出：\n\n" + reply_text[:800]
+        if pushed:
+            summary = f"✅ 修改已推送（{push_detail}）\n\n" + summary
         return JSONResponse({
             "toast": {"type": "success", "content": "已发送 ✓"},
             "card": {
@@ -1130,8 +1256,7 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
                 "header": {"title": {"tag": "plain_text",
                           "content": f"✅ 已回复 {repo}#{num_s}"}, "template": "green"},
                 "elements": [
-                    {"tag": "div", "text": {"tag": "lark_md",
-                     "content": "回复已以 xixi-box 身份发出：\n\n" + reply_text[:800]}},
+                    {"tag": "div", "text": {"tag": "lark_md", "content": summary}},
                 ],
             },
         })

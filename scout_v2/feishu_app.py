@@ -137,15 +137,18 @@ def find_group_chat_id() -> str | None:
 def build_reply_card(repo: str, number: int, issue_title: str,
                      source_author: str, source_comment: str,
                      root_cause: str, draft: str,
-                     *, fix_dispatched: bool = False) -> dict:
-    """构造"可编辑回复"卡片：显示上下文 + 多行输入 + 一键提交。
+                     *, fix_state: str = "none", pr_url: str = "") -> dict:
+    """构造"可编辑回复"卡片：上下文 + 多行输入 + 一键提交。
 
     用卡片 1.0（`im/v1/messages` 的经典结构）：组件由 `tag` 声明，
     `type` 只表示按钮样式。form 内的按钮用 `action_type: form_submit`，
-    点击后飞书回调 /feishu/callback，由回调端把编辑后的文本发到 GitHub。
+    点击后飞书回调 /feishu/callback。
 
-    fix_dispatched=True 时在标题上标明"代码改动已在流水线里推"，因为
-    此时按钮只负责发回复，不该让人以为还得自己动手改代码。
+    fix_state 决定这张卡片的语义，也就决定了按钮做什么：
+      "none"    只回复。按钮只发评论。
+      "pending" 改动还在流水线里跑。按钮会等它完成再一起推。
+      "ready"   改动已提交到暂存分支（**没动 PR 分支**）。点按钮 =
+                发评论 + 把暂存提交快进到 PR 分支。人这一下就是唯一的放行点。
     """
     # 保留换行：评审内容是分条的（"One blocking point: ..." / "Please also ..."），
     # 压成一行后结构全丢，读的人要靠猜哪句是一条要求。
@@ -158,40 +161,58 @@ def build_reply_card(repo: str, number: int, issue_title: str,
     else:
         excerpt = raw
     rc = str(root_cause or "")[:300]
-    title = (f"✅ 改动已推送 · 回复待审：{repo}#{number}" if fix_dispatched
-             else f"💬 回复草稿待审：{repo}#{number}")
+
+    link = pr_url or f"https://github.com/{repo}/pull/{number}"
+    target = f"[{repo}#{number}]({link})"
+
+    status_line = {
+        "pending": "⏳ **代码修改正在流水线里执行**，完成后这张卡片会更新",
+        "ready": ("✅ **已修改并提交**（暂存在分支上，还没动 PR —— "
+                  "点下方按钮时一起推送）"),
+    }.get(fix_state, "")
+    button_text = ("发送回复并推送修改" if fix_state in ("ready", "pending")
+                   else "一键发送回复")
+
+    elements: list[dict] = [
+        {"tag": "div", "text": {"tag": "lark_md",
+                                "content": f"**仓库**：{target}\n"
+                                           f"**issue**：{issue_title}"}},
+        {"tag": "div", "text": {"tag": "lark_md",
+                                "content": f"**我们的修法（根因）**：{rc or '见 PR 描述'}"}},
+    ]
+    if status_line:
+        elements.append({"tag": "div", "text": {"tag": "lark_md",
+                                                "content": status_line}})
+    elements += [
+        {"tag": "div", "text": {"tag": "lark_md",
+                                "content": (f"**对方评论（{source_author}）**：\n"
+                                            f"{excerpt}")}},
+        {"tag": "hr"},
+        {"tag": "div", "text": {"tag": "lark_md",
+                                "content": "**AI 草拟的回复（可直接改，改完点发送）**"}},
+        {"tag": "form", "name": "form_reply", "elements": [
+            {"tag": "input", "name": "reply_text",
+             "default_value": str(draft)[:1000],
+             "placeholder": {"tag": "plain_text",
+                             "content": "在此修改回复内容"},
+             # 飞书 input 的 max_length 上限就是 1000，超了整张卡 400
+             "max_length": 1000},
+            {"tag": "button", "action_type": "form_submit",
+             "name": "send_reply",
+             "text": {"tag": "plain_text", "content": button_text},
+             "type": "primary",
+             "value": {"do": "send", "repo": repo, "number": str(number)}},
+        ]},
+    ]
+
     return {
         "config": {"wide_screen_mode": True, "update_multi": True},
         "header": {
-            "title": {"tag": "plain_text", "content": title},
-            "template": "green" if fix_dispatched else "orange",
+            "title": {"tag": "plain_text",
+                      "content": f"💬 回复待审：{repo}#{number}"},
+            "template": "orange",
         },
-        "elements": [
-            {"tag": "div", "text": {"tag": "lark_md",
-                                    "content": (f"**仓库**：{repo}#{number}\n"
-                                                f"**issue**：{issue_title}")}},
-            {"tag": "div", "text": {"tag": "lark_md",
-                                    "content": f"**我们的修法（根因）**：{rc or '见 PR 描述'}"}},
-            {"tag": "div", "text": {"tag": "lark_md",
-                                    "content": (f"**对方评论（{source_author}）**：\n"
-                                                f"{excerpt}")}},
-            {"tag": "hr"},
-            {"tag": "div", "text": {"tag": "lark_md",
-                                    "content": "**AI 草拟的回复（可直接改，改完点发送）**"}},
-            {"tag": "form", "name": "form_reply", "elements": [
-                {"tag": "input", "name": "reply_text",
-                 "default_value": str(draft)[:1000],
-                 "placeholder": {"tag": "plain_text",
-                                 "content": "在此修改回复内容"},
-                 # 飞书 input 的 max_length 上限就是 1000，超了整张卡 400
-                 "max_length": 1000},
-                {"tag": "button", "action_type": "form_submit",
-                 "name": "send_reply",
-                 "text": {"tag": "plain_text", "content": "一键发送到 GitHub"},
-                 "type": "primary",
-                 "value": {"do": "send", "repo": repo, "number": str(number)}},
-            ]},
-        ],
+        "elements": elements,
     }
 
 
