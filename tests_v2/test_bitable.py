@@ -106,6 +106,16 @@ class TestRowToFields:
             assert col not in f
 
 
+@pytest.fixture()
+def fake(monkeypatch):
+    f = TestSyncDiff._Fake()
+    monkeypatch.setattr(fb.feishu_app, "tenant_token", lambda: "tok")
+    monkeypatch.setattr(fb.feishu_app, "_request", f.request)
+    monkeypatch.setattr(fb.feishu_app, "app_configured", lambda: True)
+    monkeypatch.setenv("FEISHU_BITABLE_APP_TOKEN", "app1")
+    return f
+
+
 class TestSyncDiff:
     class _Fake:
         """按操作记账的假飞书 API。"""
@@ -114,6 +124,7 @@ class TestSyncDiff:
             self.records = {}
             self.created = []
             self.updated = []
+            self.deleted = []
 
         def request(self, method, url, payload=None, token=None):
             if "/tables?" in url:
@@ -136,17 +147,12 @@ class TestSyncDiff:
                     self.records[rec["record_id"]] = rec["fields"]
                     self.updated.append(rec["record_id"])
                 return {"code": 0}
+            if url.endswith("records/batch_delete"):
+                for rid in payload["records"]:
+                    self.deleted.append(rid)
+                    self.records.pop(rid, None)
+                return {"code": 0}
             raise AssertionError(f"unexpected url {url}")
-
-    @pytest.fixture()
-    def fake(self, monkeypatch, tmp_path):
-        f = self._Fake()
-        monkeypatch.setattr(fb.feishu_app, "tenant_token", lambda: "tok")
-        monkeypatch.setattr(fb.feishu_app, "_request", f.request)
-        monkeypatch.setattr(fb.feishu_app, "app_configured", lambda: True)
-        monkeypatch.setattr(fb, "list_bases",
-                            lambda: [{"app_token": "app1", "name": "台账"}])
-        return f
 
     def test_first_sync_creates(self, fake, tmp_path):
         out = fb.sync_rows(tmp_path, [_row(), _row(repo="a/b", number=2)])
@@ -175,3 +181,49 @@ class TestSyncDiff:
         fb.sync_rows(tmp_path, [_row(state="closed")])
         assert len(fake.records) == 1
         assert fake.records["r1"]["状态"] == "closed"
+
+
+class TestLedgerScope:
+    """台账口径：closed 未合并 / 自有仓库 / optica 不进表，进了的也要删掉。"""
+
+    def test_unmerged_closed_excluded(self, monkeypatch):
+        monkeypatch.setattr(mp, "all_my_prs", lambda limit=100: [
+            _row(state="closed"), _row(state="merged"), _row(state="open")])
+        rows = mp.build_pr_rows(Path("."))
+        assert {r["state"] for r in rows} == {"merged", "open"}
+
+    def test_own_repos_excluded(self, monkeypatch):
+        monkeypatch.setattr(mp, "all_my_prs", lambda limit=100: [
+            _row(repo="xixi-box/safedock", number=1),
+            _row(repo="wangshun-china/interview-web", number=1),
+            _row(repo="docker/compose", number=9)])
+        rows = mp.build_pr_rows(Path("."))
+        assert [r["repo"] for r in rows] == ["docker/compose"]
+
+    def test_optica_excluded(self, monkeypatch):
+        monkeypatch.setattr(mp, "all_my_prs", lambda limit=100: [
+            _row(repo="Deep-Optica/SkillsMaster", number=3),
+            _row(repo="wxyu-deep-optica/skill-vdr", number=4),
+            _row(repo="qdrant/qdrant", number=5)])
+        assert [r["repo"] for r in mp.build_pr_rows(Path("."))] == ["qdrant/qdrant"]
+
+    def test_sync_prunes_out_of_scope_records(self, fake, tmp_path):
+        # 直灌一条口径外的（模拟"口径收紧之前已经进了表"的历史记录）
+        def keys_in_table():
+            return {fs.get("键") for fs in fake.records.values()}
+
+        fb.sync_rows(tmp_path, [_row(repo="xixi-box/safedock", number=1,
+                                     state="merged")])
+        assert "xixi-box/safedock#1" in keys_in_table()
+        out = fb.sync_rows(tmp_path, [_row(repo="qdrant/qdrant", number=5,
+                                           state="merged")])
+        assert out["pruned"] == 1
+        assert "xixi-box/safedock#1" not in keys_in_table()
+        assert "qdrant/qdrant#5" in keys_in_table()
+
+    def test_empty_rows_never_prunes(self, fake, tmp_path):
+        """GitHub 全挂时 rows 为空——那不是"全删"的信号。"""
+        fb.sync_rows(tmp_path, [_row()])
+        out = fb.sync_rows(tmp_path, [])
+        assert out.get("pruned", 0) == 0
+        assert len(fake.records) == 1

@@ -739,6 +739,25 @@ def all_my_prs(limit: int = 100) -> list[dict]:
     return list(out.values())
 
 
+# 台账口径（用户裁定 2026-11-04）：未合并就关掉的 PR 不进表；自己名下的
+# 仓库（xixi-box/*，练习/测试/作业类）和 Deep-Optica 相关仓库不是开源贡献，
+# 都剔除。merged 保留——被合并才是贡献的终点证明。
+LEDGER_EXCLUDE_STATES = {"closed"}
+# 我们自己的 GitHub 账号名下的仓库：xixi-box（机器人）和 wangshun-china（个人）
+LEDGER_OWN_OWNERS = {"xixi-box", "wangshun-china"}
+
+
+def ledger_excludes(row: dict) -> bool:
+    if str(row.get("state")) in LEDGER_EXCLUDE_STATES:
+        return True
+    owner = str(row.get("repo", "")).split("/", 1)[0].lower()
+    if owner in LEDGER_OWN_OWNERS:
+        return True
+    if "optica" in str(row.get("repo", "")).lower():
+        return True
+    return False
+
+
 def build_pr_rows(root) -> list[dict]:
     """多维表格的行：GitHub 全量 PR ⊕ 本地动作/回复/修改状态。
 
@@ -792,4 +811,4 @@ def build_pr_rows(root) -> list[dict]:
             note_parts.append(str(entry["fix_test_result"])[:120])
         row["note"] = "；".join(p for p in note_parts if p)[:600]
 
-    return rows
+    return [r for r in rows if not ledger_excludes(r)]

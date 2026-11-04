@@ -72,16 +72,28 @@ def save_binding(root: Path, binding: dict) -> None:
     os.replace(tmp, p)
 
 
+def _binding_app_token(root: Path) -> str:
+    """表格绑定：环境变量优先，其次 state 文件（首次发现后缓存）。"""
+    env_tok = (os.environ.get("FEISHU_BITABLE_APP_TOKEN") or "").strip()
+    if env_tok:
+        return env_tok
+    return str(load_binding(root).get("app_token") or "")
+
+
 def configured(root: Path) -> bool:
-    """有应用凭证且已经找到（或能找到）表格，才算就绪。"""
-    return feishu_app.app_configured()
+    """有应用凭证且表格已绑定（env 或 state），才算就绪。"""
+    return feishu_app.app_configured() and bool(_binding_app_token(root))
 
 
 def _iso_to_ms(v) -> int | None:
     if not v:
         return None
     try:
-        return int(time.mktime(time.strptime(str(v)[:19], "%Y-%m-%dT%H:%M:%S")) * 1000)
+        # GitHub 的时间是 UTC；mktime 按本地时区解释会偏移几个小时，
+        # Windows 上还会直接 OverflowError。timegm 才是 UTC 语义。
+        import calendar
+        return int(calendar.timegm(
+            time.strptime(str(v)[:19], "%Y-%m-%dT%H:%M:%S")) * 1000)
     except ValueError:
         return None
 
@@ -112,15 +124,6 @@ def row_to_fields(row: dict) -> dict:
     return f
 
 
-def list_bases() -> list[dict]:
-    body = feishu_app._request(
-        "GET", "https://open.feishu.cn/open-apis/bitable/v1/apps?page_size=50",
-        token=feishu_app.tenant_token())
-    if body.get("code") not in (0, None):
-        raise RuntimeError(f"list bases: {str(body)[:200]}")
-    return list((body.get("data") or {}).get("items") or [])
-
-
 def find_or_create_table(app_token: str) -> str:
     """返回 PR 记录表的 table_id，没有就建。"""
     tok = feishu_app.tenant_token()
@@ -140,8 +143,24 @@ def find_or_create_table(app_token: str) -> str:
     return str((created.get("data") or {}).get("table_id"))
 
 
+def _norm_field(v):
+    """归一化飞书返回的字段值，使指纹比较稳定。
+
+    飞书读回来的文本是 [{"type":"text","text":...}] 段落形态、链接会带
+    额外键——和写入时的形态不同。不归一化的话，每轮同步都会把所有行
+    "看起来变了"，白白重写整张表。
+    """
+    if isinstance(v, list):
+        parts = [str(seg.get("text") or "") for seg in v
+                 if isinstance(seg, dict) and seg.get("text") is not None]
+        return "".join(parts) if parts else v
+    if isinstance(v, dict) and "text" in v and "link" in v:
+        return {"text": v.get("text") or "", "link": v.get("link") or ""}
+    return v
+
+
 def load_records(app_token: str, table_id: str) -> dict:
-    """现有记录：{键: {"record_id":..., "fp": 指纹}}。分页拉全。"""
+    """现有记录：{键: {"record_id":..., "fields": 归一化后的字段}}。分页拉全。"""
     tok = feishu_app.tenant_token()
     out: dict = {}
     page_token = ""
@@ -155,15 +174,14 @@ def load_records(app_token: str, table_id: str) -> dict:
             raise RuntimeError(f"list records: {str(body)[:200]}")
         data = body.get("data") or {}
         for it in data.get("items") or []:
-            key = str((it.get("fields") or {}).get("键") or "")
-            if not key:
-                # 文本字段可能返回 [{"text": "..."}] 形态
-                raw = (it.get("fields") or {}).get("键")
-                if isinstance(raw, list) and raw:
-                    key = str(raw[0].get("text") or "")
+            fields = {k: _norm_field(v) for k, v in (it.get("fields") or {}).items()}
+            # 数字字段（如 PR号）飞书会回传字符串，统一回 int 才能和写入侧对上
+            if isinstance(fields.get("PR号"), str) and fields["PR号"].isdigit():
+                fields["PR号"] = int(fields["PR号"])
+            key = str(fields.get("键") or "")
             if key:
                 out[key] = {"record_id": str(it.get("record_id")),
-                            "fields": it.get("fields") or {}}
+                            "fields": fields}
         if data.get("has_more") and data.get("page_token"):
             page_token = data["page_token"]
         else:
@@ -181,13 +199,11 @@ def sync_rows(root: Path, rows: list[dict], *, force: bool = False) -> dict:
     绑定（app_token/table_id）已缓存就直接用；没有就现场发现。
     """
     binding = load_binding(root)
-    app_token = binding.get("app_token")
+    app_token = _binding_app_token(root)
     if not app_token:
-        bases = list_bases()
-        if not bases:
-            raise RuntimeError(
-                "no accessible bitable base — 在飞书里建一个多维表格并把应用加为协作者")
-        app_token = str(bases[0]["app_token"])
+        raise RuntimeError(
+            "no bitable app_token — 设 FEISHU_BITABLE_APP_TOKEN，或把表格链接"
+            "里的 token 存进 state/feishu_bitable.json")
     table_id = binding.get("table_id") or find_or_create_table(app_token)
     save_binding(root, {"app_token": app_token, "table_id": table_id})
 
@@ -216,5 +232,18 @@ def sync_rows(root: Path, rows: list[dict], *, force: bool = False) -> dict:
         _post("records/batch_create", {"records": to_create[i:i + 500]})
     for i in range(0, len(to_update), 500):
         _post("records/batch_update", {"records": to_update[i:i + 500]})
+
+    # 剔除：口径外的记录（closed 未合并 / 自有仓库 / optica）从表里删掉。
+    # 只在拿到非空行集时执行——GitHub 全挂时 rows 为空，那不能当"全部剔除"。
+    pruned = 0
+    if rows:
+        incoming = {f"{r['repo']}#{r['number']}" for r in rows}
+        stale = [hit["record_id"] for key, hit in existing.items()
+                 if key not in incoming]
+        for i in range(0, len(stale), 500):
+            _post("records/batch_delete", {"records": stale[i:i + 500]})
+        pruned = len(stale)
+
     return {"created": len(to_create), "updated": len(to_update),
-            "skipped": len(rows) - len(to_create) - len(to_update)}
+            "skipped": len(rows) - len(to_create) - len(to_update),
+            "pruned": pruned}

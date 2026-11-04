@@ -34,3 +34,4 @@ state/pr_fix_attempted.json
 state/pr_classify_cache.json
 state/pr_sync.json
 state/seen.json
+state/feishu_bitable.json

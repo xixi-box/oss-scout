@@ -795,3 +795,73 @@
 {"ts": "2026-11-04T22:04:16", "repo": "ruvnet/RuVector", "number": 1299, "action": "wait", "reason": ""}
 {"ts": "2026-11-04T22:04:17", "repo": "PrefectHQ/fastmcp", "number": 6195, "action": "wait", "reason": "Codex review failed to complete; no concrete change requested, just a retry notice. (cached)"}
 {"ts": "2026-11-04T22:04:18", "repo": "PrefectHQ/fastmcp", "number": 6195, "action": "wait", "reason": "Codex review failed to complete; no concrete change requested, just a retry notice. (cached)"}
+{"ts": "2026-11-04T22:40:31", "repo": "ClickHouse/ClickHouse", "number": 129144, "action": "wait", "reason": "Bot confirms all committers signed CLA; no action requested. (cached)"}
+{"ts": "2026-11-04T22:40:32", "repo": "ClickHouse/ClickHouse", "number": 129144, "action": "wait", "reason": "Bot confirms all committers signed CLA; no action requested. (cached)"}
+{"ts": "2026-11-04T22:40:32", "repo": "ClickHouse/ClickHouse", "number": 129144, "action": "wait", "reason": "Bot confirms all committers signed CLA; no action requested. (cached)"}
+{"ts": "2026-11-04T22:40:32", "repo": "ClickHouse/ClickHouse", "number": 129144, "action": "wait", "reason": "Bot confirms all committers signed CLA; no action requested. (cached)"}
+{"ts": "2026-11-04T22:40:34", "repo": "docker/compose", "number": 14450, "action": "address_review", "reason": "Update failing test expectation and add Matches-level regression test. (cached)"}
+{"ts": "2026-11-04T22:40:36", "repo": "agentgateway/agentgateway", "number": 4276, "action": "wait", "reason": ""}
+{"ts": "2026-11-04T22:40:39", "repo": "docker/compose", "number": 14450, "action": "address_review", "reason": "Update failing test expectation and add Matches-level regression test. (cached)"}
+{"ts": "2026-11-04T22:40:39", "repo": "milvus-io/milvus", "number": 55034, "action": "wait", "reason": "Bot reports all CI stages passed; no action requested. (cached)"}
+{"ts": "2026-11-04T22:40:39", "repo": "docker/compose", "number": 14450, "action": "address_review", "reason": "Update failing test expectation and add Matches-level regression test. (cached)"}
+{"ts": "2026-11-04T22:40:39", "repo": "docker/compose", "number": 14450, "action": "address_review", "reason": "Update failing test expectation and add Matches-level regression test. (cached)"}
+{"ts": "2026-11-04T22:40:41", "repo": "agentgateway/agentgateway", "number": 4276, "action": "wait", "reason": ""}
+{"ts": "2026-11-04T22:40:41", "repo": "agentgateway/agentgateway", "number": 4276, "action": "wait", "reason": ""}
+{"ts": "2026-11-04T22:40:41", "repo": "milvus-io/milvus", "number": 54998, "action": "wait", "reason": "Bot reports CI passed with coverage warning; no action requested. (cached)"}
+{"ts": "2026-11-04T22:40:41", "repo": "agentgateway/agentgateway", "number": 4276, "action": "wait", "reason": ""}
+{"ts": "2026-11-04T22:40:43", "repo": "milvus-io/milvus", "number": 55034, "action": "wait", "reason": "Bot reports all CI stages passed; no action requested. (cached)"}
+{"ts": "2026-11-04T22:40:44", "repo": "milvus-io/milvus", "number": 55034, "action": "wait", "reason": "Bot reports all CI stages passed; no action requested. (cached)"}
+{"ts": "2026-11-04T22:40:45", "repo": "milvus-io/milvus", "number": 55034, "action": "wait", "reason": "Bot reports all CI stages passed; no action requested. (cached)"}
+{"ts": "2026-11-04T22:40:46", "repo": "agentgateway/agentgateway", "number": 4264, "action": "wait", "reason": ""}
+{"ts": "2026-11-04T22:40:46", "repo": "milvus-io/milvus", "number": 54998, "action": "wait", "reason": "Bot reports CI passed with coverage warning; no action requested. (cached)"}
+{"ts": "2026-11-04T22:40:47", "repo": "milvus-io/milvus", "number": 54998, "action": "wait", "reason": "Bot reports CI passed with coverage warning; no action requested. (cached)"}
+{"ts": "2026-11-04T22:40:48", "repo": "milvus-io/milvus", "number": 54998, "action": "wait", "reason": "Bot reports CI passed with coverage warning; no action requested. (cached)"}
+{"ts": "2026-11-04T22:40:49", "repo": "agentgateway/agentgateway", "number": 4264, "action": "wait", "reason": ""}
+{"ts": "2026-11-04T22:40:50", "repo": "agentgateway/agentgateway", "number": 4264, "action": "wait", "reason": ""}
+{"ts": "2026-11-04T22:40:50", "repo": "modelcontextprotocol/registry", "number": 1788, "action": "wait", "reason": ""}
+{"ts": "2026-11-04T22:40:52", "repo": "agentgateway/agentgateway", "number": 4264, "action": "wait", "reason": ""}
+{"ts": "2026-11-04T22:40:53", "repo": "bytedance/deer-flow", "number": 7822, "action": "wait", "reason": ""}
+{"ts": "2026-11-04T22:40:53", "repo": "modelcontextprotocol/registry", "number": 1788, "action": "wait", "reason": ""}
+{"ts": "2026-11-04T22:40:53", "repo": "modelcontextprotocol/registry", "number": 1788, "action": "wait", "reason": ""}
+{"ts": "2026-11-04T22:40:56", "repo": "modelcontextprotocol/registry", "number": 1788, "action": "wait", "reason": ""}
+{"ts": "2026-11-04T22:40:57", "repo": "bytedance/deer-flow", "number": 7822, "action": "wait", "reason": ""}
+{"ts": "2026-11-04T22:40:57", "repo": "bytedance/deer-flow", "number": 7822, "action": "wait", "reason": ""}
+{"ts": "2026-11-04T22:40:58", "repo": "bytedance/deer-flow", "number": 7812, "action": "wait", "reason": "Bot notice confirming all committers signed the CLA; no action requested. (cached)"}
+{"ts": "2026-11-04T22:41:01", "repo": "bytedance/deer-flow", "number": 7822, "action": "wait", "reason": ""}
+{"ts": "2026-11-04T22:41:01", "repo": "bytedance/deer-flow", "number": 7812, "action": "wait", "reason": "Bot notice confirming all committers signed the CLA; no action requested. (cached)"}
+{"ts": "2026-11-04T22:41:02", "repo": "Arize-ai/phoenix", "number": 17507, "action": "address_review", "reason": "Bot's Request changes review requires the contributor to make the requested changes. (cached)"}
+{"ts": "2026-11-04T22:41:03", "repo": "bytedance/deer-flow", "number": 7812, "action": "wait", "reason": "Bot notice confirming all committers signed the CLA; no action requested. (cached)"}
+{"ts": "2026-11-04T22:41:06", "repo": "bytedance/deer-flow", "number": 7812, "action": "wait", "reason": "Bot notice confirming all committers signed the CLA; no action requested. (cached)"}
+{"ts": "2026-11-04T22:41:07", "repo": "Arize-ai/phoenix", "number": 17507, "action": "address_review", "reason": "Bot's Request changes review requires the contributor to make the requested changes. (cached)"}
+{"ts": "2026-11-04T22:41:07", "repo": "promptfoo/promptfoo", "number": 12079, "action": "wait", "reason": "Codecov bot reports coverage status only; no action requested. (cached)"}
+{"ts": "2026-11-04T22:41:08", "repo": "Arize-ai/phoenix", "number": 17507, "action": "address_review", "reason": "Bot's Request changes review requires the contributor to make the requested changes. (cached)"}
+{"ts": "2026-11-04T22:41:11", "repo": "promptfoo/promptfoo", "number": 12079, "action": "wait", "reason": "Codecov bot reports coverage status only; no action requested. (cached)"}
+{"ts": "2026-11-04T22:41:12", "repo": "PrefectHQ/fastmcp", "number": 6198, "action": "assignment_note", "reason": "Bot says PR awaits maintainer assignment; no contributor action, don't request assignment. (cached)"}
+{"ts": "2026-11-04T22:41:12", "repo": "Arize-ai/phoenix", "number": 17507, "action": "address_review", "reason": "Bot's Request changes review requires the contributor to make the requested changes. (cached)"}
+{"ts": "2026-11-04T22:41:12", "repo": "promptfoo/promptfoo", "number": 12079, "action": "wait", "reason": "Codecov bot reports coverage status only; no action requested. (cached)"}
+{"ts": "2026-11-04T22:41:16", "repo": "promptfoo/promptfoo", "number": 12079, "action": "wait", "reason": "Codecov bot reports coverage status only; no action requested. (cached)"}
+{"ts": "2026-11-04T22:41:17", "repo": "ruvnet/RuVector", "number": 1299, "action": "wait", "reason": ""}
+{"ts": "2026-11-04T22:41:20", "repo": "PrefectHQ/fastmcp", "number": 6198, "action": "assignment_note", "reason": "Bot says PR awaits maintainer assignment; no contributor action, don't request assignment. (cached)"}
+{"ts": "2026-11-04T22:41:21", "repo": "PrefectHQ/fastmcp", "number": 6195, "action": "wait", "reason": "Codex review failed to complete; no concrete change requested, just a retry notice. (cached)"}
+{"ts": "2026-11-04T22:41:25", "repo": "ruvnet/RuVector", "number": 1299, "action": "wait", "reason": ""}
+{"ts": "2026-11-04T22:41:26", "repo": "ruvnet/RuVector", "number": 1299, "action": "wait", "reason": ""}
+{"ts": "2026-11-04T22:41:27", "repo": "ruvnet/RuVector", "number": 1299, "action": "wait", "reason": ""}
+{"ts": "2026-11-04T22:41:28", "repo": "PrefectHQ/fastmcp", "number": 6195, "action": "wait", "reason": "Codex review failed to complete; no concrete change requested, just a retry notice. (cached)"}
+{"ts": "2026-11-04T22:41:30", "repo": "PrefectHQ/fastmcp", "number": 6195, "action": "wait", "reason": "Codex review failed to complete; no concrete change requested, just a retry notice. (cached)"}
+{"ts": "2026-11-04T22:41:30", "repo": "PrefectHQ/fastmcp", "number": 6195, "action": "wait", "reason": "Codex review failed to complete; no concrete change requested, just a retry notice. (cached)"}
+{"ts": "2026-11-04T22:41:32", "repo": "PrefectHQ/fastmcp", "number": 6172, "action": "wait", "reason": "Bot reports an incomplete review and optional retry; no change requested."}
+{"ts": "2026-11-04T22:41:33", "repo": "PrefectHQ/fastmcp", "number": 6172, "action": "wait", "reason": "Bot reports an incomplete review and optional retry; no change requested. (cached)"}
+{"ts": "2026-11-04T22:41:34", "repo": "PrefectHQ/fastmcp", "number": 6172, "action": "wait", "reason": "Bot reports an incomplete review and optional retry; no change requested. (cached)"}
+{"ts": "2026-11-04T22:41:39", "repo": "PrefectHQ/fastmcp", "number": 6172, "action": "wait", "reason": "Bot review failed; only offers optional retry, no concrete change requested."}
+{"ts": "2026-11-04T22:41:44", "repo": "PrefectHQ/fastmcp", "number": 6171, "action": "wait", "reason": "Bot reports its review failed; no contributor action requested."}
+{"ts": "2026-11-04T22:41:45", "repo": "PrefectHQ/fastmcp", "number": 6171, "action": "wait", "reason": "Bot reports a failed review and offers retry; no code change requested."}
+{"ts": "2026-11-04T22:41:46", "repo": "PrefectHQ/fastmcp", "number": 6171, "action": "wait", "reason": "Bot reports its automated review couldn't complete; no change requested from contributor."}
+{"ts": "2026-11-04T22:41:49", "repo": "volcengine/OpenViking", "number": 6826, "action": "wait", "reason": ""}
+{"ts": "2026-11-04T22:41:49", "repo": "volcengine/OpenViking", "number": 6826, "action": "wait", "reason": ""}
+{"ts": "2026-11-04T22:41:50", "repo": "PrefectHQ/fastmcp", "number": 6171, "action": "wait", "reason": "Bot reports its review failed and offers a retry; no code change requested."}
+{"ts": "2026-11-04T22:41:50", "repo": "volcengine/OpenViking", "number": 6826, "action": "wait", "reason": ""}
+{"ts": "2026-11-04T22:41:52", "repo": "ruvnet/RuVector", "number": 1293, "action": "wait", "reason": ""}
+{"ts": "2026-11-04T22:41:53", "repo": "ruvnet/RuVector", "number": 1293, "action": "wait", "reason": ""}
+{"ts": "2026-11-04T22:41:53", "repo": "volcengine/OpenViking", "number": 6826, "action": "wait", "reason": ""}
+{"ts": "2026-11-04T22:41:56", "repo": "ruvnet/RuVector", "number": 1293, "action": "wait", "reason": ""}
+{"ts": "2026-11-04T22:41:56", "repo": "ruvnet/RuVector", "number": 1293, "action": "wait", "reason": ""}
