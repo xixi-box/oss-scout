@@ -96,3 +96,48 @@ class TestRealWorldCases:
             _comment("changeset-bot[bot]", "No changeset found in this PR"),
         ]))
         assert got["action"] == "wait"
+
+
+class TestPleasantry:
+    """催 review / 打招呼不该被当成 review 去起草技术回复。
+
+    2026-11-04 实录（software-agent-sdk#6269）：「All green here, rebased,
+    could someone review?」被起草成一封解释修复细节的信——对方只是想知道
+    什么时候有人看，AI 自说自话反而露怯。
+    """
+
+    def test_review_ping_is_wait(self):
+        got = mp.classify(_pr(comments=[_comment(
+            "contributor",
+            "Hey team! @OpenHands/maintainers All green here, no conflicts, "
+            "rebased on latest main. Could someone review when you get a "
+            "chance? Thanks!")]))
+        assert got["action"] == "wait"
+
+    def test_any_update_is_wait(self):
+        got = mp.classify(_pr(comments=[_comment(
+            "contributor", "any update on this?")]))
+        assert got["action"] == "wait"
+
+    def test_lgtm_is_wait(self):
+        got = mp.classify(_pr(comments=[_comment("maintainer", "LGTM!")]))
+        assert got["action"] == "wait"
+
+    def test_ping_with_real_ask_is_still_review(self):
+        """客套句里夹了真诉求，必须照 review 处理（宁可多起草一次）。"""
+        got = mp.classify(_pr(comments=[_comment(
+            "maintainer",
+            "All green here, but why does this swallow the exception?")]))
+        assert got["action"] in ("address_review", "answer_question")
+
+    def test_thanks_with_request_is_still_review(self):
+        got = mp.classify(_pr(comments=[_comment(
+            "maintainer", "Thanks! Could you also add a test for the empty case?")]))
+        assert got["action"] == "address_review"
+
+    def test_mentioned_org_does_not_break_detection(self):
+        """@org/team 里的斜杠曾把句式正则打断，导致客套判不出来。"""
+        assert mp.is_pleasantry("Hey @OpenHands/maintainers all green, "
+                                "could someone review?")
+        # 加了诉求词就不再是客套（please 是真的在要求做事）
+        assert not mp.is_pleasantry("Hey @OpenHands/maintainers bump please")

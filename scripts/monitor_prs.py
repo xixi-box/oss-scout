@@ -42,6 +42,40 @@ PATTERNS = [
     ("assignment", re.compile(r"assign|claimer|taken|already\s+working", re.I)),
 ]
 
+# 纯"催 review / 打招呼"的评论：没有任何可执行诉求。为这类评论起草技术回复
+# 是自说自话——对方只是想知道什么时候有人看，AI 编一段"我改了 X"反而露怯。
+# 判定方式是词袋而非句式：先剔掉 @提及（@org/team 里的斜杠会把正则打断），
+# 再看有没有催办词、有没有真正的诉求词。命中催办词且无诉求词才算客套。
+_RE_MENTION = re.compile(r"@[\w./-]+")
+_RE_PING = re.compile(
+    r"\b(?:all\s+green|ci\s+is\s+green|no\s+conflicts?|rebased|bump|ping|"
+    r"kindly\s+review|could\s+someone|take\s+a\s+look|when\s+you\s+get\s+a\s+chance|"
+    r"any\s+update|still\s+waiting|lgtm|looks\s+good)\b", re.I)
+# 只要出现这些词就说明对方真提了事，必须按 review 处理，宁可多判一次。
+# 不收名词性的 "update"/"change"——"any update on this?" 是催办，不是诉求。
+_RE_ACTIONABLE = re.compile(
+    r"\b(?:please|should|need\s+to|must|why|how|instead|rename|revert|"
+    r"missing|wrong|breaks?|fails?|failing|error|bug|tests?|"
+    r"add\s+(?:a\s+)?(?:test|check|log|assert)|remove\s+this|"
+    r"fix\s+this|change\s+this)\b", re.I)
+# "why/how" 只是提问，落到 review 分类还得有 review 的句式兜住。
+_RE_REVIEWISH = re.compile(
+    r"\b(?:why|how\s+(?:does|do|is|are)|instead|should|please|could\s+you)\b",
+    re.I)
+
+
+def is_pleasantry(body: str) -> bool:
+    """判断一条评论是不是纯客套/催 review（无可执行诉求）。
+
+    两道条件同时成立才算：出现催办词，且没有任何诉求词。反过来漏判一次
+    只是多起草一封草稿（不影响正确性），误判成客套会真的漏掉维护者意见，
+    所以诉求词表取得宽。
+    """
+    text = _RE_MENTION.sub(" ", str(body or "")).strip()
+    if not text or len(text) > 400:
+        return False
+    return bool(_RE_PING.search(text)) and not _RE_ACTIONABLE.search(text)
+
 
 def _gh(args: list[str], timeout: int = 90) -> str:
     try:
@@ -108,9 +142,15 @@ def classify(pr: dict) -> dict:
     action, reason = "wait", ""
     if failing:
         action, reason = "fix_ci", f"failing checks: {', '.join(failing[:4])}"
+    elif latest and is_pleasantry(body):
+        # 催 review / 打招呼：没有诉求可落实，回一段技术解释是自说自话
+        action, reason = "wait", "pleasantry / review ping (no actionable ask)"
     elif latest and PATTERNS[2][1].search(body):
         action = "address_review"
         reason = f"review from {(latest.get('author') or {}).get('login')}"
+    elif latest and _RE_REVIEWISH.search(body):
+        action = "answer_question"
+        reason = "maintainer asked a question about the change"
     elif latest and PATTERNS[3][1].search(body):
         action, reason = "answer_question", "maintainer asked for information"
     elif latest and PATTERNS[4][1].search(body):
