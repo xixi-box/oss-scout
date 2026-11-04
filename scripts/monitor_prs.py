@@ -264,9 +264,25 @@ def pr_state(repo: str, number: int) -> dict:
                "state,mergeable,reviewDecision,comments,statusCheckRollup,"
                "createdAt,isDraft,title,body,url"])
     try:
-        return json.loads(raw) if raw else {}
+        state = json.loads(raw) if raw else {}
     except json.JSONDecodeError:
         return {}
+    # gh pr view 的 comments 只有 issue 层。把行内 review 评论合进来
+    # （合成 author/body/createdAt 形态），分类器才能看见维护者写在
+    # 代码旁边的修改要求（agentgateway#4264 实录）。
+    inline_raw = _gh(["api", f"repos/{repo}/pulls/{number}/comments?per_page=100",
+                      "--jq", r'.[] | "\(.created_at)|\(.user.login)|\(.body)"'])
+    inline = []
+    for line in (inline_raw or "").splitlines():
+        parts = line.split("|", 2)
+        if len(parts) == 3:
+            inline.append({"author": {"login": parts[1]},
+                           "body": parts[2], "createdAt": parts[0]})
+    inline.sort(key=lambda c: c["createdAt"])
+    state["comments"] = sorted(
+        (state.get("comments") or []) + inline,
+        key=lambda c: c.get("createdAt") or "")
+    return state
 
 
 def classify(pr: dict) -> dict:
@@ -564,14 +580,24 @@ REPLIES_FILE = ROOT / "state" / "pr_replies.json"
 
 
 def _thread(repo: str, number: int, limit: int = 10) -> list[dict]:
-    raw = _gh(["api", f"repos/{repo}/issues/{number}/comments",
-               "--jq", r'.[] | "\(.created_at)|\(.user.login)|\(.body)"'])
+    """PR 上的全部人话：issue 层评论 + 行内 review 评论，按时间合并。
+
+    2026-11-04 实录（agentgateway#4264）：维护者把修改要求写在行内评论里，
+    而 issues/{n}/comments 根本不含行内评论——分类器和起草器都看不见，
+    一条"必须改代码"的 review 被静默漏了两天。pulls/{n}/comments 才是
+    行内评论的家。两个端点是不同的集合，不会重复。
+    """
+    jq = r'.[] | "\(.created_at)|\(.user.login)|\(.body)"'
     out = []
-    for line in (raw or "").splitlines():
-        parts = line.split("|", 2)
-        if len(parts) == 3:
-            out.append({"created_at": parts[0], "author": parts[1],
-                        "body": parts[2][:COMMENT_TEXT_LIMIT]})
+    for endpoint in (f"repos/{repo}/issues/{number}/comments",
+                     f"repos/{repo}/pulls/{number}/comments"):
+        raw = _gh(["api", f"{endpoint}?per_page=100", "--jq", jq])
+        for line in (raw or "").splitlines():
+            parts = line.split("|", 2)
+            if len(parts) == 3:
+                out.append({"created_at": parts[0], "author": parts[1],
+                            "body": parts[2][:COMMENT_TEXT_LIMIT]})
+    out.sort(key=lambda c: c["created_at"])
     return out[-limit:]
 
 
@@ -633,6 +659,14 @@ def draft_reply(repo: str, number: int, *, force: bool = False,
             and prev.get("for_comment") == latest.get("created_at")):
         return {"drafted": False, "reason": "draft already current",
                 "key": key, "draft": prev.get("draft")}
+    # 已回复过这条评论就不再起草：我们的最新发言比对方的最新发言晚，
+    # 说明球在对面——再起草就是对同一条评论刷屏（2026-11-04 实录：
+    # compose#14450 已发送后每 15 分钟被重新起草、重新推卡片）。
+    ours = [c for c in thread if str(c.get("author") or "") in MY_LOGINS]
+    if (not force and ours and latest
+            and str(ours[-1].get("created_at") or "") > str(latest.get("created_at") or "")):
+        return {"drafted": False, "reason": "already replied; waiting on them",
+                "key": key}
 
     # 模型配置只从 _model() 走：分类和起草共用一处，测试也只 stub 一处
     key, model = _model()

@@ -5,6 +5,7 @@ PR 开出去之后没人管是最容易烂尾的地方。分类逻辑决定"要�
 """
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -437,3 +438,96 @@ class TestReplyTargetIsExternal:
         monkeypatch.setattr(mp, "_thread", lambda r, n, limit=30: [
             {"created_at": "t1", "author": "xixi-box", "body": "ours"}])
         assert mp.latest_external_comment("docker/compose", 14450) is None
+
+
+class TestInlineComments:
+    """行内 review 评论必须进入分类和起草视野。
+
+    agentgateway#4264 实录：维护者把"改成 cfg 条件编译"写在行内，
+    issues/{n}/comments 不含行内评论——分类器看不见，一条必须改代码的
+    review 被静默漏掉。
+    """
+
+    def test_thread_includes_inline_comments(self, monkeypatch):
+        calls = []
+
+        def fake_gh(args, timeout=90):
+            calls.append(args[1])
+            if "/pulls/" in args[1]:
+                return ("2026-11-04T14:09:43Z|keithmattix|"
+                        "use cfg instead of passing windows")
+            return "2026-11-02T17:15:23Z|someone|first comment"
+
+        monkeypatch.setattr(mp, "_gh", fake_gh)
+        thread = mp._thread("agentgateway/agentgateway", 4264)
+        authors = [c["author"] for c in thread]
+        assert "keithmattix" in authors and "someone" in authors
+        # 两个端点都被拉了
+        assert any("/pulls/" in c for c in calls)
+        assert any("/issues/" in c for c in calls)
+        # 按时间排序
+        times = [c["created_at"] for c in thread]
+        assert times == sorted(times)
+
+    def test_pr_state_merges_inline_comments(self, monkeypatch):
+        def fake_gh(args, timeout=90):
+            joined = " ".join(args)
+            if "/pulls/" in joined:
+                return ("2026-11-04T14:09:43Z|keithmattix|"
+                        "please use cfg instead of the flag")
+            return json.dumps({
+                "comments": [{"author": {"login": "old"}, "body": "hi",
+                              "createdAt": "2026-11-02T00:00:00Z"}],
+                "statusCheckRollup": [], "reviewDecision": "",
+                "isDraft": False, "title": "t", "body": "", "url": ""})
+
+        monkeypatch.setattr(mp, "_gh", fake_gh)
+        state = mp.pr_state("a/b", 1)
+        bodies = [c.get("body", "") for c in state["comments"]]
+        assert any("cfg" in b for b in bodies), state["comments"]
+        # 行内评论按时间排进同一条时间线
+        times = [c.get("createdAt", "") for c in state["comments"]]
+        assert times == sorted(times)
+
+
+class TestAlreadyRepliedGate:
+    """球在对面时不再起草——刷屏的根源就在这。"""
+
+    def _thread(self):
+        return [
+            {"created_at": "2026-11-04T08:52:08Z", "author": "ndeloof",
+             "body": "please do X"},
+            {"created_at": "2026-11-04T11:02:04Z", "author": "xixi-box",
+             "body": "Done in abcdef."},
+        ]
+
+    def test_reply_newer_than_external_skips(self, monkeypatch, tmp_path):
+        (tmp_path / "state").mkdir()
+        monkeypatch.setattr(mp, "REPLIES_FILE",
+                            tmp_path / "state" / "pr_replies.json")
+        monkeypatch.setattr(mp, "_thread", lambda r, n, limit=10: self._thread())
+        out = mp.draft_reply("docker/compose", 14450)
+        assert out["drafted"] is False
+        assert out["reason"] == "already replied; waiting on them"
+
+    def test_new_external_comment_reopens_drafting(self, monkeypatch, tmp_path):
+        (tmp_path / "state").mkdir()
+        monkeypatch.setattr(mp, "REPLIES_FILE",
+                            tmp_path / "state" / "pr_replies.json")
+        thread = self._thread() + [
+            {"created_at": "2026-11-04T14:09:43Z", "author": "ndeloof",
+             "body": "one more thing"}]
+        monkeypatch.setattr(mp, "_thread", lambda r, n, limit=10: thread)
+        monkeypatch.setattr(mp, "_model", lambda: ("", ""))
+        out = mp.draft_reply("docker/compose", 14450)
+        # 对方又说话了 → 应该尝试起草（无 key 时报 no model key）
+        assert out["reason"] == "no model key"
+
+    def test_force_overrides_gate(self, monkeypatch, tmp_path):
+        (tmp_path / "state").mkdir()
+        monkeypatch.setattr(mp, "REPLIES_FILE",
+                            tmp_path / "state" / "pr_replies.json")
+        monkeypatch.setattr(mp, "_thread", lambda r, n, limit=10: self._thread())
+        monkeypatch.setattr(mp, "_model", lambda: ("", ""))
+        out = mp.draft_reply("docker/compose", 14450, force=True)
+        assert out["reason"] == "no model key"   # 走到了模型那步
