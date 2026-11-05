@@ -6,6 +6,7 @@ fork PR 自动跑（需维护者批准），所以「测试通过」没人验证
 """
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -124,3 +125,58 @@ class TestGoTagsRetry:
         ok, _ = pr_fix._verify(tmp_path, [" M a.go"], {})
         assert ok is False
         assert len(calls) == 1   # 没有可用的标签，不瞎重试
+
+
+class TestNodeTargetedTests:
+    """大仓库全量 npm test 动辄半小时——超时=未验证=拒推。改动的测试
+    文件存在时优先 vitest/jest 定向跑（promptfoo 实录）。"""
+
+    def test_vitest_targeted_on_changed_test_files(self, tmp_path, monkeypatch):
+        pkg = {"devDependencies": {"vitest": "^1"}}
+        (tmp_path / "package.json").write_text(json.dumps(pkg), encoding="utf-8")
+        calls = []
+        monkeypatch.setattr(pr_fix, "_run",
+                            lambda cmd, cwd, timeout=1500:
+                            (calls.append(cmd), (0, ""))[1])
+        ok, _ = pr_fix._verify(tmp_path, [" M src/x.ts", " A test/x.test.ts"], {})
+        assert ok is True
+        assert calls and list(calls[0][:2]) == ['npx', 'vitest']
+        assert any("test/x.test.ts" in c for c in calls[0])
+
+    def test_falls_back_to_npm_test_without_vitest(self, tmp_path, monkeypatch):
+        (tmp_path / "package.json").write_text(
+            json.dumps({"scripts": {"test": "mocha"}}), encoding="utf-8")
+        calls = []
+        monkeypatch.setattr(pr_fix, "_run",
+                            lambda cmd, cwd, timeout=1500:
+                            (calls.append(cmd), (0, ""))[1])
+        ok, _ = pr_fix._verify(tmp_path, [" M test/x.test.js"], {})
+        assert ok is True
+        assert calls and calls[0][0] == "npm"
+
+
+class TestPytestNoTestsCollected:
+    def test_rc5_falls_back_to_tests_dir(self, tmp_path, monkeypatch):
+        (tmp_path / "pyproject.toml").write_text("[project]\n", encoding="utf-8")
+        (tmp_path / "tests").mkdir()
+        calls = []
+
+        def fake_run(cmd, cwd, timeout=1500):
+            calls.append(cmd)
+            rc = 5 if "tests/" not in cmd else 0   # 第一次没收集到，tests/ 全过
+            return rc, ""
+
+        monkeypatch.setattr(pr_fix, "_run", fake_run)
+        ok, desc = pr_fix._verify(tmp_path, [" M src/mod.py"], {})
+        assert ok is True
+        assert any("tests/" in " ".join(c) for c in calls), calls
+
+    def test_rc5_without_tests_dir_is_unverified(self, tmp_path, monkeypatch):
+        (tmp_path / "pyproject.toml").write_text("[project]\n", encoding="utf-8")
+        calls = []
+        monkeypatch.setattr(pr_fix, "_run",
+                            lambda cmd, cwd, timeout=1500:
+                            (calls.append(cmd), (5, ""))[1])
+        ok, _ = pr_fix._verify(tmp_path, [" M src/mod.py"], {})
+        assert ok is False
+        assert len(calls) == 1

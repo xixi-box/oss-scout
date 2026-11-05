@@ -187,19 +187,46 @@ def _verify(repo_dir: Path, changed: list[str],
         if not sel:
             return True, "python: no target"
         rc, out = _run(["python3", "-m", "pytest", "-x", "-q", *sel], repo_dir)
+        if rc == 5:
+            # pytest 的"没收集到任何测试"：选中的源码文件本来就没有测试。
+            # 改成跑仓库的测试目录（opencode 按提示加了回归测试的话通常在
+            # tests/ 下）；没有 tests/ 才如实标记不可验证。
+            tests_dir = repo_dir / "tests"
+            if tests_dir.exists():
+                rc, out = _run(["python3", "-m", "pytest", "-x", "-q", "tests/"],
+                               repo_dir, timeout=1800)
+                if rc == 0:
+                    return True, "pytest tests/ rc=0"
+            rc = 5
         if rc != 0:
             logs.write_text(out[-9000:], encoding="utf-8", errors="replace")
         return rc == 0, f"pytest {sel} rc={rc}"
 
-    # Node：有 test 脚本就跑一遍
+    # Node：优先对改动的测试文件跑 vitest/jest（大仓库全量套件动辄
+    # 半小时，超时=未验证=拒推，promptfoo 这类仓库就卡在这）；没有
+    # 目标文件或没有 runner 再回落 npm test。
     pkg = repo_dir / "package.json"
     if pkg.exists():
         import json as _json
         try:
-            scripts = (_json.loads(pkg.read_text(encoding="utf-8"))
-                       .get("scripts") or {})
+            pkgjson = _json.loads(pkg.read_text(encoding="utf-8"))
         except Exception:  # noqa: BLE001
-            scripts = {}
+            pkgjson = {}
+        dev = pkgjson.get("devDependencies") or {}
+        dep = pkgjson.get("dependencies") or {}
+        test_files = [l[3:].strip() for l in changed
+                      if l.strip().endswith((".test.ts", ".test.js",
+                                             ".test.tsx", ".test.mjs"))]
+        for runner_cmd in (("npx", "vitest", "run", "--silent", *test_files),
+                           ("npx", "jest", "--silent", *test_files)):
+            runner = runner_cmd[1]
+            if test_files and (runner in dev or runner in dep):
+                rc, out = _run(runner_cmd, repo_dir)
+                if rc != 0:
+                    logs.write_text(out[-9000:], encoding="utf-8",
+                                    errors="replace")
+                return rc == 0, f"{runner} {test_files} rc={rc}"
+        scripts = pkgjson.get("scripts") or {}
         if "test" in scripts:
             rc, out = _run(["npm", "test", "--silent"], repo_dir)
             if rc != 0:

@@ -482,7 +482,7 @@ def _attempts() -> dict:
 
 def dispatch_pr_fix(repo: str, number: int, *, dry_run: bool = False,
                     kind: str = "ci", review_comment: str = "",
-                    review_author: str = "") -> dict:
+                    review_author: str = "", force: bool = False) -> dict:
     """对挂红的 PR（或需按 review 改的 PR）派一轮 opencode 修复。
 
     kind="ci"       CI 挂红，修到绿
@@ -520,8 +520,15 @@ def dispatch_pr_fix(repo: str, number: int, *, dry_run: bool = False,
     else:
         key = f"{repo}#{number}@{head_sha[:12]}"
     attempts = _attempts()
-    if key in attempts:
-        return {"dispatched": False, "reason": f"already attempted: {key}"}
+    if key in attempts and not force:
+        # 失败解锁：派发出去的工作流可能跑挂（验证拒推/网络/文件非法），
+        # 挂了的修复永远不重试就会永久卡死（promptfoo#12079 实录：两条
+        # P1 卡了一天）。超过 3 小时的旧派发视为已失败，允许重派——
+        # 正常一轮 opencode 修复 + 推送远用不了 3 小时。
+        age_h = _attempt_age_hours(attempts[key])
+        if age_h is None or age_h < 3:
+            return {"dispatched": False, "reason": f"already attempted: {key}"}
+        attempts.pop(key, None)
 
     if kind == "ci":
         failing = failing_details(repo, number)
@@ -573,6 +580,16 @@ def dispatch_pr_fix(repo: str, number: int, *, dry_run: bool = False,
             # 改动会被 pr-fix 直接推到这个 fork 分支的 PR 分支上
             "fork_repo": payload["fork_repo"],
             "branch": payload["branch"]}
+
+
+def _attempt_age_hours(entry: dict) -> float | None:
+    ts = str((entry or {}).get("ts") or "")
+    try:
+        import datetime as dt
+        t = dt.datetime.fromisoformat(ts)
+        return (dt.datetime.now() - t).total_seconds() / 3600
+    except ValueError:
+        return None
 
 
 def _save_attempts(data: dict) -> None:

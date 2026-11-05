@@ -984,3 +984,16 @@
 {"ts": "2026-11-05T12:56:39", "repo": "istio/istio", "number": 62655, "action": "wait", "reason": "Bot is waiting for an org member to verify and add ok-to-test."}
 {"ts": "2026-11-05T12:56:39", "repo": "istio/istio", "number": 62655, "action": "wait", "reason": "Bot is waiting for org member to add /ok-to-test; no contributor action."}
 {"ts": "2026-11-05T12:56:39", "repo": "istio/istio", "number": 62655, "action": "wait", "reason": "Bot says it needs an org member's /ok-to-test before testing."}
+{"ts": "2026-11-05T13:16:04", "repo": "istio/istio", "number": 62656, "action": "wait", "reason": "Bot awaits org member verification and /ok-to-test; no contributor action needed. (cached)"}
+{"ts": "2026-11-05T13:16:04", "repo": "istio/istio", "number": 62656, "action": "wait", "reason": "Bot awaits org member verification and /ok-to-test; no contributor action needed. (cached)"}
+{"ts": "2026-11-05T13:16:05", "repo": "istio/istio", "number": 62656, "action": "wait", "reason": "Bot awaits org member verification and /ok-to-test; no contributor action needed. (cached)"}
+{"ts": "2026-11-05T13:16:05", "repo": "istio/istio", "number": 62656, "action": "wait", "reason": "Bot awaits org member verification and /ok-to-test; no contributor action needed. (cached)"}
+{"ts": "2026-11-05T13:16:07", "repo": "istio/istio", "number": 62655, "action": "wait", "reason": "Bot says it needs an org member's /ok-to-test before testing. (cached)"}
+{"ts": "2026-11-05T13:16:07", "repo": "istio/istio", "number": 62655, "action": "wait", "reason": "Bot says it needs an org member's /ok-to-test before testing. (cached)"}
+{"ts": "2026-11-05T13:16:07", "repo": "istio/istio", "number": 62655, "action": "wait", "reason": "Bot says it needs an org member's /ok-to-test before testing. (cached)"}
+{"ts": "2026-11-05T13:16:11", "repo": "istio/istio", "number": 62654, "action": "wait", "reason": "Bot is waiting for a maintainer to add ok-to-test; no contributor action needed."}
+{"ts": "2026-11-05T13:16:12", "repo": "istio/istio", "number": 62654, "action": "wait", "reason": "Bot says waiting for maintainer to approve testing; no contributor action needed."}
+{"ts": "2026-11-05T13:16:12", "repo": "istio/istio", "number": 62654, "action": "wait", "reason": "Bot says waiting for maintainer verification; no contributor action needed."}
+{"ts": "2026-11-05T13:16:13", "repo": "ClickHouse/ClickHouse", "number": 129144, "action": "wait", "reason": "Bot confirms all committers signed CLA; no action requested. (cached)"}
+{"ts": "2026-11-05T13:16:14", "repo": "ClickHouse/ClickHouse", "number": 129144, "action": "wait", "reason": "Bot confirms all committers signed CLA; no action requested. (cached)"}
+{"ts": "2026-11-05T13:16:14", "repo": "ClickHouse/ClickHouse", "number": 129144, "action": "wait", "reason": "Bot confirms all committers signed CLA; no action requested. (cached)"}
