@@ -18,6 +18,9 @@ jobs:
         # 脚本只打印"有没有"，不打印值。
         run: docker exec oss-scout python /app/scripts/container_diag.py
 
+      - name: Drain diagnosis
+        run: docker exec -i oss-scout python3 /app/scripts/drain_probe.py
+
       - name: Quota and queue consumption
         run: docker exec -i oss-scout python3 /app/scripts/quota_probe.py
 
