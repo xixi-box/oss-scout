@@ -229,3 +229,44 @@ class TestLedgerScope:
         out = fb.sync_rows(tmp_path, [])
         assert out.get("pruned", 0) == 0
         assert len(fake.records) == 1
+
+
+class TestNumberNormalization:
+    """数字列回传字符串不归一化，指纹永远对不上——扫描表 1300+ 行每 15
+    分钟被整表重写一遍就是这么来的。"""
+
+    def test_issue_number_and_stars_normalized(self, monkeypatch, tmp_path):
+        captured = {}
+
+        class Fake:
+            def request(self, method, url, payload=None, token=None):
+                if "/tables?" in url:
+                    return {"code": 0, "data": {"items": [
+                        {"table_id": "tblS", "name": fb.SCAN_TABLE_NAME}]}}
+                if "/records?page_size=" in url:
+                    # 模拟真实回传形态：其他列原样回来，唯独数字列
+                    # 变成字符串（飞书读端的已知行为）
+                    return {"code": 0, "data": {"items": [
+                        {"record_id": "r1", "fields": {
+                            "键": "a/b#9", "仓库": "a/b", "issue号": "9",
+                            "状态": "queued",
+                            "链接": {"text": "a/b#9",
+                                     "link": "https://github.com/a/b/issues/9"},
+                            "发现时间": 1793840400000}}]}}
+                raise AssertionError(url)
+
+        fake = Fake()
+        monkeypatch.setattr(fb.feishu_app, "tenant_token", lambda: "tok")
+        monkeypatch.setattr(fb.feishu_app, "_request", fake.request)
+        monkeypatch.setenv("FEISHU_BITABLE_APP_TOKEN", "app1")
+
+        rows = [{"key": "a/b#9", "status": "queued", "why": "",
+                 "first_seen": "2026-11-05T01:00:00"}]
+        out = fb.sync_table(tmp_path, rows, table_name=fb.SCAN_TABLE_NAME,
+                            fields=fb.SCAN_FIELDS,
+                            to_fields=fb.scan_row_to_fields,
+                            binding_key="scan_table_id")
+        # 存量行的 issue号 是字符串 "9"，写入侧是 int 9——归一化后应当
+        # 被识别为"无变化"而不是整行重写
+        assert out["updated"] == 0, out
+        assert out["skipped"] == 1

@@ -976,3 +976,11 @@
 {"ts": "2026-11-05T10:51:36", "repo": "istio/istio", "number": 62656, "action": "wait", "reason": "Bot is waiting for maintainer ok-to-test; no contributor action needed."}
 {"ts": "2026-11-05T10:51:36", "repo": "istio/istio", "number": 62656, "action": "wait", "reason": "Bot notice about maintainer verification and /ok-to-test; no contributor action needed."}
 {"ts": "2026-11-05T10:51:37", "repo": "istio/istio", "number": 62656, "action": "wait", "reason": "Bot awaits org member verification and /ok-to-test; no contributor action needed."}
+{"ts": "2026-11-05T12:56:32", "repo": "istio/istio", "number": 62656, "action": "wait", "reason": "Bot awaits org member verification and /ok-to-test; no contributor action needed. (cached)"}
+{"ts": "2026-11-05T12:56:32", "repo": "istio/istio", "number": 62656, "action": "wait", "reason": "Bot awaits org member verification and /ok-to-test; no contributor action needed. (cached)"}
+{"ts": "2026-11-05T12:56:33", "repo": "istio/istio", "number": 62656, "action": "wait", "reason": "Bot awaits org member verification and /ok-to-test; no contributor action needed. (cached)"}
+{"ts": "2026-11-05T12:56:33", "repo": "istio/istio", "number": 62656, "action": "wait", "reason": "Bot awaits org member verification and /ok-to-test; no contributor action needed. (cached)"}
+{"ts": "2026-11-05T12:56:38", "repo": "istio/istio", "number": 62655, "action": "wait", "reason": "Bot is waiting for an org member to verify and apply /ok-to-test."}
+{"ts": "2026-11-05T12:56:39", "repo": "istio/istio", "number": 62655, "action": "wait", "reason": "Bot is waiting for an org member to verify and add ok-to-test."}
+{"ts": "2026-11-05T12:56:39", "repo": "istio/istio", "number": 62655, "action": "wait", "reason": "Bot is waiting for org member to add /ok-to-test; no contributor action."}
+{"ts": "2026-11-05T12:56:39", "repo": "istio/istio", "number": 62655, "action": "wait", "reason": "Bot says it needs an org member's /ok-to-test before testing."}

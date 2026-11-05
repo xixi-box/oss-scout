@@ -498,6 +498,7 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
                                                         context=r)
                                 _audit(root, "pr_reply_drafted", key,
                                        f"drafted={draft.get('drafted')} "
+                                       f"reason={str(draft.get('reason'))[:80]} "
                                        f"fix_kind=review")
                                 if draft.get("drafted"):
                                     _notify_draft(root, r, draft)
@@ -512,7 +513,8 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
                                 draft = mod.draft_reply(r["repo"], r["number"],
                                                         context=r)
                                 _audit(root, "pr_reply_drafted", key,
-                                       f"drafted={draft.get('drafted')}")
+                                       f"drafted={draft.get('drafted')} "
+                                       f"reason={str(draft.get('reason'))[:80]}")
                                 if draft.get("drafted"):
                                     _notify_draft(root, r, draft)
                             except Exception as e:  # noqa: BLE001

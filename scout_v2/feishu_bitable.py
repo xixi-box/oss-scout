@@ -204,11 +204,14 @@ def load_records(app_token: str, table_id: str) -> dict:
         if body.get("code") not in (0, None):
             raise RuntimeError(f"list records: {str(body)[:200]}")
         data = body.get("data") or {}
+        # 数字列飞书回传字符串、文本列回传段落——不归一化的话每轮同步的
+        # 指纹永远对不上，整表每 15 分钟被无意义重写一遍（扫描表 1300+ 行）
+        NUMBER_FIELDS = ("PR号", "issue号", "stars")
         for it in data.get("items") or []:
             fields = {k: _norm_field(v) for k, v in (it.get("fields") or {}).items()}
-            # 数字字段（如 PR号）飞书会回传字符串，统一回 int 才能和写入侧对上
-            if isinstance(fields.get("PR号"), str) and fields["PR号"].isdigit():
-                fields["PR号"] = int(fields["PR号"])
+            for col in NUMBER_FIELDS:
+                if isinstance(fields.get(col), str) and fields[col].isdigit():
+                    fields[col] = int(fields[col])
             key = str(fields.get("键") or "")
             if key:
                 out[key] = {"record_id": str(it.get("record_id")),
