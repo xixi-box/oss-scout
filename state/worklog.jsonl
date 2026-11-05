@@ -694,3 +694,7 @@
 {"ts": "2026-11-05T23:44:38", "action": "dashboard_staged_flush_error", "target": "-", "result": "name 'dt' is not defined", "source": "web-ui"}
 {"ts": "2026-11-05T23:57:14", "action": "dashboard_staged_flush_error", "target": "-", "result": "name 'dt' is not defined", "source": "web-ui"}
 {"ts": "2026-11-05T23:57:37", "action": "dashboard_staged_flush_error", "target": "-", "result": "name 'dt' is not defined", "source": "web-ui"}
+{"ts": "2026-11-06T00:12:40", "action": "dashboard_pr_sync_failed", "target": "8 prs", "result": "not configured", "source": "web-ui"}
+{"ts": "2026-11-06T00:12:40", "action": "dashboard_pr_needs_reply", "target": "docker/compose#14450", "result": "address_review from ndeloof: Thanks, removing the `*` special case is the right fix: I checked that with `*` then `!src`, `data/log`, `.env` and `node_modules/...` are now ignored", "source": "web-ui"}
+{"ts": "2026-11-06T00:12:40", "action": "dashboard_pr_review_fix_dispatch", "target": "docker/compose#14450", "result": "dispatched=False kind=None reason=pr head unavailable", "source": "web-ui"}
+{"ts": "2026-11-06T00:12:40", "action": "dashboard_pr_reply_drafted", "target": "docker/compose#14450", "result": "drafted=False reason=no comments fix_kind=review", "source": "web-ui"}

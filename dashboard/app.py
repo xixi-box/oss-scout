@@ -128,8 +128,11 @@ def _staged_flush_once(root: Path, cfg: dict) -> dict:
     droot = _data_root(root)
     qpath = droot / "queue" / "candidates.json"
     q = json.loads(qpath.read_text(encoding="utf-8"))
+    # 处理 staged（凌晨语义）和 new（手动触发语义）：两者都是"还没消费
+    # 的合格候选"，粗筛+细筛后按名额送修。手动触发时 new 也会被过一遍
+    # 粗筛+细筛——躺了一段时间可能有人已经做了。
     staged = [(k, e) for k, e in q.items()
-              if (e or {}).get("status") == "staged"]
+              if (e or {}).get("status") in ("staged", "new")]
     if not staged:
         return {"staged": 0, "kicked": 0, "processed": 0}
     staged.sort(key=lambda kv: str(kv[1].get("staged_at") or ""))
