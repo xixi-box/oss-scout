@@ -1058,3 +1058,40 @@
 {"ts": "2026-11-05T14:45:31", "repo": "milvus-io/milvus", "number": 55034, "action": "wait", "reason": "bot notice from sre-ci-robot"}
 {"ts": "2026-11-05T14:45:31", "repo": "milvus-io/milvus", "number": 55034, "action": "wait", "reason": "bot notice from sre-ci-robot"}
 {"ts": "2026-11-05T14:45:33", "repo": "milvus-io/milvus", "number": 55034, "action": "wait", "reason": "bot notice from sre-ci-robot"}
+{"ts": "2026-11-05T15:15:52", "repo": "Deep-Optica/SkillsMaster", "number": 146, "action": "wait", "reason": ""}
+{"ts": "2026-11-05T15:15:55", "repo": "istio/istio", "number": 62656, "action": "wait", "reason": "Bot awaits org member verification and /ok-to-test; no contributor action needed. (cached)"}
+{"ts": "2026-11-05T15:15:57", "repo": "istio/istio", "number": 62655, "action": "wait", "reason": "Bot says it needs an org member's /ok-to-test before testing. (cached)"}
+{"ts": "2026-11-05T15:16:00", "repo": "istio/istio", "number": 62654, "action": "wait", "reason": "Bot says waiting for maintainer verification; no contributor action needed. (cached)"}
+{"ts": "2026-11-05T15:16:01", "repo": "Deep-Optica/SkillsMaster", "number": 146, "action": "wait", "reason": ""}
+{"ts": "2026-11-05T15:16:01", "repo": "Deep-Optica/SkillsMaster", "number": 146, "action": "wait", "reason": ""}
+{"ts": "2026-11-05T15:16:02", "repo": "Deep-Optica/SkillsMaster", "number": 146, "action": "wait", "reason": ""}
+{"ts": "2026-11-05T15:16:02", "repo": "ClickHouse/ClickHouse", "number": 129144, "action": "wait", "reason": "Bot confirms all committers signed CLA; no action requested. (cached)"}
+{"ts": "2026-11-05T15:16:04", "repo": "istio/istio", "number": 62656, "action": "wait", "reason": "Bot awaits org member verification and /ok-to-test; no contributor action needed. (cached)"}
+{"ts": "2026-11-05T15:16:04", "repo": "istio/istio", "number": 62656, "action": "wait", "reason": "Bot awaits org member verification and /ok-to-test; no contributor action needed. (cached)"}
+{"ts": "2026-11-05T15:16:05", "repo": "istio/istio", "number": 62656, "action": "wait", "reason": "Bot awaits org member verification and /ok-to-test; no contributor action needed. (cached)"}
+{"ts": "2026-11-05T15:16:05", "repo": "docker/compose", "number": 14450, "action": "address_review", "reason": "Update failing test expectation and add Matches-level regression test. (cached)"}
+{"ts": "2026-11-05T15:16:08", "repo": "istio/istio", "number": 62655, "action": "wait", "reason": "Bot says it needs an org member's /ok-to-test before testing. (cached)"}
+{"ts": "2026-11-05T15:16:08", "repo": "istio/istio", "number": 62655, "action": "wait", "reason": "Bot says it needs an org member's /ok-to-test before testing. (cached)"}
+{"ts": "2026-11-05T15:16:09", "repo": "istio/istio", "number": 62655, "action": "wait", "reason": "Bot says it needs an org member's /ok-to-test before testing. (cached)"}
+{"ts": "2026-11-05T15:16:10", "repo": "istio/istio", "number": 62654, "action": "wait", "reason": "Bot says waiting for maintainer verification; no contributor action needed. (cached)"}
+{"ts": "2026-11-05T15:16:10", "repo": "istio/istio", "number": 62654, "action": "wait", "reason": "Bot says waiting for maintainer verification; no contributor action needed. (cached)"}
+{"ts": "2026-11-05T15:16:11", "repo": "istio/istio", "number": 62654, "action": "wait", "reason": "Bot says waiting for maintainer verification; no contributor action needed. (cached)"}
+{"ts": "2026-11-05T15:16:12", "repo": "ClickHouse/ClickHouse", "number": 129144, "action": "wait", "reason": "Bot confirms all committers signed CLA; no action requested. (cached)"}
+{"ts": "2026-11-05T15:16:12", "repo": "ClickHouse/ClickHouse", "number": 129144, "action": "wait", "reason": "Bot confirms all committers signed CLA; no action requested. (cached)"}
+{"ts": "2026-11-05T15:16:12", "repo": "milvus-io/milvus", "number": 55034, "action": "wait", "reason": "Comment agrees no change is needed and only resolves conversation."}
+{"ts": "2026-11-05T15:16:13", "repo": "ClickHouse/ClickHouse", "number": 129144, "action": "wait", "reason": "Bot confirms all committers signed CLA; no action requested. (cached)"}
+{"ts": "2026-11-05T15:16:14", "repo": "docker/compose", "number": 14450, "action": "address_review", "reason": "Update failing test expectation and add Matches-level regression test. (cached)"}
+{"ts": "2026-11-05T15:16:14", "repo": "docker/compose", "number": 14450, "action": "address_review", "reason": "Update failing test expectation and add Matches-level regression test. (cached)"}
+{"ts": "2026-11-05T15:16:15", "repo": "docker/compose", "number": 14450, "action": "address_review", "reason": "Update failing test expectation and add Matches-level regression test. (cached)"}
+{"ts": "2026-11-05T15:16:16", "repo": "milvus-io/milvus", "number": 55034, "action": "wait", "reason": "Comment agrees no change is needed and only resolves conversation. (cached)"}
+{"ts": "2026-11-05T15:16:16", "repo": "milvus-io/milvus", "number": 54998, "action": "wait", "reason": "Confirms fix and resolves conversation; no contributor action requested."}
+{"ts": "2026-11-05T15:16:16", "repo": "milvus-io/milvus", "number": 55034, "action": "wait", "reason": "Comment agrees no change is needed and only resolves conversation. (cached)"}
+{"ts": "2026-11-05T15:19:54", "repo": "Deep-Optica/SkillsMaster", "number": 146, "action": "wait", "reason": ""}
+{"ts": "2026-11-05T15:19:57", "repo": "istio/istio", "number": 62656, "action": "wait", "reason": "Bot awaits org member verification and /ok-to-test; no contributor action needed. (cached)"}
+{"ts": "2026-11-05T15:19:59", "repo": "istio/istio", "number": 62655, "action": "wait", "reason": "Bot says it needs an org member's /ok-to-test before testing. (cached)"}
+{"ts": "2026-11-05T15:20:01", "repo": "istio/istio", "number": 62654, "action": "wait", "reason": "Bot says waiting for maintainer verification; no contributor action needed. (cached)"}
+{"ts": "2026-11-05T15:20:04", "repo": "ClickHouse/ClickHouse", "number": 129144, "action": "wait", "reason": "Bot confirms all committers signed CLA; no action requested. (cached)"}
+{"ts": "2026-11-05T15:20:08", "repo": "docker/compose", "number": 14450, "action": "address_review", "reason": "Update failing test expectation and add Matches-level regression test. (cached)"}
+{"ts": "2026-11-05T15:20:11", "repo": "milvus-io/milvus", "number": 55034, "action": "wait", "reason": "Comment agrees no change is needed and only resolves conversation. (cached)"}
+{"ts": "2026-11-05T15:20:15", "repo": "milvus-io/milvus", "number": 54998, "action": "wait", "reason": "Confirms fix and resolves conversation; no contributor action requested. (cached)"}
+{"ts": "2026-11-05T15:20:21", "repo": "modelcontextprotocol/registry", "number": 1788, "action": "address_review", "reason": "Requests adding a regression test case with mixed-case owner and exact grant."}

@@ -140,7 +140,8 @@ class TestNodeTargetedTests:
                             (calls.append(cmd), (0, ""))[1])
         ok, _ = pr_fix._verify(tmp_path, [" M src/x.ts", " A test/x.test.ts"], {})
         assert ok is True
-        assert calls and list(calls[0][:2]) == ['npx', 'vitest']
+        assert calls and calls[0][0] == 'npx' and calls[0][1] == '--yes'
+        assert calls[0][2] == 'vitest'
         assert any("test/x.test.ts" in c for c in calls[0])
 
     def test_falls_back_to_npm_test_without_vitest(self, tmp_path, monkeypatch):

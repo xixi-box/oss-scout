@@ -250,7 +250,7 @@ def _verify(repo_dir: Path, changed: list[str],
         # 全过，worker 验证却连 runner 都起不来）。
         for runner_cmd in (("npx", "--yes", "vitest", "run", "--silent", *test_files),
                            ("npx", "--yes", "jest", "--silent", *test_files)):
-            runner = runner_cmd[1]
+            runner = runner_cmd[2]
             if test_files and (runner in dev or runner in dep):
                 runner_available = True
                 rc, out = _run(runner_cmd, repo_dir)
