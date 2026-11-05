@@ -1046,6 +1046,35 @@ def queue_display_state(status: str, updated_at: str = "") -> str:
     return ""
 
 
+def recheck_still_worth(key: str, title: str = "") -> tuple[bool, str]:
+    """粗筛：这条 staged 候选还值得做吗（凌晨批量用）。
+
+    规则层确定性检查：issue 是否仍 open、无人认领、无关联 PR、不是重复。
+    有人做了/已关闭 → (False, 原因)。调用失败保守放行（宁重评不误杀）。
+    """
+    repo, _, num = key.partition("#")
+    if not repo or not num.isdigit():
+        return False, "bad key"
+    try:
+        from scout_v2.git_host import recheck_candidate
+        r = recheck_candidate(repo, int(num), root_cause_keywords=title or None)
+        if r is None or not r.complete:
+            return True, "incomplete recheck (kept)"
+        if not r.issue_open:
+            return False, f"issue closed (state={r.issue_open})"
+        if not r.unassigned:
+            return False, "already assigned"
+        if r.has_claim_signal:
+            return False, "claim signal in comments/body"
+        if r.is_duplicate:
+            return False, f"duplicate of {r.duplicate_of}"
+        if r.has_cross_ref_pr or r.open_pr_hits:
+            return False, f"PR exists: {(r.open_pr_hits or ['xref'])[0]}"
+        return True, "ok"
+    except Exception as e:  # noqa: BLE001
+        return True, f"recheck error (kept): {str(e)[:100]}"
+
+
 def build_candidate_rows(root) -> list[dict]:
     """「候选池」表的行：queue/candidates.json 全量镜像 + 派生状态。"""
     qpath = root / "queue" / "candidates.json"

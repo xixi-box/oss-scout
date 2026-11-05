@@ -458,14 +458,18 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
         _thr.Thread(target=_loop, daemon=True).start()
 
     def _staged_flush_loop():
-        """每天凌晨把 staged 候选批量放回可消费状态。
+        """每天凌晨处理 staged 候选：粗筛+细筛，合格的按日期从前往后消费。
 
-        设计（用户裁定 2026-11-05）：
+        设计（用户裁定 2026-11-05 二次修订）：
           白天  → 每分钟发现并消费，名额满了就标 staged
-          凌晨  → 把 staged 全部激活成 new，让次日的每分钟循环去抢
-        凌晨这一轮**不重跑细筛**：AI 判定在入队时已经做过，隔一晚上
-        没有理由再烧一次模型调用；真正需要复核的只有"有没有人做了"，
-        那由每条候选认领前的实时复检兜底（issue 是否被指派/已有 PR）。
+          凌晨  → 逐条处理 staged：
+                    粗筛（规则）：issue 是否还 open/无人认领/无关联 PR——
+                      有人做了直接踢出
+                    细筛（AI，复用入队时同一评分器）：躺了一晚上可能有新评论、
+                      上下文可能变了，重跑一次判定，不合格踢出
+                    合格 → 立即送 candidate_pipeline 修复（占当日名额）
+                  顺序：staged_at 从前往后（最早排队的先做）
+        AI 调用失败不踢出（保守：保留到下一轮，宁可重评也不误杀）。
 
         时间取 configs/dashboard.yaml 的 staged_flush_hour_local（默认 4 点，
         与 bug hunter 同档，避开白天 Actions 高峰）。
@@ -474,30 +478,96 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
         import threading as _th
         import time as _t
 
+        def _flush_once(cfg: dict) -> None:
+            hour = int(cfg.get("staged_flush_hour_local", 4))
+            now = _dt.datetime.now()
+            last = _dt.time(hour, 0)
+            # 只在到点后的第一小时内跑一次（避免跑几小时后又触发）
+            if not (last <= now.time() <= (dt.datetime.combine(now.date(), last)
+                                           + dt.timedelta(hours=1)).time()):
+                return
+            from scout_v2.workers.auto_pipeline import _data_root, candidate_pipeline
+            from scout_v2.workers.issue_scorer import load_scorer_config, GoClient
+            from scout_v2.state_store import atomic_json_write
+            droot = _data_root(root)
+            qpath = droot / "queue" / "candidates.json"
+            q = json.loads(qpath.read_text(encoding="utf-8"))
+            staged = [(k, e) for k, e in q.items()
+                      if (e or {}).get("status") == "staged"]
+            if not staged:
+                return
+            staged.sort(key=lambda kv: str(kv[1].get("staged_at") or ""))
+            cfg_s = load_scorer_config(droot)
+            scorer = None
+            if cfg_s.get("api_key"):
+                scorer = GoClient(key=cfg_s["api_key"],
+                                  model=cfg_s.get("model", "deepseek-v4.1-flash"),
+                                  timeout=180)
+            kicked, processed, kept = [], [], 0
+            for key, e in staged:
+                # ---- 粗筛：issue 是否还值得做（规则层，确定性）----
+                try:
+                    ok, reason = mod.recheck_still_worth(
+                        key, str(e.get("title") or ""))
+                except Exception as ex:  # noqa: BLE001
+                    ok, reason = True, f"recheck error (kept): {str(ex)[:80]}"
+                if not ok:
+                    e["status"] = "aborted_competed"
+                    e["abort_reason"] = f"morning recheck: {reason}"[:200]
+                    kicked.append(key)
+                    continue
+                # ---- 细筛：AI 重评（复用入队同一评分器）----
+                if scorer is None:
+                    e["status"] = "new"
+                    kept += 1
+                    continue
+                verdict = scorer.score_issue({
+                    "repo": e.get("repo") or key.partition("#")[0],
+                    "number": int(key.partition("#")[2] or 0),
+                    "title": e.get("title") or "",
+                    "labels": e.get("labels") or [],
+                    "reactions": 0, "comments": 0,
+                    "body_excerpt": e.get("body_excerpt") or "",
+                    "age_hours": None, "reporter_offered_fix": None,
+                    "claimish_signal": None})
+                if verdict.get("usable") is not True:
+                    e["status"] = "aborted_stale"
+                    e["abort_reason"] = ("morning AI re-screen: "
+                                         + str(verdict.get("reason"))[:200])
+                    kicked.append(key)
+                    continue
+                # ---- 合格：立即修复（占当日名额）----
+                e["status"] = "new"
+                kept += 1
+                processed.append(key)
+            atomic_json_write(qpath, q)
+            _audit(root, "staged_flush",
+                   f"{len(staged)} staged | kicked={len(kicked)} processed={len(processed)}",
+                   "kicked: " + ", ".join(kicked[:5]))
+            from scout_v2.notify import feishu_send
+            feishu_send(
+                f"🌅 凌晨批量处理：{len(staged)} 条暂存",
+                f"踢出 {len(kicked)} 条（被做/不合格），"
+                f"送修 {len(processed)} 条（占当日名额）")
+            # 合格的直接走修复（不经每分钟循环——当场做）
+            for key in processed:
+                e = q.get(key) or {}
+                try:
+                    out = candidate_pipeline(droot, e)
+                    _audit(root, "auto_repair", key,
+                           json.dumps(out, ensure_ascii=False)[:400])
+                except Exception as ex:  # noqa: BLE001
+                    _audit(root, "auto_repair_error", key, str(ex)[:200])
+
         def _loop():
             last_day = ""
             while True:
                 try:
                     cfg = D.dashboard_settings(ds)
-                    hour = int(cfg.get("staged_flush_hour_local", 4))
                     now = _dt.datetime.now()
                     today = now.strftime("%Y-%m-%d")
-                    if now.hour >= hour and last_day != today:
-                        from scout_v2.workers.auto_pipeline import _data_root
-                        from scout_v2.state_store import atomic_json_write
-                        droot = _data_root(root)
-                        qpath = droot / "queue" / "candidates.json"
-                        q = json.loads(qpath.read_text(encoding="utf-8"))
-                        revived = 0
-                        for key, e in q.items():
-                            if (e or {}).get("status") == "staged":
-                                e["status"] = "new"
-                                e.pop("staged_at", None)
-                                revived += 1
-                        if revived:
-                            atomic_json_write(qpath, q)
-                            _audit(root, "staged_flush", f"{revived} candidates",
-                                   f"activated at {now:%H:%M} for today's consumption")
+                    if now.hour >= 4 and last_day != today:
+                        _flush_once(cfg)
                         last_day = today
                 except Exception as e:  # noqa: BLE001
                     try:

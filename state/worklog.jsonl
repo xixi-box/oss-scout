@@ -691,3 +691,4 @@
 {"ts": "2026-11-05T00:04:08", "action": "dashboard_pr_review_fix_dispatch", "target": "docker/compose#14450", "result": "dispatched=False kind=None reason=pr head unavailable", "source": "web-ui"}
 {"ts": "2026-11-05T00:04:08", "action": "dashboard_pr_reply_drafted", "target": "docker/compose#14450", "result": "drafted=False fix_kind=review", "source": "web-ui"}
 {"ts": "2026-11-05T15:19:35", "action": "dashboard_pr_sync_failed", "target": "0 prs", "result": "not configured", "source": "web-ui"}
+{"ts": "2026-11-05T23:44:38", "action": "dashboard_staged_flush_error", "target": "-", "result": "name 'dt' is not defined", "source": "web-ui"}

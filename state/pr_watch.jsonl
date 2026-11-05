@@ -1394,3 +1394,40 @@
 {"ts": "2026-11-05T23:15:56", "repo": "bytedance/deer-flow", "number": 7812, "action": "address_review", "reason": "Optional nit asks to include title/context fields in document source text order. (cached)"}
 {"ts": "2026-11-05T23:15:56", "repo": "bytedance/deer-flow", "number": 7812, "action": "address_review", "reason": "Optional nit asks to include title/context fields in document source text order. (cached)"}
 {"ts": "2026-11-05T23:15:57", "repo": "PrefectHQ/fastmcp", "number": 6172, "action": "wait", "reason": "Bot review failed; only offers optional retry, no concrete change requested. (cached)"}
+{"ts": "2026-11-05T23:46:44", "repo": "Deep-Optica/SkillsMaster", "number": 147, "action": "wait", "reason": ""}
+{"ts": "2026-11-05T23:46:46", "repo": "Deep-Optica/SkillsMaster", "number": 146, "action": "wait", "reason": ""}
+{"ts": "2026-11-05T23:46:49", "repo": "istio/istio", "number": 62656, "action": "wait", "reason": "Bot awaits org member verification and /ok-to-test; no contributor action needed. (cached)"}
+{"ts": "2026-11-05T23:46:52", "repo": "istio/istio", "number": 62655, "action": "wait", "reason": "Bot says it needs an org member's /ok-to-test before testing. (cached)"}
+{"ts": "2026-11-05T23:46:56", "repo": "istio/istio", "number": 62654, "action": "wait", "reason": "Bot says waiting for maintainer verification; no contributor action needed. (cached)"}
+{"ts": "2026-11-05T23:47:00", "repo": "ClickHouse/ClickHouse", "number": 129144, "action": "wait", "reason": "Bot confirms all committers signed CLA; no action requested. (cached)"}
+{"ts": "2026-11-05T23:47:07", "repo": "docker/compose", "number": 14450, "action": "address_review", "reason": "Update failing test expectation and add Matches-level regression test. (cached)"}
+{"ts": "2026-11-05T23:47:14", "repo": "milvus-io/milvus", "number": 55034, "action": "wait", "reason": "Comment agrees no change is needed and only resolves conversation. (cached)"}
+{"ts": "2026-11-05T23:47:16", "repo": "Deep-Optica/SkillsMaster", "number": 147, "action": "wait", "reason": ""}
+{"ts": "2026-11-05T23:47:17", "repo": "Deep-Optica/SkillsMaster", "number": 147, "action": "wait", "reason": ""}
+{"ts": "2026-11-05T23:47:17", "repo": "Deep-Optica/SkillsMaster", "number": 147, "action": "wait", "reason": ""}
+{"ts": "2026-11-05T23:47:19", "repo": "milvus-io/milvus", "number": 54998, "action": "wait", "reason": "Confirms fix and resolves conversation; no contributor action requested. (cached)"}
+{"ts": "2026-11-05T23:47:20", "repo": "Deep-Optica/SkillsMaster", "number": 146, "action": "wait", "reason": ""}
+{"ts": "2026-11-05T23:47:20", "repo": "Deep-Optica/SkillsMaster", "number": 146, "action": "wait", "reason": ""}
+{"ts": "2026-11-05T23:47:21", "repo": "Deep-Optica/SkillsMaster", "number": 146, "action": "wait", "reason": ""}
+{"ts": "2026-11-05T23:47:23", "repo": "istio/istio", "number": 62656, "action": "wait", "reason": "Bot awaits org member verification and /ok-to-test; no contributor action needed. (cached)"}
+{"ts": "2026-11-05T23:47:23", "repo": "modelcontextprotocol/registry", "number": 1788, "action": "wait", "reason": "Approval with test results; notes are informational and no change requested. (cached)"}
+{"ts": "2026-11-05T23:47:24", "repo": "istio/istio", "number": 62656, "action": "wait", "reason": "Bot awaits org member verification and /ok-to-test; no contributor action needed. (cached)"}
+{"ts": "2026-11-05T23:47:25", "repo": "istio/istio", "number": 62656, "action": "wait", "reason": "Bot awaits org member verification and /ok-to-test; no contributor action needed. (cached)"}
+{"ts": "2026-11-05T23:47:26", "repo": "bytedance/deer-flow", "number": 7822, "action": "address_review", "reason": "They point out denominator miscounts malformed results, contradicting docstring/invariant; fix needed. (cached)"}
+{"ts": "2026-11-05T23:47:27", "repo": "istio/istio", "number": 62655, "action": "wait", "reason": "Bot says it needs an org member's /ok-to-test before testing. (cached)"}
+{"ts": "2026-11-05T23:47:28", "repo": "istio/istio", "number": 62655, "action": "wait", "reason": "Bot says it needs an org member's /ok-to-test before testing. (cached)"}
+{"ts": "2026-11-05T23:47:28", "repo": "istio/istio", "number": 62655, "action": "wait", "reason": "Bot says it needs an org member's /ok-to-test before testing. (cached)"}
+{"ts": "2026-11-05T23:47:30", "repo": "bytedance/deer-flow", "number": 7812, "action": "address_review", "reason": "Optional nit asks to include title/context fields in document source text order. (cached)"}
+{"ts": "2026-11-05T23:47:32", "repo": "istio/istio", "number": 62654, "action": "wait", "reason": "Bot says waiting for maintainer verification; no contributor action needed. (cached)"}
+{"ts": "2026-11-05T23:47:32", "repo": "istio/istio", "number": 62654, "action": "wait", "reason": "Bot says waiting for maintainer verification; no contributor action needed. (cached)"}
+{"ts": "2026-11-05T23:47:32", "repo": "istio/istio", "number": 62654, "action": "wait", "reason": "Bot says waiting for maintainer verification; no contributor action needed. (cached)"}
+{"ts": "2026-11-05T23:47:34", "repo": "promptfoo/promptfoo", "number": 12079, "action": "address_review", "reason": "Bot requests documenting the changed select-best criteria interpretation. (cached)"}
+{"ts": "2026-11-05T23:47:35", "repo": "ClickHouse/ClickHouse", "number": 129144, "action": "wait", "reason": "Bot confirms all committers signed CLA; no action requested. (cached)"}
+{"ts": "2026-11-05T23:47:36", "repo": "ClickHouse/ClickHouse", "number": 129144, "action": "wait", "reason": "Bot confirms all committers signed CLA; no action requested. (cached)"}
+{"ts": "2026-11-05T23:47:39", "repo": "docker/compose", "number": 14450, "action": "address_review", "reason": "Update failing test expectation and add Matches-level regression test. (cached)"}
+{"ts": "2026-11-05T23:47:42", "repo": "ClickHouse/ClickHouse", "number": 129144, "action": "wait", "reason": "Bot confirms all committers signed CLA; no action requested. (cached)"}
+{"ts": "2026-11-05T23:47:46", "repo": "PrefectHQ/fastmcp", "number": 6198, "action": "address_review", "reason": "P2 issue asks to preserve callable wrappers’ exposed signatures for URI validation. (cached)"}
+{"ts": "2026-11-05T23:47:47", "repo": "docker/compose", "number": 14450, "action": "address_review", "reason": "Update failing test expectation and add Matches-level regression test. (cached)"}
+{"ts": "2026-11-05T23:47:47", "repo": "milvus-io/milvus", "number": 55034, "action": "wait", "reason": "Comment agrees no change is needed and only resolves conversation. (cached)"}
+{"ts": "2026-11-05T23:47:49", "repo": "docker/compose", "number": 14450, "action": "address_review", "reason": "Update failing test expectation and add Matches-level regression test. (cached)"}
+{"ts": "2026-11-05T23:47:50", "repo": "ruvnet/RuVector", "number": 1299, "action": "wait", "reason": ""}
