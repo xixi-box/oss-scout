@@ -19,6 +19,18 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import dashboard.data as D  # noqa: E402
 
 
+def opts_cy(spy_cls):
+    """把一个只实现 score_issue 的 Spy 包装成 GoClient 兼容构造器。"""
+    class _Client:
+        def __init__(self, **kwargs):
+            self._spy = spy_cls()
+
+        def score_issue(self, issue):
+            return self._spy.score_issue(issue)
+
+    return _Client
+
+
 def _env(min_age: float = 2):
     tmp = Path(tempfile.mkdtemp())
     (tmp / "configs").mkdir(parents=True)
@@ -27,6 +39,9 @@ def _env(min_age: float = 2):
         "repositories": {"a/b": {"lane": "open"}}}), encoding="utf-8")
     (tmp / "configs" / "cloudflare.yaml").write_text(
         yaml.dump({"ingest_token": "t"}), encoding="utf-8")
+    (tmp / "configs" / "scorer.yaml").write_text(
+        yaml.dump({"api_key": "test-key", "model": "test-model"}),
+        encoding="utf-8")
     (tmp / "queue").mkdir()
     (tmp / "state").mkdir()
     (tmp / "queue" / "candidates.json").write_text("{}", encoding="utf-8")
@@ -43,19 +58,9 @@ def _item(created: str):
             "labels": [], "created_at": created, "url": "u"}
 
 
-def test_fresh_issue_is_not_queued_and_is_marked_too_fresh():
-    ds, tmp = _env()
-    now = dt.datetime.utcnow().isoformat(timespec="seconds") + "Z"
-    n, _ = D.ingest_cloudflare_issues(ds, [_item(now)])
-    assert n == 0
-    seen = json.loads((tmp / "state" / "seen.json").read_text(encoding="utf-8"))
-    e = seen.get("a/b#99", {})
-    assert e.get("status") == "too_fresh"
-    assert "why" in e
-
-
-def test_gate_runs_before_the_ai_scorer():
-    """太新鲜的 issue 不应该烧一次 AI 评分调用。"""
+def test_fresh_issue_still_reaches_the_ai():
+    """年龄不再是硬闸（用户裁定 2026-11-05）：太新鲜的 issue 照常走 AI 判定，
+    年龄与"报告者想自己修"作为信号交给模型权衡。"""
     ds, tmp = _env()
     now = dt.datetime.utcnow().isoformat(timespec="seconds") + "Z"
     called = []
@@ -66,19 +71,59 @@ def test_gate_runs_before_the_ai_scorer():
 
         def score_issue(self, issue):
             called.append(issue)
-            return {"usable": True, "reason": "", "model": "x"}
+            return {"usable": True, "reason": "ok", "model": "x"}
 
-    import dashboard.data as _D
-    orig = _D._discover_score
-    _D._discover_score = lambda: type("D", (), {"RE_BILLING": orig().RE_BILLING,
-                                                "RE_FEATURE_LABEL": orig().RE_FEATURE_LABEL,
-                                                "RE_BAD_TITLE": orig().RE_BAD_TITLE})()
+    import scout_v2.workers.issue_scorer as isc
+    orig = isc.GoClient
+    isc.GoClient = opts_cy(Spy)
     try:
         n, _ = D.ingest_cloudflare_issues(ds, [_item(now)])
     finally:
-        _D._discover_score = orig
-    assert n == 0
-    assert not called, "age gate must run before any AI call"
+        isc.GoClient = orig
+    assert called, "fresh issue must still be scored by AI"
+    assert called[0]["age_hours"] is not None
+    assert called[0]["age_hours"] < 0.1
+    seen = json.loads((tmp / "state" / "seen.json").read_text(encoding="utf-8"))
+    assert seen.get("a/b#99", {}).get("status") != "too_fresh"
+
+
+def test_reporter_offer_is_detected_and_passed_to_ai():
+    """报告者说"让我来修"→ 作为信号传给 AI，让它判 NO（礼貌让位）。"""
+    ds, tmp = _env()
+    now = dt.datetime.utcnow().isoformat(timespec="seconds") + "Z"
+    item = _item(now)
+    item["body_excerpt"] += "\n\nMay I prepare that focused fix?"
+    called = []
+
+    class Spy:
+        def __init__(self, **k):
+            pass
+
+        def score_issue(self, issue):
+            called.append(issue)
+            return {"usable": True, "reason": "ok", "model": "x"}
+
+    import scout_v2.workers.issue_scorer as isc
+    orig = isc.GoClient
+    isc.GoClient = opts_cy(Spy)
+    try:
+        D.ingest_cloudflare_issues(ds, [item])
+    finally:
+        isc.GoClient = orig
+    assert called[0]["reporter_offered_fix"] is True
+
+
+def test_reason_columns_are_split():
+    """粗筛原因（规则否决）与细筛原因（AI 理由）分开记。"""
+    ds, tmp = _env()
+    billing = _item("2026-11-01T00:00:00Z")
+    billing["title"] = "[BUG] please refund my subscription"
+    n, _ = D.ingest_cloudflare_issues(ds, [billing])
+    seen = json.loads((tmp / "state" / "seen.json").read_text(encoding="utf-8"))
+    e = seen.get("a/b#99", {})
+    assert e.get("status") == "blocked"
+    assert e.get("coarse_reason"), e
+    assert "why" not in e, "旧单列原因应迁到 coarse/fine"
 
 
 def test_old_enough_issue_still_flows_through():

@@ -730,10 +730,14 @@ def cloudflare_cfg(ds) -> dict:
 
 
 _RE_OFFER = __import__("re").compile(
-    r"(may|can|could|shall)\s+i\s+(prepare|submit|open|send|provide)\s+"
-    r"(a|the)?\s*(pr|pull request|fix|patch)|"
-    r"i('ll|'d| would like to| am happy to)\s+(prepare|submit|open|work on)"
-    r"|i\s+(would like to|want to|plan to)\s+(fix|work on)", re.I)
+    # 报告者主动提出要自己修：英文常见说法（"May I prepare that focused fix?"、
+    # "I'd like to work on this"、"happy to send a PR"…）
+    r"(may|can|could|shall|should)\s+i\s+(prepare|submit|open|send|provide|fix|take)"
+    r"|i('ll|'d| would like to| am happy to| am going to| will)\s+"
+    r"(prepare|submit|open|work on|fix|send|provide)"
+    r"|(happy|glad|willing)\s+to\s+(prepare|submit|open|send|provide|fix)"
+    r"|i\s+(would like to|want to|plan to|intend to)\s+(fix|work on|prepare|take)",
+    re.I)
 
 
 def ingest_cloudflare_issues(ds, items: list[dict]) -> tuple[int, list[str]]:

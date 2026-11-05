@@ -251,10 +251,12 @@ class TestNumberNormalization:
                     return {"code": 0, "data": {"items": [
                         {"table_id": "tblS", "name": fb.SCAN_TABLE_NAME}]}}
                 if "/fields?page_size=" in url:
+                    # 已存在的列与 SCAN_FIELDS 对齐（含新拆的粗筛/细筛原因），
+                    # 否则 ensure_columns 会尝试 POST 建字段
                     return {"code": 0, "data": {"items": [
-                        {"field_name": n} for n in
-                        ("键", "仓库", "issue号", "状态", "原因",
-                         "入队状态", "链接", "发现时间")]}}
+                        {"field_name": f["field_name"]} for f in fb.SCAN_FIELDS]}}
+                if url.endswith("/fields"):
+                    return {"code": 0, "data": {}}
                 if "/records?page_size=" in url:
                     # 模拟真实回传形态：其他列原样回来，唯独数字列
                     # 变成字符串（飞书读端的已知行为）
