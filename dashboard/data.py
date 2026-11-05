@@ -1009,7 +1009,13 @@ DASHBOARD_DEFAULTS = {
     "cf_pull_seconds": 300,
     "pr_refresh_seconds": 120,    # PR 列表自动刷新间隔
     "gh_cache_ttl": 300,          # gh 外部命令结果缓存秒数
-    "auto_repair_seconds": 300,   # 自动修复轮询间隔（0=关闭）；每日认领上限仍由 ClaimLedger 强制
+    # 每分钟发现并消费候选（用户裁定 2026-11-05：原本 300s 且与 15 分钟
+    # 的 PR 监控共用循环，一轮 PR 扫描要 5-10 分钟，候选消费被挤到几小时一次）。
+    # 额度仍是硬上限，超出的由 drain 标 staged 留到次日凌晨批量取。
+    "auto_repair_seconds": 60,
+    # staged 候选每天几点（本地时区）批量激活。凌晨 4 点与 bug hunter 同档，
+    # 避开白天 Actions 高峰。
+    "staged_flush_hour_local": 4,
 }
 
 

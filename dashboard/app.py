@@ -384,6 +384,10 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
                     if interval <= 0:
                         _t.sleep(60)
                         continue
+                    # 每分钟发现并消费候选（用户裁定 2026-11-05）：
+                    # 名额未满就当场修，满了 drain 内部自动标 staged 留到
+                    # 次日凌晨批量取。这条循环独立于 PR 监控（后者每 15min
+                    # 且要扫 30+ 个 PR 的所有端点，会把候选消费挤到几小时一次）。
                     _dispatch(keys=None)
                     _t.sleep(interval)
                 except Exception as e:  # noqa: BLE001 — 永不因单次异常停摆
@@ -394,6 +398,57 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
                     _t.sleep(120)
 
         _thr.Thread(target=_loop, daemon=True).start()
+
+    def _staged_flush_loop():
+        """每天凌晨把 staged 候选批量放回可消费状态。
+
+        设计（用户裁定 2026-11-05）：
+          白天  → 每分钟发现并消费，名额满了就标 staged
+          凌晨  → 把 staged 全部激活成 new，让次日的每分钟循环去抢
+        凌晨这一轮**不重跑细筛**：AI 判定在入队时已经做过，隔一晚上
+        没有理由再烧一次模型调用；真正需要复核的只有"有没有人做了"，
+        那由每条候选认领前的实时复检兜底（issue 是否被指派/已有 PR）。
+
+        时间取 configs/dashboard.yaml 的 staged_flush_hour_local（默认 4 点，
+        与 bug hunter 同档，避开白天 Actions 高峰）。
+        """
+        import datetime as _dt
+        import threading as _th
+        import time as _t
+
+        def _loop():
+            last_day = ""
+            while True:
+                try:
+                    cfg = D.dashboard_settings(ds)
+                    hour = int(cfg.get("staged_flush_hour_local", 4))
+                    now = _dt.datetime.now()
+                    today = now.strftime("%Y-%m-%d")
+                    if now.hour >= hour and last_day != today:
+                        from scout_v2.workers.auto_pipeline import _data_root
+                        from scout_v2.state_store import atomic_json_write
+                        droot = _data_root(root)
+                        qpath = droot / "queue" / "candidates.json"
+                        q = json.loads(qpath.read_text(encoding="utf-8"))
+                        revived = 0
+                        for key, e in q.items():
+                            if (e or {}).get("status") == "staged":
+                                e["status"] = "new"
+                                e.pop("staged_at", None)
+                                revived += 1
+                        if revived:
+                            atomic_json_write(qpath, q)
+                            _audit(root, "staged_flush", f"{revived} candidates",
+                                   f"activated at {now:%H:%M} for today's consumption")
+                        last_day = today
+                except Exception as e:  # noqa: BLE001
+                    try:
+                        _audit(root, "staged_flush_error", "-", str(e)[:200])
+                    except Exception:  # noqa: BLE001
+                        pass
+                _t.sleep(600)   # 每 10 分钟看一次"是否到点"
+
+        _th.Thread(target=_loop, daemon=True).start()
 
     def _pr_watch_loop():
         """盯着我们开出去的 PR：CI 红了留痕，并把 PR 列表同步给 Worker。
@@ -636,6 +691,7 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
     _cf_poll_loop()   # 必须在 ds 创建后启动（依赖 ds 读配置）
     _auto_repair_loop()
     _pr_watch_loop()  # PR 开出去之后的闭环：盯 CI / 评论
+    _staged_flush_loop()  # 每天凌晨把 staged 批量激活，供当天消费
     app.state.ds = ds
     app.state.root = root
     secret = _secret(root)
