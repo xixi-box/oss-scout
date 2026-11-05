@@ -549,6 +549,15 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
                                     binding_key="scan_table_id")
                                 _audit(root, "bitable_sync_scan", f"{len(scan_rows)} rows",
                                        json.dumps(out, ensure_ascii=False))
+                            cand_rows = mod.build_candidate_rows(root)
+                            if cand_rows:
+                                out = FB.sync_table(
+                                    root, cand_rows, table_name=FB.CAND_TABLE_NAME,
+                                    fields=FB.CAND_FIELDS,
+                                    to_fields=FB.cand_row_to_fields,
+                                    binding_key="cand_table_id")
+                                _audit(root, "bitable_sync_cand", f"{len(cand_rows)} rows",
+                                       json.dumps(out, ensure_ascii=False))
                     except Exception as e:  # noqa: BLE001
                         _audit(root, "bitable_sync_error", "-", str(e)[:200])
                 except Exception as e:  # noqa: BLE001

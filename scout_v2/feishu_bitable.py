@@ -31,6 +31,29 @@ STATE_FILE = "feishu_bitable.json"
 # 「仓库池」表：监控名单 + 池审计（语言/stars/最近 push）。评分列等
 # pool_rates 把指标落盘后再补。
 
+# 「候选池」表：queue/candidates.json 的镜像——真正进入流水线的 issue。
+# 处理状态用颜色语义：黄=排队中（含等确认），绿=已解决（PR 已开出），
+# 红=已失效（stale/竞争失败/尝试超限等）。
+CAND_TABLE_NAME = "候选池"
+CAND_FIELDS = [
+    {"field_name": "键", "type": 1},
+    {"field_name": "仓库", "type": 1},
+    {"field_name": "issue号", "type": 2},
+    {"field_name": "标题", "type": 1},
+    {"field_name": "车道", "type": 1},
+    {"field_name": "处理状态", "type": 3, "property": {"options": [
+        {"name": "排队中", "color": 2},      # 黄
+        {"name": "已解决", "color": 3},      # 绿
+        {"name": "已失效", "color": 0},      # 红
+        {"name": "等确认", "color": 0},
+    ]}},
+    {"field_name": "AI判定", "type": 1},
+    {"field_name": "入队时间", "type": 5},
+    {"field_name": "更新时间", "type": 5},
+    {"field_name": "PR链接", "type": 15},
+    {"field_name": "备注", "type": 1},
+]
+
 # 「扫描发现」表：seen.json 的镜像——Worker 扫到的每个 issue 和它的去向
 # （入队 / 被规则否决 / 低分 / 未知仓库）。回答"这个 issue 为什么没被处理"。
 SCAN_TABLE_NAME = "扫描发现"
@@ -40,6 +63,11 @@ SCAN_FIELDS = [
     {"field_name": "issue号", "type": 2},
     {"field_name": "状态", "type": 1},
     {"field_name": "原因", "type": 1},
+    {"field_name": "入队状态", "type": 3, "property": {"options": [
+        {"name": "排队中", "color": 2},
+        {"name": "已解决", "color": 3},
+        {"name": "已失效", "color": 0},
+    ]}},
     {"field_name": "链接", "type": 15},
     {"field_name": "发现时间", "type": 5},
 ]
@@ -154,9 +182,25 @@ def row_to_fields(row: dict) -> dict:
     return f
 
 
+def ensure_columns(app_token: str, table_id: str, fields: list) -> None:
+    """给已存在的表补缺失的字段（如扫描发现后加的 入队状态 列）。"""
+    tok = feishu_app.tenant_token()
+    body = feishu_app._request(
+        "GET", f"https://open.feishu.cn/open-apis/bitable/v1/apps/{app_token}"
+               f"/tables/{table_id}/fields?page_size=100", token=tok)
+    if body.get("code") not in (0, None):
+        return
+    existing = {f.get("field_name") for f in (body.get("data") or {}).get("items") or []}
+    for spec in fields:
+        if spec.get("field_name") not in existing:
+            feishu_app._request(
+                "POST", f"https://open.feishu.cn/open-apis/bitable/v1/apps/{app_token}"
+                        f"/tables/{table_id}/fields", spec, token=tok)
+
+
 def find_or_create_table(app_token: str, table_name: str = TABLE_NAME,
                          fields: list | None = None) -> str:
-    """按名字找表，没有就按字段规格建。"""
+    """按名字找表，没有就按字段规格建；已存在的表补缺失字段。"""
     tok = feishu_app.tenant_token()
     body = feishu_app._request(
         "GET", f"https://open.feishu.cn/open-apis/bitable/v1/apps/{app_token}/tables"
@@ -165,7 +209,9 @@ def find_or_create_table(app_token: str, table_name: str = TABLE_NAME,
         raise RuntimeError(f"list tables: {str(body)[:200]}")
     for t in (body.get("data") or {}).get("items") or []:
         if t.get("name") == table_name:
-            return str(t["table_id"])
+            tid = str(t["table_id"])
+            ensure_columns(app_token, tid, fields or FIELDS)
+            return tid
     created = feishu_app._request(
         "POST", f"https://open.feishu.cn/open-apis/bitable/v1/apps/{app_token}/tables",
         {"table": {"name": table_name, "fields": fields or FIELDS}}, token=tok)
@@ -262,10 +308,42 @@ def scan_row_to_fields(row: dict) -> dict:
         f["状态"] = str(row["status"])
     if row.get("why"):
         f["原因"] = str(row["why"])[:500]
+    if row.get("queue_state"):
+        f["入队状态"] = str(row["queue_state"])
     if row.get("first_seen"):
         ms = _iso_to_ms(str(row["first_seen"]).replace(" ", "T"))
         if ms:
             f["发现时间"] = ms
+    return f
+
+
+def cand_row_to_fields(row: dict) -> dict:
+    f = {
+        "键": row.get("key") or "",
+        "仓库": str(row.get("key") or "").partition("#")[0],
+    }
+    num = str(row.get("key") or "").partition("#")[2]
+    if num.isdigit():
+        f["issue号"] = int(num)
+        repo = f["仓库"]
+        f.setdefault("链接", {"text": f"{repo}#{num}",
+                              "link": f"https://github.com/{repo}/issues/{num}"})
+    if row.get("title"):
+        f["标题"] = str(row["title"])[:500]
+    if row.get("lane"):
+        f["车道"] = str(row["lane"])
+    if row.get("queue_state"):
+        f["处理状态"] = str(row["queue_state"])
+    if row.get("ai_verdict"):
+        f["AI判定"] = str(row["ai_verdict"])[:300]
+    for col, key in (("入队时间", "discovered_at"), ("更新时间", "updated_at")):
+        ms = _iso_to_ms(row.get(key))
+        if ms:
+            f[col] = ms
+    if row.get("pr_url"):
+        f["PR链接"] = {"text": "PR", "link": str(row["pr_url"])}
+    if row.get("note"):
+        f["备注"] = str(row["note"])[:500]
     return f
 
 
@@ -292,6 +370,7 @@ def sync_table(root: Path, rows: list[dict], *, table_name: str, fields: list,
     table_id = binding.get(binding_key) or find_or_create_table(
         app_token, table_name, fields)
     save_binding(root, {"app_token": app_token, binding_key: table_id})
+    ensure_columns(app_token, table_id, fields or [])
 
     tok = feishu_app.tenant_token()
     existing = load_records(app_token, table_id)

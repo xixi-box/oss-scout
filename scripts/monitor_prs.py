@@ -971,6 +971,22 @@ def build_scan_rows(root) -> list[dict]:
         seen = json.loads(seen_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return []
+    # 入队状态：从候选队列 join（黄=排队中，绿=已解决，红=已失效，
+    # 空=从未入队——被否决/太新鲜/范围外）
+    queue_states: dict = {}
+    try:
+        qpath = root / "queue" / "candidates.json"
+        if not qpath.exists():
+            qpath = ROOT / "queue" / "candidates.json"
+        q = json.loads(qpath.read_text(encoding="utf-8")) or {}
+        for qkey, qentry in q.items():
+            qentry = qentry or {}
+            st = queue_display_state(qentry.get("status"),
+                                     qentry.get("updated_at"))
+            if st:
+                queue_states[qkey] = st
+    except (OSError, json.JSONDecodeError):
+        pass
     rows = []
     for key, v in seen.items():
         v = v or {}
@@ -981,6 +997,72 @@ def build_scan_rows(root) -> list[dict]:
             "status": str(v.get("status") or ""),
             "why": str(v.get("why") or ""),
             "first_seen": str(v.get("first_seen") or ""),
+            "queue_state": queue_states.get(key, ""),
         })
     rows.sort(key=lambda r: r["first_seen"], reverse=True)
+    return rows
+
+
+# ---- 候选池/扫描发现的入队状态：黄=排队中，绿=已解决，红=已失效 ----
+
+_QUEUE_YELLOW = {"new", "staged", "needs_maintainer_confirm", "needs_cla",
+                 "gated_alignment_only"}
+_QUEUE_GREEN = {"pr_open", "merged", "completed"}
+_QUEUE_RED = {"aborted_stale", "stage_expired", "escalated", "aborted_competed",
+              "aborted_duplicate", "aborted_closed", "aborted_no_evidence",
+              "aborted_blocked_design", "recheck_failed", "queued_hist"}
+QUEUE_EXPIRE_DAYS = 3
+
+
+def queue_display_state(status: str, updated_at: str = "") -> str:
+    """候选的处理状态 → 飞书三色语义。
+
+    黄=排队中（含等确认/等CLA），绿=已解决（PR 已开出），红=已失效
+    （stale/竞争失败/尝试超限，或 new/staged 躺了超过 3 天没轮上）。
+    """
+    status = str(status or "")
+    import datetime as _dt
+    if status in _QUEUE_GREEN:
+        return "已解决"
+    if status in _QUEUE_RED:
+        return "已失效"
+    if status in _QUEUE_YELLOW:
+        if updated_at:
+            try:
+                age = _dt.datetime.now() - _dt.datetime.fromisoformat(
+                    str(updated_at)[:19])
+                if age.days >= QUEUE_EXPIRE_DAYS:
+                    return "已失效"
+            except ValueError:
+                pass
+        return "排队中"
+    return ""
+
+
+def build_candidate_rows(root) -> list[dict]:
+    """「候选池」表的行：queue/candidates.json 全量镜像 + 派生状态。"""
+    qpath = root / "queue" / "candidates.json"
+    if not qpath.exists():
+        qpath = ROOT / "queue" / "candidates.json"
+    try:
+        q = json.loads(qpath.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    rows = []
+    for key, entry in (q or {}).items():
+        entry = entry or {}
+        rows.append({
+            "key": key,
+            "title": str(entry.get("title") or "")[:300],
+            "lane": str(entry.get("lane") or ""),
+            "queue_state": queue_display_state(entry.get("status"),
+                                               entry.get("updated_at")),
+            "ai_verdict": str(((entry.get("ai_verdict") or {}).get("reason"))
+                              or "")[:250],
+            "discovered_at": entry.get("discovered_at") or "",
+            "updated_at": entry.get("updated_at") or "",
+            "pr_url": entry.get("pr_url") or "",
+            "note": "；".join(str(b) for b in (entry.get("blockers") or []))[:300],
+        })
+    rows.sort(key=lambda r: r["key"])
     return rows

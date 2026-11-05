@@ -132,6 +132,13 @@ class TestSyncDiff:
                     {"table_id": "tbl1", "name": fb.TABLE_NAME}]}}
             if url.endswith("/tables"):
                 return {"code": 0, "data": {"table_id": "tbl1"}}
+            if "/fields?page_size=" in url:
+                # ensure_columns 的字段列表：PR 表已有所需字段
+                names = {"键", "仓库", "PR号", "标题", "状态", "最近动作",
+                         "回复状态", "修改状态", "创建时间", "最近活动",
+                         "关闭时间", "链接", "备注"}
+                items = [{"field_name": n} for n in names]
+                return {"code": 0, "data": {"items": items}}
             if "/records?page_size=" in url:
                 items = [{"record_id": rid, "fields": fs}
                          for rid, fs in self.records.items()]
@@ -243,6 +250,11 @@ class TestNumberNormalization:
                 if "/tables?" in url:
                     return {"code": 0, "data": {"items": [
                         {"table_id": "tblS", "name": fb.SCAN_TABLE_NAME}]}}
+                if "/fields?page_size=" in url:
+                    return {"code": 0, "data": {"items": [
+                        {"field_name": n} for n in
+                        ("键", "仓库", "issue号", "状态", "原因",
+                         "入队状态", "链接", "发现时间")]}}
                 if "/records?page_size=" in url:
                     # 模拟真实回传形态：其他列原样回来，唯独数字列
                     # 变成字符串（飞书读端的已知行为）
@@ -270,3 +282,64 @@ class TestNumberNormalization:
         # 被识别为"无变化"而不是整行重写
         assert out["updated"] == 0, out
         assert out["skipped"] == 1
+
+
+class TestCandidateRows:
+    """候选池表：黄=排队中（含等确认），绿=已解决（PR 已开出），
+    红=已失效（stale/竞争失败/超限/躺超 3 天没轮上）。"""
+
+    def _entry(self, status, updated="2026-11-05T01:00:00"):
+        return {"id": "a/b#9", "repo": "a/b", "number": 9, "title": "t",
+                "lane": "open", "status": status, "updated_at": updated,
+                "discovered_at": "2026-11-01T00:00:00",
+                "ai_verdict": {"usable": True, "reason": ""}, "blockers": []}
+
+    def test_state_mapping(self, tmp_path, monkeypatch):
+        (tmp_path / "queue").mkdir()
+        (tmp_path / "queue" / "candidates.json").write_text(json.dumps({
+            "a/b#1": self._entry("new"),
+            "a/b#2": self._entry("pr_open"),
+            "a/b#3": self._entry("aborted_stale"),
+            "a/b#4": self._entry("needs_maintainer_confirm"),
+            "a/b#5": self._entry("queued_hist"),
+            "a/b#6": self._entry("out_of_scope"),
+        }), encoding="utf-8")
+        rows = mp.build_candidate_rows(tmp_path)
+        states = {r["key"]: r["queue_state"] for r in rows}
+        assert states["a/b#1"] == "排队中"
+        assert states["a/b#2"] == "已解决"
+        assert states["a/b#3"] == "已失效"
+        assert states["a/b#4"] == "排队中"
+        assert states["a/b#5"] == "已失效"
+        assert states["a/b#6"] == ""
+
+    def test_stale_new_turns_expired(self, tmp_path, monkeypatch):
+        """new 躺超过 3 天没轮上 → 红（失效）。"""
+        (tmp_path / "queue").mkdir()
+        (tmp_path / "queue" / "candidates.json").write_text(json.dumps({
+            "a/b#7": self._entry("new", updated="2026-10-01T00:00:00"),
+        }), encoding="utf-8")
+        rows = mp.build_candidate_rows(tmp_path)
+        assert rows[0]["queue_state"] == "已失效"
+
+    def test_scan_rows_carry_queue_state(self, tmp_path, monkeypatch):
+        (tmp_path / "state").mkdir()
+        (tmp_path / "state" / "seen.json").write_text(
+            json.dumps({"a/b#9": {"first_seen": "2026-11-05T01:00:00",
+                                  "status": "queued"}}), encoding="utf-8")
+        (tmp_path / "queue").mkdir()
+        (tmp_path / "queue" / "candidates.json").write_text(json.dumps({
+            "a/b#9": self._entry("pr_open")}), encoding="utf-8")
+        rows = mp.build_scan_rows(tmp_path)
+        assert rows[0]["queue_state"] == "已解决"
+
+    def test_cand_converter_colors_and_fields(self):
+        f = fb.cand_row_to_fields({
+            "key": "a/b#9", "title": "t", "lane": "open",
+            "queue_state": "排队中", "ai_verdict": "ok",
+            "discovered_at": "2026-11-05T01:00:00Z",
+            "updated_at": "2026-11-05T02:00:00Z",
+            "pr_url": "https://github.com/a/b/pull/1", "note": "n"})
+        assert f["处理状态"] == "排队中"
+        assert f["issue号"] == 9
+        assert f["PR链接"]["link"].endswith("/pull/1")
