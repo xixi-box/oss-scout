@@ -34,6 +34,10 @@ Answer YES only if all of these hold:
 
 Answer NO if any of these:
     - not a bug, already answered, or docs-only
+    - the reporter asked to prepare the fix / a PR themselves -- leave it to
+      them; racing a volunteer is bad manners and bad for the project
+    - it is only minutes old and a maintainer or the reporter is likely still
+      working on it (age under a couple of hours with no maintainer ask)
     - too vague to act on, or needs a design decision from maintainers
     - reproducible only in an environment the agent cannot reach
     - security-sensitive
@@ -45,6 +49,7 @@ be precise; a long one can still be vague.
 Issue from {repo}#{number}
 Labels: {labels}
 Reactions: {reactions} | Comments: {comments}
+Age: {age} | Reporter offered to fix it themselves: {offer}
 Title: {title}
 
 Body:
@@ -137,6 +142,9 @@ class GoClient:
             repo=issue.get("repo", ""), number=issue.get("number", ""),
             labels=", ".join(issue.get("labels") or []) or "none",
             reactions=issue.get("reactions", 0), comments=issue.get("comments", 0),
+            age=(f"{issue.get('age_hours')}h"
+                 if issue.get("age_hours") is not None else "unknown"),
+            offer="yes" if issue.get("reporter_offered_fix") else "no",
             title=str(issue.get("title", ""))[:200],
             body=str(issue.get("body_excerpt", ""))[:4000])
         ok, text = self.chat(prompt)

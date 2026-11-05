@@ -995,7 +995,14 @@ def build_scan_rows(root) -> list[dict]:
         rows.append({
             "key": key,
             "status": str(v.get("status") or ""),
-            "why": str(v.get("why") or ""),
+            # 兼容旧记录：早期只写一个 why，按状态归到对应列
+            "coarse_reason": str(v.get("coarse_reason")
+                                 or (v.get("why") if str(v.get("status"))
+                                     in ("blocked", "unknown_repo", "too_fresh")
+                                     else "") or ""),
+            "fine_reason": str(v.get("fine_reason")
+                               or (v.get("why") if str(v.get("status")) == "rejected"
+                                   else "") or ""),
             "first_seen": str(v.get("first_seen") or ""),
             "queue_state": queue_states.get(key, ""),
         })

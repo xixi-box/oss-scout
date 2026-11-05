@@ -729,6 +729,13 @@ def cloudflare_cfg(ds) -> dict:
     return cfg
 
 
+_RE_OFFER = __import__("re").compile(
+    r"(may|can|could|shall)\s+i\s+(prepare|submit|open|send|provide)\s+"
+    r"(a|the)?\s*(pr|pull request|fix|patch)|"
+    r"i('ll|'d| would like to| am happy to)\s+(prepare|submit|open|work on)"
+    r"|i\s+(would like to|want to|plan to)\s+(fix|work on)", re.I)
+
+
 def ingest_cloudflare_issues(ds, items: list[dict]) -> tuple[int, list[str]]:
     """Cloudflare Worker 回传的原始 issue → 客观否决 + AI 二元判定 → 入队。
 
@@ -776,18 +783,18 @@ def ingest_cloudflare_issues(ds, items: list[dict]) -> tuple[int, list[str]]:
             continue
         lane = lane_of.get(repo)
         if lane is None:
-            seen[key] = {"first_seen": now_iso, "status": "unknown_repo"}
+            seen[key] = {"first_seen": now_iso, "status": "unknown_repo",
+                         "coarse_reason": "repo not in monitored pool"}
             seen_dirty = True
             continue
         title = str(it.get("title", ""))
         body = str(it.get("body_excerpt", ""))
         labels = [str(l) for l in (it.get("labels") or [])]
 
-        # 年龄闸：issue 太新鲜不碰——同日快杀八成是内部人自提自修，而且
-        # 可能撞上"别的用户先礼貌请求要修"的名场面（phoenix#17506 实录：
-        # issue 提出 4 分钟后我们的 PR 就开了，直接违反该仓库 CONTRIBUTING
-        # 的 wait-for-confirmation，factory bot 在 review 里公开点名）。
-        # min_issue_age_hours 在仓库池 defaults 里（默认 2h）。
+        # 年龄与"提出者想自己修"不是硬闸，而是交给 AI 判定的信号
+        # （用户裁定 2026-11-05）：粗筛不再按年龄拦（原先 2h 闸会误杀真正
+        # 值得做的年轻 issue，也更可能因为"看到就想抢"而冒犯报告者）；
+        # 让 AI 在评分时权衡"太新鲜 + 报告者已提出要自己修 → 不动"。
         pool_defaults = {}
         try:
             import yaml as _yaml
@@ -796,9 +803,8 @@ def ingest_cloudflare_issues(ds, items: list[dict]) -> tuple[int, list[str]]:
                 .read_text(encoding="utf-8")) or {}
         except Exception:  # noqa: BLE001
             pool_defaults = {}
-        min_age_h = float((pool_defaults.get("defaults") or {}).get(
-            "min_issue_age_hours", 2))
         created = str(it.get("created_at") or "")
+        age_h = None
         if created:
             try:
                 created_dt = dt.datetime.fromisoformat(
@@ -806,15 +812,13 @@ def ingest_cloudflare_issues(ds, items: list[dict]) -> tuple[int, list[str]]:
                 age_h = (dt.datetime.utcnow() - created_dt).total_seconds() / 3600
             except ValueError:
                 age_h = None
-            if age_h is not None and age_h < min_age_h:
-                seen[key] = {"first_seen": now_iso,
-                             "status": "too_fresh",
-                             "why": f"issue age {age_h:.1f}h < {min_age_h}h"}
-                seen_dirty = True
-                continue
+
 
         # 客观否决（不需要 AI 判断的事实）：标题像提问、纯文档、计费抱怨。
         # 这类连调 AI 都省了。其余交给 AI 判断"能不能自动处理"。
+        signals = {"age_hours": round(age_h, 1) if age_h is not None else None,
+                   # 报告者主动表示要自己修 → AI 应当让位（礼貌与声誉）
+                   "reporter_offered_fix": bool(_RE_OFFER.search(body))}
         blockers: list[str] = []
         if discover.RE_BILLING.search(title):
             blockers.append("billing_complaint")
@@ -834,7 +838,10 @@ def ingest_cloudflare_issues(ds, items: list[dict]) -> tuple[int, list[str]]:
                 verdict = scorer.score_issue({
                     "repo": repo, "number": number, "title": title,
                     "labels": labels, "reactions": int(it.get("reactions") or 0),
-                    "comments": int(it.get("comments") or 0), "body_excerpt": body})
+                    "comments": int(it.get("comments") or 0), "body_excerpt": body,
+                    "age_hours": signals.get("age_hours"),
+                    "reporter_offered_fix":
+                        signals.get("reporter_offered_fix")})
             except Exception as ex:  # noqa: BLE001 — 评分失败不阻塞入队，留给人工看
                 verdict = {"usable": None, "reason": f"scorer error: {ex}"[:200],
                            "model": None}
@@ -843,9 +850,13 @@ def ingest_cloudflare_issues(ds, items: list[dict]) -> tuple[int, list[str]]:
             seen[key] = {"first_seen": now_iso,
                          "status": "blocked" if blockers else "rejected"}
             seen_dirty = True
-            # 记录 AI 的理由，便于事后核对"它为什么被拒"
+            # 粗筛=规则层为什么否决（候选 blockers）；细筛=AI 判定理由。
+            # 两类分开记，表里也分开显示，否则"没入队"到底卡在规则还是
+            # AI 上无从判断。
+            if blockers:
+                seen[key]["coarse_reason"] = ",".join(blockers)[:200]
             if verdict.get("reason"):
-                seen[key]["why"] = verdict["reason"][:200]
+                seen[key]["fine_reason"] = str(verdict["reason"])[:200]
             continue
 
 

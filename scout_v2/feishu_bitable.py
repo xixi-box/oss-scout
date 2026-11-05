@@ -62,7 +62,9 @@ SCAN_FIELDS = [
     {"field_name": "仓库", "type": 1},
     {"field_name": "issue号", "type": 2},
     {"field_name": "状态", "type": 1},
-    {"field_name": "原因", "type": 1},
+    # 粗筛=规则层否决（提问/文档/计费/标签/范围外）；细筛=AI 判定理由
+    {"field_name": "粗筛原因", "type": 1},
+    {"field_name": "细筛原因", "type": 1},
     {"field_name": "入队状态", "type": 3, "property": {"options": [
         {"name": "排队中", "color": 2},
         {"name": "已解决", "color": 3},
@@ -306,8 +308,10 @@ def scan_row_to_fields(row: dict) -> dict:
                      "link": f"https://github.com/{repo}/issues/{num}"}
     if row.get("status"):
         f["状态"] = str(row["status"])
-    if row.get("why"):
-        f["原因"] = str(row["why"])[:500]
+    if row.get("coarse_reason"):
+        f["粗筛原因"] = str(row["coarse_reason"])[:500]
+    if row.get("fine_reason"):
+        f["细筛原因"] = str(row["fine_reason"])[:500]
     if row.get("queue_state"):
         f["入队状态"] = str(row["queue_state"])
     if row.get("first_seen"):
