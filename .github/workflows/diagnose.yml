@@ -45,11 +45,19 @@ jobs:
           except Exception as e:
               print("seen read failed:", str(e)[:120])
 
-          print("=== worklog: ingest/bitable/feishu (last 20) ===")
-          for ln in tail(root / "state" / "worklog.jsonl", 400):
-              if any(k in ln for k in ("ingest", "bitable", "feishu_cb",
-                                        "feishu_card", "pr_reply")):
-                  print(ln[:240])
+          print("=== worklog: reply/bitable/feishu for milvus + counts ===")
+          try:
+              lines = (root / "state" / "worklog.jsonl")                   .read_text(encoding="utf-8", errors="replace").splitlines()
+          except OSError:
+              lines = []
+          hits = [ln for ln in lines
+                  if any(k in ln for k in ("milvus#55034", "milvus#54998",
+                                           "feishu_card", "pr_reply_drafted",
+                                           "pr_review_fix", "bitable_sync",
+                                           "pr_needs_reply", "feishu_cb"))]
+          print("matched:", len(hits), "of", len(lines), "total")
+          for ln in hits[-25:]:
+              print(ln[:250])
 
           print("=== pr_replies.json statuses ===")
           try:
