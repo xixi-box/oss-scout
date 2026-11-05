@@ -1,0 +1,18 @@
+name: staged-flush (manual)
+on:
+  workflow_dispatch:
+jobs:
+  flush:
+    runs-on: [self-hosted, aliyun]
+    timeout-minutes: 120
+    steps:
+      - name: Run staged flush (coarse+fine screen, oldest first)
+        run: |
+          docker exec -i oss-scout python3 - <<'PY'
+          import sys, json
+          sys.path.insert(0, "/app")
+          from pathlib import Path
+          from dashboard.app import _staged_flush_once
+          out = _staged_flush_once(Path("/data"), {})
+          print(json.dumps(out, ensure_ascii=False, indent=1))
+          PY

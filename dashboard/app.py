@@ -109,6 +109,90 @@ def _atomic_write_text(path: Path, text: str) -> None:
     os.replace(tmp, path)
 
 
+def _staged_flush_once(root: Path, cfg: dict) -> dict:
+    """凌晨批量处理 staged：粗筛+细筛，合格的立即送修。
+
+    独立成模块级函数以便手动触发（workflow_dispatch → 容器内直调）。
+    返回 {staged, kicked, processed, kicked_keys}。
+    """
+    import datetime as _dt
+    from scout_v2.workers.auto_pipeline import _data_root, candidate_pipeline
+    import importlib.util as _ilu
+    _spec = _ilu.spec_from_file_location(
+        "monitor_prs", Path(__file__).resolve().parents[1] / "scripts" / "monitor_prs.py")
+    _mp = _ilu.module_from_spec(_spec)
+    _spec.loader.exec_module(_mp)
+    recheck_still_worth = _mp.recheck_still_worth
+    from scout_v2.workers.issue_scorer import load_scorer_config, GoClient
+    from scout_v2.state_store import atomic_json_write
+    droot = _data_root(root)
+    qpath = droot / "queue" / "candidates.json"
+    q = json.loads(qpath.read_text(encoding="utf-8"))
+    staged = [(k, e) for k, e in q.items()
+              if (e or {}).get("status") == "staged"]
+    if not staged:
+        return {"staged": 0, "kicked": 0, "processed": 0}
+    staged.sort(key=lambda kv: str(kv[1].get("staged_at") or ""))
+    cfg_s = load_scorer_config(droot)
+    scorer = None
+    if cfg_s.get("api_key"):
+        scorer = GoClient(key=cfg_s["api_key"],
+                          model=cfg_s.get("model", "deepseek-v4.1-flash"),
+                          timeout=180)
+    kicked, processed, kept = [], [], 0
+    for key, e in staged:
+        ok, reason = recheck_still_worth(key, str(e.get("title") or ""))
+        if not ok:
+            e["status"] = "aborted_competed"
+            e["abort_reason"] = f"morning recheck: {reason}"[:200]
+            kicked.append(key)
+            continue
+        if scorer is None:
+            e["status"] = "new"
+            kept += 1
+            continue
+        verdict = scorer.score_issue({
+            "repo": e.get("repo") or key.partition("#")[0],
+            "number": int(key.partition("#")[2] or 0),
+            "title": e.get("title") or "",
+            "labels": e.get("labels") or [],
+            "reactions": 0, "comments": 0,
+            "body_excerpt": e.get("body_excerpt") or "",
+            "age_hours": None, "reporter_offered_fix": None,
+            "claimish_signal": None})
+        if verdict.get("usable") is not True:
+            e["status"] = "aborted_stale"
+            e["abort_reason"] = ("morning AI re-screen: "
+                                 + str(verdict.get("reason"))[:200])
+            kicked.append(key)
+            continue
+        e["status"] = "new"
+        kept += 1
+        processed.append(key)
+    atomic_json_write(qpath, q)
+    try:
+        _audit(root, "staged_flush",
+               f"{len(staged)} staged | kicked={len(kicked)} processed={len(processed)}",
+               "kicked: " + ", ".join(kicked[:5]))
+        from scout_v2.notify import feishu_send
+        feishu_send(
+            f"🌅 凌晨批量处理：{len(staged)} 条暂存",
+            f"踢出 {len(kicked)} 条（被做/不合格），送修 {len(processed)} 条")
+    except Exception:  # noqa: BLE001
+        pass
+    for key in processed:
+        e = q.get(key) or {}
+        try:
+            out = candidate_pipeline(droot, e)
+            _audit(root, "auto_repair", key,
+                   json.dumps(out, ensure_ascii=False)[:400])
+        except Exception as ex:  # noqa: BLE001
+            _audit(root, "auto_repair_error", key, str(ex)[:200])
+    return {"staged": len(staged), "kicked": len(kicked),
+            "processed": len(processed), "kept": kept,
+            "kicked_keys": kicked[:20], "processed_keys": processed[:20]}
+
+
 def _notify_draft(root: Path, r: dict, draft: dict) -> None:
     """把"AI 草稿待人审"推给飞书，人可在卡片里改完一键发。
 
@@ -479,85 +563,15 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
         import time as _t
 
         def _flush_once(cfg: dict) -> None:
+            # 时间窗判断后调模块级实现（粗筛+细筛+立即送修，见 _staged_flush_once）
             hour = int(cfg.get("staged_flush_hour_local", 4))
             now = _dt.datetime.now()
-            last = _dt.time(hour, 0)
-            # 只在到点后的第一小时内跑一次（避免跑几小时后又触发）
-            if not (last <= now.time() <= (dt.datetime.combine(now.date(), last)
-                                           + dt.timedelta(hours=1)).time()):
+            window_end = (dt.datetime.combine(now.date(), dt.time(hour, 0))
+                          + dt.timedelta(hours=1)).time()
+            if not (dt.time(hour, 0) <= now.time() <= window_end):
                 return
-            from scout_v2.workers.auto_pipeline import _data_root, candidate_pipeline
-            from scout_v2.workers.issue_scorer import load_scorer_config, GoClient
-            from scout_v2.state_store import atomic_json_write
-            droot = _data_root(root)
-            qpath = droot / "queue" / "candidates.json"
-            q = json.loads(qpath.read_text(encoding="utf-8"))
-            staged = [(k, e) for k, e in q.items()
-                      if (e or {}).get("status") == "staged"]
-            if not staged:
-                return
-            staged.sort(key=lambda kv: str(kv[1].get("staged_at") or ""))
-            cfg_s = load_scorer_config(droot)
-            scorer = None
-            if cfg_s.get("api_key"):
-                scorer = GoClient(key=cfg_s["api_key"],
-                                  model=cfg_s.get("model", "deepseek-v4.1-flash"),
-                                  timeout=180)
-            kicked, processed, kept = [], [], 0
-            for key, e in staged:
-                # ---- 粗筛：issue 是否还值得做（规则层，确定性）----
-                try:
-                    ok, reason = mod.recheck_still_worth(
-                        key, str(e.get("title") or ""))
-                except Exception as ex:  # noqa: BLE001
-                    ok, reason = True, f"recheck error (kept): {str(ex)[:80]}"
-                if not ok:
-                    e["status"] = "aborted_competed"
-                    e["abort_reason"] = f"morning recheck: {reason}"[:200]
-                    kicked.append(key)
-                    continue
-                # ---- 细筛：AI 重评（复用入队同一评分器）----
-                if scorer is None:
-                    e["status"] = "new"
-                    kept += 1
-                    continue
-                verdict = scorer.score_issue({
-                    "repo": e.get("repo") or key.partition("#")[0],
-                    "number": int(key.partition("#")[2] or 0),
-                    "title": e.get("title") or "",
-                    "labels": e.get("labels") or [],
-                    "reactions": 0, "comments": 0,
-                    "body_excerpt": e.get("body_excerpt") or "",
-                    "age_hours": None, "reporter_offered_fix": None,
-                    "claimish_signal": None})
-                if verdict.get("usable") is not True:
-                    e["status"] = "aborted_stale"
-                    e["abort_reason"] = ("morning AI re-screen: "
-                                         + str(verdict.get("reason"))[:200])
-                    kicked.append(key)
-                    continue
-                # ---- 合格：立即修复（占当日名额）----
-                e["status"] = "new"
-                kept += 1
-                processed.append(key)
-            atomic_json_write(qpath, q)
-            _audit(root, "staged_flush",
-                   f"{len(staged)} staged | kicked={len(kicked)} processed={len(processed)}",
-                   "kicked: " + ", ".join(kicked[:5]))
-            from scout_v2.notify import feishu_send
-            feishu_send(
-                f"🌅 凌晨批量处理：{len(staged)} 条暂存",
-                f"踢出 {len(kicked)} 条（被做/不合格），"
-                f"送修 {len(processed)} 条（占当日名额）")
-            # 合格的直接走修复（不经每分钟循环——当场做）
-            for key in processed:
-                e = q.get(key) or {}
-                try:
-                    out = candidate_pipeline(droot, e)
-                    _audit(root, "auto_repair", key,
-                           json.dumps(out, ensure_ascii=False)[:400])
-                except Exception as ex:  # noqa: BLE001
-                    _audit(root, "auto_repair_error", key, str(ex)[:200])
+            _staged_flush_once(root, cfg)
+
 
         def _loop():
             last_day = ""
