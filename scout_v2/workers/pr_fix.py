@@ -182,16 +182,35 @@ def _verify(repo_dir: Path, changed: list[str],
             or (repo_dir / "pytest.ini").exists():
         nodes = [f.get("name", "") for f in payload.get("failing") or []
                  if "::" in f.get("name", "")]
-        sel = ([n.split("::")[0] for n in nodes[:3]] if nodes
-               else [l[3:].strip() for l in changed if l.strip().endswith(".py")][:5])
+        changed_py = [l[3:].strip() for l in changed
+                      if l.strip().endswith(".py")]
+        # 改动的测试文件 → 跑它所在目录（和 opencode 自己验证的方式一致：
+        # fastmcp#6198 实录——传源码文件 pytest rc=4 用法错误，opencode 跑
+        # tests/resources 全过）。没有测试文件时退回改动源码文件。
+        test_like = [f for f in changed_py
+                     if Path(f).name.startswith("test_")
+                     or Path(f).name.endswith("_test.py")]
+        dirs = sorted({Path(f).parent.as_posix() for f in test_like})
+        if dirs:
+            sel = [f"./{d}/" if d and d != "." else "./" for d in dirs]
+        elif nodes:
+            sel = [n.split("::")[0] for n in nodes[:3]]
+        else:
+            sel = changed_py[:5]
         if not sel:
             return True, "python: no target"
         rc, out = _run(["python3", "-m", "pytest", "-x", "-q", *sel], repo_dir)
-        if rc == 5:
+        if rc in (4, 5):
             # pytest 的"没收集到任何测试"：选中的源码文件本来就没有测试。
             # 改成跑仓库的测试目录（opencode 按提示加了回归测试的话通常在
             # tests/ 下）；没有 tests/ 才如实标记不可验证。
             tests_dir = repo_dir / "tests"
+            if not tests_dir.exists():
+                # 仓库结构可能是 tests 以外的名字（如 fastmcp_slim/tests）
+                for cand in sorted(repo_dir.glob("**/tests/")):
+                    if "node_modules" not in str(cand) and any(cand.glob("test_*.py")):
+                        tests_dir = cand
+                        break
             if tests_dir.exists():
                 rc, out = _run(["python3", "-m", "pytest", "-x", "-q", "tests/"],
                                repo_dir, timeout=1800)
@@ -217,10 +236,12 @@ def _verify(repo_dir: Path, changed: list[str],
         test_files = [l[3:].strip() for l in changed
                       if l.strip().endswith((".test.ts", ".test.js",
                                              ".test.tsx", ".test.mjs"))]
+        runner_available = False
         for runner_cmd in (("npx", "vitest", "run", "--silent", *test_files),
                            ("npx", "jest", "--silent", *test_files)):
             runner = runner_cmd[1]
             if test_files and (runner in dev or runner in dep):
+                runner_available = True
                 rc, out = _run(runner_cmd, repo_dir)
                 if rc != 0:
                     logs.write_text(out[-9000:], encoding="utf-8",
@@ -229,6 +250,19 @@ def _verify(repo_dir: Path, changed: list[str],
         scripts = pkgjson.get("scripts") or {}
         if "test" in scripts:
             rc, out = _run(["npm", "test", "--silent"], repo_dir)
+            if rc != 0 and runner_available:
+                # 定向跑挂可能只是测试间的共享状态问题（opencode 两文件
+                # 同跑 68 全过、单文件 rc=1 的实录）；整跑一次再下结论
+                full_cmd = (["npx", "vitest", "run", "--silent"]
+                            if "vitest" in (dev or dep)
+                            else (["npx", "jest", "--silent"]
+                                  if "jest" in (dev or dep) else []))
+                if full_cmd:
+                    rcf, outf = _run(full_cmd, repo_dir, timeout=1800)
+                    if rcf == 0:
+                        return True, ("full runner rc=0 "
+                                      f"(targeted rc={rc} was isolation)")
+                    out += "\n--- full run ---\n" + outf
             if rc != 0:
                 logs.write_text(out[-9000:], encoding="utf-8", errors="replace")
             return rc == 0, f"npm test rc={rc}"

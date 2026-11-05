@@ -205,6 +205,7 @@ jobs:
 
       - name: Record result for the dashboard
         if: always()
+        continue-on-error: true   # 遥测性质：回调挂了不该把整个修复运行标红
         shell: bash
         # 注意：一个 step 只能有一个 env 键。GitHub 的解析器拒绝重复键，
         # PyYAML 却静默容忍（取后者）——2026-11-04 这里的重复 env 让
