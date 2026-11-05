@@ -50,7 +50,8 @@ CAND_FIELDS = [
     {"field_name": "AI判定", "type": 1},
     {"field_name": "入队时间", "type": 5},
     {"field_name": "更新时间", "type": 5},
-    {"field_name": "PR链接", "type": 15},
+    {"field_name": "链接", "type": 15},        # issue 链接
+    {"field_name": "PR链接", "type": 15},      # 开出的 PR
     {"field_name": "备注", "type": 1},
 ]
 
@@ -375,6 +376,17 @@ def sync_table(root: Path, rows: list[dict], *, table_name: str, fields: list,
         app_token, table_name, fields)
     save_binding(root, {"app_token": app_token, binding_key: table_id})
     ensure_columns(app_token, table_id, fields or [])
+    # 转换器可能产出规格里漏写的列（2026-11-05：候选池行带「链接」而
+    # CAND_FIELDS 没定义它，整批 batch_create 被 FieldNameNotFound 打回）。
+    # 以实际产出的键为准补齐文本列，避免"代码改了一处、表建不出来"。
+    produced = set()
+    for row in rows[:5]:
+        produced.update(to_fields(row).keys())
+    declared = {f.get("field_name") for f in (fields or [])}
+    missing = sorted(produced - declared)
+    if missing:
+        ensure_columns(app_token, table_id,
+                       [{"field_name": n, "type": 1} for n in missing])
 
     tok = feishu_app.tenant_token()
     existing = load_records(app_token, table_id)
