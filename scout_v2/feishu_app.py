@@ -169,6 +169,7 @@ def build_reply_card(repo: str, number: int, issue_title: str,
     status_line = {
         "pending": "⏳ **代码修改进行中**，完成后这张卡片会更新",
         "pushed": "✅ **已修改并推送**（commit 已在 PR 上）",
+        "nochange": "✅ **无需变更**（opencode 判断修复已在分支上，没有派发）",
         "failed": "⚠️ **代码修改未完成**（测试没过或无法验证，见 audit）",
     }.get(fix_state, "")
     # 代码修改一律自动推送，人只对"对外文字"负责——按钮永远只发回复。

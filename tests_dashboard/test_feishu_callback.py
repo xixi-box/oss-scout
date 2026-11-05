@@ -398,3 +398,30 @@ class TestInlineReplyRouting:
                if n.get("tag") == "form"][0]["elements"][1]
         assert btn["value"]["kind"] == "inline"
         assert btn["value"]["comment_id"] == "12345"
+
+
+class TestNoChangeOutcome:
+    """opencode 判"无需变更"必须落账，否则监控循环会反复重派、反复发卡。
+
+    2026-11-05 实录：5 条已修复的 PR 被循环重派 3 小时，每轮给用户发
+    同一张卡片。根因：no-change 的 workflow 没回调，看板状态停在
+    "进行中"，派发去重表又没有记录。
+    """
+
+    def test_no_change_records_nochange_state(self, client, tmp_path):
+        rp = tmp_path / "state" / "pr_replies.json"
+        rp.write_text(json.dumps({"a/b#1": {"status": "draft"}}), encoding="utf-8")
+        r = client.post("/api/pr/reply/fix-result",
+                        headers={"X-Ingest-Token": "t"},
+                        json={"repo": "a/b", "number": 1, "no_change": True,
+                              "pushed": False})
+        assert r.status_code == 200
+        e = json.loads(rp.read_text(encoding="utf-8"))["a/b#1"]
+        assert e["fix_state"] == "nochange"
+
+    def test_nochange_card_status_line(self):
+        from scout_v2.feishu_app import build_reply_card
+        card = build_reply_card("a/b", 1, "t", "m", "c", "rc", "d",
+                                fix_state="nochange")
+        blob = json.dumps(card, ensure_ascii=False)
+        assert "无需变更" in blob

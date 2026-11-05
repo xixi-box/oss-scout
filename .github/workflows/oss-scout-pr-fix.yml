@@ -168,7 +168,31 @@ jobs:
           cd "$RUNNER_TEMP/repo"
           if git diff --quiet && git diff --cached --quiet; then
             echo "no changes produced"
+            # opencode 判定"无需变更"（修复已在分支上/意见已被覆盖）也是
+            # 一个需要上报的结果：不回调的话，看板/飞书永远停在"进行中"，
+            # 且 15 分钟监控循环会因为派发记录在而跳过、却因为状态没更新
+            # 而反复给用户发同一张卡片（2026-11-05 实录）。
             echo "outcome=nochange" >> "$GITHUB_OUTPUT"
+            python3 - <<'PY2'
+            import json, os, urllib.request
+            j = json.load(open(os.environ["RUNNER_TEMP"] + "/fix.json"))
+            payload = {"repo": j["upstream_repo"], "number": j["pr_number"],
+                       "kind": j.get("kind") or "ci", "pushed": False,
+                       "no_change": True, "fork_repo": j["fork_repo"]}
+            token = os.environ.get("INGEST_TOKEN", "")
+            url = (os.environ.get("DASHBOARD_URL", "") or "").rstrip("/")                 + "/api/pr/reply/fix-result"
+            if not token or not url.startswith("http"):
+                raise SystemExit(0)
+            req = urllib.request.Request(
+                url, data=json.dumps(payload).encode(), method="POST",
+                headers={"Content-Type": "application/json",
+                         "X-Ingest-Token": token})
+            try:
+                with urllib.request.urlopen(req, timeout=30) as resp:
+                    print("callback:", resp.status)
+            except Exception as e:
+                print("callback failed (best-effort):", str(e)[:150])
+            PY2
             exit 0
           fi
           # worker 按仓库形态跑过测试（go test / pytest / npm test）。验证不过

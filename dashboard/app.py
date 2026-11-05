@@ -1216,6 +1216,18 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
         if not repo or not isinstance(num, int):
             return JSONResponse({"detail": "repo/number required"}, status_code=400)
         key = f"{repo}#{num}"
+        # no_change = opencode 判断"无需变更"（修复已在分支上/意见已被
+        # 覆盖）。这不是失败——必须落账并记入去重表，否则 15 分钟监控
+        # 循环会对同一条 PR 反复派发、反复给用户发同一张卡片
+        # （2026-11-05 实录：5 条已修复的 PR 被循环重派了 3 小时）。
+        if body.get("no_change"):
+            extra = {"fix_state": "nochange",
+                     "fix_test_result": "no changes (already addressed)",
+                     "fix_done_at": time.strftime("%Y-%m-%dT%H:%M:%S")}
+            _mark_reply(key, "draft", **extra)
+            _audit(root, "pr_fix_result", key, "no_change")
+            return JSONResponse({"ok": True, "outcome": "no_change"})
+
         pushed = bool(body.get("pushed", body.get("test_ok")))
         extra = {"fix_state": "pushed" if pushed else "failed",
                  "fix_test_result": str(body.get("test_result") or "")[:200],
