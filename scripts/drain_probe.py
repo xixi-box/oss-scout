@@ -70,3 +70,13 @@ for ln in lines:
 print("  count:", len(recent))
 for r in recent[-8:]:
     print("   ", r["ts"], r["action"], r["target"], str(r.get("result"))[:110])
+
+print("\n=== auto_repair (any action, last 10 today) ===")
+try:
+    hits = [l for l in lines if today in l and '"action": "dashboard_auto_repair"' in l]
+    print("  auto_repair today:", len(hits))
+    for l in hits[-10:]:
+        r = json.loads(l)
+        print("   ", r["ts"], "|", r.get("target"), "|", str(r.get("result"))[:100])
+except Exception as e:
+    print("  ", str(e)[:150])
