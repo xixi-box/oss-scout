@@ -1072,4 +1072,7 @@ def build_candidate_rows(root) -> list[dict]:
             "note": "；".join(str(b) for b in (entry.get("blockers") or []))[:300],
         })
     rows.sort(key=lambda r: r["key"])
-    return rows
+    # 候选池 = 当前真实在排队的（用户裁定 2026-11-05，二次收窄）：
+    # 只留"排队中"。已解决去 PR 记录表查，已失效/范围外/历史一律踢出——
+    # 表里不留死行，处理状态也永远不会为空。
+    return [r for r in rows if r["queue_state"] == "排队中"]

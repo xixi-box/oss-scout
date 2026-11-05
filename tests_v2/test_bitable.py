@@ -296,33 +296,26 @@ class TestCandidateRows:
                 "discovered_at": "2026-11-01T00:00:00",
                 "ai_verdict": {"usable": True, "reason": ""}, "blockers": []}
 
-    def test_state_mapping(self, tmp_path, monkeypatch):
+    def test_candidate_table_only_keeps_queued(self, tmp_path, monkeypatch):
+        """候选池 = 当前真实在排队的（用户裁定 2026-11-05）。
+
+        已解决去 PR 记录表查；已失效/范围外/历史一律不进表——
+        表里不留死行，处理状态永远不会为空。
+        """
         (tmp_path / "queue").mkdir()
         (tmp_path / "queue" / "candidates.json").write_text(json.dumps({
             "a/b#1": self._entry("new"),
-            "a/b#2": self._entry("pr_open"),
-            "a/b#3": self._entry("aborted_stale"),
-            "a/b#4": self._entry("needs_maintainer_confirm"),
-            "a/b#5": self._entry("queued_hist"),
-            "a/b#6": self._entry("out_of_scope"),
+            "a/b#2": self._entry("pr_open"),                      # 已解决 → 踢
+            "a/b#3": self._entry("aborted_stale"),                # 已失效 → 踢
+            "a/b#4": self._entry("needs_maintainer_confirm"),     # 等确认 → 留
+            "a/b#5": self._entry("queued_hist"),                  # 历史 → 踢
+            "a/b#6": self._entry("out_of_scope"),                 # 范围外 → 踢
+            "a/b#7": self._entry("new", updated="2026-10-01T00:00:00"),  # 躺超3天 → 踢
         }), encoding="utf-8")
         rows = mp.build_candidate_rows(tmp_path)
         states = {r["key"]: r["queue_state"] for r in rows}
-        assert states["a/b#1"] == "排队中"
-        assert states["a/b#2"] == "已解决"
-        assert states["a/b#3"] == "已失效"
-        assert states["a/b#4"] == "排队中"
-        assert states["a/b#5"] == "已失效"
-        assert states["a/b#6"] == ""
-
-    def test_stale_new_turns_expired(self, tmp_path, monkeypatch):
-        """new 躺超过 3 天没轮上 → 红（失效）。"""
-        (tmp_path / "queue").mkdir()
-        (tmp_path / "queue" / "candidates.json").write_text(json.dumps({
-            "a/b#7": self._entry("new", updated="2026-10-01T00:00:00"),
-        }), encoding="utf-8")
-        rows = mp.build_candidate_rows(tmp_path)
-        assert rows[0]["queue_state"] == "已失效"
+        assert set(states) == {"a/b#1", "a/b#4"}
+        assert all(v == "排队中" for v in states.values())
 
     def test_scan_rows_carry_queue_state(self, tmp_path, monkeypatch):
         (tmp_path / "state").mkdir()
