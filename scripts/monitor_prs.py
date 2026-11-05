@@ -131,13 +131,18 @@ _ACTIONS = ("wait", "address_review", "answer_question", "assignment_note")
 # 覆盖率报告、artifacts 清理）。注意不包括"已被人认领"这类——那要留痕。
 _NOISE_BOT_RE = re.compile(
     r"changeset-bot|dependabot|renovate|codecov|github-actions|"
-    r"pre-commit-ci|netlify|vercel|sonarcloud|stale", re.I)
+    r"pre-commit-ci|netlify|vercel|sonarcloud|stale|sre-ci-robot", re.I)
+# sre-ci-robot 的 ciloop-result 是 CI 结果通报（过/不过都有）：通过无需动作，
+# 不过会体现在 statusCheckRollup 里走 fix_ci——通报本身永远不该触发 review 修复
+# （milvus#55034 实录：CI 全绿的通报派了一轮 opencode 空跑）。
 
 
 def _is_noise_bot(author: str, body: str) -> bool:
-    if not str(author or "").endswith("[bot]"):
+    who = str(author or "")
+    # sre-ci-robot 是普通账号不是 GitHub App（无 [bot] 后缀），单列
+    if not (who.endswith("[bot]") or who.lower() == "sre-ci-robot"):
         return False
-    if not _NOISE_BOT_RE.search(author):
+    if not _NOISE_BOT_RE.search(who):
         return False
     # bot 发的是"认领/冲突"信息时仍然要留痕，交给后面的规则判
     return not PATTERNS[4][1].search(body or "")
