@@ -244,8 +244,12 @@ def _verify(repo_dir: Path, changed: list[str],
                       if l.strip().endswith((".test.ts", ".test.js",
                                              ".test.tsx", ".test.mjs"))]
         runner_available = False
-        for runner_cmd in (("npx", "vitest", "run", "--silent", *test_files),
-                           ("npx", "jest", "--silent", *test_files)):
+        # npx --yes：deps 步骤的 npm install 偶发失败会留下没有 vitest 的
+        # node_modules；不带 --yes 时 npx 在 CI 里直接报 "vitest not
+        # installed"——promptfoo#12079 第 5 轮实录（opencode 自己 76 条
+        # 全过，worker 验证却连 runner 都起不来）。
+        for runner_cmd in (("npx", "--yes", "vitest", "run", "--silent", *test_files),
+                           ("npx", "--yes", "jest", "--silent", *test_files)):
             runner = runner_cmd[1]
             if test_files and (runner in dev or runner in dep):
                 runner_available = True
@@ -255,6 +259,7 @@ def _verify(repo_dir: Path, changed: list[str],
                     # 68 全过、单文件 rc=1 的实录）；整跑一次再下结论
                     full_cmd = ([runner, "run", "--silent"]
                                 if runner == "vitest" else [runner, "--silent"])
+                    full_cmd = ["npx", "--yes"] + full_cmd
                     rcf, outf = _run(full_cmd, repo_dir, timeout=1800)
                     if rcf == 0:
                         return True, (f"{runner} full run rc=0 "

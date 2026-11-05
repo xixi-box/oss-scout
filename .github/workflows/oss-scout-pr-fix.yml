@@ -84,7 +84,14 @@ jobs:
           elif [ -f poetry.lock ]; then
             poetry install --quiet || echo "WARN: poetry install failed"
           elif [ -f package.json ]; then
-            (command -v npm >/dev/null && npm install --silent) || echo "WARN: npm install failed"
+            # npm install 静默失败 = 残缺 node_modules = 验证阶段连 runner
+            # 都起不来（promptfoo#12079 第 5 轮实录）。npm ci 优先（确定性
+            # 安装），失败要响——反正装不上后面必然拒推。
+            if [ -f package-lock.json ]; then
+              npm ci --no-audit --no-fund || echo "WARN: npm ci failed"
+            else
+              npm install --no-audit --no-fund || echo "WARN: npm install failed"
+            fi
           elif [ -f requirements.txt ]; then
             $PIP -r requirements.txt || echo "WARN: requirements install failed"
           elif [ -f pyproject.toml ]; then
