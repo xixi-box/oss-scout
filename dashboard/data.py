@@ -740,7 +740,8 @@ def ingest_cloudflare_issues(ds, items: list[dict]) -> tuple[int, list[str]]:
     去重与 discover.py 共用 state/seen.json。写路径走 atomic_json_write。
     """
     from scout_v2.state_store import atomic_json_write
-    added: list[str] = []      # 本次新入队的候选 id，供调用方立即派发
+    added: list[str] = []
+    seen_dirty = False      # 本次新入队的候选 id，供调用方立即派发
     # 不 import discover.py：它在模块顶层硬读 config.json，容器里没有该文件会崩。
     # 只复用它的评分实现（纯函数 + 正则），通过 _discover_score() 取得。
     discover = _discover_score()
@@ -776,10 +777,41 @@ def ingest_cloudflare_issues(ds, items: list[dict]) -> tuple[int, list[str]]:
         lane = lane_of.get(repo)
         if lane is None:
             seen[key] = {"first_seen": now_iso, "status": "unknown_repo"}
+            seen_dirty = True
             continue
         title = str(it.get("title", ""))
         body = str(it.get("body_excerpt", ""))
         labels = [str(l) for l in (it.get("labels") or [])]
+
+        # 年龄闸：issue 太新鲜不碰——同日快杀八成是内部人自提自修，而且
+        # 可能撞上"别的用户先礼貌请求要修"的名场面（phoenix#17506 实录：
+        # issue 提出 4 分钟后我们的 PR 就开了，直接违反该仓库 CONTRIBUTING
+        # 的 wait-for-confirmation，factory bot 在 review 里公开点名）。
+        # min_issue_age_hours 在仓库池 defaults 里（默认 2h）。
+        pool_defaults = {}
+        try:
+            import yaml as _yaml
+            pool_defaults = _yaml.safe_load(
+                (ds.root / "configs" / "repositories.yaml")
+                .read_text(encoding="utf-8")) or {}
+        except Exception:  # noqa: BLE001
+            pool_defaults = {}
+        min_age_h = float((pool_defaults.get("defaults") or {}).get(
+            "min_issue_age_hours", 2))
+        created = str(it.get("created_at") or "")
+        if created:
+            try:
+                created_dt = dt.datetime.fromisoformat(
+                    created.replace("Z", "+00:00")).replace(tzinfo=None)
+                age_h = (dt.datetime.utcnow() - created_dt).total_seconds() / 3600
+            except ValueError:
+                age_h = None
+            if age_h is not None and age_h < min_age_h:
+                seen[key] = {"first_seen": now_iso,
+                             "status": "too_fresh",
+                             "why": f"issue age {age_h:.1f}h < {min_age_h}h"}
+                seen_dirty = True
+                continue
 
         # 客观否决（不需要 AI 判断的事实）：标题像提问、纯文档、计费抱怨。
         # 这类连调 AI 都省了。其余交给 AI 判断"能不能自动处理"。
@@ -810,10 +842,12 @@ def ingest_cloudflare_issues(ds, items: list[dict]) -> tuple[int, list[str]]:
         if blockers or verdict.get("usable") is not True:
             seen[key] = {"first_seen": now_iso,
                          "status": "blocked" if blockers else "rejected"}
+            seen_dirty = True
             # 记录 AI 的理由，便于事后核对"它为什么被拒"
             if verdict.get("reason"):
                 seen[key]["why"] = verdict["reason"][:200]
             continue
+
 
         entry = {"id": key, "repo": repo, "number": number, "title": title,
                  "url": it.get("url") or f"https://github.com/{repo}/issues/{number}",
@@ -831,10 +865,14 @@ def ingest_cloudflare_issues(ds, items: list[dict]) -> tuple[int, list[str]]:
                  "body_excerpt": body[:8000]}
         q[key] = entry
         seen[key] = {"first_seen": now_iso, "status": "queued"}
+        seen_dirty = True
         queued += 1
         added.append(key)
     if queued:
         atomic_json_write(ds.root / "queue" / "candidates.json", q)
+    # seen 的否决类状态（too_fresh/blocked/rejected）也要落盘——否则每轮
+    # 重新评估，且事后无法回答"这个 issue 为什么没被处理"
+    if queued or seen_dirty:
         atomic_json_write(seen_path, seen)
     return queued, added
 

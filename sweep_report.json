@@ -1,0 +1,86 @@
+[
+ {
+  "key": "Arize-ai/phoenix#17507",
+  "title": "fix: [BUG]: to_annotation_dataframe fails when a scored",
+  "flags": [
+   "待回复:最后一条来自arize-phoenix-factory[bot]@2026-11-02T17:30"
+  ]
+ },
+ {
+  "key": "ClickHouse/ClickHouse#129144",
+  "title": "fix: MySQL interface: Connector/J 9.x fails on connect ",
+  "flags": [
+   "待回复:最后一条来自CLAassistant@2026-11-04T01:24"
+  ]
+ },
+ {
+  "key": "OpenHands/software-agent-sdk#6269",
+  "title": "fix(llm): treat LiteLLM proxy cache-miss 401 as transie",
+  "flags": [
+   "待回复:最后一条来自LeonxLJX@2026-11-04T01:17"
+  ]
+ },
+ {
+  "key": "PrefectHQ/fastmcp#6171",
+  "title": "fix: from_openapi: cookie parameters with array/object ",
+  "flags": [
+   "待回复:最后一条来自chatgpt-codex-connector[bot]@2026-10-30T20:23"
+  ]
+ },
+ {
+  "key": "PrefectHQ/fastmcp#6172",
+  "title": "fix: FastMCP 3.x: propagate trace context on client lis",
+  "flags": [
+   "待回复:最后一条来自chatgpt-codex-connector[bot]@2026-10-30T20:27"
+  ]
+ },
+ {
+  "key": "PrefectHQ/fastmcp#6195",
+  "title": "fix: Unconvertible prompt and resource template argumen",
+  "flags": [
+   "待回复:最后一条来自chatgpt-codex-connector[bot]@2026-10-31T18:33"
+  ]
+ },
+ {
+  "key": "PrefectHQ/fastmcp#6198",
+  "title": "fix: `session: UserSession` on a resource or resource t",
+  "flags": [
+   "待回复:最后一条来自chatgpt-codex-connector[bot]@2026-10-31T23:37"
+  ]
+ },
+ {
+  "key": "milvus-io/milvus#54998",
+  "title": "fix: [Bug]: gRPC logger replacement races with etcd cli",
+  "flags": [
+   "待回复:最后一条来自sre-ci-robot@2026-11-05T02:15"
+  ]
+ },
+ {
+  "key": "milvus-io/milvus#55034",
+  "title": "fix: [Bug]: retry.Do/Handle sleep one more backoff afte",
+  "flags": [
+   "待回复:最后一条来自sre-ci-robot@2026-11-05T02:10"
+  ]
+ },
+ {
+  "key": "promptfoo/promptfoo#12079",
+  "title": "fix: select-best criteria are not rendered with test va",
+  "flags": [
+   "待回复:最后一条来自chatgpt-codex-connector[bot]@2026-11-01T09:24"
+  ]
+ },
+ {
+  "key": "pulumi/pulumi#25467",
+  "title": "Deduplicate a policy pack that is both required and pas",
+  "flags": [
+   "待回复:最后一条来自github-actions[bot]@2026-10-31T02:28"
+  ]
+ },
+ {
+  "key": "pydantic/pydantic-ai#9285",
+  "title": "Add `event_stream_handler` to `ToolOutputLimits`' `Summ",
+  "flags": [
+   "CI红:Package Label"
+  ]
+ }
+]
