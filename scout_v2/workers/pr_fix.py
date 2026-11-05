@@ -199,11 +199,16 @@ def _verify(repo_dir: Path, changed: list[str],
             sel = changed_py[:5]
         if not sel:
             return True, "python: no target"
-        rc, out = _run(["python3", "-m", "pytest", "-x", "-q", *sel], repo_dir)
+        # fastmcp/pydantic-ai-harness 实录：依赖装在 uv 管理的 .venv 里，
+        # 系统 python3 -m pytest 收集不到任何东西（rc=5）。uv.lock 存在
+        # 就走 uv run（依赖已由 deps 步骤 sync 过，--no-sync 免得重新拉）。
+        use_uv = (repo_dir / "uv.lock").exists()
+        base = (["uv", "run", "--no-sync"] if use_uv else ["python3", "-m"])
+        rc, out = _run([*base, "pytest", "-x", "-q", *sel], repo_dir)
         if rc in (4, 5):
-            # pytest 的"没收集到任何测试"：选中的源码文件本来就没有测试。
-            # 改成跑仓库的测试目录（opencode 按提示加了回归测试的话通常在
-            # tests/ 下）；没有 tests/ 才如实标记不可验证。
+            # pytest 的"没收集到任何测试/用法错误"：选中的源码文件本来就没有
+            # 测试。改成跑仓库的测试目录（opencode 按提示加了回归测试的话
+            # 通常在 tests/ 下）；没有 tests/ 才如实标记不可验证。
             tests_dir = repo_dir / "tests"
             if not tests_dir.exists():
                 # 仓库结构可能是 tests 以外的名字（如 fastmcp_slim/tests）
@@ -212,12 +217,14 @@ def _verify(repo_dir: Path, changed: list[str],
                         tests_dir = cand
                         break
             if tests_dir.exists():
-                rc, out = _run(["python3", "-m", "pytest", "-x", "-q", "tests/"],
+                rc, out = _run([*base, "pytest", "-x", "-q", "tests/"],
                                repo_dir, timeout=1800)
                 if rc == 0:
-                    return True, "pytest tests/ rc=0"
+                    return True, ("pytest tests/ rc=0"
+                                  + (" (uv)" if use_uv else ""))
             rc = 5
         if rc != 0:
+            print("[prfix-test-tail] " + out[-1500:])
             logs.write_text(out[-9000:], encoding="utf-8", errors="replace")
         return rc == 0, f"pytest {sel} rc={rc}"
 
@@ -244,6 +251,16 @@ def _verify(repo_dir: Path, changed: list[str],
                 runner_available = True
                 rc, out = _run(runner_cmd, repo_dir)
                 if rc != 0:
+                    # 定向跑挂可能只是测试间共享状态（opencode 两文件同跑
+                    # 68 全过、单文件 rc=1 的实录）；整跑一次再下结论
+                    full_cmd = ([runner, "run", "--silent"]
+                                if runner == "vitest" else [runner, "--silent"])
+                    rcf, outf = _run(full_cmd, repo_dir, timeout=1800)
+                    if rcf == 0:
+                        return True, (f"{runner} full run rc=0 "
+                                      f"(targeted rc={rc} was isolation)")
+                    out += "\n--- full run ---\n" + outf
+                    print("[prfix-test-tail] " + outf[-1500:])
                     logs.write_text(out[-9000:], encoding="utf-8",
                                     errors="replace")
                 return rc == 0, f"{runner} {test_files} rc={rc}"
