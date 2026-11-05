@@ -61,18 +61,15 @@ class TestReleaseSemantics:
 
 
 class TestAbortClassification:
-    """_abort_release 的 give_back 默认值和各调用点的分类。"""
+    """2026-11-05 用户裁定：所有 abort 一律退坑——5 个名额 = 5 个开出的
+    PR，不是 5 次尝试。give_back 参数仅为兼容旧调用方保留。"""
 
-    def test_source_has_both_paths(self):
+    def test_all_paths_release(self):
         src = (Path(__file__).resolve().parents[1] / "scout_v2" / "workers"
                / "auto_pipeline.py").read_text(encoding="utf-8")
-        assert "give_back: bool = True" in src
-        # 证据链失败必须不归还
-        assert "give_back=False)   # 成本已经付出去" in src
-        # 发布失败也必须不归还
-        assert 'summary["abort"], give_back=False' in src
-        # 环境类故障显式标注归还
-        assert src.count("give_back=True)") >= 3
+        assert "give_back: bool = True" in src          # 兼容签名保留
+        assert "give_back=False" not in src             # 所有调用点都退坑
+        assert "ledger.release_claim(key, eng.tz_name)" in src
 
     def test_attempt_limit_constant(self):
         from scout_v2.workers.auto_pipeline import MAX_ATTEMPTS_PER_CANDIDATE
@@ -207,3 +204,28 @@ class TestStagedFlush:
                 e.pop("staged_at", None)
         atomic_json_write(qpath, q)
         assert json.loads(qpath.read_text(encoding="utf-8"))["a/b#1"]["ai_verdict"] == verdict
+
+
+class TestAlwaysReleaseSemantics:
+    """2026-11-05 用户裁定：每天 5 个 = 5 个开出的 PR，不是 5 次尝试。
+
+    失败（无证据/发布失败/候选不可用）一律退坑，让下一条候选顶上。
+    防死循环靠同候选日闸 + 每日 3 次保险丝，不靠扣名额。
+    """
+
+    def test_no_evidence_path_releases(self):
+        import inspect
+        src = inspect.getsource(mp)
+        assert "give_back=False" not in src, "所有 abort 路径必须退坑"
+        assert "ledger.release_claim(key, eng.tz_name)" in src
+
+    def test_give_back_param_is_tolerated_but_ignored(self, tmp_path):
+        """兼容旧调用方：give_back=False 传入也照样退坑。"""
+        led = ClaimLedger(tmp_path / "t.db")
+        ok, _ = led.try_claim("Asia/Shanghai", "a/b#1", max_per_day=5)
+        assert ok is True
+        released = led.release_claim("a/b#1", "Asia/Shanghai")
+        assert released is True
+        # 释放后名额立刻可用
+        ok2, _ = led.try_claim("Asia/Shanghai", "a/c#2", max_per_day=5)
+        assert ok2 is True

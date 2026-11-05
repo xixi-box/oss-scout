@@ -113,6 +113,54 @@ def test_reporter_offer_is_detected_and_passed_to_ai():
     assert called[0]["reporter_offered_fix"] is True
 
 
+def test_body_ai_warning_reaches_the_scorer_prompt():
+    """clickhouse#126287 实录：body 写 "the fix maybe is not trivial to ask AI
+    to do it"——命中的句子必须以 body signal 进 comments_block，让模型判 NO。"""
+    ds, tmp = _env()
+    now = dt.datetime.utcnow().isoformat(timespec="seconds") + "Z"
+    item = _item(now)
+    item["body_excerpt"] += ("\n\nThe fix maybe is not trivial to ask AI to do "
+                             "it, so a maintainer should look at it first.")
+    called = []
+
+    class Spy:
+        def __init__(self, **k):
+            pass
+
+        def score_issue(self, issue):
+            called.append(issue)
+            return {"usable": False, "reason": "warned off AI", "model": "x"}
+
+    import scout_v2.workers.issue_scorer as isc
+    orig = isc.GoClient
+    isc.GoClient = opts_cy(Spy)
+    try:
+        D.ingest_cloudflare_issues(ds, [item])
+    finally:
+        isc.GoClient = orig
+    issue = called[0]
+    assert issue["claimish_signal"] is True
+    assert any("not trivial to ask AI" in str(c.get("body"))
+               for c in issue.get("comments") or [])
+
+    # 端到端再验一次 prompt 组装：真 GoClient + 假 chat，捕获 prompt
+    prompts = []
+
+    def fake_chat(prompt, max_tokens=200):
+        prompts.append(prompt)
+        return True, "DECISION: NO\nREASON: maintainer says not for AI"
+
+    client = isc.GoClient(key="k", model="m")
+    client.chat = fake_chat
+    verdict = client.score_issue(issue)
+    assert verdict["usable"] is False
+    assert "not trivial to ask AI" in prompts[0]
+    assert "Comments (recent)" in prompts[0]
+    assert "body signal" in prompts[0]
+    # NO 清单硬条款在模板里
+    assert "not trivial for" in isc.SCORE_PROMPT
+
+
 def test_reason_columns_are_split():
     """粗筛原因（规则否决）与细筛原因（AI 理由）分开记。"""
     ds, tmp = _env()

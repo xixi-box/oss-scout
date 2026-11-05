@@ -36,6 +36,10 @@ Answer NO if any of these:
     - not a bug, already answered, or docs-only
     - the reporter asked to prepare the fix / a PR themselves -- leave it to
       them; racing a volunteer is bad manners and bad for the project
+    - a maintainer or the reporter says this is not for AI / not trivial for
+      AI, or hands the fix to a specific person
+    - the issue body or comments contain a clear claim signal (I'll fix this,
+      working on it, opened a PR)
     - it is only minutes old and a maintainer or the reporter is likely still
       working on it (age under a couple of hours with no maintainer ask)
     - too vague to act on, or needs a design decision from maintainers
@@ -50,6 +54,7 @@ Issue from {repo}#{number}
 Labels: {labels}
 Reactions: {reactions} | Comments: {comments}
 Age: {age} | Reporter offered to fix it themselves: {offer}
+Comments (recent): {comments_block}
 Title: {title}
 
 Body:
@@ -138,13 +143,28 @@ class GoClient:
         2026-10-30：从 A/B/C 三档改成二元判断。B 档从未被消费（入口只要 A），
         留着只是让模型在"能不能做"和"有多好做"之间摇摆。
         """
+        # 评论输入两种形态：文摘列表 [{author, body}]（最近几条）→ 组
+        # comments_block；整数（旧调用方只传条数）→ 无文摘，块置 none。
+        # clickhouse#126287 实录：维护者派单 / 报告者"不适合 AI"只出现在
+        # body 或评论里，不进 prompt 模型就看不见。
+        cmts = issue.get("comments")
+        if isinstance(cmts, list):
+            lines = [f"- {str(c.get('author') or 'unknown')}: "
+                     f"{str(c.get('body') or '').strip()[:300]}"
+                     for c in cmts if isinstance(c, dict)]
+            comments_block = "\n".join(lines) or "none"
+            n_comments = issue.get("num_comments", len(cmts))
+        else:
+            comments_block = "none"
+            n_comments = cmts if isinstance(cmts, int) else 0
         prompt = SCORE_PROMPT.format(
             repo=issue.get("repo", ""), number=issue.get("number", ""),
             labels=", ".join(issue.get("labels") or []) or "none",
-            reactions=issue.get("reactions", 0), comments=issue.get("comments", 0),
+            reactions=issue.get("reactions", 0), comments=n_comments,
             age=(f"{issue.get('age_hours')}h"
                  if issue.get("age_hours") is not None else "unknown"),
             offer="yes" if issue.get("reporter_offered_fix") else "no",
+            comments_block=comments_block,
             title=str(issue.get("title", ""))[:200],
             body=str(issue.get("body_excerpt", ""))[:4000])
         ok, text = self.chat(prompt)

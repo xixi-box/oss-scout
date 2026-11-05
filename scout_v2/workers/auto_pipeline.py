@@ -440,21 +440,20 @@ def candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6) -> dict:
     summary["steps"].append(f"claimed (attempt {attempts + 1}, daily budget)")
 
     def _abort_release(msg: str, *, give_back: bool = True) -> dict:
-        """中止并（可选）归还额度。
+        """中止并归还额度（2026-11-05 用户裁定：所有失败一律退坑）。
 
-        2026-11-03 实测：今天 claim 33 次、abort 42 次，sqlite 里只剩 2 条——
-        因为每次 abort 都无条件归还额度，于是"claim→失败→还额度→再 claim"
-        可以无限循环（deer-flow#7846 循环了 7 次，每次都在烧 Actions 分钟）。
-        「每天 N 个」限的是同时占用的名额，被这种循环架空了。
+        「每天 5 个」指的是**5 个开出的 PR**，不是 5 次尝试——失败的认领
+        必须退坑，让下一条候选顶上，直到开出 5 个 PR 或候选耗尽。
 
-        归还规则——只有**环境故障**才还（那不是我们的机会没用好），
-        凡是**真实消耗了尝试**的一律不还：
-          give_back=True   网络抖动 / 后端不可达 / 崩溃 / CLA 阻塞
-          give_back=False  证据链不成立、发布失败、候选本身不可用
-        这样计数才等于"今天真正花掉了几次机会"。
+        防死循环不靠扣名额，靠两道闸：
+          1. 同候选同日不再认领（try_claim 的 already-claimed）
+          2. 同候选每天最多试 3 次（worklog 计数的保险丝，见
+             _todays_claim_count；2026-11-05 修复：计数曾因并发写丢失
+             而失效，fastmcp#6298 一天被认领 6 次即此）
+
+        give_back 参数保留以兼容调用方，但语义已改为"总是退坑"。
         """
-        if give_back:
-            ledger.release_claim(key, eng.tz_name)
+        ledger.release_claim(key, eng.tz_name)
         ledger.close()
         summary["abort"] = msg
         log(root, "abort", key, msg + ("; claim released" if give_back
@@ -554,7 +553,7 @@ def candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6) -> dict:
             f"evidence chain incomplete: {res.outcome} repro={res.reproduced_on_base} "
             f"fixed={res.fixed_on_patch} gate={report.errors or 'PASS'} "
             f"patch={'yes' if patch_file else 'no'}",
-            give_back=False)   # 成本已经付出去（Actions 分钟），这次机会算用掉了
+            give_back=True)   # 无证据也算尝试失败：退坑让下一条候选顶上
         _r["repair"] = {"backend": backend, "outcome": res.outcome,
                         "repro": res.reproduced_on_base, "fixed": res.fixed_on_patch,
                         "unverified": res.unverified_items[:3]}
@@ -578,16 +577,16 @@ def candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6) -> dict:
             summary["steps"].append("published on runner")
         else:
             summary["abort"] = f"runner publish failed: {runner_pr.get('error', '')[:180]}"
-            return _abort_release(summary["abort"], give_back=False)
+            return _abort_release(summary["abort"], give_back=True)
     else:
         # ---- 控制器侧发布（Modal 后端 / runner 未配置 publish）----
         pr_url = _publish_pr(root, entry, base_sha, patch_file, summary)
         if pr_url is None:
             return _abort_release(summary.get("abort", "publish failed"),
-                                  give_back=False)
+                                  give_back=True)
     if not pr_url:
         return _abort_release("publish reported success but no PR url",
-                              give_back=False)
+                              give_back=True)
     summary["pr"] = pr_url
     log(root, "pr_open", key, f"{pr_url} (auto pipeline, backend={backend})")
     mark_candidate(root, key, "pr_open")

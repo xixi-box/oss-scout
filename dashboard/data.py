@@ -740,6 +740,39 @@ _RE_OFFER = __import__("re").compile(
     re.I)
 
 
+# 更宽的认领/派单/禁 AI 信号（clickhouse#126287 实录）：报告者在 body 里写
+# "the fix maybe is not trivial to ask AI to do it"、维护者在评论里派单
+# "you can fix this and I can try to review"。Worker 事件只有 body 没有
+# 评论列表，先把 body 里命中的句子喂给评分层。
+_RE_CLAIMISH = re.compile(
+    r"not\s+(?:trivial|easy|suitable|appropriate|realistic)\s+(?:enough\s+)?"
+    r"(?:for|to\s+ask|to)\s+(?:an?\s+)?(?:ai|agent|llm|bot)"
+    r"|too\s+(?:complex|hard|difficult|involved)\s+for\s+(?:an?\s+)?(?:ai|agent|llm|bot)"
+    r"|\b(?:ai|agent|llm|bot)s?\s+(?:cannot|can't|shouldn't|should\s+not|won't)\b"
+    r"|(?:you|he|she|they|@\w+)\s+(?:can|could|should|may|will)\s+"
+    r"(?:fix|take|handle|work\s+on|look\s+into)\s+(?:this|it|that|the\s)"
+    r"|\b(?:i|we)\s*(?:'ll|'d|will|would|am\s+going\s+to|want\s+to|"
+    r"plan\s+to|intend\s+to|can|could)\s+"
+    r"(?:fix|take|handle|claim|work\s+on|look\s+into|implement|prepare|submit|open|send)"
+    r"|working\s+on\s+(?:this|it|that|a\s+fix|the\s+fix)"
+    r"|\b(?:opened|submitted|created|filed|pushed)\s+(?:a\s+)?"
+    r"(?:pr\b|pull\s?request|fix\b|branch)"
+    r"|assign(?:ed|ing)?\s+(?:this|it|that)?\s*(?:to\s+)?@\w+",
+    re.I)
+
+
+def _claimish_sentences(body: str) -> list[str]:
+    """body 里命中的认领/派单/禁 AI 句子（至多 5 条，每条截 300 字）。"""
+    out: list[str] = []
+    for chunk in re.split(r"(?<=[.!?])\s+|\n+", body or ""):
+        chunk = chunk.strip()
+        if chunk and _RE_CLAIMISH.search(chunk):
+            out.append(chunk[:300])
+            if len(out) >= 5:
+                break
+    return out
+
+
 def ingest_cloudflare_issues(ds, items: list[dict]) -> tuple[int, list[str]]:
     """Cloudflare Worker 回传的原始 issue → 客观否决 + AI 二元判定 → 入队。
 
@@ -820,9 +853,13 @@ def ingest_cloudflare_issues(ds, items: list[dict]) -> tuple[int, list[str]]:
 
         # 客观否决（不需要 AI 判断的事实）：标题像提问、纯文档、计费抱怨。
         # 这类连调 AI 都省了。其余交给 AI 判断"能不能自动处理"。
+        claim_sents = _claimish_sentences(body)
         signals = {"age_hours": round(age_h, 1) if age_h is not None else None,
                    # 报告者主动表示要自己修 → AI 应当让位（礼貌与声誉）
-                   "reporter_offered_fix": bool(_RE_OFFER.search(body))}
+                   "reporter_offered_fix": bool(_RE_OFFER.search(body)),
+                   # body 里出现认领/派单/禁 AI 句子 → 原句随 comments_block
+                   # 进 prompt（claimish_signal 供规则层/展示层引用）
+                   "claimish_signal": bool(claim_sents)}
         blockers: list[str] = []
         if discover.RE_BILLING.search(title):
             blockers.append("billing_complaint")
@@ -842,10 +879,16 @@ def ingest_cloudflare_issues(ds, items: list[dict]) -> tuple[int, list[str]]:
                 verdict = scorer.score_issue({
                     "repo": repo, "number": number, "title": title,
                     "labels": labels, "reactions": int(it.get("reactions") or 0),
-                    "comments": int(it.get("comments") or 0), "body_excerpt": body,
+                    "num_comments": int(it.get("comments") or 0),
+                    # Worker 事件没有评论列表；把 body 里命中的认领/派单/
+                    # 禁 AI 句子伪装成评论文摘送进 prompt（clickhouse#126287）
+                    "comments": [{"author": "body signal", "body": s}
+                                 for s in claim_sents],
+                    "body_excerpt": body,
                     "age_hours": signals.get("age_hours"),
                     "reporter_offered_fix":
-                        signals.get("reporter_offered_fix")})
+                        signals.get("reporter_offered_fix"),
+                    "claimish_signal": signals.get("claimish_signal")})
             except Exception as ex:  # noqa: BLE001 — 评分失败不阻塞入队，留给人工看
                 verdict = {"usable": None, "reason": f"scorer error: {ex}"[:200],
                            "model": None}
