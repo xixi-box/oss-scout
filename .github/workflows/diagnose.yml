@@ -24,6 +24,48 @@ jobs:
       - name: Quota and queue consumption
         run: docker exec -i oss-scout python3 /app/scripts/quota_probe.py
 
+      - name: Kick expired candidates from queue
+        run: |
+          docker exec -i oss-scout python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          import datetime as dt
+          root = Path(os.environ.get("OSSCOUT_DASHBOARD_ROOT", "/data"))
+          qpath = root / "queue" / "candidates.json"
+          q = json.loads(qpath.read_text(encoding="utf-8"))
+          RED = {"aborted_stale", "stage_expired", "escalated", "aborted_competed",
+                 "aborted_duplicate", "aborted_closed", "aborted_no_evidence",
+                 "aborted_blocked_design", "recheck_failed", "queued_hist"}
+          kicked, kept = [], 0
+          for key, e in q.items():
+              e = e or {}
+              st = str(e.get("status") or "")
+              if st in RED:
+                  e["status"] = "stage_expired"
+                  kicked.append(key)
+              elif st in ("new", "staged", "needs_maintainer_confirm", "needs_cla",
+                          "gated_alignment_only"):
+                  upd = str(e.get("updated_at") or "")[:19]
+                  try:
+                      age_days = (dt.datetime.now() -
+                                  dt.datetime.fromisoformat(upd)).days
+                  except ValueError:
+                      age_days = 0
+                  if age_days >= 3:
+                      e["status"] = "stage_expired"
+                      kicked.append(key)
+                  else:
+                      kept += 1
+          tmp = qpath.with_suffix(".json.tmp")
+          tmp.write_text(json.dumps(q, ensure_ascii=False, indent=1),
+                         encoding="utf-8")
+          json.loads(tmp.read_text(encoding="utf-8"))
+          os.replace(tmp, qpath)
+          print(f"kicked {len(kicked)} expired, kept {kept} queued")
+          for k in kicked[:10]:
+              print("  kicked:", k)
+          PY
+
       - name: Purge too_fresh (age gate retired)
         run: docker exec -i oss-scout python3 /app/scripts/purge_too_fresh.py
 
