@@ -18,6 +18,9 @@ jobs:
         # 脚本只打印"有没有"，不打印值。
         run: docker exec oss-scout python /app/scripts/container_diag.py
 
+      - name: Purge too_fresh (age gate retired)
+        run: docker exec -i oss-scout python3 /app/scripts/purge_too_fresh.py
+
       - name: Live state dump (read-only)
         run: |
           docker exec -i oss-scout python3 - <<'PY'
