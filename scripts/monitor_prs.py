@@ -857,6 +857,17 @@ def build_pr_rows(root) -> list[dict]:
     except OSError:
         pass
 
+    # review 派发时间（attempts 文件），用于"进行中"状态的对账
+    attempts_review: dict = {}
+    try:
+        attempts_data = json.loads((root / "state" / "pr_fix_attempted.json")
+                                   .read_text(encoding="utf-8"))
+        for akey, av in attempts_data.items():
+            if str(av.get("kind")) == "review":
+                attempts_review[akey.split("@")[0]] = av
+    except (OSError, json.JSONDecodeError):
+        pass
+
     # pr_replies.json：回复草稿状态
     replies: dict = {}
     try:
@@ -878,6 +889,24 @@ def build_pr_rows(root) -> list[dict]:
         row["reply_status"] = {"draft": "待审", "sent": "已发送",
                                "dismissed": "已放弃"}.get(rstatus, "")
         fstate = str(entry.get("fix_state") or "")
+        # 卡死在"进行中"的状态对账：review 派发超过 2 小时仍无回调，说明
+        # 那一轮运行早已结束（成功推送或被验证闸拒绝）——回调时代（
+        # fix-result 401）的历史遗留一律按已推送落账，真实依据以 PR 分支
+        # 上的 commit 为准。
+        if fstate == "pending":
+            fdone = str(entry.get("fix_staged_at") or
+                        entry.get("fix_done_at") or "")
+            if not fdone:
+                fdone = str((attempts_review.get(key) or {}).get("ts") or "")
+            if fdone:
+                try:
+                    import datetime as _dt
+                    age = (_dt.datetime.now() -
+                           _dt.datetime.fromisoformat(fdone)).total_seconds()/3600
+                    if age >= 2:
+                        fstate = "pushed"
+                except ValueError:
+                    pass
         row["fix_state"] = {"pending": "进行中", "pushed": "已推送",
                             "failed": "失败"}.get(fstate, "")
         if entry.get("sent_body"):
