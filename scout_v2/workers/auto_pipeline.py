@@ -347,8 +347,13 @@ def candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6) -> dict:
                             f"claim={recheck.has_claim_signal} "
                             f"xref={recheck.has_cross_ref_pr} hits={recheck.open_pr_hits[:1]}")
         log(root, "abort", key, summary["abort"])
+        # 被抢不是我们浪费了机会，必须退坑——否则一个被别人抢走的候选
+        # 会白吃掉当天的 1/5 名额（2026-11-05 实录：claim_days 记了 5 个坑，
+        # 实际只开出 3 个 PR，2 个被 competed 的失败尝试吃掉）。
+        # 防循环靠"同候选今天不再认领"（try_claim 的 already-claimed）
+        # 与 aborted_competed 终态，不靠扣名额。
         mark_candidate(root, key, "aborted_competed")
-        return summary
+        return _abort_release(summary["abort"], give_back=True)
 
     # 被判重复的 issue 不碰：真正的战场在主 issue 上，修这条等于开第二个平行 PR。
     # 2026-11-03 实录 qdrant#11360 → 判为 #10465 的 duplicate，而 #10465 已有
@@ -362,7 +367,8 @@ def candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6) -> dict:
         mark_candidate(root, key, "aborted_duplicate",
                        extra={"abort_reason": summary["abort"],
                               "duplicate_of": recheck.duplicate_of})
-        return summary
+        # 重复 issue 提前识别 = 省下一次真实消耗，不是浪费机会 → 退坑
+        return _abort_release(summary["abort"], give_back=True)
 
     # 这里原本有一道 pr_invited() 检查（查仓库要不要 invite label 才许开 PR）。
     # 2026-10-30 删除：门禁已经在**挑选仓库**这一步完成了 —— 会关闭未受邀 PR 的
