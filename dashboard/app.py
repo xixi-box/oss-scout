@@ -640,8 +640,12 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
         return tpl.TemplateResponse(request, name, ctx, status_code=status_code)
 
     # ---------------- 认证 ----------------
+    # /api/ingest/ 与 /api/pr/reply/fix-result 都用 X-Ingest-Token 自校验
+    # （分别是 Worker→看板、pr-fix workflow→看板 的机对机通道），不走会话
+    # 认证。fix-result 不加进来的后果：workflow 回调 401，修复状态永远
+    # 回不到看板和飞书（2026-11-04 实录）。
     PUBLIC_PATHS = ("/login", "/static", "/favicon.ico", "/api/ingest/",
-                    "/feishu/callback")
+                    "/api/pr/reply/fix-result", "/feishu/callback")
 
     @app.middleware("http")
     async def auth_middleware(request: Request, call_next):

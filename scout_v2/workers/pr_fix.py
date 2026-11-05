@@ -100,6 +100,33 @@ def build_prompt(payload: dict) -> str:
     return "\n".join(parts)
 
 
+_GO_TAG_RE = None
+
+
+def _detect_go_tags(repo_dir: Path) -> str:
+    """从仓库自己的 CI workflow / Makefile 里找 go test 的惯用构建标签。
+
+    不猜通用值——标签是仓库约定，猜错了照样误判。找不到就返回空串。
+    """
+    global _GO_TAG_RE
+    if _GO_TAG_RE is None:
+        import re as _re
+        _GO_TAG_RE = _re.compile(r"go\s+test[^\n]*?-tags[=\s]+([A-Za-z0-9,_.-]+)")
+    candidates: list[str] = []
+    for pattern in (".github/workflows/*.yml", ".github/workflows/*.yaml",
+                    "Makefile", "makefile"):
+        for f in repo_dir.glob(pattern):
+            try:
+                text = f.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            for m in _GO_TAG_RE.finditer(text):
+                tag = m.group(1).strip().strip("'\"")
+                if tag and tag not in candidates:
+                    candidates.append(tag)
+    return candidates[0] if candidates else ""
+
+
 def _run(cmd: list[str], cwd: Path, timeout: int = 1500) -> tuple[int, str]:
     try:
         r = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True,
@@ -136,6 +163,17 @@ def _verify(repo_dir: Path, changed: list[str],
         targets = [f"./{p}/" if p and p != "." else "./" for p in pkgs]
         rc, out = _run(["go", "test", *targets], repo_dir)
         if rc != 0:
+            # 不少仓库的测试套件要构建标签才跑得全（milvus 是
+            # -tags dynamic,test；2026-11-05 实录：不带标签 rc=1，
+            # 带上全绿——差点把一个真修复误杀成拒推）。从仓库自己的
+            # CI/Makefile 里找惯用标签，带标签重试一次再下结论。
+            tags = _detect_go_tags(repo_dir)
+            if tags:
+                rc2, out2 = _run(["go", "test", f"-tags={tags}", *targets],
+                                 repo_dir)
+                if rc2 == 0:
+                    return True, f"go test -tags={tags} {targets} rc=0"
+                out += "\n--- with -tags=%s ---\n" % tags + out2
             logs.write_text(out[-9000:], encoding="utf-8", errors="replace")
         return rc == 0, f"go test {targets} rc={rc}"
 

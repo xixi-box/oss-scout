@@ -973,3 +973,6 @@
 {"ts": "2026-11-05T00:04:19", "repo": "milvus-io/milvus", "number": 54998, "action": "wait", "reason": ""}
 {"ts": "2026-11-05T00:04:23", "repo": "milvus-io/milvus", "number": 54998, "action": "wait", "reason": "Bot reports CI passed with coverage warning; no action requested. (cached)"}
 {"ts": "2026-11-05T00:04:30", "repo": "agentgateway/agentgateway", "number": 4264, "action": "answer_question", "reason": "Asks why pass windows parameter instead of using cfg in the function."}
+{"ts": "2026-11-05T10:51:36", "repo": "istio/istio", "number": 62656, "action": "wait", "reason": "Bot is waiting for maintainer ok-to-test; no contributor action needed."}
+{"ts": "2026-11-05T10:51:36", "repo": "istio/istio", "number": 62656, "action": "wait", "reason": "Bot notice about maintainer verification and /ok-to-test; no contributor action needed."}
+{"ts": "2026-11-05T10:51:37", "repo": "istio/istio", "number": 62656, "action": "wait", "reason": "Bot awaits org member verification and /ok-to-test; no contributor action needed."}

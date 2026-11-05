@@ -503,6 +503,16 @@ def dispatch_pr_fix(repo: str, number: int, *, dry_run: bool = False,
 
     head_sha = head.get("headRefOid", "")
     if kind == "review":
+        # 指令文本 = 全部对方评论（含行内），不是只有最新一条——
+        # 2026-11-05 实录：yhmo 三条意见同时在场，"取最新一条"让 fix
+        # 指令变成了机器人的 CI 通报，两条真要求被挤丢了。
+        merged = _thread(repo, number)
+        ext = [c for c in merged
+               if str(c.get("author") or "") not in MY_LOGINS]
+        if ext:
+            review_comment = chr(10).join(
+                f"[{c['created_at'][:16]} {c['author']}] {c['body'][:600]}"
+                for c in ext[-8:])
         # review 类去重不能用 head_sha：同一条意见在推 commit 之前会被反复看到
         digest = hashlib.sha1(
             f"{repo}#{number}:{review_comment}".encode()).hexdigest()[:12]

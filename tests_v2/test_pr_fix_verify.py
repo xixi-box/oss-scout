@@ -80,3 +80,47 @@ class TestVerify:
         ok, desc = pr_fix._verify(tmp_path, [" M a.go"], {})
         assert ok is False
         assert "rc=127" in desc
+
+
+class TestGoTagsRetry:
+    """Go 仓库的测试套件常要构建标签才跑得全——不带标签的失败必须先
+    带仓库惯用标签重试再下结论（milvus -tags dynamic,test 实录：
+    不带 rc=1，带上全绿，差点误杀一个真修复）。"""
+
+    def test_retries_with_ci_detected_tags(self, tmp_path, monkeypatch):
+        (tmp_path / "go.mod").write_text("module x\n", encoding="utf-8")
+        wf = tmp_path / ".github" / "workflows"
+        wf.mkdir(parents=True)
+        (wf / "ci.yml").write_text(
+            "  run: go test -tags dynamic,test ./pkg/util/retry/",
+            encoding="utf-8")
+        (tmp_path / "pkg" / "watch").mkdir(parents=True)
+        calls = []
+
+        def fake_run(cmd, cwd, timeout=1500):
+            calls.append(cmd)
+            # 不带标签 rc=1；带标签 rc=0（命令里任一元素含 -tags 即视为带标签）
+            tagged = any("-tags" in c for c in cmd)
+            return (0 if tagged else 1), "ok"
+
+        monkeypatch.setattr(pr_fix, "_run", fake_run)
+        ok, desc = pr_fix._verify(tmp_path, [" M pkg/watch/x.go"], {})
+        assert ok is True
+        assert any("-tags=dynamic,test" in " ".join(c) for c in calls)
+
+    def test_fails_when_tagged_retry_also_fails(self, tmp_path, monkeypatch):
+        (tmp_path / "go.mod").write_text("module x\n", encoding="utf-8")
+        monkeypatch.setattr(pr_fix, "_run",
+                            lambda cmd, cwd, timeout=1500: (1, "still failing"))
+        ok, desc = pr_fix._verify(tmp_path, [" M a.go"], {})
+        assert ok is False
+
+    def test_no_tags_in_repo_means_no_retry(self, tmp_path, monkeypatch):
+        (tmp_path / "go.mod").write_text("module x\n", encoding="utf-8")
+        calls = []
+        monkeypatch.setattr(pr_fix, "_run",
+                            lambda cmd, cwd, timeout=1500:
+                            (calls.append(cmd), (1, "x"))[1])
+        ok, _ = pr_fix._verify(tmp_path, [" M a.go"], {})
+        assert ok is False
+        assert len(calls) == 1   # 没有可用的标签，不瞎重试

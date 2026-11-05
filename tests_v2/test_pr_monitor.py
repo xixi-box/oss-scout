@@ -587,3 +587,51 @@ class TestReplyTargetRouting:
                            )["docker/compose#1"]
         assert entry["source_kind"] == "issue"
         assert entry["source_comment_id"] == 777
+
+
+class TestDispatchMergesComments:
+    """review 派发指令要带上全部对方评论——只取最新一条会把真要求挤掉
+    （milvus#55034 实录：yhmo 三条意见被机器人的 CI 通报挤出指令）。"""
+
+    def _setup(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(mp, "pr_head", lambda r, n: {
+            "isCrossRepository": True,
+            "headRepositoryOwner": {"login": "xixi-box"},
+            "headRefName": "b", "headRefOid": "a" * 40})
+        monkeypatch.setattr(mp, "ATTEMPTS_FILE", tmp_path / "attempts.json")
+        monkeypatch.setattr(mp, "failing_details", lambda r, n: [])
+        captured = {}
+        monkeypatch.setattr(mp, "_gh", lambda args, timeout=90:
+                            (captured.__setitem__("gh_last", args), "")[1])
+        monkeypatch.setattr(mp, "run_gh", lambda args, timeout=90: 0)
+        return captured
+
+    def test_prompt_carries_all_external_comments(self, monkeypatch, tmp_path):
+        captured = self._setup(monkeypatch, tmp_path)
+
+        def fake_gh(args, timeout=90):
+            joined = " ".join(args)
+            captured["args"] = args
+            if "/pulls/" in joined:
+                return ("2026-11-04T19:26:39Z|yhmo|999|Low: unreachable branch")
+            if "/issues/" in joined:
+                return ("2026-11-04T18:35:08Z|yhmo|111|Medium: no regression test")
+            return ""
+
+        monkeypatch.setattr(mp, "_gh", fake_gh)
+        out = mp.dispatch_pr_fix("milvus-io/milvus", 55034, kind="review",
+                                 review_comment="only latest",
+                                 review_author="bot")
+        assert out["dispatched"] is True
+        payload_args = captured["args"]
+        assert payload_args, "dispatch must have run"
+
+    def test_digest_changes_when_any_comment_changes(self, monkeypatch, tmp_path):
+        """任意一条评论变化 → 新的去重键（不然新意见会被旧键挡住）。"""
+        self._setup(monkeypatch, tmp_path)
+        kw = dict(kind="review", review_comment="same text",
+                  review_author="m")
+        d1 = mp.dispatch_pr_fix("a/b", 1, **kw)
+        assert d1["dispatched"] is True
+        d2 = mp.dispatch_pr_fix("a/b", 1, **kw)
+        assert d2["dispatched"] is False and "already" in d2["reason"]
