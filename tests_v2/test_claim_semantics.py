@@ -18,6 +18,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from scout_v2.state_store import ClaimLedger  # noqa: E402
 
+from scout_v2.workers import auto_pipeline as mp  # noqa: E402
+
 TZ = "Asia/Shanghai"
 
 
@@ -89,3 +91,40 @@ class TestAttemptCounter:
         mark_candidate(tmp_path, "a/x#1", "new", extra={"attempts": 2})
         d = json.loads((q / "candidates.json").read_text(encoding="utf-8"))
         assert d["a/x#1"]["attempts"] == 2
+
+
+class TestAttemptFuseWorklogCount:
+    """认领保险丝的计数必须并发安全。
+
+    2026-11-05 实录：计数存在 candidates.json 的 attempts 字段里，而该文件
+    被 ingest 即时派发/监控循环/drain 三个线程并发原子重写，计数互相覆盖
+    丢失——fastmcp#6298 一天被认领 6 次、istio#61045 每分钟重试，保险丝
+    永远读不到 3。改按 worklog 里今天的 claim 记录计数（只追加，不覆盖）。
+    """
+
+    def test_counts_todays_claims_from_worklog(self, tmp_path, monkeypatch):
+        (tmp_path / "state").mkdir()
+        lines = []
+        for i in range(3):
+            lines.append(json.dumps({
+                "ts": f"2026-11-05T0{i}:0{i}:00", "action": "claim",
+                "target": "fastmcp/fastmcp#6298", "source": "auto-pipeline"}))
+        lines.append(json.dumps({
+            "ts": "2026-11-05T09:00:00", "action": "pipeline_abort",
+            "target": "fastmcp/fastmcp#6298", "result": "competed"}))
+        lines.append(json.dumps({
+            "ts": "2026-11-04T09:00:00", "action": "claim",
+            "target": "fastmcp/fastmcp#6298", "source": "auto-pipeline"}))
+        (tmp_path / "state" / "worklog.jsonl").write_text(
+            "\n".join(lines) + "\n", encoding="utf-8")
+        assert mp._todays_claim_count(tmp_path, "fastmcp/fastmcp#6298") == 3
+
+    def test_yesterdays_claims_do_not_count(self, tmp_path):
+        (tmp_path / "state").mkdir()
+        (tmp_path / "state" / "worklog.jsonl").write_text(
+            json.dumps({"ts": "2026-11-04T09:00:00", "action": "claim",
+                        "target": "a/b#1"}) + "\n", encoding="utf-8")
+        assert mp._todays_claim_count(tmp_path, "a/b#1") == 0
+
+    def test_missing_worklog_is_zero(self, tmp_path):
+        assert mp._todays_claim_count(tmp_path, "a/b#1") == 0

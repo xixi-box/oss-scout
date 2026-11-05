@@ -269,6 +269,25 @@ def _stage_patch_from_backend(root: Path, out_dir: Path, collected: dict) -> Pat
 
 # ---------------- 主流程 ----------------
 
+def _todays_claim_count(root: Path, key: str) -> int:
+    """worklog 里今天这条候选的认领次数（并发安全的保险丝计数）。"""
+    today = time.strftime("%Y-%m-%d")
+    n = 0
+    try:
+        for line in (root / "state" / "worklog.jsonl")                 .read_text(encoding="utf-8", errors="replace").splitlines():
+            if f'"target": "{key}"' not in line or '"claim"' not in line:
+                continue
+            try:
+                rec = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if str(rec.get("action")) == "claim"                     and str(rec.get("target")) == key                     and str(rec.get("ts", "")).startswith(today):
+                n += 1
+    except OSError:
+        return 0
+    return n
+
+
 def candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6) -> dict:
     """单候选：复检 → 合规 → 后端修复 → 质量闸 → push + PR。"""
     root = _data_root(root)
@@ -383,7 +402,13 @@ def candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6) -> dict:
     # 同一条候选今天的尝试次数上限：2026-11-03 实测 deer-flow#7846 在一天内被
     # claim 7 次（每次 abort 都归还额度），同一份活反复烧 Actions 分钟。额度闸
     # 管的是"总共几次机会"，这里管的是"一条候选最多试几次"。
-    attempts = int(entry.get("attempts") or 0)
+    #
+    # 2026-11-05：计数来源从 candidates.json 的 attempts 字段改为 worklog 里
+    # 今天的 claim 记录——candidates.json 由 ingest 即时派发/监控循环/drain
+    # 三个线程并发原子重写，attempts 计数被互相覆盖丢失（fastmcp#6298 一天
+    # 被认领 6 次、istio#61045 每分钟重试，保险丝永远读不到 3）。worklog 是
+    # 只追加的审计账本，认领动作必然留痕，按条数计数并发安全。
+    attempts = _todays_claim_count(root, key)
     if attempts >= MAX_ATTEMPTS_PER_CANDIDATE:
         summary["abort"] = (f"candidate attempt limit reached "
                             f"({attempts}/{MAX_ATTEMPTS_PER_CANDIDATE})")
