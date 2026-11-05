@@ -1,6 +1,7 @@
 """GitHub 只读访问层：复用 discover.py 的 gh CLI 调用模式，本层**无任何写函数**。
 
-认领前实时复检（Playbook §0.2）：issue 状态、assignees、新评论认领信号、关联 PR。
+认领前实时复检（Playbook §0.2）：issue 状态、assignees、正文/评论里的认领·派单·
+禁 AI 信号、关联 PR（timeline 交叉引用 + PR 文本里明写的 #<候选号>）。
 注意 Playbook 已实测本机 TLS 抖动会导致 gh 调用偶发失败：复检取不到完整信号时
 返回 None（信号不完整 ⇒ 宁可漏一条也不带假"无竞争"结论入库）。
 """
@@ -16,10 +17,24 @@ RE_CLAIM = re.compile(
     r"\bi\s?(?:'ll|will|'m\s+(?:working|on\s+it)|'d\s+like\s+to\s+(?:work|take|fix))\b"
     r"|\bworking\s+on\s+(?:this|a\s+fix|it)\b"
     r"|\btaking\s+(?:this|it)\b|\bpick(?:ed|ing)?\s+(?:this|it)\s?up\b"
-    r"|\bPR\s+(?:is\s+)?(?:open|coming|up)\b|\bopened?\s+a\s+(?:PR|pull\s+request)\b",
+    r"|\bPR\s+(?:is\s+)?(?:open|coming|up)\b|\bopened?\s+a\s+(?:PR|pull\s+request)\b"
+    # 派单："you can fix this" / "@groeneai you can handle it"——活被指给了
+    # 别人（2026-11-05 clickhouse#126287 实录：成员评论派单，我们没拦住）
+    r"|(?:\byou\b|@\w[\w-]*)\s+can\s+(?:fix|take|work\s+on|handle)\s+(?:this|it|the)\b"
+    # 禁 AI 介入：维护者明说这活不想让 AI 干（同一 issue 正文写
+    # "the fix maybe is not trivial to ask AI to do it"）
+    r"|\bnot\s+trivial\s+to\s+ask\s+ai\b|\bdon'?t\s+ask\s+ai\b"
+    r"|\bnot\s+for\s+ai\b|\bai-?free\b",
     re.I,
 )
 MAINTAINER_ASSOC = {"MEMBER", "OWNER", "COLLABORATOR"}
+# 维护者问句式派单（加权用，仅对 MEMBER/OWNER/COLLABORATOR 生效）：
+# "Can you fix this?" / "Could you take it?" 出自维护者是任务转交，
+# 出自普通用户更像求助。口径与 discover.py 的 maintainer_confirm 一致。
+_RE_DISPATCH_MENTOR = re.compile(
+    r"\b(?:can|could|would)\s+you\s+(?:fix|take|work\s+on|handle)\s+(?:this|it|the)\b",
+    re.I,
+)
 
 # "duplicate of #123" / "dupe of #123" / "same as #123" / "dup: #123"
 # 只认明确指向另一条 issue 的措辞。两个排除：
@@ -30,6 +45,18 @@ _RE_DUPLICATE_OF = re.compile(
 _RE_DUPLICATE_NEGATED = re.compile(
     r"\b(?:not|never|no\s+longer|isn'?t|wasn'?t)\s+(?:a\s+)?"
     r"(?:duplicate|dupe|dup)\s*(?:of|as|:)?\s*#\d{1,7}", re.I)
+
+
+def _is_bot_login(login: str) -> bool:
+    return login.endswith("[bot]") or login.endswith("bot")
+
+
+def _explicit_issue_ref(text: str, number: int) -> bool:
+    """文本里是否明写 "#<候选号>"（"Refs #123"/"Fixes #123"）。
+    带词边界：候选 #7883 不会误配 #78830 / #17883。"""
+    if not text or number <= 0:
+        return False
+    return re.search(rf"#{number}\b", text) is not None
 
 
 def gh_read(args: list[str], max_retries: int = 2) -> Any | None:
@@ -102,11 +129,28 @@ def recheck_candidate(repo: str, number: int, *, my_login: str = "xixi-box",
             r.duplicate_of = int(m_dup.group(1))
         except (TypeError, ValueError):
             r.duplicate_of = None
+    # 认领/派单信号：issue 正文 + 评论都扫。2026-11-05 实录
+    # clickhouse/clickhouse#126287：成员 PedroTadim 在 issue **正文**里写
+    # "the fix maybe is not trivial to ask AI to do it"，随后又在评论里派单
+    # "you can fix this"——旧逻辑只扫评论，两层信号全漏，认领并开了 PR。
+    # bot 作者的文本跳过（官方 bot 的套话不是认领），与原评论循环口径一致。
+    signals: list[tuple[str, str]] = []  # (text, author_association)
+    if not _is_bot_login(str(((issue.get("user") or {}).get("login")) or "")):
+        signals.append((body_text, str(issue.get("author_association") or "")))
     for c in comments:
-        login = (c.get("user") or {}).get("login", "")
-        if login.endswith("[bot]") or login.endswith("bot"):
+        if _is_bot_login(str(((c.get("user") or {}).get("login")) or "")):
             continue
-        if RE_CLAIM.search(c.get("body") or ""):
+        signals.append((str(c.get("body") or ""),
+                        str(c.get("author_association") or "")))
+    for text, assoc in signals:
+        if RE_CLAIM.search(text):
+            r.has_claim_signal = True
+            break
+        # 加权：问句式派单出自 MEMBER/OWNER/COLLABORATOR 是任务转交
+        # （"Can you fix this?"），出自普通用户更像求助，所以只对维护者
+        # 生效——author_association 口径与 discover.py 的 maintainer_confirm
+        # 相同。
+        if assoc in MAINTAINER_ASSOC and _RE_DISPATCH_MENTOR.search(text):
             r.has_claim_signal = True
             break
     timeline = gh_read([f"repos/{repo}/issues/{number}/timeline?per_page=100"])
@@ -121,24 +165,32 @@ def recheck_candidate(repo: str, number: int, *, my_login: str = "xixi-box",
             pr = src.get("pull_request")
             if not pr:
                 continue
-            # 只看仍可能落地的 PR：已关闭/已合并的引用不算竞争。
-            # timeline 里 PR 的 state 在 source.issue.state（不在 pull_request 内），
-            # 2026-10-28 实测返回 {"state":"closed"}。
-            # 自己关掉一个测试 PR 后，cross-referenced 事件仍在 timeline 里，
-            # 不复检这个字段会让该 issue 被永久拒绝。
-            state = str(src.get("state") or pr.get("state") or "").lower()
-            merged = (src.get("merged_at") or pr.get("merged_at")
-                      or pr.get("merged"))
-            if state == "closed" or merged:
-                continue
             # 自己开的 PR 不算竞争：timeline 的 cross-referenced 拿走的是
             # source.issue，作者在 source.issue.user.login。不排除的话，我们
             # 开出的 PR 会让同一个 issue 在后续复检里永久判成 competed。
+            # 这条必须先于状态判断：我们自己 PR 的 body 总写着 Fixes #N。
             author = str(((src.get("user") or {}).get("login")) or "")
             if author and author.lower() == my_login.lower():
                 continue
-            r.has_cross_ref_pr = True
-            break
+            # timeline 里 PR 的 state 在 source.issue.state（不在 pull_request
+            # 内），2026-10-28 实测返回 {"state":"closed"}。已关闭未合并 =
+            # 弃坑，不算竞争（自己关掉测试 PR 后事件仍在 timeline 里，
+            # 不复检这个字段会让该 issue 被永久拒绝）。
+            state = str(src.get("state") or pr.get("state") or "").lower()
+            merged = (src.get("merged_at") or pr.get("merged_at")
+                      or pr.get("merged"))
+            if state != "closed" and not merged:
+                r.has_cross_ref_pr = True
+                break
+            # 文本级直接关联（deer-flow#7883 实录：竞争 PR #7887 body 写
+            # "Refs #7883"，18.5h 后合并）：已合并 PR 的标题/正文若明写
+            # "#<候选号>"，照样拦。Refs 类引用不自动关 issue，修复落地后
+            # issue 仍 open——认领这种"已修好仍开放"的 issue 必是重复劳动。
+            # 已关闭未合并（弃坑）维持放行。
+            src_text = f"{src.get('title') or ''}\n{src.get('body') or ''}"
+            if merged and _explicit_issue_ref(src_text, number):
+                r.has_cross_ref_pr = True
+                break
     import urllib.parse as _up
     # 只看 open PR：已关闭/已合并的历史尝试不算竞争（与 cross-ref 判定一致）。
     #
@@ -190,7 +242,13 @@ def recheck_candidate(repo: str, number: int, *, my_login: str = "xixi-box",
             if author and author.lower() == my_login.lower():
                 continue
             title = str(it.get("title", ""))
-            if not _relevant(title):
+            # 文本级直接关联兜底（deer-flow#7883 实录：竞争 PR body 写
+            # "Refs #7883"，标题与根因关键词无交集，只按 _relevant 判会漏；
+            # timeline 单页 per_page=100 且按最旧在前返回，活跃 issue 的最新
+            # cross-referenced 事件也可能根本不在返回里）。搜索响应必带全量
+            # body：PR 标题/正文明写 "#<候选号>" 即判竞争，不再要求标题命中。
+            if not (_relevant(title) or _explicit_issue_ref(
+                    f"{title}\n{it.get('body') or ''}", number)):
                 continue
             r.open_pr_hits.append(f"{repo}#{it['number']}: {title[:80]}")
     if not kws:
