@@ -1,0 +1,146 @@
+[
+ {
+  "repo": "milvus-io/milvus",
+  "num": 55034,
+  "kind": "inline",
+  "author": "yhmo",
+  "created": "2026-11-04T18:35:08Z",
+  "body": "pkg/util/retry/retry.go line:114\nMedium ---- This PR changes retry.Do/Handle timing (no backoff sleep after the final attempt) but adds no regression test, so the fixed behavior is"
+ },
+ {
+  "repo": "milvus-io/milvus",
+  "num": 55034,
+  "kind": "inline",
+  "author": "yhmo",
+  "created": "2026-11-04T18:35:17Z",
+  "body": "pkg/util/retry/retry.go line:220\nLow ---- This fix reduces a fully-failing default grpcclient retry from ~52.6s to ~42.6s (0.2+0.4+0.8+1.6+3.2+6.4+10+10+10), which makes a nearby c"
+ },
+ {
+  "repo": "milvus-io/milvus",
+  "num": 55034,
+  "kind": "inline",
+  "author": "yhmo",
+  "created": "2026-11-04T18:35:25Z",
+  "body": "pkg/util/retry/retry.go line:220\nLow ---- The same \"sleep one more backoff after the final attempt fails\" behavior still exists in the Go SDK's self-contained copy, client/internal"
+ },
+ {
+  "repo": "milvus-io/milvus",
+  "num": 54998,
+  "kind": "inline",
+  "author": "yhmo",
+  "created": "2026-11-04T19:26:30Z",
+  "body": "pkg/util/logutil/logutil.go line:50\nMedium ---- The PR removes the runtime grpclog.SetLoggerV2 call but adds no committed regression test. Issue #54965 explicitly calls for \"race r"
+ },
+ {
+  "repo": "milvus-io/milvus",
+  "num": 54998,
+  "kind": "inline",
+  "author": "yhmo",
+  "created": "2026-11-04T19:26:39Z",
+  "body": "pkg/mlog/grpc.go line:46\nLow ---- This fallback branch looks unreachable: initGRPCLogger always calls set() before grpclog.SetLoggerV2 installs globalGRPCLogger, so backend is neve"
+ },
+ {
+  "repo": "istio/istio",
+  "num": 62654,
+  "kind": "issue",
+  "author": "istio-policy-bot",
+  "created": "2026-11-05T00:12:20Z",
+  "body": "🤔 🐛 You appear to be fixing a bug in Go code, yet your PR doesn't include updates to any test files. Did you forget to add a test?\n\n_Courtesy of your friendly test nag_."
+ },
+ {
+  "repo": "istio/istio",
+  "num": 62654,
+  "kind": "issue",
+  "author": "istio-policy-bot",
+  "created": "2026-11-05T00:12:21Z",
+  "body": "😊 Welcome @xixi-box! This is either your first contribution to the Istio **istio** repo, or it's been\na while since you've been here.\n\nYou can learn more about the Istio working gr"
+ },
+ {
+  "repo": "istio/istio",
+  "num": 62654,
+  "kind": "issue",
+  "author": "linux-foundation-easycla[bot]",
+  "created": "2026-11-05T00:12:25Z",
+  "body": "<a href=\"https://easycla.lfx.linuxfoundation.org/#/?version=2\"><img src=\"https://s3.amazonaws.com/cla-project-logo-prod/cla-signed.svg?v=2\" alt=\"CLA Signed\" align=\"left\" height=\"28"
+ },
+ {
+  "repo": "istio/istio",
+  "num": 62654,
+  "kind": "issue",
+  "author": "istio-testing",
+  "created": "2026-11-05T00:12:29Z",
+  "body": "Hi @xixi-box. Thanks for your PR.\n\nI'm waiting for a [istio](https://github.com/orgs/istio/people) member to verify that this patch is reasonable to test. If it is, they should rep"
+ },
+ {
+  "repo": "istio/istio",
+  "num": 62654,
+  "kind": "issue",
+  "author": "istio-testing",
+  "created": "2026-11-05T00:12:30Z",
+  "body": "Hi @xixi-box. Thanks for your PR.\n\nI'm waiting for a [istio](https://github.com/orgs/istio/people) member to verify that this patch is reasonable to test. If it is, they should rep"
+ },
+ {
+  "repo": "istio/istio",
+  "num": 62655,
+  "kind": "issue",
+  "author": "istio-policy-bot",
+  "created": "2026-11-05T00:12:41Z",
+  "body": "🤔 🐛 You appear to be fixing a bug in Go code, yet your PR doesn't include updates to any test files. Did you forget to add a test?\n\n_Courtesy of your friendly test nag_."
+ },
+ {
+  "repo": "istio/istio",
+  "num": 62655,
+  "kind": "issue",
+  "author": "linux-foundation-easycla[bot]",
+  "created": "2026-11-05T00:12:46Z",
+  "body": "<a href=\"https://api.easycla.lfx.linuxfoundation.org/v2/repository-provider/github/sign/34682364/74175805/62655/#/?version=2\"><img src=\"https://s3.amazonaws.com/cla-project-logo-pr"
+ },
+ {
+  "repo": "istio/istio",
+  "num": 62655,
+  "kind": "issue",
+  "author": "istio-testing",
+  "created": "2026-11-05T00:12:51Z",
+  "body": "Hi @xixi-box. Thanks for your PR.\n\nI'm waiting for a [istio](https://github.com/orgs/istio/people) member to verify that this patch is reasonable to test. If it is, they should rep"
+ },
+ {
+  "repo": "istio/istio",
+  "num": 62655,
+  "kind": "issue",
+  "author": "istio-testing",
+  "created": "2026-11-05T00:12:51Z",
+  "body": "Hi @xixi-box. Thanks for your PR.\n\nI'm waiting for a [istio](https://github.com/orgs/istio/people) member to verify that this patch is reasonable to test. If it is, they should rep"
+ },
+ {
+  "repo": "istio/istio",
+  "num": 62656,
+  "kind": "issue",
+  "author": "istio-policy-bot",
+  "created": "2026-11-05T00:31:40Z",
+  "body": "🤔 🐛 You appear to be fixing a bug in Go code, yet your PR doesn't include updates to any test files. Did you forget to add a test?\n\n_Courtesy of your friendly test nag_."
+ },
+ {
+  "repo": "istio/istio",
+  "num": 62656,
+  "kind": "issue",
+  "author": "linux-foundation-easycla[bot]",
+  "created": "2026-11-05T00:31:45Z",
+  "body": "<a href=\"https://api.easycla.lfx.linuxfoundation.org/v2/repository-provider/github/sign/34682364/74175805/62656/#/?version=2\"><img src=\"https://s3.amazonaws.com/cla-project-logo-pr"
+ },
+ {
+  "repo": "istio/istio",
+  "num": 62656,
+  "kind": "issue",
+  "author": "istio-testing",
+  "created": "2026-11-05T00:31:49Z",
+  "body": "Hi @xixi-box. Thanks for your PR.\n\nI'm waiting for a [istio](https://github.com/orgs/istio/people) member to verify that this patch is reasonable to test. If it is, they should rep"
+ },
+ {
+  "repo": "istio/istio",
+  "num": 62656,
+  "kind": "issue",
+  "author": "istio-testing",
+  "created": "2026-11-05T00:31:49Z",
+  "body": "Hi @xixi-box. Thanks for your PR.\n\nI'm waiting for a [istio](https://github.com/orgs/istio/people) member to verify that this patch is reasonable to test. If it is, they should rep"
+ }
+]

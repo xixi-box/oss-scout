@@ -70,6 +70,28 @@ jobs:
           except Exception as e:
               print("read failed:", str(e)[:120])
 
+          import subprocess as sp2, os as _os
+          print("=== worklog plain tail (last 8, any kind) ===")
+          try:
+              all_lines = (root / "state" / "worklog.jsonl")                   .read_text(encoding="utf-8", errors="replace").splitlines()
+              print("total lines:", len(all_lines))
+              import datetime as _dt
+              mtime = _os.path.getmtime(root / "state" / "worklog.jsonl")
+              print("mtime:", _dt.datetime.fromtimestamp(mtime).isoformat())
+              for ln in all_lines[-8:]:
+                  print(ln[:220])
+          except Exception as e:
+              print("read failed:", str(e)[:120])
+          print("=== hung gh processes in container ===")
+          try:
+              out = sp2.run(["ps", "aux"], capture_output=True, text=True, timeout=15)
+              for ln in out.stdout.splitlines():
+                  if " gh " in ln or ln.strip().endswith(" gh"):
+                      print(ln[:200])
+              gh_n = sum(1 for ln in out.stdout.splitlines() if " gh " in ln)
+              print("gh processes:", gh_n)
+          except Exception as e:
+              print("ps failed:", str(e)[:120])
           print("=== pr_sync (worker primary channel) ===")
           try:
               ps = json.loads((root / "state" / "pr_sync.json")
