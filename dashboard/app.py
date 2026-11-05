@@ -311,6 +311,64 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
         except Exception:  # noqa: BLE001 — 额度算不出来就当作没额度，宁可不做
             return 0
 
+    def _handle_pr_event(root: Path, ev: dict) -> None:
+        """Worker 即时推来的 PR 评论 → 与扫描循环相同的处理链。
+
+        在后台线程运行（可能烧几分钟 AI/Actions），失败只写审计。
+        处理链：加载 monitor_prs → 构造 classify 输入 → address_review /
+        answer_question / fix_ci 分派 → 起草回复 → 飞书卡片。
+        去重：dispatch 靠 review digest，draft 靠 for_comment——与扫描
+        循环共用一套机制，不会重复。
+        """
+        try:
+            repo = str(ev.get("repo") or "")
+            num = int(ev.get("number") or 0)
+            if not repo or not num:
+                return
+            import importlib.util
+            spec = importlib.util.spec_from_file_location(
+                "monitor_prs",
+                Path(__file__).resolve().parents[1] / "scripts" / "monitor_prs.py")
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            key = f"{repo}#{num}"
+            state = mod.pr_state(repo, num)
+            state.update({"repo": repo, "number": num})
+            cls = mod.classify(state)
+            action = cls.get("action", "wait")
+            _audit(root, "pr_event_classified", key,
+                   f"{action} reason={str(cls.get('reason'))[:100]}")
+            if action == "address_review":
+                fix_out = mod.dispatch_pr_fix(
+                    repo, num, kind="review",
+                    review_comment=str(state.get("latest_body") or ""),
+                    review_author=str(state.get("latest_author") or ""))
+                _audit(root, "pr_review_fix_dispatch", key,
+                       f"dispatched={fix_out.get('dispatched')} "
+                       f"reason={str(fix_out.get('reason'))[:120]}")
+                if fix_out.get("dispatched"):
+                    _mark_reply(key, "draft", fix_state="pending",
+                                fix_fork=str(fix_out.get("fork_repo") or ""))
+                draft = mod.draft_reply(repo, num, context=state)
+                _audit(root, "pr_reply_drafted", key,
+                       f"drafted={draft.get('drafted')} "
+                       f"reason={str(draft.get('reason'))[:80]} fix_kind=review")
+                if draft.get("drafted"):
+                    _notify_draft(root, state, draft)
+            elif action == "answer_question":
+                draft = mod.draft_reply(repo, num, context=state)
+                _audit(root, "pr_reply_drafted", key,
+                       f"drafted={draft.get('drafted')} "
+                       f"reason={str(draft.get('reason'))[:80]}")
+                if draft.get("drafted"):
+                    _notify_draft(root, state, draft)
+        except Exception as e:  # noqa: BLE001 — 通知永不影响主流程
+            try:
+                _audit(root, "pr_event_error",
+                       f"{ev.get('repo')}#{ev.get('number')}", str(e)[:200])
+            except Exception:  # noqa: BLE001
+                pass
+
     def _dispatch(keys: list[str] | None = None, limit: int = 8) -> list[str]:
         """派发候选去修复。keys 为空时从队列按 AI 判定挑。
 
@@ -1548,6 +1606,16 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
             with watch_path.open("a", encoding="utf-8") as f:
                 f.write(json.dumps(rec, ensure_ascii=False) + "\n")
             fresh += 1
+
+            # 即时处理：与 15 分钟扫描循环相同的处理链（分类→派发修复→
+            # 起草回复→飞书通知）。Worker 每分钟推一次，这条通道让维护者
+            # 意见的响应延迟从"最多 15 分钟"压到"约 1 分钟"。
+            # 不在 HTTP 请求里做（可能烧几分钟 AI/Actions）——后台线程。
+            if action in ("address_review", "answer_question"):
+                ev_copy = dict(ev)
+                ev_copy["action"] = action
+                _thr.Thread(target=_handle_pr_event,
+                            args=(root, ev_copy), daemon=True).start()
 
         if fresh:
             tmp = seen_path.with_suffix(".json.tmp")
