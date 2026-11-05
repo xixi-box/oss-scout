@@ -101,16 +101,19 @@ class TestAttemptFuseWorklogCount:
 
     def test_counts_todays_claims_from_worklog(self, tmp_path, monkeypatch):
         (tmp_path / "state").mkdir()
+        import datetime as _dt
+        today = _dt.date.today().isoformat()
+        yest = (_dt.date.today() - _dt.timedelta(days=1)).isoformat()
         lines = []
         for i in range(3):
             lines.append(json.dumps({
-                "ts": f"2026-11-05T0{i}:0{i}:00", "action": "claim",
+                "ts": f"{today}T0{i}:0{i}:00", "action": "claim",
                 "target": "fastmcp/fastmcp#6298", "source": "auto-pipeline"}))
         lines.append(json.dumps({
-            "ts": "2026-11-05T09:00:00", "action": "pipeline_abort",
+            "ts": f"{today}T09:00:00", "action": "pipeline_abort",
             "target": "fastmcp/fastmcp#6298", "result": "competed"}))
         lines.append(json.dumps({
-            "ts": "2026-11-04T09:00:00", "action": "claim",
+            "ts": f"{yest}T09:00:00", "action": "claim",
             "target": "fastmcp/fastmcp#6298", "source": "auto-pipeline"}))
         (tmp_path / "state" / "worklog.jsonl").write_text(
             "\n".join(lines) + "\n", encoding="utf-8")
