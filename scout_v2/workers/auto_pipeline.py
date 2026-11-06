@@ -949,10 +949,8 @@ def _order_candidates(entries: list[tuple[str, dict]],
                       ) -> list[tuple[str, dict]]:
     """暂存优先，且同组内先到先出。
 
-    2026-10-30（用户裁定）：每天额度用完之后，当天新识别出的可处理 issue 不要
-    丢，也不要挤掉明天——存起来，第二天**先清暂存**，暂存清完才接当天新扫的。
-    这样额度紧张时优先消化积压，同时保证昨天的发现不会因为今天又扫到一堆新的
-    就永远排不上。
+    新候选全天可消费；暂存到次日 04:00 后才参与排序，使用当日剩余额度。
+    未到期的暂存不阻挡新候选，不预留额度，也不施加额外限速。
 
     超过 STAGE_TTL_DAYS 的暂存不再返回：一个 issue 放了三天，多半已经被人修了、
     被关了，或者上下文已经变了；拿去修反而浪费额度并可能撞车。
@@ -960,7 +958,6 @@ def _order_candidates(entries: list[tuple[str, dict]],
     条"这类问题无从查起。
     """
     staged, fresh = [], []
-    waiting_backlog = False
     for key, e in entries:
         if e.get("status") == STAGED_STATUS:
             if _stage_age_days(e) > STAGE_TTL_DAYS:
@@ -968,7 +965,6 @@ def _order_candidates(entries: list[tuple[str, dict]],
                     expired_out.append(key)
                 continue
             if not _eligible(e):
-                waiting_backlog = True
                 continue
             staged.append((key, e))
         elif _eligible(e):
@@ -976,9 +972,7 @@ def _order_candidates(entries: list[tuple[str, dict]],
     staged.sort(key=lambda kv: (str(kv[1].get("staged_at") or kv[1].get("discovered_at") or ""),
                                 str(kv[1].get("discovered_at") or ""), kv[0]))
     fresh.sort(key=lambda kv: (str(kv[1].get("discovered_at") or ""), kv[0]))
-    # Midnight quota reset must not let new arrivals spend the slots reserved
-    # for yesterday's backlog before its 04:00 eligibility boundary.
-    return staged + ([] if waiting_backlog else fresh)
+    return staged + fresh
 
 
 def drain_ai_graded(root: Path, limit: int = 3, dry_run: bool = True,

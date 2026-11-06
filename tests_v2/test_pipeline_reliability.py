@@ -188,12 +188,21 @@ def test_unconsumed_backlog_waits_for_next_four_am(tmp_path, monkeypatch):
     assert entry["staged_at"] == "2026-11-06T20:00:00+08:00"
 
 
-def test_failed_repairs_still_stop_at_five_starts(tmp_path, monkeypatch):
+@pytest.mark.parametrize("include_staged", [False, True])
+def test_failed_repairs_still_stop_at_five_starts(tmp_path, monkeypatch, include_staged):
     (tmp_path / "queue").mkdir()
     (tmp_path / "state").mkdir()
     entries = {f"a/b#{i}": {"id": f"a/b#{i}", "repo": "a/b", "number": i,
                             "title": "Parser bug", "status": "new", "context_complete": True}
                for i in range(1, 7)}
+    if include_staged:
+        from scout_v2.state_store import business_now
+        now = business_now()
+        for i in (4, 5, 6):
+            entries[f"a/b#{i}"].update(
+                status="staged", staged_at=(now - dt.timedelta(days=2)).isoformat(),
+                eligible_at=dt.datetime.combine(now.date() - dt.timedelta(days=1),
+                                                dt.time(4), tzinfo=now.tzinfo).isoformat())
     (tmp_path / "queue/candidates.json").write_text(json.dumps(entries))
     eng = SimpleNamespace(repo_lane=lambda _: "open", tz_name="Asia/Shanghai",
                           max_claims_per_day=5, snapshot_id=lambda: "test")
@@ -311,11 +320,12 @@ def test_table_does_not_hide_a_live_staged_candidate_due_to_old_update_time():
     assert mod.queue_display_state("staged", "2020-01-01T00:00:00") == "排队中"
 
 
-def test_fresh_issue_cannot_take_backlog_slots_before_four_am(monkeypatch):
+@pytest.mark.parametrize("hour,minute", [(0, 0), (1, 0), (3, 59)])
+def test_fresh_issue_consumes_normally_before_four_am_with_staged_backlog(monkeypatch, hour, minute):
     from zoneinfo import ZoneInfo
-    monkeypatch.setattr(p, "business_now", lambda *a: dt.datetime(2026, 11, 7, 1, 0,
+    monkeypatch.setattr(p, "business_now", lambda *a: dt.datetime(2026, 11, 7, hour, minute,
                                                                 tzinfo=ZoneInfo("Asia/Shanghai")))
     old = {"status": "staged", "staged_at": "2026-11-06T20:00:00+08:00",
            "eligible_at": "2026-11-07T04:00:00+08:00"}
-    new = {"status": "new", "discovered_at": "2026-11-07T01:00:00+08:00"}
-    assert p._order_candidates([("old", old), ("new", new)]) == []
+    new = {"status": "new", "discovered_at": f"2026-11-07T{hour:02d}:{minute:02d}:00+08:00"}
+    assert p._order_candidates([("old", old), ("new", new)]) == [("new", new)]
