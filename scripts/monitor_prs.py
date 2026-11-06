@@ -783,7 +783,7 @@ if __name__ == "__main__":
 
 # ---- 飞书多维表格的数据源：所有 PR 一行一条 ----
 
-def all_my_prs(limit: int = 100) -> list[dict]:
+def all_my_prs(limit: int = 1000) -> list[dict]:
     """我们开出去的全部 PR（open + closed + merged），搜索接口一次拿一类。
 
     closed 和 merged 共用 `--state closed`，结果的 state 字段能区分二者；
@@ -796,9 +796,13 @@ def all_my_prs(limit: int = 100) -> list[dict]:
                    "--json", "repository,number,title,state,url,createdAt,"
                              "updatedAt,closedAt"])
         try:
-            items = json.loads(raw) if raw else []
-        except json.JSONDecodeError:
-            items = []
+            if not raw:
+                raise RuntimeError(f"PR {state} snapshot unavailable")
+            items = json.loads(raw)
+        except json.JSONDecodeError as ex:
+            raise RuntimeError("invalid PR snapshot") from ex
+        if not isinstance(items, list) or len(items) >= limit:
+            raise RuntimeError("PR snapshot incomplete; refusing to prune ledger")
         for it in items:
             key = (it["repository"]["nameWithOwner"], str(it["number"]))
             out[key] = {
@@ -904,11 +908,11 @@ def build_pr_rows(root) -> list[dict]:
                     age = (_dt.datetime.now() -
                            _dt.datetime.fromisoformat(fdone)).total_seconds()/3600
                     if age >= 2:
-                        fstate = "pushed"
+                        fstate = "unknown"
                 except ValueError:
                     pass
         row["fix_state"] = {"pending": "进行中", "pushed": "已推送",
-                            "failed": "失败"}.get(fstate, "")
+                            "failed": "失败", "unknown": "待核查"}.get(fstate, "")
         if entry.get("sent_body"):
             note_parts.append("已发回复：" + str(entry["sent_body"])[:120])
         if entry.get("fix_test_result"):
@@ -944,6 +948,8 @@ def build_repo_rows(root) -> list[dict]:
     rows = []
     for repo, spec in repos.items():
         spec = spec or {}
+        if spec.get("internal"):
+            continue
         a = audit.get(repo) or {}
         rows.append({
             "repo": repo,
@@ -1013,11 +1019,11 @@ def build_scan_rows(root) -> list[dict]:
 # ---- 候选池/扫描发现的入队状态：黄=排队中，绿=已解决，红=已失效 ----
 
 _QUEUE_YELLOW = {"new", "staged", "needs_maintainer_confirm", "needs_cla",
-                 "gated_alignment_only"}
+                 "gated_alignment_only", "running", "queued", "recheck_failed"}
 _QUEUE_GREEN = {"pr_open", "merged", "completed"}
 _QUEUE_RED = {"aborted_stale", "stage_expired", "escalated", "aborted_competed",
               "aborted_duplicate", "aborted_closed", "aborted_no_evidence",
-              "aborted_blocked_design", "recheck_failed", "queued_hist"}
+              "aborted_blocked_design", "aborted_pipeline", "queued_hist"}
 QUEUE_EXPIRE_DAYS = 3
 
 
@@ -1098,7 +1104,7 @@ def build_candidate_rows(root) -> list[dict]:
             "discovered_at": entry.get("discovered_at") or "",
             "updated_at": entry.get("updated_at") or "",
             "pr_url": entry.get("pr_url") or "",
-            "note": "；".join(str(b) for b in (entry.get("blockers") or []))[:300],
+            "note": ("正在修复；" if entry.get("status") == "running" else "") + "；".join(str(b) for b in (entry.get("blockers") or []))[:300],
         })
     rows.sort(key=lambda r: r["key"])
     # 候选池 = 当前真实在排队的（用户裁定 2026-11-05，二次收窄）：

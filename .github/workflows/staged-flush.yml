@@ -8,7 +8,7 @@ jobs:
     steps:
       - name: Run staged flush (coarse+fine screen, oldest first)
         run: |
-          docker exec -i oss-scout python3 - <<'PY'
+          docker exec -e OSSCOUT_DISABLE_AUTO_REPAIR=1 -i oss-scout python3 - <<'PY'
           import sys, json
           sys.path.insert(0, "/app")
           from pathlib import Path

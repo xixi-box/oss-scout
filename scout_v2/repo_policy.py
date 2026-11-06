@@ -79,7 +79,8 @@ class PolicyEngine:
             config_json = json_load(root / "config.json")
         except Exception as e:  # noqa: BLE001
             config_json = {}
-            agents_err = agents_err or f"config.json unreadable: {e}"
+            if (root / "config.json").exists():
+                agents_err = agents_err or f"config.json unreadable: {e}"
         eng = cls(root, config_json, repos_cfg, v2_cfg, agents_md)
         eng._db = db
         eng._worklog = worklog

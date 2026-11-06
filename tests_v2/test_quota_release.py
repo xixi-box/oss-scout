@@ -73,7 +73,7 @@ class TestAbortDoesNotResetBudget:
 
         led = ClaimLedger(tmp_path / "state" / "scout_v2.sqlite3")
         try:
-            assert led.count_today(TZ) == 1, "other candidate's claim must survive"
+            assert led.count_today(TZ) == 2, "a crashed start and other starts must remain spent"
         finally:
             led.close()
 

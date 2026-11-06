@@ -150,7 +150,7 @@ class GoClient:
         cmts = issue.get("comments")
         if isinstance(cmts, list):
             lines = [f"- {str(c.get('author') or 'unknown')}: "
-                     f"{str(c.get('body') or '').strip()[:300]}"
+                     f"{str(c.get('body') or '').strip()}"
                      for c in cmts if isinstance(c, dict)]
             comments_block = "\n".join(lines) or "none"
             n_comments = issue.get("num_comments", len(cmts))
@@ -165,7 +165,7 @@ class GoClient:
             comments_block=comments_block,
             repo_rules=str(issue.get("repo_rules") or "none recorded"),
             title=str(issue.get("title", ""))[:200],
-            body=str(issue.get("body_excerpt", ""))[:16000])
+            body=str(issue.get("body_excerpt", "")))
         ok, text = self.chat(prompt)
         if not ok:
             return {"usable": None, "reason": text[:200], "model": self.model}

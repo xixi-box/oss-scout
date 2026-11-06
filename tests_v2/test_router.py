@@ -225,7 +225,7 @@ class TestStagedCandidates:
         ready = drain_ai_graded(root, limit=1, dry_run=True)
         assert [r["id"] for r in ready] == ["a/old#1"]
 
-    def test_overflow_is_staged_not_dropped(self, tmp_path):
+    def test_batch_limit_does_not_spend_daily_quota(self, tmp_path):
         """额度只剩 1 条时，新扫到的其余候选标 staged 并记时间。"""
         from scout_v2.workers.auto_pipeline import drain_ai_graded
         entries = {
@@ -239,7 +239,7 @@ class TestStagedCandidates:
         drain_ai_graded(root, limit=1, dry_run=False)
         q = self._read(root)
         staged = [k for k, v in q.items() if v.get("status") == "staged"]
-        assert len(staged) == 2
+        assert len(staged) == 0
         assert all(q[k].get("staged_at") for k in staged)
 
     def test_expired_stage_is_dropped(self, tmp_path):

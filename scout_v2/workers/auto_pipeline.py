@@ -10,12 +10,14 @@
 - 架构里本来就有 Modal/Actions 两个后端，旧实现绕过了它们（平行实现）。
 
 硬边界（不逾越）：
-- 每日 1 个新认领（ClaimLedger + worklog 双闸）；闸门池绝不直接 PR；
+- 每日最多开工 5 条（ClaimLedger 持久计数，失败不退）；闸门池绝不直接 PR；
 - 复检任一竞争信号 → aborted_competed；
 - 证据链不完整（base 未复现 / 补丁未通过 / 质量闸失败）→ 不开 PR；
 - 后端不可用且预算不足 → 暂停，不降级到本地执行。
 """
 from __future__ import annotations
+
+import datetime as dt
 
 import json
 import os
@@ -33,7 +35,7 @@ from ..git_host import recheck_candidate
 from ..job_router import JobRouter, RouterConfig
 from ..repo_policy import PolicyEngine
 from ..schemas import Job, Result
-from ..state_store import ClaimLedger, Worklog
+from ..state_store import ClaimLedger, Worklog, queue_transaction, business_now, atomic_json_write
 from .quality_gate import verify_result
 
 # 推送目标：对第三方仓库我们没有写权限，分支一律推自己的 fork，再向原仓库发 PR。
@@ -71,43 +73,20 @@ def mark_candidate(root: Path, key: str, status: str,
 
     extra：一并写入的附加字段（如 recheck_failures 计数）。
     """
-    p = root / "queue" / "candidates.json"
-    try:
-        q = json.loads(p.read_text(encoding="utf-8"))
+    with queue_transaction(root) as q:
         if key in q:
             q[key]["status"] = status
-            q[key]["updated_at"] = time.strftime("%Y-%m-%dT%H:%M:%S")
+            q[key]["updated_at"] = business_now().isoformat(timespec="seconds")
             if extra:
                 q[key].update(extra)
-            tmp = p.with_suffix(".json.tmp")
-            tmp.write_text(json.dumps(q, ensure_ascii=False, indent=1), encoding="utf-8")
-            json.loads(tmp.read_text(encoding="utf-8"))
-            os.replace(tmp, p)
-    except Exception:  # noqa: BLE001 — 状态写入失败不影响已完成的动作
-        pass
 
 
-def _emergency_release(root: Path, candidate_id: str = "",
-                       tz_name: str = "Asia/Shanghai") -> None:
-    """pipeline 崩溃时的兜底：释放这条候选的认领，避免额度被僵尸占死。
+def _emergency_release(root: Path, candidate_id: str = "", tz_name: str = "Asia/Shanghai") -> None:
+    """A crashed attempt stays spent; never silently rerun a remote write."""
+    if candidate_id:
+        mark_candidate(root, candidate_id, "escalated",
+                       extra={"abort_reason": "controller interrupted; inspect remote job before retry"})
 
-    2026-10-31 修正两处：
-      - 以前用 `date.today()`（宿主机本地日期），业务时区是 Asia/Shanghai，
-        跨日窗口会删错行。改用 business_day。
-      - 以前删整日，一条崩溃连带清掉同批其他候选的占额，等于白送额度。现在
-        只删自己这条；candidate_id 为空时什么都不做（宁可漏放，不要误清）。
-    """
-    if not candidate_id:
-        return
-    try:
-        conn_ledger = ClaimLedger(root / "state" / "scout_v2.sqlite3")
-        conn_ledger.release_claim(candidate_id, tz_name)
-        conn_ledger.close()
-    except Exception:  # noqa: BLE001
-        pass
-
-
-# ---------------- 后端选择 ----------------
 
 def _build_router(root: Path, job: Job, engine: PolicyEngine) -> JobRouter:
     """按 configs/v2.yaml 的路由表 + 各后端可用性构建路由器。"""
@@ -271,7 +250,7 @@ def _stage_patch_from_backend(root: Path, out_dir: Path, collected: dict) -> Pat
 
 def _todays_claim_count(root: Path, key: str) -> int:
     """worklog 里今天这条候选的认领次数（并发安全的保险丝计数）。"""
-    today = time.strftime("%Y-%m-%d")
+    today = business_now().date().isoformat()
     n = 0
     try:
         wl = (root / "state" / "worklog.jsonl").read_text(
@@ -295,33 +274,54 @@ def _todays_claim_count(root: Path, key: str) -> int:
 def _abort_release_impl(msg: str, *, candidate_id: str, ledger, eng,
                    summary: dict, log_fn, root: Path, key: str,
                    give_back: bool = True) -> dict:
-    """中止并归还额度（2026-11-05 用户裁定：所有失败一律退坑）。
-
-    「每天 5 个」指的是**5 个开出的 PR**，不是 5 次尝试——失败的认领
-    必须退坑，让下一条候选顶上，直到开出 5 个 PR 或候选耗尽。
-
-    防死循环不靠扣名额，靠两道闸：
-      1. 同候选同日不再认领（try_claim 的 already-claimed）
-      2. 同候选每天最多试 3 次（worklog 计数的保险丝，见
-         _todays_claim_count；2026-11-05 修复：计数曾因并发写丢失
-         而失效，fastmcp#6298 一天被认领 6 次即此）
-
-    give_back 参数保留以兼容调用方，但语义已改为"总是退坑"。
-    """
-    ledger.release_claim(candidate_id, eng.tz_name)
-    ledger.close()
+    """Keep a consumed start in the ledger, including failed attempts."""
+    if ledger is not None:
+        ledger.close()
+        with queue_transaction(root) as q:
+            if key in q and q[key].get("status") == "running":
+                q[key].update(status="aborted_pipeline", abort_reason=msg[:300])
     summary["abort"] = msg
-    log_fn(root, "abort", key, msg + ("; claim released" if give_back
-                                      else "; claim kept (attempt consumed)"))
+    log_fn(root, "abort", key, msg + "; daily start retained")
     return summary
 
 
 def candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6) -> dict:
+    """A single durable execution lock covers every entrypoint, even other processes."""
+    import sqlite3
+    root = _data_root(root)
+    (root / "state").mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(root / "state/dispatcher.sqlite3"), timeout=0, isolation_level=None)
+    try:
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+        except sqlite3.OperationalError as ex:
+            if "locked" in str(ex).lower():
+                return {"id": entry.get("id"), "abort": "dispatcher busy"}
+            raise
+        try:
+            return _candidate_pipeline(root, entry, max_files=max_files)
+        except Exception as ex:
+            _emergency_release(root, entry.get("id", ""))
+            log(root, "crash", entry.get("id", ""), str(ex)[:200])
+            raise
+    finally:
+        conn.close()
+
+
+def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6) -> dict:
     """单候选：复检 → 合规 → 后端修复 → 质量闸 → push + PR。"""
     root = _data_root(root)
     repo, number = entry["repo"], entry["number"]
     key = entry["id"]
     summary: dict = {"id": key, "steps": []}
+    ledger = None
+    qpath = root / "queue/candidates.json"
+    if qpath.exists():
+        latest = json.loads(qpath.read_text(encoding="utf-8")).get(key)
+        if latest is not None:
+            entry = dict(latest)
+            if entry.get("status") not in ("new", "queued", "recheck_failed", "staged") or not _eligible(entry):
+                return {**summary, "abort": "candidate not currently eligible"}
 
     def _abort_release(msg: str, *, give_back: bool = True) -> dict:
         # 委托模块级实现（显式传参）。2026-11-06 实录：模块级版本曾漏参
@@ -369,7 +369,7 @@ def candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6) -> dict:
         # 超过 3 次就标 escalated 不再自动重试，避免无意义刷 API。
         n = int(entry.get("recheck_failures") or 0) + 1
         mark_candidate(root, key, "escalated" if n >= 3 else "recheck_failed",
-                       extra={"recheck_failures": n})
+                       extra={"recheck_failures": n, "screen_retry_at": (business_now() + dt.timedelta(minutes=5)).isoformat()})
         if n >= 3:
             from ..notify import feishu_send
             feishu_send(f"⚠️ 候选升级转人工：{key}",
@@ -387,7 +387,7 @@ def candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6) -> dict:
         # 实际只开出 3 个 PR，2 个被 competed 的失败尝试吃掉）。
         # 防循环靠"同候选今天不再认领"（try_claim 的 already-claimed）
         # 与 aborted_competed 终态，不靠扣名额。
-        mark_candidate(root, key, "aborted_competed")
+        mark_candidate(root, key, "aborted_closed" if not recheck.issue_open else "aborted_competed")
         return _abort_release(summary["abort"], give_back=True)
 
     # 被判重复的 issue 不碰：真正的战场在主 issue 上，修这条等于开第二个平行 PR。
@@ -439,6 +439,32 @@ def candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6) -> dict:
             return summary
         summary["steps"].append("restricted lane: maintainer-confirmed")
 
+    # Re-screen against current context at consumption, including fresh queue items.
+    from dashboard.data import refresh_issue, repo_rules_text
+    from .issue_scorer import GoClient, load_scorer_config
+    try:
+        fresh = refresh_issue(entry)
+        cfg = load_scorer_config(root)
+        if not cfg.get("api_key"):
+            raise RuntimeError("no scorer configured")
+        verdict = GoClient(key=cfg["api_key"], model=cfg.get("model", "deepseek-v4.1-flash")).score_issue({
+            **fresh, "comments": fresh["issue_comments"], "num_comments": fresh["comments"],
+            "repo_rules": repo_rules_text(repo)})
+        if verdict.get("usable") is None:
+            raise RuntimeError(verdict.get("reason") or "AI unavailable")
+    except Exception as ex:
+        mark_candidate(root, key, str(entry.get("status") or "new"),
+                       extra={"screen_retry_at": (business_now() + dt.timedelta(minutes=5)).isoformat(),
+                              "abort_reason": str(ex)[:200]})
+        return {**summary, "abort": "screening unavailable; retained"}
+    if verdict.get("usable") is False:
+        mark_candidate(root, key, "aborted_stale", extra={"abort_reason": verdict.get("reason")})
+        return {**summary, "abort": "AI re-screen rejected"}
+    entry.update(fresh)
+    entry["ai_verdict"] = verdict
+    mark_candidate(root, key, str(entry.get("status") or "new"),
+                   extra={**fresh, "ai_verdict": verdict, "screened_at": business_now().isoformat()})
+
     # ---- 认领闸 ----
     # 同一条候选今天的尝试次数上限：2026-11-03 实测 deer-flow#7846 在一天内被
     # claim 7 次（每次 abort 都归还额度），同一份活反复烧 Actions 分钟。额度闸
@@ -460,20 +486,44 @@ def candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6) -> dict:
         feishu_send(f"⚠️ 候选尝试超限转人工：{key}", summary["abort"][:150])
         return summary
 
-    ledger = ClaimLedger(root / "state" / "scout_v2.sqlite3")
-    # 每日上限由策略层配置（max_new_claims_per_business_day，0=不限）
-    ok, reason = ledger.try_claim(eng.tz_name, key,
-                                  max_per_day=eng.max_claims_per_day)
-    if not ok:
-        summary["abort"] = f"claim budget: {reason}"
-        ledger.close()
+    # Recheck and CLA failures have not started a repair and spend no quota.
+    from .cla import preflight
+    try:
+        pre = preflight(root, repo)
+    except Exception as ex:
+        summary["abort"] = f"CLA preflight unavailable: {ex}"
+        mark_candidate(root, key, str(entry.get("status") or "new"), extra={
+            "screen_retry_at": (business_now() + dt.timedelta(minutes=5)).isoformat(),
+            "abort_reason": summary["abort"]})
         return summary
-    wl.append({"ts": time.strftime("%Y-%m-%dT%H:%M:%S"), "action": "claim",
+    if pre.get("blocking"):
+        mark_candidate(root, key, "needs_cla", extra={"abort_reason": str(pre.get("detail")),
+                                                     "cla_sign_url": pre.get("url", "")})
+        summary["abort"] = "CLA required"
+        return summary
+    ledger = ClaimLedger(root / "state/scout_v2.sqlite3")
+    # The queue lock protects state across days; the ledger serializes the cap.
+    with queue_transaction(root) as q:
+        current = q.get(key)
+        if current is not None and current.get("status") not in ("new", "queued", "recheck_failed", "staged"):
+            ledger.close()
+            return {**summary, "abort": "candidate already running or terminal"}
+        if current is not None and not _order_candidates([(key, current)]):
+            ledger.close()
+            return {**summary, "abort": "candidate not eligible yet"}
+        ok, reason = ledger.try_claim(eng.tz_name, key, max_per_day=eng.max_claims_per_day)
+        if not ok:
+            if current is not None and "daily limit" in reason:
+                _defer_entry(current, root)
+            summary["abort"] = f"claim budget: {reason}"
+            ledger.close()
+            return summary
+        if current is not None:
+            current.update(status="running", attempts=attempts + 1,
+                           started_at=business_now(eng.tz_name).isoformat())
+    wl.append({"ts": business_now(eng.tz_name).isoformat(timespec="seconds"), "action": "claim",
                "target": key, "source": "auto-pipeline"})
-    mark_candidate(root, key, str(entry.get("status") or "new"),
-                   extra={"attempts": attempts + 1})
-    summary["steps"].append(f"claimed (attempt {attempts + 1}, daily budget)")
-
+    summary["steps"].append("daily start consumed")
 
     # ---- base SHA ----
     head = None
@@ -522,28 +572,6 @@ def candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6) -> dict:
         return _abort_release(f"routing failed: {str(e)[:160]}",
                              give_back=True)   # 路由层异常
     if decision.backend == "github_actions":
-        # 开 PR 前先看这个仓库要不要人工签 CLA。要人工签的仓库，PR 开出来也是
-        # 挂着 not_signed 等签名，不如现在就告诉人「先去签，签完再来」——省一轮
-        # Actions，也避免 maintainer 看到一个连 CLA 都没签的贡献者。
-        try:
-            from .cla import preflight
-            pre = preflight(root, repo)
-            if pre.get("blocking"):
-                # 必须写终态：留在 new 里的话，drain 每 60 秒重取一次，
-                # CLA 不签就一直刷（2026-11-02 实测 playwright#43842 每 10 分钟
-                # 重试，纯烧 API）。人签完 CLA 后在面板把它改回 new 即可恢复。
-                ledger.release_claim(key, eng.tz_name)
-                ledger.close()
-                summary["abort"] = f"CLA required: {pre['detail']}"
-                log(root, "abort", key, summary["abort"])
-                mark_candidate(root, key, "needs_cla",
-                               extra={"abort_reason": summary["abort"][:200],
-                                      "cla_sign_url": pre.get("url", "")})
-                return summary
-            if pre.get("detail"):
-                summary["steps"].append(f"cla: {pre['detail']}")
-        except Exception as e:  # noqa: BLE001 — CLA 检查失败不该阻断修复
-            log(root, "cla_check_failed", key, str(e)[:200])
         job.publish = _build_publish_cfg(repo, number, base_sha, entry)
     try:
         backend, remote_id, extra = _submit_job(root, job, eng)
@@ -604,7 +632,7 @@ def candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6) -> dict:
                               give_back=True)
     summary["pr"] = pr_url
     log(root, "pr_open", key, f"{pr_url} (auto pipeline, backend={backend})")
-    mark_candidate(root, key, "pr_open")
+    mark_candidate(root, key, "pr_open", extra={"pr_url": pr_url})
     from ..notify import feishu_send
     feishu_send(f"🚀 新 PR 开出：{key}", f"{pr_title} {pr_url}")
 
@@ -811,6 +839,18 @@ def _publish_pr(root: Path, entry: dict, base_sha: str, patch_file: Path,
 
 # ---------------- 候选筛选 ----------------
 
+def expire_staged(root: Path) -> int:
+    expired = []
+    with queue_transaction(root) as q:
+        for key, entry in q.items():
+            if entry.get("status") == "staged" and _stage_age_days(entry) > STAGE_TTL_DAYS:
+                entry["status"] = "stage_expired"
+                expired.append(key)
+    if expired:
+        log(root, "stage_expired", str(len(expired)), ", ".join(expired[:5]))
+    return len(expired)
+
+
 def _stage_candidates(root: Path, keys: list[str]) -> int:
     """把候选标成暂存，留到下一轮再处理。返回实际改动的条数。
 
@@ -820,27 +860,39 @@ def _stage_candidates(root: Path, keys: list[str]) -> int:
     """
     if not keys:
         return 0
-    p = root / "queue" / "candidates.json"
-    try:
-        q = json.loads(p.read_text(encoding="utf-8"))
-    except Exception:  # noqa: BLE001
-        return 0
     n = 0
-    now_iso = time.strftime("%Y-%m-%dT%H:%M:%S")
-    for key in keys:
-        e = q.get(key)
-        if not isinstance(e, dict) or e.get("status") not in ("new", "queued"):
-            continue
-        e["status"] = STAGED_STATUS
-        e.setdefault("staged_at", now_iso)
-        n += 1
+    with queue_transaction(root) as q:
+        for key in keys:
+            e = q.get(key)
+            if isinstance(e, dict) and e.get("status") in ("new", "queued", "recheck_failed", "staged"):
+                if e.get("status") == "staged" and _stage_age_days(e) > STAGE_TTL_DAYS:
+                    e["status"] = "stage_expired"
+                    continue
+                previous = e.get("eligible_at")
+                _defer_entry(e, root)
+                n += int(previous != e.get("eligible_at"))
     if n:
-        tmp = p.with_suffix(".json.tmp")
-        tmp.write_text(json.dumps(q, ensure_ascii=False, indent=1), encoding="utf-8")
-        json.loads(tmp.read_text(encoding="utf-8"))
-        os.replace(tmp, p)
-        log(root, "stage", f"{n} candidates", "deferred (daily budget exhausted)")
+        log(root, "stage", f"{n} candidates", "next business day at 04:00")
     return n
+
+
+def _defer_entry(entry: dict, root: Path) -> None:
+    import datetime as dt
+    import yaml
+    now = business_now()
+    hour = 4
+    cfg = root / "configs/dashboard.yaml"
+    if cfg.exists():
+        hour = int((yaml.safe_load(cfg.read_text(encoding="utf-8")) or {}).get("staged_flush_hour_local", 4))
+    entry["status"] = "staged"
+    entry.setdefault("staged_at", now.isoformat(timespec="seconds"))
+    due = entry.get("eligible_at")
+    due_time = dt.datetime.fromisoformat(due) if due else None
+    if due_time is not None and due_time.tzinfo is None:
+        due_time = due_time.replace(tzinfo=now.tzinfo)
+    if due_time is None or due_time <= now:
+        entry["eligible_at"] = dt.datetime.combine(now.date() + dt.timedelta(days=1),
+                                                  dt.time(hour), tzinfo=now.tzinfo).isoformat()
 
 
 STAGED_STATUS = "staged"          # 今天额度用完了，留到明天再处理
@@ -854,14 +906,42 @@ STAGE_TTL_DAYS = 3                # 暂存超过这个天数就丢，避免拿�
 
 def _stage_age_days(entry: dict) -> float:
     """候选进入暂存状态多久了（天）。时间戳缺失按 0 处理（当作刚暂存）。"""
-    ts = entry.get("staged_at") or entry.get("discovered_at") or ""
+    import datetime as dt
+    ts = entry.get("staged_at") or entry.get("discovered_at")
     if not ts:
         return 0.0
     try:
-        then = time.mktime(time.strptime(ts[:19], "%Y-%m-%dT%H:%M:%S"))
+        then = dt.datetime.fromisoformat(ts.replace("Z", "+00:00"))
+        if then.tzinfo is None:
+            then = then.replace(tzinfo=business_now().tzinfo)
+        return max(0.0, (business_now() - then).total_seconds() / 86400)
     except (ValueError, TypeError):
         return 0.0
-    return max(0.0, (time.time() - then) / 86400.0)
+
+
+def _eligible(entry: dict) -> bool:
+    import datetime as dt
+    now = business_now()
+    stamps = [entry.get("screen_retry_at"), entry.get("eligible_at")]
+    if not stamps[1] and entry.get("status") == "staged":
+        staged_at = entry.get("staged_at") or entry.get("discovered_at")
+        if not staged_at:
+            return False
+        try:
+            then = dt.datetime.fromisoformat(staged_at.replace("Z", "+00:00"))
+            stamps[1] = dt.datetime.combine(then.date() + dt.timedelta(days=1), dt.time(4), tzinfo=now.tzinfo).isoformat()
+        except (ValueError, TypeError):
+            return False
+    for ts in filter(None, stamps):
+        try:
+            due = dt.datetime.fromisoformat(ts.replace("Z", "+00:00"))
+            if due.tzinfo is None:
+                due = due.replace(tzinfo=now.tzinfo)
+            if due > now:
+                return False
+        except (ValueError, TypeError):
+            return False
+    return True
 
 
 def _order_candidates(entries: list[tuple[str, dict]],
@@ -881,6 +961,8 @@ def _order_candidates(entries: list[tuple[str, dict]],
     """
     staged, fresh = [], []
     for key, e in entries:
+        if not _eligible(e):
+            continue
         if e.get("status") == STAGED_STATUS:
             if _stage_age_days(e) > STAGE_TTL_DAYS:
                 if expired_out is not None:
@@ -915,7 +997,7 @@ def drain_ai_graded(root: Path, limit: int = 3, dry_run: bool = True,
     root = _data_root(root)
     qpath = root / "queue" / "candidates.json"
     q = json.loads(qpath.read_text(encoding="utf-8"))
-    ACTIVE = ("new", "queued", "queued_hist", "recheck_failed", STAGED_STATUS)
+    ACTIVE = ("new", "queued", "recheck_failed", STAGED_STATUS)
     eligible: list[tuple[str, dict]] = []
     for key, e in q.items():
         if e.get("status") not in ACTIVE:
@@ -940,27 +1022,8 @@ def drain_ai_graded(root: Path, limit: int = 3, dry_run: bool = True,
             mark_candidate(root, key, "stage_expired")
         log(root, "stage_expired", f"{len(expired)} candidates",
             f"older than {STAGE_TTL_DAYS}d: " + ", ".join(expired[:5]))
-    picked: list[dict] = []
-    to_stage: list[str] = []
-    for key, e in ordered:
-        if len(picked) >= limit:
-            # 额度（或本轮并发）用完：把今天新扫到的留到明天。
-            # 已经在暂存里的不动——它的 staged_at 要保持原值，否则永远不会过期。
-            if e.get("status") != STAGED_STATUS:
-                to_stage.append(key)
-            continue
-        picked.append(e)
-
-    if to_stage and not dry_run:
-        for key in to_stage:
-            q[key]["status"] = STAGED_STATUS
-            q[key].setdefault("staged_at", time.strftime("%Y-%m-%dT%H:%M:%S"))
-        tmp = qpath.with_suffix(".json.tmp")
-        tmp.write_text(json.dumps(q, ensure_ascii=False, indent=1), encoding="utf-8")
-        json.loads(tmp.read_text(encoding="utf-8"))
-        os.replace(tmp, qpath)
-        log(root, "stage", f"{len(to_stage)} candidates",
-            "deferred to next run: " + ", ".join(to_stage[:5]))
+    # A batch size is not a daily quota. Only a failed atomic claim defers work.
+    picked = [e for _, e in ordered[:max(0, limit)]]
 
     if dry_run:
         return [{"id": e["id"], "repo": e["repo"], "number": e["number"],
@@ -974,7 +1037,7 @@ def drain_ai_graded(root: Path, limit: int = 3, dry_run: bool = True,
             out.append(candidate_pipeline(root, e))
         except Exception as ex:  # noqa: BLE001
             log(root, "crash", key,
-                f"unhandled: {type(ex).__name__}: {str(ex)[:200]}; releasing claim")
+                f"unhandled: {type(ex).__name__}: {str(ex)[:200]}; start retained")
             _emergency_release(root, key)
             out.append({"id": key, "crash": f"{type(ex).__name__}: {str(ex)[:150]}"})
     return out

@@ -63,8 +63,11 @@ def gh_read(args: list[str], max_retries: int = 2) -> Any | None:
     """只读 gh api 调用。尊重 Retry-After 语义的退避；失败返回 None。"""
     cmd = ["gh", "api"] + args
     for attempt in range(max_retries + 1):
-        p = subprocess.run(cmd, capture_output=True, text=True,
-                           encoding="utf-8", errors="replace")
+        try:
+            p = subprocess.run(cmd, capture_output=True, text=True,
+                               encoding="utf-8", errors="replace", timeout=45)
+        except subprocess.TimeoutExpired:
+            return None
         if p.returncode == 0:
             return json.loads(p.stdout)
         err = p.stderr.lower()
@@ -76,6 +79,21 @@ def gh_read(args: list[str], max_retries: int = 2) -> Any | None:
             import time
             time.sleep(3 * (attempt + 1))
     return None
+
+
+def gh_pages(path: str, size: int) -> list | None:
+    """A failed later page is incomplete evidence, never an empty comment section."""
+    result = []
+    page = 1
+    while True:
+        suffix = "" if page == 1 else f"&page={page}"
+        batch = gh_read([f"{path}?per_page={size}{suffix}"])
+        if not isinstance(batch, list):
+            return None
+        result.extend(batch)
+        if len(batch) < size:
+            return result
+        page += 1
 
 
 @dataclass
@@ -99,7 +117,7 @@ def recheck_candidate(repo: str, number: int, *, my_login: str = "xixi-box",
                       root_cause_keywords: list[str] | None = None) -> RecheckResult | None:
     """认领前复检。任何一次取数失败 → complete=False（调用方应跳过该候选）。"""
     issue = gh_read([f"repos/{repo}/issues/{number}"])
-    comments = gh_read([f"repos/{repo}/issues/{number}/comments?per_page=30"])
+    comments = gh_pages(f"repos/{repo}/issues/{number}/comments", 30)
     if issue is None or comments is None:
         errs = []
         if issue is None:
@@ -153,7 +171,7 @@ def recheck_candidate(repo: str, number: int, *, my_login: str = "xixi-box",
         if assoc in MAINTAINER_ASSOC and _RE_DISPATCH_MENTOR.search(text):
             r.has_claim_signal = True
             break
-    timeline = gh_read([f"repos/{repo}/issues/{number}/timeline?per_page=100"])
+    timeline = gh_pages(f"repos/{repo}/issues/{number}/timeline", 100)
     if timeline is None:
         r.complete = False
         r.errors.append("timeline fetch failed")

@@ -3,7 +3,7 @@
 FROM python:3.11-slim
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends git curl \
+    && apt-get install -y --no-install-recommends git curl tzdata \
     && rm -rf /var/lib/apt/lists/* \
     && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
         -o /usr/share/keyrings/githubcli-archive-keyring.gpg \
@@ -36,6 +36,7 @@ RUN curl -fsSL https://opencode.ai/install | bash \
 COPY --chmod=0755 docker/entrypoint-dashboard.sh /entrypoint.sh
 RUN useradd -m scout && mkdir -p /data && chown -R scout:scout /app /data
 USER scout
+ENV TZ=Asia/Shanghai
 ENV OSSCOUT_DASHBOARD_ROOT=/data
 VOLUME ["/data"]
 

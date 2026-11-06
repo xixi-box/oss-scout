@@ -20,6 +20,7 @@ from __future__ import annotations
 import json
 import os
 import time
+import threading
 from pathlib import Path
 
 from . import feishu_app
@@ -27,6 +28,7 @@ from . import feishu_app
 TABLE_NAME = "PR 记录"
 REPO_TABLE_NAME = "仓库池"
 STATE_FILE = "feishu_bitable.json"
+_BINDING_LOCK = threading.RLock()
 
 # 「仓库池」表：监控名单 + 池审计（语言/stars/最近 push）。评分列等
 # pool_rates 把指标落盘后再补。
@@ -126,11 +128,14 @@ def load_binding(root: Path) -> dict:
 
 
 def save_binding(root: Path, binding: dict) -> None:
-    p = _state_path(root)
-    p.parent.mkdir(parents=True, exist_ok=True)
-    tmp = p.with_suffix(".json.tmp")
-    tmp.write_text(json.dumps(binding, ensure_ascii=False), encoding="utf-8")
-    os.replace(tmp, p)
+    from .state_store import atomic_json_write
+    with _BINDING_LOCK:
+        previous = load_binding(root)
+        # Table IDs belong to a base. A new base must not inherit stale IDs.
+        if (previous.get("app_token") and binding.get("app_token")
+                and previous["app_token"] != binding["app_token"]):
+            previous = {}
+        atomic_json_write(_state_path(root), {**previous, **binding})
 
 
 def _binding_app_token(root: Path) -> str:
@@ -360,11 +365,14 @@ def sync_rows(root: Path, rows: list[dict], *, force: bool = False) -> dict:
 
 
 def sync_table(root: Path, rows: list[dict], *, table_name: str, fields: list,
-               to_fields, binding_key: str, force: bool = False) -> dict:
+               to_fields, binding_key: str, force: bool = False,
+               allow_empty: bool = False) -> dict:
     """把行 upsert 进指定表；表和字段不存在就建。返回计数摘要。
 
     同一个 base 里可挂多张表（PR 记录 / 仓库池 / 候选池…），每张表用自己的
     binding_key 缓存 table_id。键列恒为"键"（repo#number 或 repo 本身）。
+    allow_empty 仅在确认拿到完整快照时启用，空结果也会清理旧行。
+    默认保留空结果保护，避免源查询故障清空飞书。
     """
     binding = load_binding(root)
     app_token = _binding_app_token(root)
@@ -372,7 +380,8 @@ def sync_table(root: Path, rows: list[dict], *, table_name: str, fields: list,
         raise RuntimeError(
             "no bitable app_token — 设 FEISHU_BITABLE_APP_TOKEN，或把表格链接"
             "里的 token 存进 state/feishu_bitable.json")
-    table_id = binding.get(binding_key) or find_or_create_table(
+    cached_table = binding.get(binding_key) if binding.get("app_token") == app_token else None
+    table_id = cached_table or find_or_create_table(
         app_token, table_name, fields)
     save_binding(root, {"app_token": app_token, binding_key: table_id})
     ensure_columns(app_token, table_id, fields or [])
@@ -417,7 +426,7 @@ def sync_table(root: Path, rows: list[dict], *, table_name: str, fields: list,
     # 剔除：口径外的记录（closed 未合并 / 自有仓库 / optica）从表里删掉。
     # 只在拿到非空行集时执行——GitHub 全挂时 rows 为空，那不能当"全部剔除"。
     pruned = 0
-    if rows:
+    if rows or allow_empty:
         incoming = {f["键"] for f in all_fields}
         stale = [hit["record_id"] for key, hit in existing.items()
                  if key not in incoming]

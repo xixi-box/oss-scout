@@ -749,16 +749,15 @@ _REPO_RULES_CACHE: dict | None = None
 
 def repo_rules_text(repo: str) -> str:
     """该仓库的 PR 规矩摘要（configs/repo_rules.yaml），供细筛 prompt 注入。"""
-    global _REPO_RULES_CACHE
-    if _REPO_RULES_CACHE is None:
-        try:
-            p = Path(__file__).resolve().parents[1] / "configs" / "repo_rules.yaml"
-            import yaml as _yaml
-            d = _yaml.safe_load(p.read_text(encoding="utf-8")) or {}
-            _REPO_RULES_CACHE = d.get("rules") or {}
-        except Exception:  # noqa: BLE001
-            _REPO_RULES_CACHE = {}
-    rule = _REPO_RULES_CACHE.get(repo) or {}
+    candidates = [Path(os.environ.get("OSSCOUT_DASHBOARD_ROOT", "/data")) / "configs/repo_rules.yaml",
+                  Path(__file__).resolve().parents[1] / "configs/repo_rules.yaml",
+                  Path(__file__).resolve().parents[1] / "configs.seed/repo_rules.yaml"]
+    rule = {}
+    for path in candidates:
+        if path.exists():
+            rules = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+            rule = (rules.get("rules") or {}).get(repo) or {}
+            break
     note = str(rule.get("note") or "").strip()
     return note if note else "none recorded"
 
@@ -792,153 +791,99 @@ def _claimish_sentences(body: str) -> list[str]:
     return out
 
 
+def refresh_issue(item: dict) -> dict:
+    """Fetch a current issue and every comment before making an AI decision."""
+    from scout_v2.git_host import gh_read
+    repo, number = item["repo"], int(item["number"])
+    issue = gh_read([f"repos/{repo}/issues/{number}"])
+    if not isinstance(issue, dict):
+        raise RuntimeError("issue context unavailable")
+    comments = []
+    page = 1
+    while True:
+        batch = gh_read([f"repos/{repo}/issues/{number}/comments?per_page=100&page={page}"])
+        if not isinstance(batch, list):
+            raise RuntimeError("issue comments unavailable")
+        comments.extend(batch)
+        if len(batch) < 100:
+            break
+        page += 1
+    return {**item, "title": issue.get("title") or "", "body_excerpt": issue.get("body") or "",
+            "updated_at": issue.get("updated_at") or "", "state": issue.get("state"),
+            "pull_request": bool(issue.get("pull_request")), "assignees": issue.get("assignees") or [],
+            "labels": [l["name"] for l in issue.get("labels") or []],
+            "comments": len(comments), "context_complete": True,
+            "issue_comments": [{"author": (c.get("user") or {}).get("login", "?"),
+                                "association": c.get("author_association", ""),
+                                "body": c.get("body") or ""} for c in comments]}
+
+
 def ingest_cloudflare_issues(ds, items: list[dict]) -> tuple[int, list[str]]:
-    """Cloudflare Worker 回传的原始 issue → 客观否决 + AI 二元判定 → 入队。
-
-    返回 (入队条数, 新入队的 id 列表)。后者让调用方可以**立即派发**修复，
-    而不用等下一轮轮询——Worker 每分钟送来新 issue，让 AI 刚判定可用的候选
-    再排 60 秒队是白等。
-
-    规则：只入队已知监控仓库；有 blockers 或 AI 判 NO 的记录进 seen 不入队；
-    去重与 discover.py 共用 state/seen.json。写路径走 atomic_json_write。
-    """
-    from scout_v2.state_store import atomic_json_write
-    added: list[str] = []
-    seen_dirty = False      # 本次新入队的候选 id，供调用方立即派发
-    # 不 import discover.py：它在模块顶层硬读 config.json，容器里没有该文件会崩。
-    # 只复用它的评分实现（纯函数 + 正则），通过 _discover_score() 取得。
-    discover = _discover_score()
-
-    q = ds._cached("candidates", 5.0, _read_json(ds.root / "queue" / "candidates.json", {}))
-    seen_path = ds.root / "state" / "seen.json"
-    seen = _read_json(seen_path, {})()
-    # lane 判定走策略层（repositories.yaml + lane_overrides 合并，PolicyEngine 同源），
-    # 而非 config.json 发现名单——否则名单外仓库（如内部测试仓）会被静默丢弃
+    """Mechanical exclusions, then AI; short atomic writes never enclose network IO."""
+    import hashlib
+    from scout_v2.state_store import atomic_json_write, queue_transaction, business_now
     from scout_v2.repo_policy import PolicyEngine
-    eng, _eng_err = PolicyEngine.load(ds.root)
-    lane_of: dict[str, str] = {}
-    if eng is not None:
-        for repo_name in ((eng.repos_cfg.get("repositories") or {})):
-            lane_of[repo_name] = eng.repo_lane(repo_name)
-
-    now_iso = dt.datetime.now().isoformat(timespec="seconds")
-    # AI 评分（用户裁定 2026-10-25）：对每条候选调 Go API，与规则评分并列存储；
-    # 最终 A/B/C 判定仍由规则引擎决定（Playbook：AI 推测不作事实）
-    from scout_v2.workers.issue_scorer import load_scorer_config
+    from scout_v2.workers.issue_scorer import load_scorer_config, GoClient
+    eng, err = PolicyEngine.load(ds.root)
+    if err or eng is None:
+        raise RuntimeError(f"policy unavailable: {err}")
     scorer_cfg = load_scorer_config(ds.root)
-    scorer = None
-    if scorer_cfg.get("api_key"):
-        from scout_v2.workers.issue_scorer import GoClient
-        scorer = GoClient(key=scorer_cfg["api_key"], model=scorer_cfg.get("model", "deepseek-v4.1-flash"))
-    queued = 0
+    scorer = GoClient(key=scorer_cfg["api_key"], model=scorer_cfg.get("model", "deepseek-v4.1-flash")) if scorer_cfg.get("api_key") else None
+    seen_path = ds.root / "state/seen.json"
+    added = []
+    excluded = {"invalid", "wontfix", "duplicate", "question", "stale", "documentation",
+                "awaiting more info", "awaiting-more-info", "needs more info", "needs-repro"}
     for it in items:
-        repo = str(it.get("repo", ""))
-        number = int(it.get("number") or 0)
+        repo, number = str(it.get("repo") or ""), int(it.get("number") or 0)
+        if not repo or number <= 0:
+            continue
         key = f"{repo}#{number}"
-        if not repo or not number or key in seen or key in q:
-            continue
-        lane = lane_of.get(repo)
-        if lane is None:
-            seen[key] = {"first_seen": now_iso, "status": "unknown_repo",
-                         "coarse_reason": "repo not in monitored pool"}
-            seen_dirty = True
-            continue
-        title = str(it.get("title", ""))
-        body = str(it.get("body_excerpt", ""))
-        labels = [str(l) for l in (it.get("labels") or [])]
-
-        # 年龄不是输入（用户裁定 2026-11-06）：哪怕很新鲜，只要报告者没有
-        # 明显要修的信号，我们也要修。细筛的"让位"判定只看：
-        #   · 报告者主动表示要自己修（_RE_OFFER）
-        #   · 正文里出现认领/派单/禁 AI 句子（_RE_CLAIMISH，随评论位进 prompt）
-
-        # 客观否决（不需要 AI 判断的事实）：标题像提问、纯文档、计费抱怨。
-        # 这类连调 AI 都省了。其余交给 AI 判断"能不能自动处理"。
+        fingerprint = hashlib.sha256(json.dumps(it, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+        with queue_transaction(ds.root) as q:
+            seen = _read_json(seen_path, {})()
+            prior = seen.get(key) or {}
+            if key in q or (prior.get("fingerprint") == fingerprint and prior.get("status") in ("blocked", "rejected")):
+                continue
+        labels = [str(l) for l in it.get("labels") or []]
+        lane = eng.repo_lane(repo)
+        blockers = []
+        if repo not in (eng.repos_cfg.get("repositories") or {}) or lane in ("unknown", "observe"):
+            blockers.append("repo_not_actionable")
+        if it.get("pull_request") or it.get("assignees") or it.get("state", "open") != "open":
+            blockers.append("not_open_unassigned_issue")
+        if excluded.intersection(l.lower() for l in labels):
+            blockers.append("excluded_label")
+        title, body = str(it.get("title") or ""), str(it.get("body_excerpt") or "")
         claim_sents = _claimish_sentences(body)
-        signals = {
-            # 报告者主动表示要自己修 → AI 应当让位（礼貌与声誉）
-            "reporter_offered_fix": bool(_RE_OFFER.search(body)),
-            # body 里出现认领/派单/禁 AI 句子 → 原句随 comments_block 进 prompt
-            "claimish_signal": bool(claim_sents),
-            # Worker 顺带拉来的评论（细筛需要：认领信号、维护者反馈、
-            # "已有人修"都在评论里——clickhouse#126287 实录）
-            "issue_comments": it.get("issue_comments") or [],
-        }
-        blockers: list[str] = []
-        if discover.RE_BILLING.search(title):
-            blockers.append("billing_complaint")
-        if any(discover.RE_FEATURE_LABEL.search(lb) for lb in labels):
-            blockers.append("feature_label")
-        if discover.RE_BAD_TITLE.search(title):
-            blockers.append("question_or_feature_title")
-        if discover.RE_DOCS.search(title):
-            blockers.append("docs_only")
-        if len(body) < 200:
-            blockers.append("thin_body")
-
-        # AI 细筛：唯一的合格判定。usable=None 表示调用失败（与"判定不可用"区分）。
-        verdict = {"usable": None, "reason": "no scorer configured", "model": None}
-        if scorer is not None:
+        verdict = {"usable": None, "reason": "no scorer configured"}
+        if not blockers and scorer is not None:
             try:
                 verdict = scorer.score_issue({
-                    "repo": repo, "number": number, "title": title,
-                    "labels": labels, "reactions": int(it.get("reactions") or 0),
+                    **it, "repo": repo, "number": number, "title": title, "labels": labels,
                     "num_comments": int(it.get("comments") or 0),
-                    # 真评论（Worker 轮转拉取）优先；没有时把 body 里命中的
-                    # 认领/派单/禁 AI 句子伪装成评论文摘送进 prompt
-                    "comments": ([{"author": c.get("author") or "?",
-                                   "body": str(c.get("body") or "")[:1500]}
-                                  for c in signals.get("issue_comments")][:20]
-                                 or [{"author": "body signal", "body": s}
-                                     for s in claim_sents]),
-                    "body_excerpt": body,
-                    "reporter_offered_fix": signals.get("reporter_offered_fix"),
-                    "claimish_signal": signals.get("claimish_signal"),
+                    "comments": it.get("issue_comments") or [{"author": "body signal", "body": x} for x in claim_sents],
+                    "reporter_offered_fix": bool(_RE_OFFER.search(body)),
+                    "claimish_signal": bool(claim_sents),
                     "repo_rules": repo_rules_text(repo)})
-            except Exception as ex:  # noqa: BLE001 — 评分失败不阻塞入队，留给人工看
-                verdict = {"usable": None, "reason": f"scorer error: {ex}"[:200],
-                           "model": None}
-
-        if blockers or verdict.get("usable") is not True:
-            seen[key] = {"first_seen": now_iso,
-                         "status": "blocked" if blockers else "rejected"}
-            seen_dirty = True
-            # 粗筛=规则层为什么否决（候选 blockers）；细筛=AI 判定理由。
-            # 两类分开记，表里也分开显示，否则"没入队"到底卡在规则还是
-            # AI 上无从判断。
-            if blockers:
-                seen[key]["coarse_reason"] = ",".join(blockers)[:200]
-            if verdict.get("reason"):
-                seen[key]["fine_reason"] = str(verdict["reason"])[:200]
-            continue
-
-
-        entry = {"id": key, "repo": repo, "number": number, "title": title,
-                 "url": it.get("url") or f"https://github.com/{repo}/issues/{number}",
-                 "lane": lane, "blockers": blockers,
-                 # 顶层也放一份 labels：PR 门禁要按标签判断这个仓库允不允许未受邀 PR。
-                 # 只在 signals 里放会让 entry["labels"] 永远为空（2026-10-30 实测
-                 # 0/210 个候选有顶层 labels），门禁于是对 requires_invite:false 的
-                 # 仓库无条件放行、对 true 的永远拒绝——两头都错。
-                 "labels": labels,
-                 "ai_verdict": verdict,
-                 "created_at": it.get("created_at", ""),
-                 "discovered_at": now_iso, "status": "new", "lease": None,
-                 "source": "cloudflare-worker",
-                 # 16000：AI 细筛需要完整复现步骤、环境说明和全部评论
-                 "body_excerpt": body[:16000]}
-        q[key] = entry
-        seen[key] = {"first_seen": now_iso, "status": "queued"}
-        seen_dirty = True
-        queued += 1
-        added.append(key)
-    if queued:
-        atomic_json_write(ds.root / "queue" / "candidates.json", q)
-    # seen 的否决类状态（too_fresh/blocked/rejected）也要落盘——否则每轮
-    # 重新评估，且事后无法回答"这个 issue 为什么没被处理"
-    if queued or seen_dirty:
-        atomic_json_write(seen_path, seen)
-    return queued, added
+            except Exception as ex:
+                verdict = {"usable": None, "reason": f"scorer error: {ex}"[:200]}
+        now = business_now().isoformat(timespec="seconds")
+        rec = {"first_seen": prior.get("first_seen") or now, "fingerprint": fingerprint,
+               "status": "blocked" if blockers else "queued" if verdict.get("usable") is True else
+                         "rejected" if verdict.get("usable") is False else "retry",
+               "coarse_reason": ",".join(blockers), "fine_reason": str(verdict.get("reason") or "")[:300]}
+        with queue_transaction(ds.root) as q:
+            seen = _read_json(seen_path, {})()
+            if not blockers and verdict.get("usable") is True and key not in q:
+                q[key] = {**it, "id": key, "repo": repo, "number": number, "lane": lane,
+                          "labels": labels, "blockers": [], "ai_verdict": verdict,
+                          "discovered_at": now, "status": "new", "lease": None,
+                          "source": "cloudflare-worker", "screened_at": now,
+                          "url": it.get("url") or f"https://github.com/{repo}/issues/{number}"}
+                added.append(key)
+            seen[key] = rec
+            atomic_json_write(seen_path, seen)
+    return len(added), added
 
 
 def _read_json(path: Path, default):
@@ -1007,7 +952,12 @@ def cloudflare_pull(ds) -> dict:
         except Exception as e:  # noqa: BLE001
             return {"pulled": pulled, "ingested": ingested, "error": str(e)[:200]}
         pulled += 1
-        ingested += ingest_cloudflare_issues(ds, payload.get("issues") or [])
+        from scout_v2.state_store import IssueInbox
+        inbox = IssueInbox(ds.root)
+        try:
+            ingested += inbox.put(payload.get("issues") or [])
+        finally:
+            inbox.close()
         try:
             _req(f"{base}/values/{key}", method="DELETE")
         except Exception:  # noqa: BLE001

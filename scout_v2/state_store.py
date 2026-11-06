@@ -1,12 +1,7 @@
-"""状态存储：统一写路径、worklog 账本、SQLite 认领锁与 Job 存储（计划 §13）。
+"""Durable inbox, daily start ledger, job state and serialized JSON queue writes.
 
-设计裁定（docs/p0_audit.md §3）：
-- 候选真值仍是 queue/candidates.json（discover.py 兼容）；SQLite 只管 Job/租约/认领锁，
-  认领**事实**以 worklog 为准，SQLite 锁只做并发闸。
-- atomic_json_write 在 discover.py 的临时文件+replace 基础上补两道（10-22 0x00 损坏教训）：
-  fsync 后回读 json 解析校验；保留上一版滚动 .bak。
-- 每日认领上限：事务内先查 SQLite 当日记录，再查 worklog 当日 claim/awaiting_assignment，
-  两者任一命中即拒绝（跨窗口/跨进程统一计数）。
+Queue JSON remains compatible with readers; queue_transaction owns runtime mutations.
+ClaimLedger retains every started repair for its Asia/Shanghai business day.
 """
 from __future__ import annotations
 
@@ -17,6 +12,7 @@ import sqlite3
 import tempfile
 from pathlib import Path
 from zoneinfo import ZoneInfo
+from contextlib import contextmanager
 
 JOB_STATES = ("queued", "leased", "running", "collecting",
               "succeeded", "failed", "inconclusive", "blocked")
@@ -33,7 +29,109 @@ def business_day(ts: dt.datetime, tz_name: str) -> str:
 
 
 def now_local_iso() -> str:
-    return dt.datetime.now().isoformat(timespec="seconds")
+    return business_now().isoformat(timespec="seconds")
+
+
+def business_now(tz_name: str = "Asia/Shanghai") -> dt.datetime:
+    return dt.datetime.now(ZoneInfo(tz_name))
+
+
+@contextmanager
+def queue_transaction(root: Path):
+    """Serialize queue read/modify/write across threads and processes.
+
+    A separate SQLite lock avoids nesting the quota database's transactions.
+    Network calls must happen outside this short transaction.
+    """
+    root = Path(root)
+    (root / "state").mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(root / "state/queue_lock.sqlite3"), timeout=60,
+                           isolation_level=None)
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        path = root / "queue/candidates.json"
+        queue = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+        original = json.dumps(queue, ensure_ascii=False, sort_keys=True)
+        yield queue
+        if original != json.dumps(queue, ensure_ascii=False, sort_keys=True):
+            atomic_json_write(path, queue)
+        conn.execute("COMMIT")
+    except BaseException:
+        if conn.in_transaction:
+            conn.execute("ROLLBACK")
+        raise
+    finally:
+        conn.close()
+
+
+class IssueInbox:
+    """Durable ingestion; HTTP acknowledges storage, never an AI network call."""
+
+    def __init__(self, root: Path):
+        self.root = Path(root)
+        (self.root / "state").mkdir(parents=True, exist_ok=True)
+        self.conn = sqlite3.connect(str(self.root / "state/issue_inbox.sqlite3"),
+                                    timeout=30, isolation_level=None)
+        self.conn.execute("PRAGMA journal_mode=WAL")
+        self.conn.execute("CREATE TABLE IF NOT EXISTS inbox ("
+                          "key TEXT PRIMARY KEY, payload TEXT NOT NULL, version INTEGER NOT NULL DEFAULT 1,"
+                          "ready REAL NOT NULL DEFAULT 0, lease_until REAL NOT NULL DEFAULT 0,"
+                          "attempts INTEGER NOT NULL DEFAULT 0, error TEXT NOT NULL DEFAULT '')")
+        if "done_version" not in {r[1] for r in self.conn.execute("PRAGMA table_info(inbox)")}:
+            try:
+                self.conn.execute("ALTER TABLE inbox ADD COLUMN done_version INTEGER NOT NULL DEFAULT 0")
+            except sqlite3.OperationalError:
+                if "done_version" not in {r[1] for r in self.conn.execute("PRAGMA table_info(inbox)")}:
+                    raise
+
+
+    def close(self):
+        self.conn.close()
+
+    def put(self, issues: list[dict]) -> int:
+        self.conn.execute("BEGIN IMMEDIATE")
+        try:
+            for issue in issues:
+                key = f"{issue['repo']}#{issue['number']}"
+                payload = json.dumps(issue, ensure_ascii=False)
+                self.conn.execute("INSERT INTO inbox(key,payload) VALUES (?,?) "
+                                  "ON CONFLICT(key) DO UPDATE SET payload=excluded.payload, "
+                                  "version=inbox.version+1,ready=0,error='' WHERE inbox.payload<>excluded.payload",
+                                  (key, payload))
+            self.conn.execute("COMMIT")
+        except BaseException:
+            self.conn.execute("ROLLBACK")
+            raise
+        return len(issues)
+
+    def take(self):
+        import time
+        now = time.time()
+        self.conn.execute("BEGIN IMMEDIATE")
+        try:
+            row = self.conn.execute("SELECT key,payload,version,attempts FROM inbox "
+                                    "WHERE done_version<version AND ready<=? AND lease_until<=? ORDER BY rowid LIMIT 1",
+                                    (now, now)).fetchone()
+            if row:
+                self.conn.execute("UPDATE inbox SET lease_until=? WHERE key=?", (now + 900, row[0]))
+            self.conn.execute("COMMIT")
+        except BaseException:
+            self.conn.execute("ROLLBACK")
+            raise
+        return row
+
+    def finish(self, key, version, error="", attempts=0):
+        import time
+        if error:
+            self.conn.execute("UPDATE inbox SET ready=?,lease_until=0,attempts=attempts+1,error=? "
+                              "WHERE key=? AND version=?", (time.time() + min(3600, 30 * 2 ** min(attempts, 7)),
+                                                            error[:300], key, version))
+            self.conn.execute("UPDATE inbox SET lease_until=0 WHERE key=? AND version<>?", (key, version))
+        else:
+            # Keep a tombstone: overlapping Worker windows must not refetch full
+            # GitHub context for every already-processed payload every minute.
+            self.conn.execute("UPDATE inbox SET done_version=MAX(done_version,?),lease_until=0,attempts=0,error='' WHERE key=?",
+                              (version, key))
 
 
 def atomic_json_write(path: Path, data, verify: bool = True, backup: bool = True) -> None:
@@ -105,7 +203,7 @@ class Worklog:
         就把当天真实机会挤掉了（2026-10-28 实测：fixture 演练 6 次，真实 issue
         被日闸拦下）。
         """
-        now = now or dt.datetime.now()
+        now = now or business_now(tz_name)
         today = business_day(now, tz_name)
         skip = skip_targets or set()
         hits = []
@@ -164,7 +262,7 @@ class ClaimLedger:
             return
         pk_cols = [r[1] for r in self._conn.execute(
             "PRAGMA table_info(claim_days)").fetchall() if r[5]]
-        if pk_cols == ["candidate_id"]:
+        if pk_cols == ["day", "candidate_id"]:
             return          # 已是新结构
 
         # 旧结构：在一个事务里搬数据。BEGIN IMMEDIATE 拿写锁，
@@ -176,7 +274,7 @@ class ClaimLedger:
                 "PRAGMA table_info(claim_days)").fetchall()]
             pk2 = [r[1] for r in self._conn.execute(
                 "PRAGMA table_info(claim_days)").fetchall() if r[5]]
-            if not cols2 or pk2 == ["candidate_id"]:
+            if not cols2 or pk2 == ["day", "candidate_id"]:
                 self._conn.execute("COMMIT")
                 return
             rows = self._conn.execute(
@@ -202,6 +300,42 @@ class ClaimLedger:
     def close(self) -> None:
         self._conn.close()
 
+    def reconcile_legacy_starts(self, worklog: Path, tz_name: str) -> None:
+        """One-time migration: failures refunded by the old code still count today."""
+        import hashlib
+        day = business_now(tz_name).date().isoformat()
+        self._conn.execute("CREATE TABLE IF NOT EXISTS quota_migrations (name TEXT PRIMARY KEY)")
+        self._conn.execute("BEGIN IMMEDIATE")
+        try:
+            name = "daily-starts-2026-11-06"
+            if self._conn.execute("SELECT 1 FROM quota_migrations WHERE name=?", (name,)).fetchone():
+                self._conn.execute("COMMIT")
+                return
+            covered = set()
+            for index, line in enumerate(worklog.read_text(encoding="utf-8").splitlines() if worklog.exists() else []):
+                try:
+                    rec = json.loads(line)
+                    ts = dt.datetime.fromisoformat(rec.get("ts", "").replace("Z", "+00:00"))
+                except (ValueError, TypeError):
+                    continue
+                if rec.get("action") != "claim" or business_day(ts, tz_name) != day:
+                    continue
+                cid = str(rec.get("target") or "")
+                if not cid:
+                    continue
+                if cid not in covered:
+                    key = cid
+                    covered.add(cid)
+                else:
+                    key = "legacy-start:" + hashlib.sha256(f"{index}:{line}".encode()).hexdigest()
+                self._conn.execute("INSERT OR IGNORE INTO claim_days(day,candidate_id,action,ts) VALUES (?,?,?,?)",
+                                   (day, key, "claim", rec["ts"]))
+            self._conn.execute("INSERT INTO quota_migrations VALUES (?)", (name,))
+            self._conn.execute("COMMIT")
+        except BaseException:
+            self._conn.execute("ROLLBACK")
+            raise
+
     def claimed_ids(self, day: str) -> list[str]:
         return [r[0] for r in self._conn.execute(
             "SELECT candidate_id FROM claim_days WHERE day=?", (day,)).fetchall()]
@@ -215,7 +349,7 @@ class ClaimLedger:
         BEGIN IMMEDIATE 串行化后：同一条候选已认领过 → 拒绝；当日已达上限 →
         拒绝；否则插入成功。
         """
-        now = now or dt.datetime.now()
+        now = now or business_now(tz_name)
         day = business_day(now, tz_name)
         ts = now_local_iso()
         cur = self._conn.cursor()
@@ -255,7 +389,7 @@ class ClaimLedger:
         额度判断必须读这张表而不是 worklog：表里有唯一约束，worklog 是
         追加日志，重复记录会让计数偏高、把额度误判成已用尽。
         """
-        now = now or dt.datetime.now()
+        now = now or business_now(tz_name)
         day = business_day(now, tz_name)
         row = self._conn.execute(
             "SELECT COUNT(*) FROM claim_days WHERE day=?", (day,)).fetchone()
@@ -272,7 +406,7 @@ class ClaimLedger:
         失败、模型解析失败都算）都会把当日额度清零，下一轮又能开两条。这是
         一天开出 12 个 PR 的第二个原因（第一个是 ingest 绕过额度检查）。
         """
-        now = now or dt.datetime.now()
+        now = now or business_now(tz_name)
         day = business_day(now, tz_name)
         cur = self._conn.execute(
             "DELETE FROM claim_days WHERE day=? AND candidate_id=?", (day, candidate_id))

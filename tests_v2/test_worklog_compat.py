@@ -63,7 +63,7 @@ class TestSchedulerGuard:
         with pytest.raises(ScheduleConflictError):
             scheduled_plan({"scheduler": {"observe_interval_minutes": 15}})
 
-    def test_continuous_consume_rejected(self):
-        from scout_v2.scheduler import ScheduleConflictError, scheduled_plan
-        with pytest.raises(ScheduleConflictError):
-            scheduled_plan({"scheduler": {}, "continuous_consume": True})
+    def test_continuous_consume_uses_shared_fifo(self):
+        from scout_v2.scheduler import scheduled_plan
+        plan = scheduled_plan({"scheduler": {"observe_interval_minutes": 0}, "continuous_consume": True})
+        assert any(t.name == "consume_fifo" and t.interval_minutes == 1 for t in plan)

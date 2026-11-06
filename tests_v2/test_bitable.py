@@ -117,6 +117,30 @@ def fake(monkeypatch):
 
 
 class TestSyncDiff:
+    def test_explicit_complete_empty_snapshot_prunes_old_rows(self, tmp_path, fake):
+        fake.records = {"r1": {"键": "a/b#1"}}
+        out = fb.sync_table(tmp_path, [], table_name=fb.CAND_TABLE_NAME,
+                            fields=fb.CAND_FIELDS, to_fields=fb.cand_row_to_fields,
+                            binding_key="cand_table_id", allow_empty=True)
+        assert out["pruned"] == 1
+        assert fake.deleted == ["r1"]
+
+    def test_unknown_empty_snapshot_keeps_old_rows(self, tmp_path, fake):
+        fake.records = {"r1": {"键": "a/b#1"}}
+        out = fb.sync_rows(tmp_path, [])
+        assert out["pruned"] == 0
+        assert fake.records
+
+    def test_sync_preserves_other_table_bindings(self, tmp_path, fake):
+        fb.save_binding(tmp_path, {"app_token": "app1", "repo_table_id": "repos"})
+        fb.sync_rows(tmp_path, [_row()])
+        assert fb.load_binding(tmp_path)["repo_table_id"] == "repos"
+
+    def test_changing_base_does_not_reuse_old_table_ids(self, tmp_path, fake):
+        fb.save_binding(tmp_path, {"app_token": "old", "pr_table_id": "old_table"})
+        fb.sync_rows(tmp_path, [_row()])
+        assert fb.load_binding(tmp_path)["pr_table_id"] == "tbl1"
+
     class _Fake:
         """按操作记账的假飞书 API。"""
 
@@ -139,6 +163,8 @@ class TestSyncDiff:
                          "关闭时间", "链接", "备注"}
                 items = [{"field_name": n} for n in names]
                 return {"code": 0, "data": {"items": items}}
+            if url.endswith("/fields") and method == "POST":
+                return {"code": 0}
             if "/records?page_size=" in url:
                 items = [{"record_id": rid, "fields": fs}
                          for rid, fs in self.records.items()]

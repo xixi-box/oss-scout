@@ -10,6 +10,7 @@ services:
     volumes:
       - /opt/oss-scout-data:/data   # state/queue/artifacts/configs 持久化
     environment:
+      - TZ=Asia/Shanghai
       - OSSCOUT_DASHBOARD_ROOT=/data
       - DASHBOARD_PASSWORD=${DASHBOARD_PASSWORD}
       - GH_TOKEN=${GH_TOKEN}

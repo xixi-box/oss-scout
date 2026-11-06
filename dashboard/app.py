@@ -110,90 +110,46 @@ def _atomic_write_text(path: Path, text: str) -> None:
 
 
 def _staged_flush_once(root: Path, cfg: dict) -> dict:
-    """凌晨批量处理 staged：粗筛+细筛，合格的立即送修。
+    """Compatibility entrypoint: use the same eligible FIFO and daily ledger."""
+    from scout_v2.workers.auto_pipeline import drain_ai_graded
+    results = drain_ai_graded(root, limit=5, dry_run=False)
+    return {"processed": len(results), "results": results}
 
-    独立成模块级函数以便手动触发（workflow_dispatch → 容器内直调）。
-    返回 {staged, kicked, processed, kicked_keys}。
-    """
-    import datetime as _dt
-    from scout_v2.workers.auto_pipeline import _data_root, candidate_pipeline
-    import importlib.util as _ilu
-    _spec = _ilu.spec_from_file_location(
-        "monitor_prs", Path(__file__).resolve().parents[1] / "scripts" / "monitor_prs.py")
-    _mp = _ilu.module_from_spec(_spec)
-    _spec.loader.exec_module(_mp)
-    recheck_still_worth = _mp.recheck_still_worth
-    from scout_v2.workers.issue_scorer import load_scorer_config, GoClient
-    from scout_v2.state_store import atomic_json_write
-    droot = _data_root(root)
-    qpath = droot / "queue" / "candidates.json"
-    q = json.loads(qpath.read_text(encoding="utf-8"))
-    # 处理 staged（凌晨语义）和 new（手动触发语义）：两者都是"还没消费
-    # 的合格候选"，粗筛+细筛后按名额送修。手动触发时 new 也会被过一遍
-    # 粗筛+细筛——躺了一段时间可能有人已经做了。
-    staged = [(k, e) for k, e in q.items()
-              if (e or {}).get("status") in ("staged", "new")]
-    if not staged:
-        return {"staged": 0, "kicked": 0, "processed": 0}
-    staged.sort(key=lambda kv: str(kv[1].get("staged_at") or ""))
-    cfg_s = load_scorer_config(droot)
-    scorer = None
-    if cfg_s.get("api_key"):
-        scorer = GoClient(key=cfg_s["api_key"],
-                          model=cfg_s.get("model", "deepseek-v4.1-flash"),
-                          timeout=180)
-    kicked, processed, kept = [], [], 0
-    for key, e in staged:
-        ok, reason = recheck_still_worth(key, str(e.get("title") or ""))
-        if not ok:
-            e["status"] = "aborted_competed"
-            e["abort_reason"] = f"morning recheck: {reason}"[:200]
-            kicked.append(key)
-            continue
-        if scorer is None:
-            e["status"] = "new"
-            kept += 1
-            continue
-        verdict = scorer.score_issue({
-            "repo": e.get("repo") or key.partition("#")[0],
-            "number": int(key.partition("#")[2] or 0),
-            "title": e.get("title") or "",
-            "labels": e.get("labels") or [],
-            "reactions": 0, "comments": 0,
-            "body_excerpt": e.get("body_excerpt") or "",
-            "age_hours": None, "reporter_offered_fix": None,
-            "claimish_signal": None})
-        if verdict.get("usable") is not True:
-            e["status"] = "aborted_stale"
-            e["abort_reason"] = ("morning AI re-screen: "
-                                 + str(verdict.get("reason"))[:200])
-            kicked.append(key)
-            continue
-        e["status"] = "new"
-        kept += 1
-        processed.append(key)
-    atomic_json_write(qpath, q)
-    try:
-        _audit(root, "staged_flush",
-               f"{len(staged)} staged | kicked={len(kicked)} processed={len(processed)}",
-               "kicked: " + ", ".join(kicked[:5]))
-        from scout_v2.notify import feishu_send
-        feishu_send(
-            f"🌅 凌晨批量处理：{len(staged)} 条暂存",
-            f"踢出 {len(kicked)} 条（被做/不合格），送修 {len(processed)} 条")
-    except Exception:  # noqa: BLE001
-        pass
-    for key in processed:
-        e = q.get(key) or {}
+
+def _sync_bitables(root: Path) -> dict:
+    """Independent table snapshots; a failed source cannot clear remote data."""
+    from scout_v2 import feishu_bitable as fb
+    import importlib.util
+    if not fb.configured(root):
+        return {"configured": False}
+    spec = importlib.util.spec_from_file_location("monitor_prs", PROJECT_ROOT / "scripts/monitor_prs.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    results = {}
+    tables = [
+        ("pr", mod.build_pr_rows, fb.TABLE_NAME, fb.FIELDS, fb.row_to_fields, "pr_table_id", None),
+        ("repos", mod.build_repo_rows, fb.REPO_TABLE_NAME, fb.REPO_FIELDS, fb.repo_row_to_fields, "repo_table_id", root / "configs/repositories.yaml"),
+        ("scan", mod.build_scan_rows, fb.SCAN_TABLE_NAME, fb.SCAN_FIELDS, fb.scan_row_to_fields, "scan_table_id", root / "state/seen.json"),
+        ("candidates", mod.build_candidate_rows, fb.CAND_TABLE_NAME, fb.CAND_FIELDS, fb.cand_row_to_fields, "cand_table_id", root / "queue/candidates.json"),
+    ]
+    for name, build, table, fields, convert, binding, source in tables:
         try:
-            out = candidate_pipeline(droot, e)
-            _audit(root, "auto_repair", key,
-                   json.dumps(out, ensure_ascii=False)[:400])
-        except Exception as ex:  # noqa: BLE001
-            _audit(root, "auto_repair_error", key, str(ex)[:200])
-    return {"staged": len(staged), "kicked": len(kicked),
-            "processed": len(processed), "kept": kept,
-            "kicked_keys": kicked[:20], "processed_keys": processed[:20]}
+            # Builders tolerate corrupt/missing files by returning []; validate first.
+            if source:
+                raw = source.read_text(encoding="utf-8")
+                yaml.safe_load(raw) if source.suffix == ".yaml" else json.loads(raw)
+            rows = build(root)
+            if name == "pr" and not rows:
+                results[name] = {"skipped": "no complete GitHub snapshot"}
+                continue
+            results[name] = fb.sync_table(root, rows, table_name=table, fields=fields,
+                                          to_fields=convert, binding_key=binding,
+                                          allow_empty=source is not None)
+            _audit(root, "bitable_sync_" + name, table, json.dumps(results[name]))
+        except Exception as ex:
+            results[name] = {"error": str(ex)[:200]}
+            _audit(root, "bitable_sync_error", name, str(ex)[:200])
+    return results
 
 
 def _notify_draft(root: Path, r: dict, draft: dict) -> None:
@@ -361,10 +317,11 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
     # workflow_dispatch，不 clone 也不编译），所以这里的上限跟 VPS 算力无关，
     # 只用来防止一次性把几百条一起甩给 Actions 打爆自动化的并发配额。
     # repair job 没有 concurrency 组，可以并行跑，实测 3 条同时在飞。
-    _MAX_CONCURRENT = 10
+    _MAX_CONCURRENT = 1
 
     def _run_one(entry: dict) -> None:
         key = str(entry.get("id", ""))
+        out = {}
         try:
             from scout_v2.workers.auto_pipeline import candidate_pipeline
             out = candidate_pipeline(root, entry)
@@ -377,6 +334,10 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
         finally:
             with _inflight_lock:
                 _inflight.pop(key, None)
+            current = _load_candidate(root, key) or {}
+            if out.get("abort") != "dispatcher busy" and current.get("status") not in (
+                    "new", "queued", "recheck_failed", "staged"):
+                _dispatch()
 
     def _claims_left() -> int:
         """当日还剩几个新认领额度。上限 0（或不限）时返回一个很大的数。"""
@@ -469,24 +430,23 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
         if os.environ.get("OSSCOUT_DISABLE_AUTO_REPAIR") == "1":
             return started
         try:
+            from scout_v2.workers.auto_pipeline import expire_staged
+            expire_staged(root)
             with _inflight_lock:
                 room = _MAX_CONCURRENT - len(_inflight)
-            room = min(room, _claims_left())
+            left = _claims_left()
+            if left <= 0:
+                from scout_v2.workers.auto_pipeline import _stage_candidates
+                queued = json.loads((root / "queue/candidates.json").read_text(encoding="utf-8"))
+                _stage_candidates(root, [k for k, e in queued.items()
+                                        if e.get("status") in ("new", "queued", "recheck_failed", "staged")])
+                return started
+            room = min(room, left)
             if room <= 0:
                 return started
             from scout_v2.workers.auto_pipeline import drain_ai_graded
-            if keys is None:
-                cands = [c["id"] for c in
-                         drain_ai_graded(root, limit=room, dry_run=True,
-                                         max_new_claims=room)]
-            else:
-                # ingest 即时触发：只取当日额度内的前 N 条，其余标成暂存留给
-                # 下一轮（drain_ai_graded 会按"暂存优先"重新排序）。
-                cands = list(keys)[:room]
-                rest = list(keys)[room:]
-                if rest:
-                    from scout_v2.workers.auto_pipeline import _data_root
-                    _stage_candidates(_data_root(root), rest)
+            # Every trigger chooses from the complete FIFO, including old backlog.
+            cands = [c["id"] for c in drain_ai_graded(root, limit=room, dry_run=True)]
             for key in cands:
                 with _inflight_lock:
                     if len(_inflight) >= _MAX_CONCURRENT:
@@ -544,56 +504,48 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
 
         _thr.Thread(target=_loop, daemon=True).start()
 
-    def _staged_flush_loop():
-        """每天凌晨处理 staged 候选：粗筛+细筛，合格的按日期从前往后消费。
-
-        设计（用户裁定 2026-11-05 二次修订）：
-          白天  → 每分钟发现并消费，名额满了就标 staged
-          凌晨  → 逐条处理 staged：
-                    粗筛（规则）：issue 是否还 open/无人认领/无关联 PR——
-                      有人做了直接踢出
-                    细筛（AI，复用入队时同一评分器）：躺了一晚上可能有新评论、
-                      上下文可能变了，重跑一次判定，不合格踢出
-                    合格 → 立即送 candidate_pipeline 修复（占当日名额）
-                  顺序：staged_at 从前往后（最早排队的先做）
-        AI 调用失败不踢出（保守：保留到下一轮，宁可重评也不误杀）。
-
-        时间取 configs/dashboard.yaml 的 staged_flush_hour_local（默认 4 点，
-        与 bug hunter 同档，避开白天 Actions 高峰）。
-        """
-        import datetime as _dt
-        import threading as _th
-        import time as _t
-
-        def _flush_once(cfg: dict) -> None:
-            # 时间窗判断后调模块级实现（粗筛+细筛+立即送修，见 _staged_flush_once）
-            hour = int(cfg.get("staged_flush_hour_local", 4))
-            now = _dt.datetime.now()
-            window_end = (_dt.datetime.combine(now.date(), _dt.time(hour, 0))
-                          + _dt.timedelta(hours=1)).time()
-            if not (_dt.time(hour, 0) <= now.time() <= window_end):
-                return
-            _staged_flush_once(root, cfg)
-
-
+    def _intake_loop():
+        """Recoverable background AI screening; request handlers only store input."""
         def _loop():
-            last_day = ""
+            from scout_v2.state_store import IssueInbox
+            if os.environ.get("OSSCOUT_DISABLE_AUTO_REPAIR") == "1":
+                return
             while True:
+                inbox = None
                 try:
-                    cfg = D.dashboard_settings(ds)
-                    now = _dt.datetime.now()
-                    today = now.strftime("%Y-%m-%d")
-                    if now.hour >= 4 and last_day != today:
-                        _flush_once(cfg)
-                        last_day = today
-                except Exception as e:  # noqa: BLE001
+                    inbox = IssueInbox(root)
+                    row = inbox.take()
+                    if not row:
+                        time.sleep(2)
+                        continue
+                    key, payload, version, attempts = row
                     try:
-                        _audit(root, "staged_flush_error", "-", str(e)[:200])
-                    except Exception:  # noqa: BLE001
+                        queue = json.loads((root / "queue/candidates.json").read_text(encoding="utf-8"))
+                        if key in queue:
+                            inbox.finish(key, version)
+                            continue
+                        item = D.refresh_issue(json.loads(payload))
+                        queued, added = D.ingest_cloudflare_issues(ds, [item])
+                        seen = json.loads((root / "state/seen.json").read_text(encoding="utf-8"))
+                        rec = seen.get(key) or {}
+                        if rec.get("status") == "retry":
+                            raise RuntimeError(rec.get("fine_reason") or "AI unavailable")
+                        inbox.finish(key, version)
+                        if added:
+                            _dispatch()
+                    except Exception as ex:
+                        inbox.finish(key, version, str(ex), attempts)
+                        _audit(root, "intake_retry", key, str(ex)[:200])
+                except Exception as ex:
+                    try:
+                        _audit(root, "intake_loop_error", "-", str(ex)[:200])
+                    except Exception:
                         pass
-                _t.sleep(600)   # 每 10 分钟看一次"是否到点"
-
-        _th.Thread(target=_loop, daemon=True).start()
+                    time.sleep(5)
+                finally:
+                    if inbox is not None:
+                        inbox.close()
+        _thr.Thread(target=_loop, daemon=True, name="issue-screening").start()
 
     def _pr_watch_loop():
         """盯着我们开出去的 PR：CI 红了留痕，并把 PR 列表同步给 Worker。
@@ -720,46 +672,6 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
                             except Exception as e:  # noqa: BLE001
                                 _audit(root, "pr_draft_error", key, str(e)[:200])
 
-                    # 飞书多维表格：三张表随监控循环同步（15 分钟一轮）。
-                    # 数据源都是本地文件 + gh，互相独立，单表失败不影响其余；
-                    # 失败只留审计，不影响监控循环。
-                    try:
-                        from scout_v2 import feishu_bitable as FB
-                        if FB.configured(root):
-                            pr_rows = mod.build_pr_rows(root)
-                            if pr_rows:
-                                out = FB.sync_rows(root, pr_rows)
-                                _audit(root, "bitable_sync_pr", f"{len(pr_rows)} rows",
-                                       json.dumps(out, ensure_ascii=False))
-                            repo_rows = mod.build_repo_rows(root)
-                            if repo_rows:
-                                out = FB.sync_table(
-                                    root, repo_rows, table_name=FB.REPO_TABLE_NAME,
-                                    fields=FB.REPO_FIELDS,
-                                    to_fields=FB.repo_row_to_fields,
-                                    binding_key="repo_table_id")
-                                _audit(root, "bitable_sync_repos", f"{len(repo_rows)} rows",
-                                       json.dumps(out, ensure_ascii=False))
-                            scan_rows = mod.build_scan_rows(root)
-                            if scan_rows:
-                                out = FB.sync_table(
-                                    root, scan_rows, table_name=FB.SCAN_TABLE_NAME,
-                                    fields=FB.SCAN_FIELDS,
-                                    to_fields=FB.scan_row_to_fields,
-                                    binding_key="scan_table_id")
-                                _audit(root, "bitable_sync_scan", f"{len(scan_rows)} rows",
-                                       json.dumps(out, ensure_ascii=False))
-                            cand_rows = mod.build_candidate_rows(root)
-                            if cand_rows:
-                                out = FB.sync_table(
-                                    root, cand_rows, table_name=FB.CAND_TABLE_NAME,
-                                    fields=FB.CAND_FIELDS,
-                                    to_fields=FB.cand_row_to_fields,
-                                    binding_key="cand_table_id")
-                                _audit(root, "bitable_sync_cand", f"{len(cand_rows)} rows",
-                                       json.dumps(out, ensure_ascii=False))
-                    except Exception as e:  # noqa: BLE001
-                        _audit(root, "bitable_sync_error", "-", str(e)[:200])
                 except Exception as e:  # noqa: BLE001
                     try:
                         _audit(root, "pr_watch_error", "-", str(e)[:200])
@@ -768,6 +680,19 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
                 _t.sleep(900)
 
         _thr.Thread(target=_loop, daemon=True).start()
+
+    def _bitable_loop():
+        def _loop():
+            if os.environ.get("OSSCOUT_DISABLE_AUTO_REPAIR") == "1":
+                return
+            time.sleep(10)
+            while True:
+                try:
+                    _sync_bitables(root)
+                except Exception as ex:
+                    _audit(root, "bitable_sync_error", "-", str(ex)[:200])
+                time.sleep(900)
+        _thr.Thread(target=_loop, daemon=True, name="bitable-sync").start()
 
     def _cf_poll_loop():
         """从 CF KV 拉取 Worker 发现的**兜底**通道（主通道是 Worker 直接 POST）。
@@ -797,46 +722,28 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
     ds = D.DataSource(root, gh_runner=gh_runner, modal_runner=modal_runner)
 
     def _reap_orphan_claim():
-        """启动时清理孤儿认领：容器若在上次 pipeline 执行中重启（如部署覆盖），
-        sqlite 里已提交的认领行没有对应的终态记录，会把当日额度占死
-        （2026-10-27 opencode#59317 事故）。判定：认领的候选 status 仍是
-        new/recheck_failed（无终态标记）→ 释放，自动线程 5 分钟内会重试。"""
+        from scout_v2.state_store import queue_transaction, ClaimLedger
+        ledger = ClaimLedger(root / "state/scout_v2.sqlite3")
         try:
-            import datetime as _dt
-            import sqlite3
-            db = root / "state" / "scout_v2.sqlite3"
-            if not db.exists():
-                return
-            conn = sqlite3.connect(str(db), timeout=15)
-            try:
-                today = _dt.date.today().isoformat()
-                rows = conn.execute(
-                    "SELECT candidate_id FROM claim_days WHERE day=?", (today,)).fetchall()
-                if not rows:
-                    return
-                q = json.loads((root / "queue" / "candidates.json").read_text(encoding="utf-8"))
-                for (cid,) in rows:
-                    entry = q.get(cid)
-                    status = (entry or {}).get("status", "")
-                    if status in ("new", "queued", "queued_hist", "recheck_failed"):
-                        conn.execute("DELETE FROM claim_days WHERE day=? AND candidate_id=?",
-                                     (today, cid))
-                        _audit(root, "orphan_claim_reaped", cid,
-                               f"container restarted mid-pipeline (status={status}); released")
-                conn.commit()
-            finally:
-                conn.close()
-        except Exception as e:  # noqa: BLE001 — 清理失败不阻塞启动
-            try:
-                _audit(root, "orphan_claim_reap_error", "-", str(e)[:150])
-            except Exception:  # noqa: BLE001
-                pass
+            ledger.reconcile_legacy_starts(root / "state/worklog.jsonl", "Asia/Shanghai")
+            previously_started = {r[0] for r in ledger._conn.execute("SELECT DISTINCT candidate_id FROM claim_days")}
+        finally:
+            ledger.close()
+        # A runner may still publish after the controller restarts. Do not resubmit it.
+        with queue_transaction(root) as q:
+            for key, entry in q.items():
+                if entry.get("status") == "running" or (key in previously_started and entry.get("status") in (
+                        "new", "queued", "recheck_failed", "staged")):
+                    entry.update(status="escalated", abort_reason="controller restarted; inspect remote run before retry")
+                    _audit(root, "orphan_requires_review", key, "daily start retained")
 
-    _reap_orphan_claim()
-    _cf_poll_loop()   # 必须在 ds 创建后启动（依赖 ds 读配置）
-    _auto_repair_loop()
-    _pr_watch_loop()  # PR 开出去之后的闭环：盯 CI / 评论
-    _staged_flush_loop()  # 每天凌晨把 staged 批量激活，供当天消费
+    if os.environ.get("OSSCOUT_DISABLE_AUTO_REPAIR") != "1":
+        _reap_orphan_claim()
+        _cf_poll_loop()
+        _intake_loop()
+        _auto_repair_loop()
+        _pr_watch_loop()
+        _bitable_loop()
     app.state.ds = ds
     app.state.root = root
     secret = _secret(root)
@@ -1282,12 +1189,7 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
 
     @app.post("/api/pipeline/run")
     def api_pipeline_run(request: Request):
-        from scout_v2.workers.auto_pipeline import drain_ai_graded
-        out = drain_ai_graded(root, limit=1, dry_run=False)
-        _audit(root, "pipeline_run", "auto", json.dumps(out, ensure_ascii=False)[:400])
-        return JSONResponse({"results": out})
-
-    # ---------------- PR 回复草稿（L3）：起草自动，发送必须人过 ----------------
+        return JSONResponse({"dispatched": _dispatch()})
 
     @app.get("/api/pr/replies")
     def api_pr_replies():
@@ -1392,41 +1294,7 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
     def api_pr_bitable_sync():
         """手动触发一次多维表格同步（也在 pr_watch 循环里 15 分钟一次）。"""
         import importlib.util
-        from scout_v2 import feishu_bitable
-        if not feishu_bitable.configured(root):
-            return JSONResponse({"detail": "feishu app not configured"},
-                                status_code=503)
-        try:
-            import importlib.util
-            spec = importlib.util.spec_from_file_location(
-                "monitor_prs",
-                Path(__file__).resolve().parents[1] / "scripts" / "monitor_prs.py")
-            mod = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(mod)
-            results = {}
-            pr_rows = mod.build_pr_rows(root)
-            results["pr"] = feishu_bitable.sync_rows(root, pr_rows)
-            results["pr"]["rows"] = len(pr_rows)
-            repo_rows = mod.build_repo_rows(root)
-            results["repos"] = feishu_bitable.sync_table(
-                root, repo_rows, table_name=feishu_bitable.REPO_TABLE_NAME,
-                fields=feishu_bitable.REPO_FIELDS,
-                to_fields=feishu_bitable.repo_row_to_fields,
-                binding_key="repo_table_id")
-            results["repos"]["rows"] = len(repo_rows)
-            scan_rows = mod.build_scan_rows(root)
-            results["scan"] = feishu_bitable.sync_table(
-                root, scan_rows, table_name=feishu_bitable.SCAN_TABLE_NAME,
-                fields=feishu_bitable.SCAN_FIELDS,
-                to_fields=feishu_bitable.scan_row_to_fields,
-                binding_key="scan_table_id")
-            results["scan"]["rows"] = len(scan_rows)
-            _audit(root, "bitable_sync_manual", "3 tables",
-                   json.dumps(results, ensure_ascii=False)[:300])
-            return JSONResponse({"ok": True, **results})
-        except Exception as e:  # noqa: BLE001
-            _audit(root, "bitable_sync_error", "-", str(e)[:200])
-            return JSONResponse({"detail": str(e)[:200]}, status_code=502)
+        return JSONResponse(_sync_bitables(root))
 
     @app.post("/api/pr/reply/send")
     def api_pr_reply_send(request: Request, repo: str = Form(""),
@@ -1596,7 +1464,7 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
             return JSONResponse({"detail": "issues must be a list"}, status_code=400)
         # 字段收敛：只保留白名单，防注入超大/异常结构
         clean = []
-        for it in items[:200]:
+        for it in items:
             if not isinstance(it, dict):
                 continue
             clean.append({
@@ -1605,20 +1473,21 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
                 "title": str(it.get("title", ""))[:400],
                 "url": str(it.get("url", ""))[:400],
                 "created_at": str(it.get("created_at", ""))[:40],
+                "updated_at": str(it.get("updated_at", ""))[:40],
+                "issue_comments": it.get("issue_comments") or [],
                 "labels": [str(x)[:60] for x in (it.get("labels") or [])][:20],
                 "reactions": int(it.get("reactions") or 0),
                 "comments": int(it.get("comments") or 0),
-                "body_excerpt": str(it.get("body_excerpt", ""))[:8000],
+                "body_excerpt": str(it.get("body_excerpt", ""))[:65536],
             })
-        queued, added = D.ingest_cloudflare_issues(ds, clean)
-        # 立即派发：AI 刚判定可用的候选不该再排 60 秒的队。_dispatch 只启动
-        # 线程就返回，不阻塞 Worker 的 HTTP 请求（它有超时）。
-        dispatched = _dispatch(keys=added) if added else []
-        _audit(root, "ingest_issues", f"{len(clean)} items",
-               f"queued={queued} dispatched={len(dispatched)} "
-               f"repos={body.get('repos_scanned', '?')}")
-        return JSONResponse({"queued": queued, "received": len(clean),
-                             "dispatched": dispatched})
+        from scout_v2.state_store import IssueInbox
+        inbox = IssueInbox(root)
+        try:
+            stored = inbox.put(clean)
+        finally:
+            inbox.close()
+        _audit(root, "ingest_issues", f"{len(clean)} items", f"durably stored={stored}")
+        return JSONResponse({"queued": stored, "received": len(clean), "dispatched": [], "stored": stored})
 
     @app.post("/api/ingest/pr-comments")
     async def api_ingest_pr_comments(request: Request):
@@ -1715,10 +1584,10 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
 
     @app.post("/api/dashboard/settings")
     def api_dashboard_settings(request: Request,
-                               cf_pull_seconds: int = Form(20),
+                               cf_pull_seconds: int = Form(300),
                                pr_refresh_seconds: int = Form(120),
                                gh_cache_ttl: int = Form(300)):
-        cfg = {"cf_pull_seconds": max(10, min(300, cf_pull_seconds)),
+        cfg = {**D.dashboard_settings(ds), "cf_pull_seconds": max(300, min(3600, cf_pull_seconds)),
                "pr_refresh_seconds": max(30, min(3600, pr_refresh_seconds)),
                "gh_cache_ttl": max(30, min(3600, gh_cache_ttl)),
                "updated_at": time.strftime("%Y-%m-%dT%H:%M:%S")}

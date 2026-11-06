@@ -34,6 +34,7 @@ def opts_cy(spy_cls):
 def _env(min_age: float = 2):
     tmp = Path(tempfile.mkdtemp())
     (tmp / "configs").mkdir(parents=True)
+    (tmp / "AGENTS.md").write_text("# test policy", encoding="utf-8")
     (tmp / "configs" / "repositories.yaml").write_text(yaml.dump({
         "defaults": {"min_issue_age_hours": min_age},
         "repositories": {"a/b": {"lane": "open"}}}), encoding="utf-8")
@@ -162,19 +163,20 @@ def test_body_ai_warning_reaches_the_scorer_prompt():
 
 
 def test_reason_columns_are_split():
-    """粗筛原因（规则否决）与细筛原因（AI 理由）分开记。"""
+    """Mechanical exclusions are recorded separately and skip the AI."""
     ds, tmp = _env()
-    billing = _item("2026-11-01T00:00:00Z")
-    billing["title"] = "[BUG] please refund my subscription"
-    n, _ = D.ingest_cloudflare_issues(ds, [billing])
-    seen = json.loads((tmp / "state" / "seen.json").read_text(encoding="utf-8"))
-    e = seen.get("a/b#99", {})
-    assert e.get("status") == "blocked"
-    assert e.get("coarse_reason"), e
-    assert "why" not in e, "旧单列原因应迁到 coarse/fine"
+    item = _item("2026-11-01T00:00:00Z")
+    item["labels"] = ["duplicate"]
+    n, _ = D.ingest_cloudflare_issues(ds, [item])
+    assert n == 0
+    seen = json.loads((tmp / "state/seen.json").read_text(encoding="utf-8"))
+    assert seen["a/b#99"]["coarse_reason"] == "excluded_label"
+    assert seen["a/b#99"]["status"] == "blocked"
 
 
-def test_old_enough_issue_still_flows_through():
+def test_old_enough_issue_still_flows_through(monkeypatch):
+    monkeypatch.setattr("scout_v2.workers.issue_scorer.GoClient.score_issue",
+                        lambda self, issue: {"usable": None, "reason": "unavailable"})
     ds, tmp = _env()
     old = (dt.datetime.utcnow() - dt.timedelta(hours=6)) \
         .isoformat(timespec="seconds") + "Z"
@@ -182,5 +184,5 @@ def test_old_enough_issue_still_flows_through():
     n, _ = D.ingest_cloudflare_issues(ds, [_item(old)])
     seen = json.loads((tmp / "state" / "seen.json").read_text(encoding="utf-8"))
     status = seen.get("a/b#99", {}).get("status")
-    assert status in ("queued", "rejected", "blocked"), status
+    assert status == "retry", status
     assert status != "too_fresh"

@@ -1,9 +1,4 @@
-"""调度（计划 §14）：P1 只提供配置驱动的调度计划与守门，不实现常驻进程。
-
-守门点：v2.yaml 的节奏若与 Playbook §1.5 冲突（观测 <2h、连续消费开启），
-`scheduled_plan()` 会拒绝输出并要求人工修订 Playbook —— 计划文本允许激进节奏，
-但 Playbook 优先，切换必须人工完成。
-"""
+"""Describe configured discovery and consumption; dashboard hosts the runtime loops."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -25,9 +20,6 @@ def scheduled_plan(v2_cfg: dict) -> list[ScheduledTask]:
     observe = int(sched.get("observe_interval_minutes", 120))
     continuous = bool(v2_cfg.get("continuous_consume", False))
 
-    if continuous:
-        raise ScheduleConflictError(
-            "continuous_consume=true requires Playbook migration (P6 + human review)")
 
     # observe=0 = 停用（发现走 Cloudflare Worker，用户裁定 2026-10-25）
     if observe == 0:
@@ -39,9 +31,11 @@ def scheduled_plan(v2_cfg: dict) -> list[ScheduledTask]:
                 f"observe_interval_minutes={observe} < Playbook's 120min — revise AGENTS.md first")
         plan = [ScheduledTask("observe_discover", observe, "VPS API (discover.py only)")]
 
-    windows = sched.get("consume_windows_local") or ["10:30", "16:30", "22:30"]
-    plan.append(ScheduledTask("consume_window", 0,
-                              f"windows {windows} (pr_monitor → discover → consume)"))
+    if continuous:
+        plan.append(ScheduledTask("consume_fifo", 1, "immediate + FIFO; staged eligible next day 04:00 Asia/Shanghai"))
+    else:
+        windows = sched.get("consume_windows_local") or ["10:30", "16:30", "22:30"]
+        plan.append(ScheduledTask("consume_window", 0, f"windows {windows}"))
     if int(sched.get("health_refresh_after_days", 7)) > 0:
         plan.append(ScheduledTask("health_refresh",
                                   int(sched.get("health_refresh_after_days", 7)) * 24 * 60,

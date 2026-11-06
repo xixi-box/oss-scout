@@ -19,41 +19,53 @@ kv_namespace_id: 06f5c54ef44a4e3ab31f7cf0e45646cc
 # Worker 扫描的仓库列表（与 cloudflare/wrangler.toml 的 REPOS 保持一致）。
 # 这里是给 dashboard 侧参考的副本；真正生效的是 wrangler.toml。
 repos:
-  - vectorize-io/hindsight
-  - tigerless-labs/agent-memory
+  - python/cpython
+  - tiangolo/sqlmodel
+  - encode/starlette
+  - django/django
+  - sqlalchemy/sqlalchemy
+  - pdm-project/pdm
+  - jlowin/fastmcp
+  - run-llama/llama_index
+  - geekan/MetaGPT
+  - microsoft/autogen
+  - google-gemini/gemini-cli
+  - bytedance/deer-flow
+  - agentgateway/agentgateway
+  - milvus-io/milvus
+  - pgvector/pgvector
   - volcengine/OpenViking
   - oceanbase/powercontext
-  - ruvnet/RuVector
-  - openai/openai-agents-python
-  - bytedance/deer-flow
-  - VoltAgent/voltagent
   - HKUDS/RAG-Anything
   - OSU-NLP-Group/HippoRAG
-  - lancedb/lancedb
-  - milvus-io/milvus
-  - qdrant/qdrant
-  - upstash/context7
-  - PrefectHQ/fastmcp
-  - modelcontextprotocol/registry
-  - Arize-ai/phoenix
-  - promptfoo/promptfoo
-  - langfuse/langfuse
-  - confident-ai/deepeval
+  - ruvnet/RuVector
+  - istio/istio
+  - envoyproxy/envoy
+  - traefik/traefik
+  - caddyserver/caddy
+  - containerd/containerd
+  - moby/moby
+  - docker/compose
+  - etcd-io/etcd
+  - minio/minio
+  - prometheus/prometheus
+  - firecracker-microvm/firecracker
+  - dagger/dagger
+  - clickhouse/clickhouse
+  - cockroachdb/cockroach
+  - valkey-io/valkey
+  - apache/kafka
+  - psf/black
+  - prettier/prettier
+  - nodejs/node
+  - pypa/pip
+  - pypa/pipx
   - pypa/virtualenv
   - pypa/pip-tools
   - tox-dev/tox
-  - biomejs/biome
-  - psf/black
-  - firecracker-microvm/firecracker
-  - microsoft/playwright-python
-  - microsoft/playwright
-  - instantdb/instant
-  - liveblocks/liveblocks
+  - python-poetry/poetry
+  - logseq/logseq
   - yjs/yjs
-  - dxos/dxos
-  - tldraw/tldraw
-  - supabase/supabase
-  - zuplo/zudoku
-  - mem0ai/mem0
-  - chroma-core/chroma
-  - pgvector/pgvector
+  - sharkdp/bat
+  - encode/uvicorn
+  - tiangolo/fastapi

@@ -9,7 +9,7 @@ scheduler:
   # 用户裁定（2026-10-25）：issue 发现只依靠 Cloudflare Worker（每分钟），
   # discover.py 兜底扫描已停用。
   observe_interval_minutes: 0          # 0 = 停用（发现走 Cloudflare Worker）
-  consume_windows_local: ["10:30", "16:30", "22:30"]
+  consume_windows_local: []  # 已由 dashboard 的统一 FIFO 派发器替代
   pr_monitor_per_consume: true         # 消费窗口开头先跑 PR 监控段
   health_refresh_after_days: 7
   # v2 计划中的激进节奏（注释，未启用；启用前须修订 Playbook）：
@@ -17,7 +17,7 @@ scheduler:
   # broad_search_interval_minutes: 30
   # pr_monitor_interval_minutes: 60
 
-continuous_consume: false             # 计划 §14：事件驱动消费默认关闭
+continuous_consume: true              # 2026-11-06：事件驱动 + 每分钟兜底；暂存次日 04:00 到期
 
 queue:
   store: "json"                       # 候选真值 = queue/candidates.json（discover.py 兼容）
