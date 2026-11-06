@@ -1,0 +1,104 @@
+_meta:
+  updated: '2026-11-06'
+  说明: 每仓库的 PR 规矩摘要，注入细筛 prompt 的 {repo_rules}。来源：CONTRIBUTING 审计 + 运行实录。仓库规矩变化时更新对应条目。
+rules:
+  HKUDS/RAG-Anything:
+    note: ''
+  OSU-NLP-Group/HippoRAG:
+    note: ''
+  agentgateway/agentgateway:
+    note: ''
+  apache/kafka:
+    note: ''
+  bytedance/deer-flow:
+    note: ''
+  caddyserver/caddy:
+    note: ''
+  clickhouse/clickhouse:
+    note: ''
+  cockroachdb/cockroach:
+    note: ''
+  containerd/containerd:
+    note: ''
+  dagger/dagger:
+    note: ''
+  django/django:
+    note: ''
+  docker/compose:
+    note: ''
+  encode/starlette:
+    note: ''
+  encode/uvicorn:
+    note: ''
+  envoyproxy/envoy:
+    note: ''
+  etcd-io/etcd:
+    note: ''
+  firecracker-microvm/firecracker:
+    note: ''
+  geekan/MetaGPT:
+    note: ''
+  google-gemini/gemini-cli:
+    note: ''
+  istio/istio:
+    note: ''
+  jlowin/fastmcp:
+    note: ''
+  logseq/logseq:
+    note: ''
+  microsoft/autogen:
+    note: ''
+  milvus-io/milvus:
+    note: sre-ci-robot 会自动跑 CI Loop（通报类，不是修复要求）
+  minio/minio:
+    note: ''
+  moby/moby:
+    note: ''
+  nodejs/node:
+    note: ''
+  oceanbase/powercontext:
+    note: ''
+  pdm-project/pdm:
+    note: ''
+  pgvector/pgvector:
+    note: ''
+  prettier/prettier:
+    note: ''
+  prometheus/prometheus:
+    note: ''
+  psf/black:
+    note: ''
+  pypa/pip:
+    note: ''
+  pypa/pip-tools:
+    note: ''
+  pypa/pipx:
+    note: ''
+  pypa/virtualenv:
+    note: ''
+  python-poetry/poetry:
+    note: ''
+  python/cpython:
+    note: ''
+  run-llama/llama_index:
+    note: ''
+  ruvnet/RuVector:
+    note: ''
+  sharkdp/bat:
+    note: ''
+  sqlalchemy/sqlalchemy:
+    note: ''
+  tiangolo/fastapi:
+    note: ''
+  tiangolo/sqlmodel:
+    note: ''
+  tox-dev/tox:
+    note: ''
+  traefik/traefik:
+    note: ''
+  valkey-io/valkey:
+    note: ''
+  volcengine/OpenViking:
+    note: ''
+  yjs/yjs:
+    note: ''

@@ -16,7 +16,7 @@ const EXCLUDED_LABELS = ["invalid", "wontfix", "duplicate", "question", "stale",
   "awaiting more info", "awaiting-more-info", "needs more info", "needs-repro",
   "documentation"];
 
-function collectIssue(issues, repo, it) {
+function collectIssue(issues, repo, it, comments) {
   if (it.pull_request || (it.assignees && it.assignees.length)) return;
   const labels = (it.labels || []).map(l => (typeof l === "string" ? l : l.name));
   if (labels.some(l => EXCLUDED_LABELS.includes(l.toLowerCase()))) return;
@@ -25,9 +25,11 @@ function collectIssue(issues, repo, it) {
     created_at: it.created_at, updated_at: it.updated_at,
     labels, reactions: (it.reactions && it.reactions.total_count) || 0,
     comments: it.comments || 0,
-    // 8000：AI 评分要判断"这个 issue 能不能自动修"，依据是复现步骤、预期行为、
+    // 16000：AI 细筛需要完整复现步骤、环境说明和全部评论
     // 环境说明。4000 常常在代码块中间截断，把可修的 issue 判成"信息不足"。
-    body_excerpt: (it.body || "").slice(0, 8000),
+    body_excerpt: (it.body || "").slice(0, 16000),
+    // 细筛需要评论：认领信号（I'll fix this）、维护者反馈、"已有人修"都在评论里
+    issue_comments: (comments || []).slice(0, 20),
   });
 }
 
@@ -79,8 +81,37 @@ async function pollOnce(env) {
       errors.push(`${repo}: ${String(e).slice(0, 80)}`);
     }
   }
-  // 不做补扫：新仓库进池只看增量。新增仓库是低频动作，进池当天手动
-  // 扫一遍（或等 issue 自然更新）就够了，不值得为它每分钟多打一次 API。
+  // 评论拉取（细筛需要评论：认领信号、维护者反馈、"已有人修"都在评论里）。
+  // 轮转：每分钟给一个仓库拉最新 issue 的评论，50 仓 ≈ 50 分钟轮完一圈；
+  // API 成本 1 call/分钟（限额 5000/h，无压力）。
+  if (repos.length) {
+    const cr_repo = repos[now.getUTCMinutes() % repos.length];
+    try {
+      const cr = await fetch(
+        `https://api.github.com/repos/${cr_repo}/issues?state=open&sort=updated` +
+        `&direction=desc&per_page=10`,
+        { headers: ghHeaders(env.GH_TOKEN) });
+      if (cr.ok) {
+        for (const it of await cr.json()) {
+          if (it.pull_request || (it.comments || 0) <= 0) continue;
+          try {
+            const cres = await fetch(
+              `https://api.github.com/repos/${cr_repo}/issues/${it.number}/comments?per_page=30`,
+              { headers: ghHeaders(env.GH_TOKEN) });
+            const cs = cres.ok ? await cres.json() : [];
+            collectIssue(issues, cr_repo, it, cs.map(c => ({
+              author: (c.user && c.user.login) || "?",
+              created_at: c.created_at || "",
+              body: (c.body || "").slice(0, 1500),
+            })));
+          } catch (e) { /* 评论拉取失败不影响主发现 */ }
+        }
+      }
+    } catch (e) {
+      errors.push(`${cr_repo} (comments): ${String(e).slice(0, 80)}`);
+    }
+  }
+
 
   // 诊断键：降频到每 30 分钟 或 有错误时写。
   // KV 免费档仅 1000 write/天——原来每分钟写 = 1440/天，单这一项就超额（2026-10-25 实测 2139）。

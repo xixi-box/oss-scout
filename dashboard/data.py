@@ -744,6 +744,25 @@ _RE_OFFER = __import__("re").compile(
 # "the fix maybe is not trivial to ask AI to do it"、维护者在评论里派单
 # "you can fix this and I can try to review"。Worker 事件只有 body 没有
 # 评论列表，先把 body 里命中的句子喂给评分层。
+_REPO_RULES_CACHE: dict | None = None
+
+
+def repo_rules_text(repo: str) -> str:
+    """该仓库的 PR 规矩摘要（configs/repo_rules.yaml），供细筛 prompt 注入。"""
+    global _REPO_RULES_CACHE
+    if _REPO_RULES_CACHE is None:
+        try:
+            p = Path(__file__).resolve().parents[1] / "configs" / "repo_rules.yaml"
+            import yaml as _yaml
+            d = _yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+            _REPO_RULES_CACHE = d.get("rules") or {}
+        except Exception:  # noqa: BLE001
+            _REPO_RULES_CACHE = {}
+    rule = _REPO_RULES_CACHE.get(repo) or {}
+    note = str(rule.get("note") or "").strip()
+    return note if note else "none recorded"
+
+
 _RE_CLAIMISH = re.compile(
     r"not\s+(?:trivial|easy|suitable|appropriate|realistic)\s+(?:enough\s+)?"
     r"(?:for|to\s+ask|to)\s+(?:an?\s+)?(?:ai|agent|llm|bot)"
@@ -828,38 +847,23 @@ def ingest_cloudflare_issues(ds, items: list[dict]) -> tuple[int, list[str]]:
         body = str(it.get("body_excerpt", ""))
         labels = [str(l) for l in (it.get("labels") or [])]
 
-        # 年龄与"提出者想自己修"不是硬闸，而是交给 AI 判定的信号
-        # （用户裁定 2026-11-05）：粗筛不再按年龄拦（原先 2h 闸会误杀真正
-        # 值得做的年轻 issue，也更可能因为"看到就想抢"而冒犯报告者）；
-        # 让 AI 在评分时权衡"太新鲜 + 报告者已提出要自己修 → 不动"。
-        pool_defaults = {}
-        try:
-            import yaml as _yaml
-            pool_defaults = _yaml.safe_load(
-                (ds.root / "configs" / "repositories.yaml")
-                .read_text(encoding="utf-8")) or {}
-        except Exception:  # noqa: BLE001
-            pool_defaults = {}
-        created = str(it.get("created_at") or "")
-        age_h = None
-        if created:
-            try:
-                created_dt = dt.datetime.fromisoformat(
-                    created.replace("Z", "+00:00")).replace(tzinfo=None)
-                age_h = (dt.datetime.utcnow() - created_dt).total_seconds() / 3600
-            except ValueError:
-                age_h = None
-
+        # 年龄不是输入（用户裁定 2026-11-06）：哪怕很新鲜，只要报告者没有
+        # 明显要修的信号，我们也要修。细筛的"让位"判定只看：
+        #   · 报告者主动表示要自己修（_RE_OFFER）
+        #   · 正文里出现认领/派单/禁 AI 句子（_RE_CLAIMISH，随评论位进 prompt）
 
         # 客观否决（不需要 AI 判断的事实）：标题像提问、纯文档、计费抱怨。
         # 这类连调 AI 都省了。其余交给 AI 判断"能不能自动处理"。
         claim_sents = _claimish_sentences(body)
-        signals = {"age_hours": round(age_h, 1) if age_h is not None else None,
-                   # 报告者主动表示要自己修 → AI 应当让位（礼貌与声誉）
-                   "reporter_offered_fix": bool(_RE_OFFER.search(body)),
-                   # body 里出现认领/派单/禁 AI 句子 → 原句随 comments_block
-                   # 进 prompt（claimish_signal 供规则层/展示层引用）
-                   "claimish_signal": bool(claim_sents)}
+        signals = {
+            # 报告者主动表示要自己修 → AI 应当让位（礼貌与声誉）
+            "reporter_offered_fix": bool(_RE_OFFER.search(body)),
+            # body 里出现认领/派单/禁 AI 句子 → 原句随 comments_block 进 prompt
+            "claimish_signal": bool(claim_sents),
+            # Worker 顺带拉来的评论（细筛需要：认领信号、维护者反馈、
+            # "已有人修"都在评论里——clickhouse#126287 实录）
+            "issue_comments": it.get("issue_comments") or [],
+        }
         blockers: list[str] = []
         if discover.RE_BILLING.search(title):
             blockers.append("billing_complaint")
@@ -880,15 +884,17 @@ def ingest_cloudflare_issues(ds, items: list[dict]) -> tuple[int, list[str]]:
                     "repo": repo, "number": number, "title": title,
                     "labels": labels, "reactions": int(it.get("reactions") or 0),
                     "num_comments": int(it.get("comments") or 0),
-                    # Worker 事件没有评论列表；把 body 里命中的认领/派单/
-                    # 禁 AI 句子伪装成评论文摘送进 prompt（clickhouse#126287）
-                    "comments": [{"author": "body signal", "body": s}
-                                 for s in claim_sents],
+                    # 真评论（Worker 轮转拉取）优先；没有时把 body 里命中的
+                    # 认领/派单/禁 AI 句子伪装成评论文摘送进 prompt
+                    "comments": ([{"author": c.get("author") or "?",
+                                   "body": str(c.get("body") or "")[:1500]}
+                                  for c in signals.get("issue_comments")][:20]
+                                 or [{"author": "body signal", "body": s}
+                                     for s in claim_sents]),
                     "body_excerpt": body,
-                    "age_hours": signals.get("age_hours"),
-                    "reporter_offered_fix":
-                        signals.get("reporter_offered_fix"),
-                    "claimish_signal": signals.get("claimish_signal")})
+                    "reporter_offered_fix": signals.get("reporter_offered_fix"),
+                    "claimish_signal": signals.get("claimish_signal"),
+                    "repo_rules": repo_rules_text(repo)})
             except Exception as ex:  # noqa: BLE001 — 评分失败不阻塞入队，留给人工看
                 verdict = {"usable": None, "reason": f"scorer error: {ex}"[:200],
                            "model": None}
@@ -919,8 +925,8 @@ def ingest_cloudflare_issues(ds, items: list[dict]) -> tuple[int, list[str]]:
                  "created_at": it.get("created_at", ""),
                  "discovered_at": now_iso, "status": "new", "lease": None,
                  "source": "cloudflare-worker",
-                 # 8000 而非 2000：AI 要判断"能否自动修"，需要看完整的复现步骤和预期行为
-                 "body_excerpt": body[:8000]}
+                 # 16000：AI 细筛需要完整复现步骤、环境说明和全部评论
+                 "body_excerpt": body[:16000]}
         q[key] = entry
         seen[key] = {"first_seen": now_iso, "status": "queued"}
         seen_dirty = True

@@ -81,8 +81,8 @@ def test_fresh_issue_still_reaches_the_ai():
     finally:
         isc.GoClient = orig
     assert called, "fresh issue must still be scored by AI"
-    assert called[0]["age_hours"] is not None
-    assert called[0]["age_hours"] < 0.1
+    # 年龄已从输入删除（用户裁定 2026-11-06）：不该再出现 age 信号
+    assert "age_hours" not in called[0]
     seen = json.loads((tmp / "state" / "seen.json").read_text(encoding="utf-8"))
     assert seen.get("a/b#99", {}).get("status") != "too_fresh"
 

@@ -40,8 +40,6 @@ Answer NO if any of these:
       AI, or hands the fix to a specific person
     - the issue body or comments contain a clear claim signal (I'll fix this,
       working on it, opened a PR)
-    - it is only minutes old and a maintainer or the reporter is likely still
-      working on it (age under a couple of hours with no maintainer ask)
     - too vague to act on, or needs a design decision from maintainers
     - reproducible only in an environment the agent cannot reach
     - security-sensitive
@@ -51,9 +49,11 @@ Judge this from what the report implies, not from how long it is. A short report
 be precise; a long one can still be vague.
 
 Issue from {repo}#{number}
+Repo rules for this repository:
+{repo_rules}
 Labels: {labels}
 Reactions: {reactions} | Comments: {comments}
-Age: {age} | Reporter offered to fix it themselves: {offer}
+Reporter offered to fix it themselves: {offer}
 Comments (recent): {comments_block}
 Title: {title}
 
@@ -161,12 +161,11 @@ class GoClient:
             repo=issue.get("repo", ""), number=issue.get("number", ""),
             labels=", ".join(issue.get("labels") or []) or "none",
             reactions=issue.get("reactions", 0), comments=n_comments,
-            age=(f"{issue.get('age_hours')}h"
-                 if issue.get("age_hours") is not None else "unknown"),
             offer="yes" if issue.get("reporter_offered_fix") else "no",
             comments_block=comments_block,
+            repo_rules=str(issue.get("repo_rules") or "none recorded"),
             title=str(issue.get("title", ""))[:200],
-            body=str(issue.get("body_excerpt", ""))[:4000])
+            body=str(issue.get("body_excerpt", ""))[:16000])
         ok, text = self.chat(prompt)
         if not ok:
             return {"usable": None, "reason": text[:200], "model": self.model}

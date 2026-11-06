@@ -720,3 +720,4 @@
 {"ts": "2026-11-06T10:42:32", "action": "dashboard_staged_flush_error", "target": "-", "result": "name 'dt' is not defined", "source": "web-ui"}
 {"ts": "2026-11-06T10:42:45", "action": "dashboard_staged_flush_error", "target": "-", "result": "name 'dt' is not defined", "source": "web-ui"}
 {"ts": "2026-11-06T10:43:43", "action": "dashboard_staged_flush_error", "target": "-", "result": "name 'dt' is not defined", "source": "web-ui"}
+{"ts": "2026-11-06T15:14:44", "action": "dashboard_staged_flush_error", "target": "-", "result": "name 'dt' is not defined", "source": "web-ui"}
