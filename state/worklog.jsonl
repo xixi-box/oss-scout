@@ -714,3 +714,9 @@
 {"ts": "2026-11-06T00:18:36", "action": "dashboard_pr_needs_reply", "target": "PrefectHQ/fastmcp#6198", "result": "address_review from chatgpt-codex-connector[bot]: **<sub><sub>![P2 Badge](https://img.shields.io/badge/P2-yellow?style=flat)</sub></sub>  Preserve callable wrappers' exposed signatures for URI validat", "source": "web-ui"}
 {"ts": "2026-11-06T00:18:49", "action": "dashboard_pr_review_fix_dispatch", "target": "PrefectHQ/fastmcp#6198", "result": "dispatched=True kind=review reason=review request from chatgpt-codex-connector[bot]", "source": "web-ui"}
 {"ts": "2026-11-06T09:43:16", "action": "dashboard_staged_flush_error", "target": "-", "result": "name 'dt' is not defined", "source": "web-ui"}
+{"ts": "2026-11-06T10:39:38", "action": "dashboard_staged_flush_error", "target": "-", "result": "name 'dt' is not defined", "source": "web-ui"}
+{"ts": "2026-11-06T10:41:46", "action": "dashboard_pr_sync_failed", "target": "1 prs", "result": "not configured", "source": "web-ui"}
+{"ts": "2026-11-06T10:42:19", "action": "dashboard_staged_flush_error", "target": "-", "result": "name 'dt' is not defined", "source": "web-ui"}
+{"ts": "2026-11-06T10:42:32", "action": "dashboard_staged_flush_error", "target": "-", "result": "name 'dt' is not defined", "source": "web-ui"}
+{"ts": "2026-11-06T10:42:45", "action": "dashboard_staged_flush_error", "target": "-", "result": "name 'dt' is not defined", "source": "web-ui"}
+{"ts": "2026-11-06T10:43:43", "action": "dashboard_staged_flush_error", "target": "-", "result": "name 'dt' is not defined", "source": "web-ui"}

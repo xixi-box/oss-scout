@@ -292,7 +292,9 @@ def _todays_claim_count(root: Path, key: str) -> int:
     return n
 
 
-def _abort_release(msg: str, *, give_back: bool = True) -> dict:
+def _abort_release_impl(msg: str, *, candidate_id: str, ledger, eng,
+                   summary: dict, log_fn, root: Path, key: str,
+                   give_back: bool = True) -> dict:
     """中止并归还额度（2026-11-05 用户裁定：所有失败一律退坑）。
 
     「每天 5 个」指的是**5 个开出的 PR**，不是 5 次尝试——失败的认领
@@ -306,11 +308,11 @@ def _abort_release(msg: str, *, give_back: bool = True) -> dict:
 
     give_back 参数保留以兼容调用方，但语义已改为"总是退坑"。
     """
-    ledger.release_claim(key, eng.tz_name)
+    ledger.release_claim(candidate_id, eng.tz_name)
     ledger.close()
     summary["abort"] = msg
-    log(root, "abort", key, msg + ("; claim released" if give_back
-                                   else "; claim kept (attempt consumed)"))
+    log_fn(root, "abort", key, msg + ("; claim released" if give_back
+                                      else "; claim kept (attempt consumed)"))
     return summary
 
 
@@ -320,6 +322,13 @@ def candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6) -> dict:
     repo, number = entry["repo"], entry["number"]
     key = entry["id"]
     summary: dict = {"id": key, "steps": []}
+
+    def _abort_release(msg: str, *, give_back: bool = True) -> dict:
+        # 委托模块级实现（显式传参）。2026-11-06 实录：模块级版本曾漏参
+        # 直接暴露，每次 abort NameError，competed 候选崩溃循环。
+        return _abort_release_impl(
+            msg, candidate_id=key, ledger=ledger, eng=eng, summary=summary,
+            log_fn=log, root=root, key=key, give_back=give_back)
 
     eng, err = PolicyEngine.load(root)
     if err is not None:
