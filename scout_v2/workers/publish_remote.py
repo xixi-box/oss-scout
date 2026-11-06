@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 from pathlib import Path
 
@@ -64,6 +65,32 @@ def _run(args: list[str], cwd: Path | None = None) -> subprocess.CompletedProces
                           text=True, encoding="utf-8", errors="replace", timeout=300)
 
 
+# 补丁里不允许出现的路径：构建/打包工具在验证阶段跑测试时产生的本地垃圾。
+# ClickHouse#129709 实录：uv/pip 在 src/ 下生成了 UNKNOWN.egg-info，被打进
+# change.patch，一路推到上游 PR，被 maintainer 点名 "Remove accidentally
+# committed files"。在应用补丁之前整段丢弃这些文件的最小 diff。
+_JUNK_PATH = re.compile(
+    r"(^|/)(__pycache__|\.pytest_cache|\.mypy_cache|\.ruff_cache|node_modules"
+    r"|\.venv|venv|dist|build|\.tox|\.coverage|coverage_html_report)(/|$)"
+    r"|\.egg-info(/|$)"
+    r"|\.pyc$|\.pyo$|\.log$")
+
+
+def filter_patch_junk(patch_text: str) -> str:
+    """丢弃补丁中指向构建垃圾路径的文件段，其余原样保留。"""
+    sections = re.split(r"(?m)^(?=diff --git )", patch_text)
+    kept: list[str] = []
+    for sec in sections:
+        if not sec.startswith("diff --git "):
+            kept.append(sec)          # 开头的 diff 元信息/索引行原样保留
+            continue
+        m = re.match(r"diff --git a/(.+?) b/(.+?)$", sec.splitlines()[0])
+        if m and (_JUNK_PATH.search(m.group(1)) or _JUNK_PATH.search(m.group(2))):
+            continue                  # 垃圾路径：整段丢弃
+        kept.append(sec)
+    return "".join(kept)
+
+
 def publish(repo_dir: Path, patch_file: Path, publish_cfg: dict) -> dict:
     """把补丁推到 fork 并向上游开 PR。返回 {ok, pr, error, branch}。
 
@@ -81,6 +108,12 @@ def publish(repo_dir: Path, patch_file: Path, publish_cfg: dict) -> dict:
                                       "(need push_repo/upstream/branch/title)"}
     if not patch_file.is_file() or not patch_file.read_text(encoding="utf-8").strip():
         return {"ok": False, "error": "no patch to publish"}
+    filtered = filter_patch_junk(patch_file.read_text(encoding="utf-8"))
+    if not filtered.strip():
+        return {"ok": False, "error": "no patch to publish (all sections were "
+                                      "build-artifact junk)"}
+    if filtered != patch_file.read_text(encoding="utf-8"):
+        patch_file.write_text(filtered, encoding="utf-8")
 
     token = (os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN") or "").strip()
 
@@ -92,6 +125,27 @@ def publish(repo_dir: Path, patch_file: Path, publish_cfg: dict) -> dict:
         return {"ok": False,
                 "error": f"fork {push_repo} is missing and could not be created "
                          f"(check the token has repo scope)"}
+
+    # 0.5) issue 级查重：这个 issue 我们已有 open PR 就不再开第二个。
+    #      2026-11-06 实录：分支名带 base 哈希（fix/<issueN>-<sha7>），每轮修复
+    #      rebase 到新 base 后分支名就变了，branch 级查重拦不住——OpenViking#6823
+    #      一度同时挂着三个 PR。改成查"我们在这个 issue 上的 open PR"。
+    owner = push_repo.split("/")[0]
+    issue_no = int(publish_cfg.get("issue_number") or 0)
+    if issue_no > 0:
+        listing = _run(["gh", "pr", "list", "--repo", upstream, "--author", owner,
+                        "--state", "open", "--json", "number,body,url"])
+        if listing.returncode == 0:
+            try:
+                open_prs = json.loads(listing.stdout or "[]")
+            except json.JSONDecodeError:
+                open_prs = []
+            for p in open_prs:
+                if re.search(rf"#{issue_no}\b", str(p.get("body") or "")):
+                    return {"ok": True, "pr": str(p.get("url") or ""),
+                            "branch": branch,
+                            "note": f"existing PR #{p.get('number')} for issue "
+                                    f"#{issue_no}; skipped duplicate publish"}
 
     # 1) 在验证用的仓库里建分支并应用补丁
     co = _run(["git", "checkout", "-q", "-B", branch], cwd=repo_dir)
