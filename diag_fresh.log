@@ -1,0 +1,357 @@
+diag	Set up job	﻿2026-11-06T02:03:17.2507876Z Current runner version: '2.338.2'
+diag	Set up job	2026-11-06T02:03:17.2517721Z Runner name: 'oss-scout-aliyun'
+diag	Set up job	2026-11-06T02:03:17.2518666Z Runner group name: 'Default'
+diag	Set up job	2026-11-06T02:03:17.2520887Z Machine name: 'iZbp100g63ukc736u8vebhZ'
+diag	Set up job	2026-11-06T02:03:17.2524357Z ##[group]GITHUB_TOKEN Permissions
+diag	Set up job	2026-11-06T02:03:17.2527390Z Contents: read
+diag	Set up job	2026-11-06T02:03:17.2528418Z Metadata: read
+diag	Set up job	2026-11-06T02:03:17.2529368Z Packages: read
+diag	Set up job	2026-11-06T02:03:17.2530122Z ##[endgroup]
+diag	Set up job	2026-11-06T02:03:17.2533632Z Secret source: Actions
+diag	Set up job	2026-11-06T02:03:17.2534891Z Cache mode: write
+diag	Set up job	2026-11-06T02:03:17.2535894Z Prepare workflow directory
+diag	Set up job	2026-11-06T02:03:17.3378785Z Prepare all required actions
+diag	Set up job	2026-11-06T02:03:17.3518675Z Complete job name: diag
+diag	Container state and logs	﻿2026-11-06T02:03:17.5241759Z ##[group]Run docker ps -a --filter name=oss-scout --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'
+diag	Container state and logs	2026-11-06T02:03:17.5243571Z ^[[36;1mdocker ps -a --filter name=oss-scout --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'^[[0m
+diag	Container state and logs	2026-11-06T02:03:17.5244726Z ^[[36;1mecho "=== logs (last 50) ==="^[[0m
+diag	Container state and logs	2026-11-06T02:03:17.5245764Z ^[[36;1mdocker logs --tail 50 oss-scout 2>&1 || echo "no logs"^[[0m
+diag	Container state and logs	2026-11-06T02:03:17.5246706Z ^[[36;1mecho "=== curl from host ==="^[[0m
+diag	Container state and logs	2026-11-06T02:03:17.5247811Z ^[[36;1mcurl -sv --max-time 5 http://127.0.0.1:18787/login 2>&1 | tail -8 || true^[[0m
+diag	Container state and logs	2026-11-06T02:03:17.5365589Z shell: /usr/bin/bash -e {0}
+diag	Container state and logs	2026-11-06T02:03:17.5366911Z ##[endgroup]
+diag	Container state and logs	2026-11-06T02:03:18.0289434Z NAMES       STATUS                    PORTS
+diag	Container state and logs	2026-11-06T02:03:18.0290690Z oss-scout   Up 13 minutes (healthy)   127.0.0.1:18787->8787/tcp, 172.17.0.1:18787->8787/tcp
+diag	Container state and logs	2026-11-06T02:03:18.0292089Z === logs (last 50) ===
+diag	Container state and logs	2026-11-06T02:03:18.0292992Z INFO:     Started server process [1]
+diag	Container state and logs	2026-11-06T02:03:18.0293674Z INFO:     Waiting for application startup.
+diag	Container state and logs	2026-11-06T02:03:18.0294767Z INFO:     Application startup complete.
+diag	Container state and logs	2026-11-06T02:03:18.0295660Z INFO:     Uvicorn running on http://0.0.0.0:8787 (Press CTRL+C to quit)
+diag	Container state and logs	2026-11-06T02:03:18.0296575Z INFO:     127.0.0.1:55716 - "GET /login HTTP/1.1" 200 OK
+diag	Container state and logs	2026-11-06T02:03:18.0297720Z INFO:     127.0.0.1:40618 - "GET /login HTTP/1.1" 200 OK
+diag	Container state and logs	2026-11-06T02:03:18.0298575Z INFO:     127.0.0.1:54306 - "GET /login HTTP/1.1" 200 OK
+diag	Container state and logs	2026-11-06T02:03:18.0299362Z INFO:     127.0.0.1:50462 - "GET /login HTTP/1.1" 200 OK
+diag	Container state and logs	2026-11-06T02:03:18.0300243Z INFO:     172.29.0.1:33340 - "POST /api/pr/reply/fix-result HTTP/1.1" 200 OK
+diag	Container state and logs	2026-11-06T02:03:18.0301174Z INFO:     127.0.0.1:60510 - "GET /login HTTP/1.1" 200 OK
+diag	Container state and logs	2026-11-06T02:03:18.0302055Z INFO:     172.29.0.1:44114 - "POST /api/pr/reply/fix-result HTTP/1.1" 200 OK
+diag	Container state and logs	2026-11-06T02:03:18.0303033Z INFO:     127.0.0.1:52578 - "GET /login HTTP/1.1" 200 OK
+diag	Container state and logs	2026-11-06T02:03:18.0303821Z INFO:     127.0.0.1:60424 - "GET /login HTTP/1.1" 200 OK
+diag	Container state and logs	2026-11-06T02:03:18.0304621Z INFO:     127.0.0.1:42704 - "GET /login HTTP/1.1" 200 OK
+diag	Container state and logs	2026-11-06T02:03:18.0305609Z INFO:     172.29.0.1:43896 - "POST /api/pr/reply/fix-result HTTP/1.1" 200 OK
+diag	Container state and logs	2026-11-06T02:03:18.0306592Z INFO:     172.29.0.1:44300 - "POST /api/pr/reply/fix-result HTTP/1.1" 200 OK
+diag	Container state and logs	2026-11-06T02:03:18.0307691Z INFO:     127.0.0.1:51746 - "GET /login HTTP/1.1" 200 OK
+diag	Container state and logs	2026-11-06T02:03:18.0308515Z INFO:     127.0.0.1:49924 - "GET /login HTTP/1.1" 200 OK
+diag	Container state and logs	2026-11-06T02:03:18.0309395Z INFO:     172.29.0.1:43242 - "POST /api/pr/reply/fix-result HTTP/1.1" 200 OK
+diag	Container state and logs	2026-11-06T02:03:18.0310292Z INFO:     127.0.0.1:36242 - "GET /login HTTP/1.1" 200 OK
+diag	Container state and logs	2026-11-06T02:03:18.0311191Z INFO:     172.29.0.1:42720 - "POST /api/pr/reply/fix-result HTTP/1.1" 200 OK
+diag	Container state and logs	2026-11-06T02:03:18.0312170Z INFO:     172.29.0.1:50596 - "POST /api/pr/reply/fix-result HTTP/1.1" 200 OK
+diag	Container state and logs	2026-11-06T02:03:18.0313237Z INFO:     127.0.0.1:44350 - "GET /login HTTP/1.1" 200 OK
+diag	Container state and logs	2026-11-06T02:03:18.0314030Z INFO:     127.0.0.1:54598 - "GET /login HTTP/1.1" 200 OK
+diag	Container state and logs	2026-11-06T02:03:18.0314750Z === curl from host ===
+diag	Container state and logs	2026-11-06T02:03:18.0953807Z     <p class="muted small mt">密码来源：环境变量 DASHBOARD_PASSWORD，或 state/dashboard_password.txt（首次启动自动生成）</p>
+diag	Container state and logs	2026-11-06T02:03:18.0955678Z   </div>
+diag	Container state and logs	2026-11-06T02:03:18.0956678Z </div>
+diag	Container state and logs	2026-11-06T02:03:18.0956935Z 
+diag	Container state and logs	2026-11-06T02:03:18.0957228Z </main>
+diag	Container state and logs	2026-11-06T02:03:18.0958106Z <footer class="footer">127.0.0.1:8787 · 所有写操作经登录 + worklog 审计 · 不要暴露到公网</footer>
+diag	Container state and logs	2026-11-06T02:03:18.0958947Z </body>
+diag	Container state and logs	2026-11-06T02:03:18.0959416Z </html>
+diag	Credential wiring	﻿2026-11-06T02:03:18.1091436Z ##[group]Run docker exec oss-scout python /app/scripts/container_diag.py
+diag	Credential wiring	2026-11-06T02:03:18.1092755Z ^[[36;1mdocker exec oss-scout python /app/scripts/container_diag.py^[[0m
+diag	Credential wiring	2026-11-06T02:03:18.1113285Z shell: /usr/bin/bash -e {0}
+diag	Credential wiring	2026-11-06T02:03:18.1113919Z ##[endgroup]
+diag	Credential wiring	2026-11-06T02:03:27.1832659Z file_token_empty: True
+diag	Credential wiring	2026-11-06T02:03:27.1833439Z env_api_set: True
+diag	Credential wiring	2026-11-06T02:03:27.1833975Z env_ingest_set: True
+diag	Credential wiring	2026-11-06T02:03:27.1834742Z effective_api_set: True
+diag	Credential wiring	2026-11-06T02:03:27.1835443Z effective_ingest_set: True
+diag	Credential wiring	2026-11-06T02:03:27.1836032Z pr_sync_at: 2026-11-06T01:52:41
+diag	Credential wiring	2026-11-06T02:03:27.1836710Z pr_sync_count: 31
+diag	Credential wiring	2026-11-06T02:03:27.1837248Z --- pr_watch audit tail (matched 4589) ---
+diag	Credential wiring	2026-11-06T02:03:27.1891839Z   2026-11-06T01:53:13 dashboard_pr_reply_drafted promptfoo/promptfoo#12079 :: drafted=False reason=model error: HTTP 429: {"error":{"type":"server_error","message":"Upstream reque fix_kind
+diag	Credential wiring	2026-11-06T02:03:27.1895029Z   2026-11-06T01:53:13 dashboard_pr_needs_reply PrefectHQ/fastmcp#6198 :: address_review from chatgpt-codex-connector[bot]: **<sub><sub>![P2 Badge](https://img.shields.io/badge/P2-yell
+diag	Credential wiring	2026-11-06T02:03:27.1896775Z   2026-11-06T01:53:35 dashboard_pr_reply_drafted PrefectHQ/fastmcp#6198 :: drafted=True reason=None fix_kind=review
+diag	Credential wiring	2026-11-06T02:03:27.1898111Z   2026-11-06T01:53:36 dashboard_pr_ci_failed pydantic/pydantic-ai#9285 :: ['Package Label']
+diag	Credential wiring	2026-11-06T02:03:27.1900388Z   2026-11-06T01:53:44 dashboard_pr_fix_dispatch pydantic/pydantic-ai#9285 :: dispatched=True reason=1 failing check(s)
+diag	Credential wiring	2026-11-06T02:03:27.1976914Z   2026-11-06T01:53:44 dashboard_pr_needs_reply pydantic/pydantic-ai-harness#729 :: address_review from mpfaffenberger: Hi @xixi-box, thanks for this PR! 👋
+diag	Credential wiring	2026-11-06T02:03:27.1978959Z 
+diag	Credential wiring	2026-11-06T02:03:27.1979350Z Heads up: `pydantic-ai-harness` has b
+diag	Credential wiring	2026-11-06T02:03:27.1981056Z   2026-11-06T01:53:52 dashboard_pr_reply_drafted pydantic/pydantic-ai-harness#729 :: drafted=False reason=already replied; waiting on them fix_kind=review
+diag	Credential wiring	2026-11-06T02:03:27.1984097Z   2026-11-06T01:54:30 dashboard_pr_fix_result pydantic/pydantic-ai#9285 :: pushed=False test=None
+diag	Credential wiring	2026-11-06T02:03:27.1985464Z   2026-11-06T01:54:54 dashboard_pr_fix_result docker/compose#14450 :: pushed=False test=no-change
+diag	Credential wiring	2026-11-06T02:03:27.1986926Z   2026-11-06T01:57:52 dashboard_pr_fix_result bytedance/deer-flow#7822 :: pushed=False test=unverified: no test runner detected
+diag	Credential wiring	2026-11-06T02:03:27.1988053Z   2026-11-06T01:58:08 dashboard_pr_fix_result promptfoo/promptfoo#12079 :: pushed=False test=no-change
+diag	Credential wiring	2026-11-06T02:03:27.1989506Z   2026-11-06T01:59:45 dashboard_pr_fix_result PrefectHQ/fastmcp#6198 :: pushed=False test=no-change
+diag	Credential wiring	2026-11-06T02:03:27.1990701Z   2026-11-06T02:00:41 dashboard_pr_fix_result pydantic/pydantic-ai-harness#729 :: pushed=True test=pytest ['./tests/tool_output_limits/'] rc=0
+diag	Credential wiring	2026-11-06T02:03:27.1993132Z   2026-11-06T02:00:54 dashboard_pr_fix_result bytedance/deer-flow#7812 :: pushed=False test=unverified: no test runner detected
+diag	Credential wiring	2026-11-06T02:03:27.1993992Z --- claim cap audit (2026-11-06) ---
+diag	Credential wiring	2026-11-06T02:03:27.1994583Z   pipeline_abort                 3
+diag	Credential wiring	2026-11-06T02:03:27.1995273Z   claim                          2
+diag	Credential wiring	2026-11-06T02:03:27.1996215Z   repeated claims:
+diag	Credential wiring	2026-11-06T02:03:27.1997025Z --- duplicate probe ---
+diag	Credential wiring	2026-11-06T02:03:27.1998127Z   KNOWN-DUP(->10465): open=False dup=True of=None
+diag	Credential wiring	2026-11-06T02:03:27.1999257Z   normal: open=True dup=False of=None
+diag	Credential wiring	2026-11-06T02:03:27.1999904Z --- feishu app ---
+diag	Credential wiring	2026-11-06T02:03:27.2000593Z   FEISHU_APP_ID set: True
+diag	Credential wiring	2026-11-06T02:03:27.2001268Z   FEISHU_APP_SECRET set: True
+diag	Credential wiring	2026-11-06T02:03:27.2001771Z   FEISHU_VERIFICATION_TOKEN set: True
+diag	Credential wiring	2026-11-06T02:03:27.2002263Z   FEISHU_CHAT_ID set: True
+diag	Credential wiring	2026-11-06T02:03:27.2002786Z   app_configured: True
+diag	Credential wiring	2026-11-06T02:03:27.2004861Z   chats visible: 0 err=HTTP 400: Access denied. One of the following scopes is required: [im:chat:readonly, im:chat, im:chat.group_info:readonly, im:chat:read].应用尚未开通所需的应用身份权限：[im:cha
+diag	Credential wiring	2026-11-06T02:03:27.2006014Z   resolved chat: oc_78882c888a479446c45fbd2b35f73d7e
+diag	Overnight activity probe	﻿2026-11-06T02:03:27.2799257Z ##[group]Run docker exec -i oss-scout python3 /app/scripts/overnight_probe.py
+diag	Overnight activity probe	2026-11-06T02:03:27.2800860Z ^[[36;1mdocker exec -i oss-scout python3 /app/scripts/overnight_probe.py^[[0m
+diag	Overnight activity probe	2026-11-06T02:03:27.2926352Z shell: /usr/bin/bash -e {0}
+diag	Overnight activity probe	2026-11-06T02:03:27.2927241Z ##[endgroup]
+diag	Overnight activity probe	2026-11-06T02:03:27.6417758Z === now: 2026-11-06T02:03:27 ===
+diag	Overnight activity probe	2026-11-06T02:03:27.6418518Z 
+diag	Overnight activity probe	2026-11-06T02:03:27.6419102Z === worklog auto_repair / claim / pr_open (last 10h) ===
+diag	Overnight activity probe	2026-11-06T02:03:27.6419949Z  count: 8
+diag	Overnight activity probe	2026-11-06T02:03:27.6421625Z    2026-11-05T19:12:26 | staged_flush | 51 staged | kicked=51 processed=0 | kicked: Arize-ai/phoenix#17245, Arize-ai/phoenix#17162, langfuse/langfuse#19454, Arize-ai/phoenix#17293, volce
+diag	Overnight activity probe	2026-11-06T02:03:27.6428369Z    2026-11-06T00:00:25 | pipeline_abort | envoyproxy/envoy#49003 | competed: open=True unassigned=True claim=False xref=True hits=['envoyproxy/envoy#49011: connect_grpc_bridge: 
+diag	Overnight activity probe	2026-11-06T02:03:27.6429780Z    2026-11-06T00:00:25 | claim | milvus-io/milvus#55208 | None
+diag	Overnight activity probe	2026-11-06T02:03:27.6430405Z    2026-11-06T00:00:26 | claim | nodejs/node#49441 | None
+diag	Overnight activity probe	2026-11-06T02:03:27.6431694Z    2026-11-06T00:11:31 | pipeline_abort | milvus-io/milvus#55208 | evidence chain incomplete: failed repro=False fixed=False gate=PASS patch=no; claim released
+diag	Overnight activity probe	2026-11-06T02:03:27.6433006Z    2026-11-06T00:11:35 | auto_repair | milvus-io/milvus#55208 | {"id": "milvus-io/milvus#55208", "steps": ["lane=open", "recheck ok", "claimed (attempt 1, daily budget)", "ag
+diag	Overnight activity probe	2026-11-06T02:03:27.6435817Z    2026-11-06T00:12:35 | pipeline_abort | nodejs/node#49441 | evidence chain incomplete: failed repro=False fixed=False gate=["job_id mismatch: result='job-5dbda74e-104e-48
+diag	Overnight activity probe	2026-11-06T02:03:27.6437542Z    2026-11-06T00:12:38 | auto_repair | nodejs/node#49441 | {"id": "nodejs/node#49441", "steps": ["lane=open", "recheck ok", "claimed (attempt 1, daily budget)", "agent d
+diag	Overnight activity probe	2026-11-06T02:03:27.6438240Z 
+diag	Overnight activity probe	2026-11-06T02:03:27.6438448Z === queue: new/staged/aborted_competed counts ===
+diag	Overnight activity probe	2026-11-06T02:03:27.6439021Z   {'out_of_scope': 167, 'stage_expired': 409, 'pr_open': 11, 'needs_cla': 1}
+diag	Overnight activity probe	2026-11-06T02:03:27.6439455Z 
+diag	Overnight activity probe	2026-11-06T02:03:27.6439599Z === claim_days today ===
+diag	Overnight activity probe	2026-11-06T02:03:27.6439817Z 
+diag	Overnight activity probe	2026-11-06T02:03:27.6440042Z === worklog mtime (loop heartbeat) ===
+diag	Overnight activity probe	2026-11-06T02:03:27.6440501Z   mtime: 2026-11-06T02:00:54.607884 | age: 152.9 s
+diag	Drain diagnosis	﻿2026-11-06T02:03:27.6750431Z ##[group]Run docker exec -i oss-scout python3 /app/scripts/drain_probe.py
+diag	Drain diagnosis	2026-11-06T02:03:27.6751579Z ^[[36;1mdocker exec -i oss-scout python3 /app/scripts/drain_probe.py^[[0m
+diag	Drain diagnosis	2026-11-06T02:03:27.6789336Z shell: /usr/bin/bash -e {0}
+diag	Drain diagnosis	2026-11-06T02:03:27.6790047Z ##[endgroup]
+diag	Drain diagnosis	2026-11-06T02:03:27.8696028Z OSSCOUT_DISABLE_AUTO_REPAIR = None
+diag	Drain diagnosis	2026-11-06T02:03:27.8696957Z OSSCOUT_DASHBOARD_ROOT = '/data'
+diag	Drain diagnosis	2026-11-06T02:03:27.8697585Z worklog mtime: 2026-11-06T02:00:54.607884 | size: 3908154
+diag	Drain diagnosis	2026-11-06T02:03:27.8698142Z now: 2026-11-06T02:03:27
+diag	Drain diagnosis	2026-11-06T02:03:27.8698501Z last 3:
+diag	Drain diagnosis	2026-11-06T02:03:27.8699116Z    2026-11-06T01:59:45 dashboard_pr_fix_result PrefectHQ/fastmcp#6198
+diag	Drain diagnosis	2026-11-06T02:03:27.8699868Z    2026-11-06T02:00:41 dashboard_pr_fix_result pydantic/pydantic-ai-harness#729
+diag	Drain diagnosis	2026-11-06T02:03:27.8701577Z    2026-11-06T02:00:54 dashboard_pr_fix_result bytedance/deer-flow#7812
+diag	Quota and queue consumption	﻿2026-11-06T02:03:27.8887741Z ##[group]Run docker exec -i oss-scout python3 /app/scripts/quota_probe.py
+diag	Quota and queue consumption	2026-11-06T02:03:27.8888463Z ^[[36;1mdocker exec -i oss-scout python3 /app/scripts/quota_probe.py^[[0m
+diag	Quota and queue consumption	2026-11-06T02:03:27.8915360Z shell: /usr/bin/bash -e {0}
+diag	Quota and queue consumption	2026-11-06T02:03:27.8915785Z ##[endgroup]
+diag	Quota and queue consumption	2026-11-06T02:03:28.1245732Z === claim_days ===
+diag	Quota and queue consumption	2026-11-06T02:03:28.1248177Z   ('2026-11-05', 'jlowin/fastmcp#6298', 'claim', '2026-11-05T07:53:00')
+diag	Quota and queue consumption	2026-11-06T02:03:28.1249717Z   ('2026-11-05', 'istio/istio#61075', 'claim', '2026-11-05T00:01:35')
+diag	Quota and queue consumption	2026-11-06T02:03:28.1251128Z   ('2026-11-05', 'istio/istio#61045', 'claim', '2026-11-05T05:00:21')
+diag	Quota and queue consumption	2026-11-06T02:03:28.1252177Z   ('2026-11-05', 'istio/istio#61027', 'claim', '2026-11-05T05:00:21')
+diag	Quota and queue consumption	2026-11-06T02:03:28.1313783Z   ('2026-11-05', 'bytedance/deer-flow#7883', 'claim', '2026-11-05T08:04:29')
+diag	Quota and queue consumption	2026-11-06T02:03:28.1314401Z  tables: ['claim_days']
+diag	Quota and queue consumption	2026-11-06T02:03:28.1314772Z === queue status counts ===
+diag	Quota and queue consumption	2026-11-06T02:03:28.1315123Z  total: 588
+diag	Quota and queue consumption	2026-11-06T02:03:28.1315561Z   {'out_of_scope': 167, 'stage_expired': 409, 'pr_open': 11, 'needs_cla': 1}
+diag	Quota and queue consumption	2026-11-06T02:03:28.1316176Z === auto_repair audit today ===
+diag	Quota and queue consumption	2026-11-06T02:03:28.1316549Z  count: 3
+diag	Quota and queue consumption	2026-11-06T02:03:28.1317383Z   2026-11-06T00:00:25 dashboard_auto_repair_error envoyproxy/envoy#49003 cannot access local variable '_abort_release' where it is not associated with a value
+diag	Quota and queue consumption	2026-11-06T02:03:28.1319297Z   2026-11-06T00:11:35 dashboard_auto_repair milvus-io/milvus#55208 {"id": "milvus-io/milvus#55208", "steps": ["lane=open", "recheck ok", "claimed (attempt 1, daily budget)", "agent decide
+diag	Quota and queue consumption	2026-11-06T02:03:28.1321055Z   2026-11-06T00:12:38 dashboard_auto_repair nodejs/node#49441 {"id": "nodejs/node#49441", "steps": ["lane=open", "recheck ok", "claimed (attempt 1, daily budget)", "agent decides tes
+diag	Kick expired candidates from queue	﻿2026-11-06T02:03:28.1440733Z ##[group]Run docker exec -i oss-scout python3 - <<'PY'
+diag	Kick expired candidates from queue	2026-11-06T02:03:28.1441416Z ^[[36;1mdocker exec -i oss-scout python3 - <<'PY'^[[0m
+diag	Kick expired candidates from queue	2026-11-06T02:03:28.1441896Z ^[[36;1mimport json, os^[[0m
+diag	Kick expired candidates from queue	2026-11-06T02:03:28.1442295Z ^[[36;1mfrom pathlib import Path^[[0m
+diag	Kick expired candidates from queue	2026-11-06T02:03:28.1442686Z ^[[36;1mimport datetime as dt^[[0m
+diag	Kick expired candidates from queue	2026-11-06T02:03:28.1443162Z ^[[36;1mroot = Path(os.environ.get("OSSCOUT_DASHBOARD_ROOT", "/data"))^[[0m
+diag	Kick expired candidates from queue	2026-11-06T02:03:28.1443717Z ^[[36;1mqpath = root / "queue" / "candidates.json"^[[0m
+diag	Kick expired candidates from queue	2026-11-06T02:03:28.1444210Z ^[[36;1mq = json.loads(qpath.read_text(encoding="utf-8"))^[[0m
+diag	Kick expired candidates from queue	2026-11-06T02:03:28.1444810Z ^[[36;1mRED = {"aborted_stale", "stage_expired", "escalated", "aborted_competed",^[[0m
+diag	Kick expired candidates from queue	2026-11-06T02:03:28.1445478Z ^[[36;1m       "aborted_duplicate", "aborted_closed", "aborted_no_evidence",^[[0m
+diag	Kick expired candidates from queue	2026-11-06T02:03:28.1446089Z ^[[36;1m       "aborted_blocked_design", "recheck_failed", "queued_hist"}^[[0m
+diag	Kick expired candidates from queue	2026-11-06T02:03:28.1446579Z ^[[36;1mkicked, kept = [], 0^[[0m
+diag	Kick expired candidates from queue	2026-11-06T02:03:28.1446940Z ^[[36;1mfor key, e in q.items():^[[0m
+diag	Kick expired candidates from queue	2026-11-06T02:03:28.1447450Z ^[[36;1m    e = e or {}^[[0m
+diag	Kick expired candidates from queue	2026-11-06T02:03:28.1447817Z ^[[36;1m    st = str(e.get("status") or "")^[[0m
+diag	Kick expired candidates from queue	2026-11-06T02:03:28.1448219Z ^[[36;1m    if st in RED:^[[0m
+diag	Kick expired candidates from queue	2026-11-06T02:03:28.1448593Z ^[[36;1m        e["status"] = "stage_expired"^[[0m
+diag	Kick expired candidates from queue	2026-11-06T02:03:28.1449016Z ^[[36;1m        kicked.append(key)^[[0m
+diag	Kick expired candidates from queue	2026-11-06T02:03:28.1449519Z ^[[36;1m    elif st in ("new", "staged", "needs_maintainer_confirm", "needs_cla",^[[0m
+diag	Kick expired candidates from queue	2026-11-06T02:03:28.1450067Z ^[[36;1m                "gated_alignment_only"):^[[0m
+diag	Kick expired candidates from queue	2026-11-06T02:03:28.1450527Z ^[[36;1m        upd = str(e.get("updated_at") or "")[:19]^[[0m
+diag	Kick expired candidates from queue	2026-11-06T02:03:28.1450947Z ^[[36;1m        try:^[[0m
+diag	Kick expired candidates from queue	2026-11-06T02:03:28.1451345Z ^[[36;1m            age_days = (dt.datetime.now() -^[[0m
+diag	Kick expired candidates from queue	2026-11-06T02:03:28.1451840Z ^[[36;1m                        dt.datetime.fromisoformat(upd)).days^[[0m
+diag	Kick expired candidates from queue	2026-11-06T02:03:28.1453532Z ^[[36;1m        except ValueError:^[[0m
+diag	Kick expired candidates from queue	2026-11-06T02:03:28.1454767Z ^[[36;1m            age_days = 0^[[0m
+diag	Kick expired candidates from queue	2026-11-06T02:03:28.1455166Z ^[[36;1m        if age_days >= 3:^[[0m
+diag	Kick expired candidates from queue	2026-11-06T02:03:28.1455565Z ^[[36;1m            e["status"] = "stage_expired"^[[0m
+diag	Kick expired candidates from queue	2026-11-06T02:03:28.1456010Z ^[[36;1m            kicked.append(key)^[[0m
+diag	Kick expired candidates from queue	2026-11-06T02:03:28.1456388Z ^[[36;1m        else:^[[0m
+diag	Kick expired candidates from queue	2026-11-06T02:03:28.1456715Z ^[[36;1m            kept += 1^[[0m
+diag	Kick expired candidates from queue	2026-11-06T02:03:28.1457151Z ^[[36;1mtmp = qpath.with_suffix(".json.tmp")^[[0m
+diag	Kick expired candidates from queue	2026-11-06T02:03:28.1457671Z ^[[36;1mtmp.write_text(json.dumps(q, ensure_ascii=False, indent=1),^[[0m
+diag	Kick expired candidates from queue	2026-11-06T02:03:28.1458177Z ^[[36;1m               encoding="utf-8")^[[0m
+diag	Kick expired candidates from queue	2026-11-06T02:03:28.1458618Z ^[[36;1mjson.loads(tmp.read_text(encoding="utf-8"))^[[0m
+diag	Kick expired candidates from queue	2026-11-06T02:03:28.1459307Z ^[[36;1mos.replace(tmp, qpath)^[[0m
+diag	Kick expired candidates from queue	2026-11-06T02:03:28.1459780Z ^[[36;1mprint(f"kicked {len(kicked)} expired, kept {kept} queued")^[[0m
+diag	Kick expired candidates from queue	2026-11-06T02:03:28.1460291Z ^[[36;1mfor k in kicked[:10]:^[[0m
+diag	Kick expired candidates from queue	2026-11-06T02:03:28.1460659Z ^[[36;1m    print("  kicked:", k)^[[0m
+diag	Kick expired candidates from queue	2026-11-06T02:03:28.1461025Z ^[[36;1mPY^[[0m
+diag	Kick expired candidates from queue	2026-11-06T02:03:28.1484564Z shell: /usr/bin/bash -e {0}
+diag	Kick expired candidates from queue	2026-11-06T02:03:28.1485021Z ##[endgroup]
+diag	Kick expired candidates from queue	2026-11-06T02:03:28.4618817Z kicked 409 expired, kept 1 queued
+diag	Kick expired candidates from queue	2026-11-06T02:03:28.4619589Z   kicked: langfuse/langfuse#19388
+diag	Kick expired candidates from queue	2026-11-06T02:03:28.4620023Z   kicked: crewAIInc/crewAI#6072
+diag	Kick expired candidates from queue	2026-11-06T02:03:28.4621549Z   kicked: OpenHands/OpenHands#18951
+diag	Kick expired candidates from queue	2026-11-06T02:03:28.4622065Z   kicked: Arize-ai/phoenix#17245
+diag	Kick expired candidates from queue	2026-11-06T02:03:28.4622565Z   kicked: infiniflow/ragflow#19229
+diag	Kick expired candidates from queue	2026-11-06T02:03:28.4623065Z   kicked: anomalyco/opencode#49903
+diag	Kick expired candidates from queue	2026-11-06T02:03:28.4623521Z   kicked: anomalyco/opencode#59337
+diag	Kick expired candidates from queue	2026-11-06T02:03:28.4623994Z   kicked: aaif-goose/goose#13148
+diag	Kick expired candidates from queue	2026-11-06T02:03:28.4624576Z   kicked: Arize-ai/phoenix#17264
+diag	Kick expired candidates from queue	2026-11-06T02:03:28.4625294Z   kicked: anomalyco/opencode#59317
+diag	Purge too_fresh (age gate retired)	﻿2026-11-06T02:03:28.4838012Z ##[group]Run docker exec -i oss-scout python3 /app/scripts/purge_too_fresh.py
+diag	Purge too_fresh (age gate retired)	2026-11-06T02:03:28.4838718Z ^[[36;1mdocker exec -i oss-scout python3 /app/scripts/purge_too_fresh.py^[[0m
+diag	Purge too_fresh (age gate retired)	2026-11-06T02:03:28.4876759Z shell: /usr/bin/bash -e {0}
+diag	Purge too_fresh (age gate retired)	2026-11-06T02:03:28.4877277Z ##[endgroup]
+diag	Purge too_fresh (age gate retired)	2026-11-06T02:03:28.6256013Z purged too_fresh: 0 | remaining: 1578
+diag	Live state dump (read-only)	﻿2026-11-06T02:03:28.6782916Z ##[group]Run docker exec -i oss-scout python3 - <<'PY'
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6783768Z ^[[36;1mdocker exec -i oss-scout python3 - <<'PY'^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6784173Z ^[[36;1mimport json, collections^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6784520Z ^[[36;1mfrom pathlib import Path^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6784856Z ^[[36;1mroot = Path("/data")^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6785150Z ^[[36;1m^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6785428Z ^[[36;1mdef tail(path, n=12, contains=None):^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6785778Z ^[[36;1m    try:^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6786122Z ^[[36;1m        lines = Path(path).read_text(encoding="utf-8",^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6786610Z ^[[36;1m                                     errors="replace").splitlines()^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6787312Z ^[[36;1m    except OSError:^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6787864Z ^[[36;1m        return []^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6788175Z ^[[36;1m    if contains:^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6788527Z ^[[36;1m        lines = [l for l in lines if contains in l]^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6788923Z ^[[36;1m    return lines[-n:]^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6789270Z ^[[36;1m^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6789545Z ^[[36;1mprint("=== seen.json freshness ===")^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6789892Z ^[[36;1mtry:^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6790214Z ^[[36;1m    seen = json.loads((root / "state" / "seen.json")^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6790663Z ^[[36;1m                      .read_text(encoding="utf-8"))^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6791167Z ^[[36;1m    firsts = sorted((v or {}).get("first_seen", "") for v in seen.values())^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6791784Z ^[[36;1m    print("entries:", len(seen), "| oldest:", firsts[0] if firsts else "-",^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6792318Z ^[[36;1m          "| newest:", firsts[-1] if firsts else "-")^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6792717Z ^[[36;1mexcept Exception as e:^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6793076Z ^[[36;1m    print("seen read failed:", str(e)[:120])^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6793431Z ^[[36;1m^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6793794Z ^[[36;1mprint("=== worklog: reply/bitable/feishu for milvus + counts ===")^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6794234Z ^[[36;1mtry:^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6794770Z ^[[36;1m    lines = (root / "state" / "worklog.jsonl")                   .read_text(encoding="utf-8", errors="replace").splitlines()^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6795394Z ^[[36;1mexcept OSError:^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6795683Z ^[[36;1m    lines = []^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6795977Z ^[[36;1mhits = [ln for ln in lines^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6796382Z ^[[36;1m        if any(k in ln for k in ("milvus#55034", "milvus#54998",^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6796864Z ^[[36;1m                                 "feishu_card", "pr_reply_drafted",^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6797913Z ^[[36;1m                                 "pr_review_fix", "bitable_sync",^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6798540Z ^[[36;1m                                 "pr_needs_reply", "feishu_cb"))]^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6799025Z ^[[36;1mprint("matched:", len(hits), "of", len(lines), "total")^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6799464Z ^[[36;1mfor ln in hits[-25:]:^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6799775Z ^[[36;1m    print(ln[:250])^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6800061Z ^[[36;1m^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6800363Z ^[[36;1mprint("=== pr_replies.json statuses ===")^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6800722Z ^[[36;1mtry:^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6801055Z ^[[36;1m    rp = json.loads((root / "state" / "pr_replies.json")^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6801505Z ^[[36;1m                    .read_text(encoding="utf-8"))^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6801883Z ^[[36;1m    for k, v in rp.items():^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6802244Z ^[[36;1m        print(" ", k, "->", v.get("status"),^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6802647Z ^[[36;1m              "| fix:", v.get("fix_state"),^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6803044Z ^[[36;1m              "| sent_at:", v.get("sent_at", ""))^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6803417Z ^[[36;1mexcept Exception as e:^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6803765Z ^[[36;1m    print("read failed:", str(e)[:120])^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6804108Z ^[[36;1m^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6804380Z ^[[36;1mimport subprocess as sp2, os as _os^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6804812Z ^[[36;1mprint("=== worklog plain tail (last 8, any kind) ===")^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6805207Z ^[[36;1mtry:^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6805976Z ^[[36;1m    all_lines = (root / "state" / "worklog.jsonl")                   .read_text(encoding="utf-8", errors="replace").splitlines()^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6806656Z ^[[36;1m    print("total lines:", len(all_lines))^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6807031Z ^[[36;1m    import datetime as _dt^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6807515Z ^[[36;1m    mtime = _os.path.getmtime(root / "state" / "worklog.jsonl")^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6808084Z ^[[36;1m    print("mtime:", _dt.datetime.fromtimestamp(mtime).isoformat())^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6808757Z ^[[36;1m    for ln in all_lines[-8:]:^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6809210Z ^[[36;1m        print(ln[:220])^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6809548Z ^[[36;1mexcept Exception as e:^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6809898Z ^[[36;1m    print("read failed:", str(e)[:120])^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6810342Z ^[[36;1mprint("=== hung gh processes in container ===")^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6810748Z ^[[36;1mtry:^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6811193Z ^[[36;1m    out = sp2.run(["ps", "aux"], capture_output=True, text=True, timeout=15)^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6811714Z ^[[36;1m    for ln in out.stdout.splitlines():^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6812163Z ^[[36;1m        if " gh " in ln or ln.strip().endswith(" gh"):^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6812812Z ^[[36;1m            print(ln[:200])^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6813266Z ^[[36;1m    gh_n = sum(1 for ln in out.stdout.splitlines() if " gh " in ln)^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6813739Z ^[[36;1m    print("gh processes:", gh_n)^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6814095Z ^[[36;1mexcept Exception as e:^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6814444Z ^[[36;1m    print("ps failed:", str(e)[:120])^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6814862Z ^[[36;1mprint("=== pr_sync (worker primary channel) ===")^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6815245Z ^[[36;1mtry:^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6815576Z ^[[36;1m    ps = json.loads((root / "state" / "pr_sync.json")^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6816023Z ^[[36;1m                    .read_text(encoding="utf-8"))^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6816501Z ^[[36;1m    print("at:", ps.get("at"), "| prs:", len(ps.get("prs", [])))^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6816950Z ^[[36;1mexcept Exception as e:^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6817376Z ^[[36;1m    print("read failed:", str(e)[:120])^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6817723Z ^[[36;1mPY^[[0m
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6840646Z shell: /usr/bin/bash -e {0}
+diag	Live state dump (read-only)	2026-11-06T02:03:28.6840996Z ##[endgroup]
+diag	Live state dump (read-only)	2026-11-06T02:03:28.9671178Z === seen.json freshness ===
+diag	Live state dump (read-only)	2026-11-06T02:03:28.9671713Z entries: 1578 | oldest: 2026-10-26T13:34:44 | newest: 2026-11-06T01:59:45
+diag	Live state dump (read-only)	2026-11-06T02:03:28.9672233Z === worklog: reply/bitable/feishu for milvus + counts ===
+diag	Live state dump (read-only)	2026-11-06T02:03:28.9673016Z matched: 3089 of 17336 total
+diag	Live state dump (read-only)	2026-11-06T02:03:28.9676854Z {"ts": "2026-11-06T01:39:23", "action": "dashboard_bitable_sync_scan", "target": "1572 rows", "result": "{\"created\": 1, \"updated\": 3, \"skipped\": 1568, \"pruned\": 0}", "source": "web-ui"}
+diag	Live state dump (read-only)	2026-11-06T02:03:28.9678291Z {"ts": "2026-11-06T01:39:25", "action": "dashboard_bitable_sync_cand", "target": "1 rows", "result": "{\"created\": 0, \"updated\": 0, \"skipped\": 1, \"pruned\": 0}", "source": "web-ui"}
+diag	Live state dump (read-only)	2026-11-06T02:03:28.9679861Z {"ts": "2026-11-06T01:52:42", "action": "dashboard_pr_needs_reply", "target": "docker/compose#14450", "result": "address_review from ndeloof: Thanks, removing the `*` special case is the right fix: I checked that with `*` then `!src`, `data/log`, `.e
+diag	Live state dump (read-only)	2026-11-06T02:03:28.9681922Z {"ts": "2026-11-06T01:52:48", "action": "dashboard_pr_review_fix_dispatch", "target": "docker/compose#14450", "result": "dispatched=True kind=review reason=review request from ndeloof", "source": "web-ui"}
+diag	Live state dump (read-only)	2026-11-06T02:03:28.9683424Z {"ts": "2026-11-06T01:52:49", "action": "dashboard_pr_reply_drafted", "target": "docker/compose#14450", "result": "drafted=False reason=already replied; waiting on them fix_kind=review", "source": "web-ui"}
+diag	Live state dump (read-only)	2026-11-06T02:03:28.9686822Z {"ts": "2026-11-06T01:52:49", "action": "dashboard_pr_needs_reply", "target": "bytedance/deer-flow#7822", "result": "address_review from willem-bd: Follow-up on the fix (prior threads verified resolved at this head): this denominator counts *all* mal
+diag	Live state dump (read-only)	2026-11-06T02:03:28.9689060Z {"ts": "2026-11-06T01:52:55", "action": "dashboard_pr_review_fix_dispatch", "target": "bytedance/deer-flow#7822", "result": "dispatched=True kind=review reason=review request from willem-bd", "source": "web-ui"}
+diag	Live state dump (read-only)	2026-11-06T02:03:28.9690558Z {"ts": "2026-11-06T01:52:56", "action": "dashboard_pr_reply_drafted", "target": "bytedance/deer-flow#7822", "result": "drafted=False reason=already replied; waiting on them fix_kind=review", "source": "web-ui"}
+diag	Live state dump (read-only)	2026-11-06T02:03:28.9692763Z {"ts": "2026-11-06T01:52:56", "action": "dashboard_pr_needs_reply", "target": "bytedance/deer-flow#7812", "result": "address_review from willem-bd: Optional nit: `_document_source_text` drops the document's `title` and `context` fields, which `subage
+diag	Live state dump (read-only)	2026-11-06T02:03:28.9696300Z {"ts": "2026-11-06T01:53:02", "action": "dashboard_pr_review_fix_dispatch", "target": "bytedance/deer-flow#7812", "result": "dispatched=True kind=review reason=review request from willem-bd", "source": "web-ui"}
+diag	Live state dump (read-only)	2026-11-06T02:03:28.9698071Z {"ts": "2026-11-06T01:53:04", "action": "dashboard_pr_reply_drafted", "target": "bytedance/deer-flow#7812", "result": "drafted=False reason=already replied; waiting on them fix_kind=review", "source": "web-ui"}
+diag	Live state dump (read-only)	2026-11-06T02:03:28.9699999Z {"ts": "2026-11-06T01:53:04", "action": "dashboard_pr_needs_reply", "target": "promptfoo/promptfoo#12079", "result": "address_review from chatgpt-codex-connector[bot]: **<sub><sub>![P1 Badge](https://img.shields.io/badge/P1-orange?style=flat)</sub></
+diag	Live state dump (read-only)	2026-11-06T02:03:28.9711032Z {"ts": "2026-11-06T01:53:10", "action": "dashboard_pr_review_fix_dispatch", "target": "promptfoo/promptfoo#12079", "result": "dispatched=True kind=review reason=review request from chatgpt-codex-connector[bot]", "source": "web-ui"}
+diag	Live state dump (read-only)	2026-11-06T02:03:28.9712890Z {"ts": "2026-11-06T01:53:13", "action": "dashboard_pr_reply_drafted", "target": "promptfoo/promptfoo#12079", "result": "drafted=False reason=model error: HTTP 429: {\"error\":{\"type\":\"server_error\",\"message\":\"Upstream reque fix_kind=review", "
+diag	Live state dump (read-only)	2026-11-06T02:03:28.9715075Z {"ts": "2026-11-06T01:53:13", "action": "dashboard_pr_needs_reply", "target": "PrefectHQ/fastmcp#6198", "result": "address_review from chatgpt-codex-connector[bot]: **<sub><sub>![P2 Badge](https://img.shields.io/badge/P2-yellow?style=flat)</sub></sub
+diag	Live state dump (read-only)	2026-11-06T02:03:28.9720185Z {"ts": "2026-11-06T01:53:19", "action": "dashboard_pr_review_fix_dispatch", "target": "PrefectHQ/fastmcp#6198", "result": "dispatched=True kind=review reason=review request from chatgpt-codex-connector[bot]", "source": "web-ui"}
+diag	Live state dump (read-only)	2026-11-06T02:03:28.9722632Z {"ts": "2026-11-06T01:53:35", "action": "dashboard_pr_reply_drafted", "target": "PrefectHQ/fastmcp#6198", "result": "drafted=True reason=None fix_kind=review", "source": "web-ui"}
+diag	Live state dump (read-only)	2026-11-06T02:03:28.9723887Z {"ts": "2026-11-06T01:53:36", "action": "dashboard_feishu_card", "target": "PrefectHQ/fastmcp#6198", "result": "fix_state=pending sent", "source": "web-ui"}
+diag	Live state dump (read-only)	2026-11-06T02:03:28.9956620Z {"ts": "2026-11-06T01:53:44", "action": "dashboard_pr_needs_reply", "target": "pydantic/pydantic-ai-harness#729", "result": "address_review from mpfaffenberger: Hi @xixi-box, thanks for this PR! 👋\n\nHeads up: `pydantic-ai-harness` has been migrated 
+diag	Live state dump (read-only)	2026-11-06T02:03:28.9959737Z {"ts": "2026-11-06T01:53:50", "action": "dashboard_pr_review_fix_dispatch", "target": "pydantic/pydantic-ai-harness#729", "result": "dispatched=True kind=review reason=review request from mpfaffenberger", "source": "web-ui"}
+diag	Live state dump (read-only)	2026-11-06T02:03:28.9962048Z {"ts": "2026-11-06T01:53:52", "action": "dashboard_pr_reply_drafted", "target": "pydantic/pydantic-ai-harness#729", "result": "drafted=False reason=already replied; waiting on them fix_kind=review", "source": "web-ui"}
+diag	Live state dump (read-only)	2026-11-06T02:03:28.9963491Z {"ts": "2026-11-06T01:54:02", "action": "dashboard_bitable_sync_pr", "target": "29 rows", "result": "{\"created\": 0, \"updated\": 6, \"skipped\": 23, \"pruned\": 0}", "source": "web-ui"}
+diag	Live state dump (read-only)	2026-11-06T02:03:28.9965143Z {"ts": "2026-11-06T01:54:06", "action": "dashboard_bitable_sync_repos", "target": "51 rows", "result": "{\"created\": 0, \"updated\": 42, \"skipped\": 9, \"pruned\": 0}", "source": "web-ui"}
+diag	Live state dump (read-only)	2026-11-06T02:03:28.9967524Z {"ts": "2026-11-06T01:54:17", "action": "dashboard_bitable_sync_scan", "target": "1576 rows", "result": "{\"created\": 4, \"updated\": 3, \"skipped\": 1569, \"pruned\": 0}", "source": "web-ui"}
+diag	Live state dump (read-only)	2026-11-06T02:03:28.9969483Z {"ts": "2026-11-06T01:54:20", "action": "dashboard_bitable_sync_cand", "target": "1 rows", "result": "{\"created\": 0, \"updated\": 0, \"skipped\": 1, \"pruned\": 0}", "source": "web-ui"}
+diag	Live state dump (read-only)	2026-11-06T02:03:28.9970680Z === pr_replies.json statuses ===
+diag	Live state dump (read-only)	2026-11-06T02:03:28.9971312Z   docker/compose#14450 -> draft | fix: failed | sent_at: 2026-11-04T11:02:04
+diag	Live state dump (read-only)	2026-11-06T02:03:28.9972139Z   pydantic/pydantic-ai-harness#729 -> draft | fix: pushed | sent_at: 
+diag	Live state dump (read-only)	2026-11-06T02:03:28.9972939Z   agentgateway/agentgateway#4264 -> sent | fix: None | sent_at: 2026-11-04T15:45:51
+diag	Live state dump (read-only)	2026-11-06T02:03:28.9973556Z   modelcontextprotocol/registry#1788 -> draft | fix: pushed | sent_at: 
+diag	Live state dump (read-only)	2026-11-06T02:03:28.9974985Z   promptfoo/promptfoo#12079 -> draft | fix: failed | sent_at: 
+diag	Live state dump (read-only)	2026-11-06T02:03:28.9975760Z   bytedance/deer-flow#7822 -> draft | fix: failed | sent_at: 
+diag	Live state dump (read-only)	2026-11-06T02:03:28.9976356Z   bytedance/deer-flow#7812 -> draft | fix: failed | sent_at: 
+diag	Live state dump (read-only)	2026-11-06T02:03:28.9976954Z   milvus-io/milvus#54998 -> draft | fix: pending | sent_at: 
+diag	Live state dump (read-only)	2026-11-06T02:03:28.9977672Z   milvus-io/milvus#55034 -> draft | fix: pending | sent_at: 
+diag	Live state dump (read-only)	2026-11-06T02:03:28.9978392Z   PrefectHQ/fastmcp#6198 -> draft | fix: failed | sent_at: 
+diag	Live state dump (read-only)	2026-11-06T02:03:28.9979109Z   pydantic/pydantic-ai#9285 -> draft | fix: failed | sent_at: 
+diag	Live state dump (read-only)	2026-11-06T02:03:28.9979889Z   PrefectHQ/fastmcp#6172 -> draft | fix: pushed | sent_at: 
+diag	Live state dump (read-only)	2026-11-06T02:03:28.9980565Z   PrefectHQ/fastmcp#6195 -> draft | fix: failed | sent_at: 
+diag	Live state dump (read-only)	2026-11-06T02:03:28.9981282Z   PrefectHQ/fastmcp#6171 -> draft | fix: failed | sent_at: 
+diag	Live state dump (read-only)	2026-11-06T02:03:28.9981868Z === worklog plain tail (last 8, any kind) ===
+diag	Live state dump (read-only)	2026-11-06T02:03:28.9982376Z total lines: 17336
+diag	Live state dump (read-only)	2026-11-06T02:03:28.9982647Z mtime: 2026-11-06T02:00:54.607884
+diag	Live state dump (read-only)	2026-11-06T02:03:28.9984883Z {"ts": "2026-11-06T01:54:20", "action": "dashboard_bitable_sync_cand", "target": "1 rows", "result": "{\"created\": 0, \"updated\": 0, \"skipped\": 1, \"pruned\": 0}", "source": "web-ui"}
+diag	Live state dump (read-only)	2026-11-06T02:03:28.9986370Z {"ts": "2026-11-06T01:54:30", "action": "dashboard_pr_fix_result", "target": "pydantic/pydantic-ai#9285", "result": "pushed=False test=None", "source": "web-ui"}
+diag	Live state dump (read-only)	2026-11-06T02:03:28.9987878Z {"ts": "2026-11-06T01:54:54", "action": "dashboard_pr_fix_result", "target": "docker/compose#14450", "result": "pushed=False test=no-change", "source": "web-ui"}
+diag	Live state dump (read-only)	2026-11-06T02:03:28.9989120Z {"ts": "2026-11-06T01:57:52", "action": "dashboard_pr_fix_result", "target": "bytedance/deer-flow#7822", "result": "pushed=False test=unverified: no test runner detected", "source": "web-ui"}
+diag	Live state dump (read-only)	2026-11-06T02:03:28.9991264Z {"ts": "2026-11-06T01:58:08", "action": "dashboard_pr_fix_result", "target": "promptfoo/promptfoo#12079", "result": "pushed=False test=no-change", "source": "web-ui"}
+diag	Live state dump (read-only)	2026-11-06T02:03:28.9993173Z {"ts": "2026-11-06T01:59:45", "action": "dashboard_pr_fix_result", "target": "PrefectHQ/fastmcp#6198", "result": "pushed=False test=no-change", "source": "web-ui"}
+diag	Live state dump (read-only)	2026-11-06T02:03:28.9994829Z {"ts": "2026-11-06T02:00:41", "action": "dashboard_pr_fix_result", "target": "pydantic/pydantic-ai-harness#729", "result": "pushed=True test=pytest ['./tests/tool_output_limits/'] rc=0", "source": "web-ui"}
+diag	Live state dump (read-only)	2026-11-06T02:03:28.9996646Z {"ts": "2026-11-06T02:00:54", "action": "dashboard_pr_fix_result", "target": "bytedance/deer-flow#7812", "result": "pushed=False test=unverified: no test runner detected", "source": "web-ui"}
+diag	Live state dump (read-only)	2026-11-06T02:03:28.9997652Z === hung gh processes in container ===
+diag	Live state dump (read-only)	2026-11-06T02:03:28.9998418Z ps failed: [Errno 2] No such file or directory: 'ps'
+diag	Live state dump (read-only)	2026-11-06T02:03:28.9999089Z === pr_sync (worker primary channel) ===
+diag	Live state dump (read-only)	2026-11-06T02:03:28.9999627Z at: 2026-11-06T01:52:41 | prs: 31
+diag	Complete job	﻿2026-11-06T02:03:29.0218344Z Cleaning up orphan processes
