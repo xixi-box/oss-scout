@@ -569,9 +569,9 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
             # 时间窗判断后调模块级实现（粗筛+细筛+立即送修，见 _staged_flush_once）
             hour = int(cfg.get("staged_flush_hour_local", 4))
             now = _dt.datetime.now()
-            window_end = (dt.datetime.combine(now.date(), dt.time(hour, 0))
-                          + dt.timedelta(hours=1)).time()
-            if not (dt.time(hour, 0) <= now.time() <= window_end):
+            window_end = (_dt.datetime.combine(now.date(), _dt.time(hour, 0))
+                          + _dt.timedelta(hours=1)).time()
+            if not (_dt.time(hour, 0) <= now.time() <= window_end):
                 return
             _staged_flush_once(root, cfg)
 
