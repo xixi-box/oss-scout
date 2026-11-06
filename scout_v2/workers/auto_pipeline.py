@@ -960,22 +960,25 @@ def _order_candidates(entries: list[tuple[str, dict]],
     条"这类问题无从查起。
     """
     staged, fresh = [], []
+    waiting_backlog = False
     for key, e in entries:
-        if not _eligible(e):
-            continue
         if e.get("status") == STAGED_STATUS:
             if _stage_age_days(e) > STAGE_TTL_DAYS:
                 if expired_out is not None:
                     expired_out.append(key)
                 continue
+            if not _eligible(e):
+                waiting_backlog = True
+                continue
             staged.append((key, e))
-        else:
+        elif _eligible(e):
             fresh.append((key, e))
-    # 暂存组按进入时间正序（最早暂存的先做）；新候选按发现时间正序
-    staged.sort(key=lambda kv: str(kv[1].get("staged_at")
-                                   or kv[1].get("discovered_at") or ""))
-    fresh.sort(key=lambda kv: str(kv[1].get("discovered_at") or ""))
-    return staged + fresh
+    staged.sort(key=lambda kv: (str(kv[1].get("staged_at") or kv[1].get("discovered_at") or ""),
+                                str(kv[1].get("discovered_at") or ""), kv[0]))
+    fresh.sort(key=lambda kv: (str(kv[1].get("discovered_at") or ""), kv[0]))
+    # Midnight quota reset must not let new arrivals spend the slots reserved
+    # for yesterday's backlog before its 04:00 eligibility boundary.
+    return staged + ([] if waiting_backlog else fresh)
 
 
 def drain_ai_graded(root: Path, limit: int = 3, dry_run: bool = True,

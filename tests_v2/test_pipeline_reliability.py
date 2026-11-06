@@ -309,3 +309,13 @@ def test_table_does_not_hide_a_live_staged_candidate_due_to_old_update_time():
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     assert mod.queue_display_state("staged", "2020-01-01T00:00:00") == "排队中"
+
+
+def test_fresh_issue_cannot_take_backlog_slots_before_four_am(monkeypatch):
+    from zoneinfo import ZoneInfo
+    monkeypatch.setattr(p, "business_now", lambda *a: dt.datetime(2026, 11, 7, 1, 0,
+                                                                tzinfo=ZoneInfo("Asia/Shanghai")))
+    old = {"status": "staged", "staged_at": "2026-11-06T20:00:00+08:00",
+           "eligible_at": "2026-11-07T04:00:00+08:00"}
+    new = {"status": "new", "discovered_at": "2026-11-07T01:00:00+08:00"}
+    assert p._order_candidates([("old", old), ("new", new)]) == []
