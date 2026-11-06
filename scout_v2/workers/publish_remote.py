@@ -128,14 +128,25 @@ def publish(repo_dir: Path, patch_file: Path, publish_cfg: dict) -> dict:
         push_url = f"https://x-access-token:{token}@github.com/{push_repo}.git"
     else:
         push_url = f"https://github.com/{push_repo}.git"
+    head = f"{push_repo.split('/')[0]}:{branch}"
     pu = _run(["git", "push", "-q", push_url, f"HEAD:refs/heads/{branch}"], cwd=repo_dir)
     if pu.returncode != 0:
-        # stderr 可能含 token 的 URL，回传前脱敏
-        msg = (pu.stderr or "").replace(token, "***") if token else (pu.stderr or "")
-        return {"ok": False, "error": f"push failed: {msg[-250:]}"}
+        # 分支名是确定式的（fix/<issueN>-<slug>）：上一轮 repair 失败留在 fork 上的
+        # 旧分支会让这次 push 撞 non-fast-forward。旧分支只有还挂着一个 open PR 时
+        # 不能动（那时根本不该重走 publish）；否则删掉残留分支重推一次。
+        open_pr = _run(["gh", "pr", "list", "--repo", upstream, "--head", head,
+                        "--state", "open", "--json", "url", "--jq", ".[0].url"])
+        if open_pr.returncode == 0 and not (open_pr.stdout or "").strip():
+            _run(["gh", "api", "-X", "DELETE",
+                  f"repos/{push_repo}/git/refs/heads/{branch}"])
+            pu = _run(["git", "push", "-q", push_url,
+                       f"HEAD:refs/heads/{branch}"], cwd=repo_dir)
+        if pu.returncode != 0:
+            # stderr 可能含 token 的 URL，回传前脱敏
+            msg = (pu.stderr or "").replace(token, "***") if token else (pu.stderr or "")
+            return {"ok": False, "error": f"push failed: {msg[-250:]}"}
 
     # 3) 向原仓库开 PR（gh 读 GH_TOKEN；runner 的 GITHUB_TOKEN 对上游有 issue 写权）
-    head = f"{push_repo.split('/')[0]}:{branch}"
     pr = _run(["gh", "pr", "create", "--repo", upstream, "--head", head,
                "--title", title, "--body", body])
     if pr.returncode != 0:
