@@ -336,11 +336,11 @@ class TestCandidateRows:
             "a/b#4": self._entry("needs_maintainer_confirm"),     # 等确认 → 留
             "a/b#5": self._entry("queued_hist"),                  # 历史 → 踢
             "a/b#6": self._entry("out_of_scope"),                 # 范围外 → 踢
-            "a/b#7": self._entry("new", updated="2026-10-01T00:00:00"),  # 躺超3天 → 踢
+            "a/b#7": self._entry("new", updated="2026-10-01T00:00:00"),  # 实际仍在排队 → 留
         }), encoding="utf-8")
         rows = mp.build_candidate_rows(tmp_path)
         states = {r["key"]: r["queue_state"] for r in rows}
-        assert set(states) == {"a/b#1", "a/b#4"}
+        assert set(states) == {"a/b#1", "a/b#4", "a/b#7"}
         assert all(v == "排队中" for v in states.values())
 
     def test_scan_rows_carry_queue_state(self, tmp_path, monkeypatch):

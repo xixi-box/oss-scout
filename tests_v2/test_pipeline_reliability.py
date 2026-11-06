@@ -299,3 +299,13 @@ def test_exact_roster_is_preserved():
     worker = re.search(r'REPOS = "([^"]+)"', (root / "cloudflare/wrangler.toml").read_text(encoding="utf-8"))[1].split(",")
     assert len(monitored) == 50
     assert set(worker) == monitored
+
+
+def test_table_does_not_hide_a_live_staged_candidate_due_to_old_update_time():
+    import importlib.util
+    from pathlib import Path
+    path = Path(__file__).resolve().parents[1] / "scripts/monitor_prs.py"
+    spec = importlib.util.spec_from_file_location("monitor_table_regression", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    assert mod.queue_display_state("staged", "2020-01-01T00:00:00") == "排队中"

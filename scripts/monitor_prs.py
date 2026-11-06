@@ -1040,14 +1040,8 @@ def queue_display_state(status: str, updated_at: str = "") -> str:
     if status in _QUEUE_RED:
         return "已失效"
     if status in _QUEUE_YELLOW:
-        if updated_at:
-            try:
-                age = _dt.datetime.now() - _dt.datetime.fromisoformat(
-                    str(updated_at)[:19])
-                if age.days >= QUEUE_EXPIRE_DAYS:
-                    return "已失效"
-            except ValueError:
-                pass
+        # Expiration is a real queue transition owned by the dispatcher. An old
+        # updated_at must not hide work that was just deferred to tomorrow.
         return "排队中"
     return ""
 
