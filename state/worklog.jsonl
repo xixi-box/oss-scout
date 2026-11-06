@@ -713,3 +713,4 @@
 {"ts": "2026-11-06T00:18:36", "action": "dashboard_pr_reply_drafted", "target": "promptfoo/promptfoo#12079", "result": "drafted=False reason=no comments fix_kind=review", "source": "web-ui"}
 {"ts": "2026-11-06T00:18:36", "action": "dashboard_pr_needs_reply", "target": "PrefectHQ/fastmcp#6198", "result": "address_review from chatgpt-codex-connector[bot]: **<sub><sub>![P2 Badge](https://img.shields.io/badge/P2-yellow?style=flat)</sub></sub>  Preserve callable wrappers' exposed signatures for URI validat", "source": "web-ui"}
 {"ts": "2026-11-06T00:18:49", "action": "dashboard_pr_review_fix_dispatch", "target": "PrefectHQ/fastmcp#6198", "result": "dispatched=True kind=review reason=review request from chatgpt-codex-connector[bot]", "source": "web-ui"}
+{"ts": "2026-11-06T09:43:16", "action": "dashboard_staged_flush_error", "target": "-", "result": "name 'dt' is not defined", "source": "web-ui"}

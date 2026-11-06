@@ -292,6 +292,28 @@ def _todays_claim_count(root: Path, key: str) -> int:
     return n
 
 
+def _abort_release(msg: str, *, give_back: bool = True) -> dict:
+    """中止并归还额度（2026-11-05 用户裁定：所有失败一律退坑）。
+
+    「每天 5 个」指的是**5 个开出的 PR**，不是 5 次尝试——失败的认领
+    必须退坑，让下一条候选顶上，直到开出 5 个 PR 或候选耗尽。
+
+    防死循环不靠扣名额，靠两道闸：
+      1. 同候选同日不再认领（try_claim 的 already-claimed）
+      2. 同候选每天最多试 3 次（worklog 计数的保险丝，见
+         _todays_claim_count；2026-11-05 修复：计数曾因并发写丢失
+         而失效，fastmcp#6298 一天被认领 6 次即此）
+
+    give_back 参数保留以兼容调用方，但语义已改为"总是退坑"。
+    """
+    ledger.release_claim(key, eng.tz_name)
+    ledger.close()
+    summary["abort"] = msg
+    log(root, "abort", key, msg + ("; claim released" if give_back
+                                   else "; claim kept (attempt consumed)"))
+    return summary
+
+
 def candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6) -> dict:
     """单候选：复检 → 合规 → 后端修复 → 质量闸 → push + PR。"""
     root = _data_root(root)
@@ -443,26 +465,6 @@ def candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6) -> dict:
                    extra={"attempts": attempts + 1})
     summary["steps"].append(f"claimed (attempt {attempts + 1}, daily budget)")
 
-    def _abort_release(msg: str, *, give_back: bool = True) -> dict:
-        """中止并归还额度（2026-11-05 用户裁定：所有失败一律退坑）。
-
-        「每天 5 个」指的是**5 个开出的 PR**，不是 5 次尝试——失败的认领
-        必须退坑，让下一条候选顶上，直到开出 5 个 PR 或候选耗尽。
-
-        防死循环不靠扣名额，靠两道闸：
-          1. 同候选同日不再认领（try_claim 的 already-claimed）
-          2. 同候选每天最多试 3 次（worklog 计数的保险丝，见
-             _todays_claim_count；2026-11-05 修复：计数曾因并发写丢失
-             而失效，fastmcp#6298 一天被认领 6 次即此）
-
-        give_back 参数保留以兼容调用方，但语义已改为"总是退坑"。
-        """
-        ledger.release_claim(key, eng.tz_name)
-        ledger.close()
-        summary["abort"] = msg
-        log(root, "abort", key, msg + ("; claim released" if give_back
-                                       else "; claim kept (attempt consumed)"))
-        return summary
 
     # ---- base SHA ----
     head = None
