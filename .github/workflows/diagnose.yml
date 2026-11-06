@@ -27,6 +27,26 @@ jobs:
       - name: Quota and queue consumption
         run: docker exec -i oss-scout python3 /app/scripts/quota_probe.py
 
+      - name: Queue composition (new by repo)
+        run: |
+          docker exec -i oss-scout python3 - <<'PY'
+          import json, collections, os
+          from pathlib import Path
+          root = Path(os.environ.get("OSSCOUT_DASHBOARD_ROOT", "/data"))
+          q = json.loads((root / "queue" / "candidates.json")
+                         .read_text(encoding="utf-8"))
+          by = collections.Counter()
+          for k, v in q.items():
+              if isinstance(v, dict) and v.get("status") == "new":
+                  by[str(k).rsplit("#", 1)[0]] += 1
+          print("new total:", sum(by.values()))
+          for repo, n in by.most_common(40):
+              print(" ", repo, n)
+          st = collections.Counter(str((v or {}).get("status"))
+                                   for v in q.values() if isinstance(v, dict))
+          print("all statuses:", dict(st))
+          PY
+
       - name: Restore wrongly-kicked candidates (one-time)
         run: |
           docker exec -i oss-scout python3 - <<'PY'
