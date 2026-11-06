@@ -27,46 +27,30 @@ jobs:
       - name: Quota and queue consumption
         run: docker exec -i oss-scout python3 /app/scripts/quota_probe.py
 
-      - name: Kick expired candidates from queue
+      - name: Restore wrongly-kicked candidates (one-time)
         run: |
           docker exec -i oss-scout python3 - <<'PY'
           import json, os
           from pathlib import Path
-          import datetime as dt
           root = Path(os.environ.get("OSSCOUT_DASHBOARD_ROOT", "/data"))
           qpath = root / "queue" / "candidates.json"
           q = json.loads(qpath.read_text(encoding="utf-8"))
-          RED = {"aborted_stale", "stage_expired", "escalated", "aborted_competed",
-                 "aborted_duplicate", "aborted_closed", "aborted_no_evidence",
-                 "aborted_blocked_design", "recheck_failed", "queued_hist"}
-          kicked, kept = [], 0
+          # 2026-11-06 一次性恢复：昨天的 Kick 步骤把 409 条候选（含 49 条
+          # 正常排队的 new）误标 stage_expired，清空了消费队列。全部恢复
+          # 为 new，让 drain 按老→新顺序逐条消费；真正过期的会在认领前
+          # 复检和修复失败中被自然淘汰。
+          restored = 0
           for key, e in q.items():
               e = e or {}
-              st = str(e.get("status") or "")
-              if st in RED:
-                  e["status"] = "stage_expired"
-                  kicked.append(key)
-              elif st in ("new", "staged", "needs_maintainer_confirm", "needs_cla",
-                          "gated_alignment_only"):
-                  upd = str(e.get("updated_at") or "")[:19]
-                  try:
-                      age_days = (dt.datetime.now() -
-                                  dt.datetime.fromisoformat(upd)).days
-                  except ValueError:
-                      age_days = 0
-                  if age_days >= 3:
-                      e["status"] = "stage_expired"
-                      kicked.append(key)
-                  else:
-                      kept += 1
+              if e.get("status") == "stage_expired":
+                  e["status"] = "new"
+                  restored += 1
           tmp = qpath.with_suffix(".json.tmp")
           tmp.write_text(json.dumps(q, ensure_ascii=False, indent=1),
                          encoding="utf-8")
           json.loads(tmp.read_text(encoding="utf-8"))
           os.replace(tmp, qpath)
-          print(f"kicked {len(kicked)} expired, kept {kept} queued")
-          for k in kicked[:10]:
-              print("  kicked:", k)
+          print(f"restored {restored} candidates to new")
           PY
 
       - name: Purge too_fresh (age gate retired)
