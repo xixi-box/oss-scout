@@ -1,14 +1,127 @@
-name: Diagnose oss-scout container
+name: Feishu native console preview
 on:
   workflow_dispatch:
 jobs:
   diag:
     runs-on: [self-hosted, aliyun]
-    timeout-minutes: 5
+    timeout-minutes: 8
     steps:
-      - name: Container health
+      - name: Publish and read back native preview tables
+        shell: bash
         run: |
-          docker ps --filter name=oss-scout --format 'table {{.Names}}\t{{.Status}}'
-          curl --fail --silent --show-error --max-time 10 http://127.0.0.1:18787/login > /dev/null
-      - name: Read-only runtime and Worker status
-        run: docker exec oss-scout python /app/scripts/runtime_status.py --worker
+          docker exec -i -w /app oss-scout python - <<'PY'
+          import datetime as dt
+          import json
+          import os
+          from pathlib import Path
+
+          from dashboard.console_activity import snapshot
+          from dashboard.data import DataSource
+          from scout_v2 import feishu_app
+          from scout_v2 import feishu_bitable as bitable
+          from scout_v2.roster import monitored_repo
+          from scout_v2.state_store import business_now
+
+          root = Path(os.environ.get("OSSCOUT_DASHBOARD_ROOT", "/data"))
+          base = bitable._binding_app_token(root)
+          if not base or not feishu_app.app_configured():
+              raise RuntimeError("Existing Feishu application and Base binding are required")
+          data = snapshot(DataSource(root))
+          now = business_now()
+          if len(data["rows"]) != 60 or not data["working_available"]:
+              raise RuntimeError("Live snapshot incomplete")
+          bucket = dt.time.fromisoformat(data["rows"][-1]["time"])
+          last = dt.datetime.combine(now.date(), bucket, tzinfo=now.tzinfo)
+          if last > now:
+              last -= dt.timedelta(days=1)
+
+          labels = {"coarse": "粗筛", "fine": "细筛", "pr": "PR 动作", "reply": "回复草稿", "retry": "失败待查"}
+
+          def ms(value):
+              if not value:
+                  return None
+              value = dt.datetime.fromisoformat(value) if isinstance(value, str) else value
+              return int((value if value.tzinfo else value.replace(tzinfo=now.tzinfo)).timestamp() * 1000)
+
+          def link(item, kind):
+              repo, number = item["repo"], item["number"]
+              return {"text": f"{repo}#{number}", "link": f"https://github.com/{repo}/{kind}/{number}"}
+
+          def publish(label, key, records, columns):
+              fields = [{"field_name": name, "type": kind} for name, kind in (("键", 1), *columns)]
+              for field in fields:
+                  if field["type"] == 5:
+                      field["property"] = {"date_formatter": "yyyy-MM-dd HH:mm"}
+              bitable.sync_table(root, records, table_name=f"运行台预览 · {label}",
+                                 fields=fields, to_fields=lambda row: row, binding_key=key,
+                                 allow_empty=True)
+              table = bitable.load_binding(root)[key]
+              saved = bitable.load_records(base, table)
+              if set(saved) != {row["键"] for row in records}:
+                  raise RuntimeError(f"{label} read-back keys did not match")
+              by_key = {row["键"]: row for row in records}
+              for row_key, record in saved.items():
+                  for name, field_type in columns:
+                      if field_type == 2 and float(record["fields"][name]) != by_key[row_key][name]:
+                          raise RuntimeError(f"{label} numeric read-back did not match")
+                      if field_type == 15 and name in by_key[row_key]:
+                          actual = record["fields"].get(name) or {}
+                          expected = by_key[row_key][name]
+                          if not isinstance(actual, dict) or actual.get("link") != expected["link"]:
+                              raise RuntimeError(f"{label} hyperlink read-back did not match")
+              return {"table": label, "records": len(saved),
+                      "url": f"https://my.feishu.cn/base/{base}?table={table}"}
+
+          summaries, events, runs, queue = [], [], [], []
+          for i, row in enumerate(data["rows"]):
+              minute = last - dt.timedelta(minutes=59 - i)
+              key = minute.strftime("%Y-%m-%d %H:%M")
+              entries = {kind: [item for item in row[kind] if monitored_repo(item["repo"])] for kind in labels}
+              summaries.append({"键": key, "完成分钟": ms(minute),
+                                **{label: len(entries[kind]) for kind, label in labels.items()}})
+              for kind, items in entries.items():
+                  for j, item in enumerate(items):
+                      events.append({"键": f"{key}/{kind}/{j}", "完成分钟": ms(minute),
+                                     "类型": labels[kind], "对象": link(item, item["type"])})
+
+          for items, status, kind in ((data["working"], "工作中", None),
+                                      (data["today"], "今日新 PR", "pull"),
+                                      (data["repairs"], "修复已推送", "pull")):
+              for item in items:
+                  item_kind = kind or ("issues" if item["kind"] == "created" else "pull")
+                  row = {"键": item.get("workflow") or f"{status}/{item['repo']}#{item['number']}/{item.get('time')}",
+                         "状态": status, "对象": link(item, item_kind)}
+                  if item.get("workflow"):
+                      row["工作流"] = {"text": "查看 GitHub Actions", "link": item["workflow"]}
+                  if item.get("time"):
+                      row["完成时间"] = ms(item["time"])
+                  runs.append(row)
+          for i, item in enumerate(data["queue"], 1):
+              row = {"键": f"{item['repo']}#{item['number']}", "FIFO 序号": i, "Issue": link(item, "issues")}
+              for source, field in (("time", "暂存时间"), ("eligible_at", "可消费时间")):
+                  if item.get(source):
+                      row[field] = ms(item[source])
+              queue.append(row)
+
+          total_url = bitable.pr_table_url(root)
+          if not total_url:
+              raise RuntimeError("Existing PR ledger URL is unavailable")
+          settings = [{"键": "当前运行设置", "每日消费时间": data["schedule"],
+                       "今日额度": f"{len(data['today'])} / 5", "采样时间": ms(now),
+                       "总 PR 记录": {"text": "打开现有 PR 记录表", "link": total_url}}]
+          reports = [
+              publish("分钟汇总", "native_preview_minutes", summaries,
+                      (("完成分钟", 5), *((label, 2) for label in labels.values()))),
+              publish("活动明细", "native_preview_events", events,
+                      (("完成分钟", 5), ("类型", 1), ("对象", 15))),
+              publish("任务状态", "native_preview_runs", runs,
+                      (("状态", 1), ("对象", 15), ("工作流", 15), ("完成时间", 5))),
+              publish("暂存队列", "native_preview_queue", queue,
+                      (("FIFO 序号", 2), ("Issue", 15), ("暂存时间", 5), ("可消费时间", 5))),
+              publish("运行概况", "native_preview_settings", settings,
+                      (("每日消费时间", 1), ("今日额度", 1), ("采样时间", 5), ("总 PR 记录", 15))),
+          ]
+          print(json.dumps({"snapshot_bjt": now.isoformat(), "working": len(data["working"]),
+                            "today": len(data["today"]), "repairs": len(data["repairs"]),
+                            "tables": reports}, ensure_ascii=False))
+          PY
