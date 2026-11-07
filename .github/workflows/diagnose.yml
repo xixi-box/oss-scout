@@ -1,33 +1,18 @@
-name: Probe Feishu primary hyperlink
+name: Migrate four Feishu ledgers to linked keys
 on:
   workflow_dispatch:
+    inputs:
+      revision:
+        required: true
+        type: string
 jobs:
   diag:
     runs-on: [self-hosted, aliyun]
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
-      - run: |
-          docker exec -i -w /app oss-scout python - <<'PY'
-          from pathlib import Path
-          import os
-          from scout_v2 import feishu_bitable as b, feishu_app as a
-          root = Path(os.environ.get("OSSCOUT_DASHBOARD_ROOT", "/data"))
-          base = b._binding_app_token(root)
-          tid = b.find_or_create_table(base, "键链接格式临时验证", [{"field_name": "键", "type": 1}])
-          url = f"https://open.feishu.cn/open-apis/bitable/v1/apps/{base}/tables/{tid}/records"
-          token = a.tenant_token()
-          link = "https://github.com/xixi-box/oss-scout"
-          for value in ([{"type": "url", "text": "oss-scout", "link": link}], link):
-              result = a._request("POST", url, {"fields": {"键": value}}, token=token)
-              print("probe", result.get("code"), result.get("msg"))
-              rec = result.get("data", {}).get("record", {}).get("record_id")
-              if rec:
-                  try:
-                      data = a._request("GET", f"{url}?page_size=10&text_field_as_array=true", token=token)
-                      print("read-back", data.get("data", {}).get("items", []))
-                  finally:
-                      deleted = a._request("DELETE", f"{url}/{rec}", token=token)
-                      assert deleted.get("code") == 0
-          deleted = a._request("DELETE", url.rsplit("/", 1)[0], token=token)
-          assert deleted.get("code") == 0
-          PY
+      - name: Verify the running sync version
+        env:
+          EXPECTED_REVISION: ${{ inputs.revision }}
+        run: test "$(docker inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' oss-scout)" = "$EXPECTED_REVISION"
+      - name: Migrate and verify Feishu fields
+        run: docker exec -w /app oss-scout python scripts/migrate_feishu_links.py
