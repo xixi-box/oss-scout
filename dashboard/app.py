@@ -1274,11 +1274,13 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
         _mark_reply(key, "draft", **extra)
         _audit(root, "pr_fix_result", key,
                f"pushed={pushed} test={str(body.get('test_result'))[:80]}")
-        if pushed and body.get("kind") == "review":
+        if pushed and body.get("kind") == "review" and body.get("review_comment_id"):
             def draft_after_push():
                 try:
                     from scripts.monitor_prs import draft_reply, pr_state
                     state = pr_state(repo, num)
+                    state.update(pr_title=state.get("title"), pr_url=state.get("url"),
+                                 pr_body=state.get("body"), review_comment_id=body["review_comment_id"])
                     state["fix_result"] = extra
                     draft = draft_reply(repo, num, context=state)
                     if draft.get("drafted"):

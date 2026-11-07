@@ -526,6 +526,7 @@ def _dispatch_pr_fix(repo: str, number: int, *, dry_run: bool = False,
         return {"dispatched": False, "reason": "head not on our fork"}
 
     head_sha = head.get("headRefOid", "")
+    review_source = None
     if kind == "review":
         # 指令文本 = 全部对方评论（含行内），不是只有最新一条——
         # 2026-11-05 实录：yhmo 三条意见同时在场，"取最新一条"让 fix
@@ -536,10 +537,11 @@ def _dispatch_pr_fix(repo: str, number: int, *, dry_run: bool = False,
                and c.get("body", "").strip() == review_comment.strip()[:COMMENT_TEXT_LIMIT]]
         if not ext:
             return {"dispatched": False, "reason": "review author or comment not verified"}
-        review_comment = ext[-1]["body"]
+        review_source = ext[-1]
+        review_comment = review_source["body"]
         # review 类去重不能用 head_sha：同一条意见在推 commit 之前会被反复看到
         digest = hashlib.sha1(
-            f"{repo}#{number}:{ext[-1]['source']}:{ext[-1]['comment_id']}:{review_comment}".encode()).hexdigest()[:12]
+            f"{repo}#{number}:{review_source['source']}:{review_source['comment_id']}:{review_comment}".encode()).hexdigest()[:12]
         key = f"{repo}#{number}@review:{digest}"
     else:
         key = f"{repo}#{number}@{head_sha[:12]}"
@@ -583,7 +585,8 @@ def _dispatch_pr_fix(repo: str, number: int, *, dry_run: bool = False,
                "head_sha": head_sha, "kind": kind,
                "failing": failing[:6], "comments": comments,
                "review_comment": review_comment[:4000] if kind == "review" else "",
-               "review_author": review_author if kind == "review" else ""}
+               "review_author": review_author if kind == "review" else "",
+               "review_comment_id": review_source["comment_id"] if review_source else None}
     import base64 as _b64
     fix_b64 = _b64.b64encode(json.dumps(payload, ensure_ascii=False).encode()).decode()
     job_id = f"prfix-{repo.replace('/', '-')}-{number}-{key.rsplit('@', 1)[-1][:12]}"
@@ -694,6 +697,9 @@ def draft_reply(repo: str, number: int, *, force: bool = False,
     if not external:
         return {"drafted": False, "reason": "only our own comments"}
     latest = external[-1]
+    expected = (context or {}).get("review_comment_id")
+    if expected and latest.get("comment_id") != expected:
+        return {"drafted": False, "reason": "review comment superseded"}
     prev = replies.get(key) or {}
     if (not force and prev.get("status") == "draft"
             and prev.get("for_comment") == latest.get("created_at")):

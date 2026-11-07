@@ -187,6 +187,9 @@ jobs:
 
           tmp = pathlib.Path(os.environ["RUNNER_TEMP"])
           job = json.loads((tmp / "job.json").read_text())
+          if os.environ.get("GITHUB_RUN_ATTEMPT", "1") != "1":
+              print("publication requires a new controller reservation; skipping rerun")
+              sys.exit(0)
           if not (job.get("publish") or {}):
               print("no publish config in payload; skipping")
               sys.exit(0)
