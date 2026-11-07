@@ -14,7 +14,9 @@ on:
         default: false
 jobs:
   deploy:
-    runs-on: [self-hosted, aliyun]
+    # The Worker deploy only calls Cloudflare and does not need the app's deployment host.
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
     steps:
       - uses: actions/checkout@v4
 
@@ -43,7 +45,7 @@ jobs:
           if [ "${{ inputs.dry_run }}" = "true" ]; then FLAGS="--dry-run"; fi
           # 部署机 node 是 v20，wrangler 4.x 要求 >=22（EBADENGINE）。
           # 锁 3.x：功能足够部署 Worker，且兼容 node 20。
-          npx --yes wrangler@3 deploy $FLAGS 2>&1 | tail -30
+          npx --yes wrangler@3 deploy $FLAGS
 
       - name: Verify live repo count
         if: inputs.dry_run != true
