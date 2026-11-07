@@ -229,8 +229,12 @@ def build_reply_card(repo: str, number: int, issue_title: str,
     }
 
 
-def build_pr_approval_card(record: dict, *, draft: str = "", complete: bool = False,
+def build_pr_approval_card(record: dict, *, draft: str = "", drafts: dict | None = None,
+                           selected: list | None = None, complete: bool = False,
                            error: str = "", preview: bool = False) -> dict:
+    import html
+    import re
+
     repo, number = record["repo"], record["number"]
     link = f"https://github.com/{repo}/pull/{number}"
     run_id = str(record.get("run_id") or "")
@@ -244,30 +248,64 @@ def build_pr_approval_card(record: dict, *, draft: str = "", complete: bool = Fa
     if source_url.startswith(link + "#"):
         elements.append({"tag": "div", "text": {"tag": "lark_md",
                          "content": f"[{source_label}]({source_url})"}})
-    if preview:
-        elements.append({"tag": "div", "text": {"tag": "plain_text",
-                         "content": "演示 · 按钮仅预览，不会向 GitHub 写入。"}})
     status = record.get("reply_status")
+    targets = record.get("targets") or []
+    drafts = drafts or {}
     for value in (
         record.get("title"),
-        f"{record['source_author']}：{record.get('source_comment') or ''}" if record.get("source_author") else "",
+        f"{record['source_author']}：{record.get('source_comment') or ''}"
+        if record.get("source_author") and not targets else "",
         record.get("summary"),
         (f"{'已推送' if record.get('pushed') else '已提交，待推送'} {sha[:12]}\n"
          f"测试：{record.get('test_result') or ''}\n"
          + "\n".join(record.get("changed_files") or [])) if sha else "",
-        (f"回复发送失败\n草稿：{draft}" if draft else "回复发送失败") if status == "failed" else "",
-        (f"已回复：{draft}" if draft else "已回复") if status == "sent" else "",
+        (f"回复发送失败\n草稿：{draft}" if draft else "回复发送失败") if status == "failed" and not targets else "",
+        (f"已回复：{draft}" if draft else "已回复") if status == "sent" and not targets else "",
         error,
     ):
         if value:
             elements.append({"tag": "div", "text": {"tag": "plain_text", "content": str(value)[:1200]}})
+    form = []
+    options = []
+    for i, target in enumerate(targets):
+        target_id = target["id"]
+        target_draft = drafts.get(target_id, "")
+        target_url = str(target.get("url") or "")
+        label = {"change": "代码修改", "answer": "答复", "skip": "无需处理"}.get(target["action"], "")
+        heading = f"**{i + 1}. {label} · {html.escape(str(target.get('author') or ''))}**"
+        if target_url.startswith(link + "#") and re.fullmatch(r"[a-zA-Z0-9_-]+", target_url.split("#", 1)[1]):
+            heading += f" · [原讨论]({target_url})"
+        source = html.escape(str(target.get("body") or "")[:1000])
+        source = re.sub(r"(?m)^\s*```suggestion[^\n]*$", "\n**建议修改**\n```", source)
+        details = {"tag": "markdown", "content": f"{heading}\n{source}"}
+        if complete:
+            elements.append(details)
+            result = (record.get("reply_statuses") or {}).get(target_id)
+            if target["has_draft"]:
+                content = {"sent": "已发送", "failed": "发送失败"}.get(result, "未选择发送")
+                if result == "failed" and target_draft:
+                    content += f"\n{target_draft}"
+                elements.append({"tag": "div", "text": {"tag": "plain_text", "content": content}})
+        else:
+            form.append(details)
+            if target["has_draft"]:
+                options.append({"text": {"tag": "plain_text", "content": f"{i + 1}. {label}"},
+                                "value": target_id})
+                form.append({"tag": "input", "name": f"reply_{i}", "default_value": target_draft[:1000],
+                             "input_type": "multiline_text", "rows": 3, "max_length": 1000,
+                             "width": "fill", "placeholder": {"tag": "plain_text", "content": "编辑这条回复"}})
     if not complete:
         button = {"tag": "button", "type": "primary", "name": "confirm",
                   "text": {"tag": "plain_text", "content": (
-                      "确认推送并回复" if sha and draft else "确认推送" if sha else "确认回复")},
+                      "确认推送并回复" if sha and (draft or options) else "确认推送" if sha else "确认回复")},
                   "value": {"do": "preview_pr_followup" if preview else "approve_pr_followup",
                             "job_id": record.get("job_id", "")}}
-        form = []
+        if options:
+            values = [option["value"] for option in options]
+            form.insert(0, {"tag": "multi_select_static", "name": "selected_replies",
+                            "placeholder": {"tag": "plain_text", "content": "勾选要发送的回复"},
+                            "options": options, "initial_options": values if selected is None else
+                            [value for value in values if value in selected]})
         if draft:
             form.append({"tag": "input", "name": "reply_text", "default_value": draft,
                          "input_type": "multiline_text", "rows": 6, "max_length": 1000,
@@ -277,7 +315,7 @@ def build_pr_approval_card(record: dict, *, draft: str = "", complete: bool = Fa
     return {"config": {"wide_screen_mode": True, "update_multi": True},
             "header": {"template": "red" if status == "failed" else "green" if complete else "orange",
                        "title": {"tag": "plain_text", "content":
-                                 f"{'PR 跟进演示' if preview else 'PR 跟进结果' if complete else 'PR 跟进待确认'}：{repo}#{number}"}},
+                                 f"{'PR 跟进结果' if complete else 'PR 跟进待确认'}：{repo}#{number}"}},
             "elements": elements}
 
 

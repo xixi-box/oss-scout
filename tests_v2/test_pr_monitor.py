@@ -341,6 +341,26 @@ class TestReviewDispatch:
         assert second["dispatched"] is False
         assert "already attempted" in second["reason"]
 
+    def test_inline_comments_in_one_submitted_review_dispatch_once(self, monkeypatch, tmp_path):
+        import base64
+        from datetime import datetime, timezone
+
+        runs = self._setup(monkeypatch, tmp_path)
+        now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        monkeypatch.setattr(mp, "_thread", lambda *args, **kwargs: [
+            {"source": "review", "comment_id": 42, "review_id": 42, "body": "",
+             "review_state": "COMMENTED", "author": "maint", "created_at": now},
+            *({"source": "inline", "comment_id": i, "thread_id": i, "review_id": 42,
+               "body": "Review comment", "author": "maint", "created_at": now}
+              for i in range(1, 6)),
+        ])
+        assert mp.dispatch_pr_fix("docker/compose", 7, kind="followup")["dispatched"]
+        assert not mp.dispatch_pr_fix("docker/compose", 7, kind="followup",
+                                      source_kind="inline", comment_id=5)["dispatched"]
+        assert len(runs) == 1
+        encoded = next(arg.split("=", 1)[1] for arg in runs[0] if arg.startswith("fix_b64="))
+        assert json.loads(base64.b64decode(encoded))["review_id"] == 42
+
     def test_different_review_dispatches_again(self, monkeypatch, tmp_path):
         self._setup(monkeypatch, tmp_path)
         mp.dispatch_pr_fix("docker/compose", 7, kind="review",

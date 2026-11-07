@@ -532,6 +532,8 @@ def _dispatch_pr_fix(repo: str, number: int, *, dry_run: bool = False,
 
     head_sha = head.get("headRefOid", "")
     review_source = None
+    review_id = None
+    attempts = _attempts()
     if kind == "followup":
         from datetime import datetime, timedelta, timezone
         thread = _thread(repo, number, limit=None)
@@ -542,15 +544,26 @@ def _dispatch_pr_fix(repo: str, number: int, *, dry_run: bool = False,
         else:
             since = (datetime.now(timezone.utc) - timedelta(hours=48)).strftime("%Y-%m-%dT%H:%M:%SZ")
             human = [c for c in human if c["created_at"] >= since]
-        review_source = human[-1] if human else None
+        prefix = f"{repo.lower()}#{number}@followup:"
+        for candidate in human:
+            group = candidate.get("review_id")
+            if group and not any(c["source"] == "review" and c["comment_id"] == group
+                                 and c.get("review_state") not in ("PENDING", "DISMISSED") for c in thread):
+                continue
+            candidate_key = prefix + (f"review:{group}" if group else
+                                       f"{candidate['source']}:{candidate['comment_id']}")
+            if candidate_key in attempts and not force and attempts[candidate_key].get("reason") != "dispatch failed":
+                continue
+            if any(c["author"] in MY_LOGINS and c["created_at"] > candidate["created_at"]
+                   and ((c["source"] == "inline" and c["thread_id"] == candidate["thread_id"])
+                        if candidate["source"] == "inline"
+                        else comment_id is None and c["source"] == "issue")
+                   for c in thread):
+                continue
+            review_source, review_id, key = candidate, group, candidate_key
+            break
         if not review_source:
             return {"dispatched": False, "reason": "no actionable human comment"}
-        if any(c["author"] in MY_LOGINS and c["created_at"] > review_source["created_at"]
-               and ((c["source"] == "inline" and c["thread_id"] == review_source["thread_id"])
-                    if review_source["source"] == "inline"
-                    else comment_id is None and c["source"] == "issue") for c in thread):
-            return {"dispatched": False, "reason": "already replied"}
-        key = f"{repo.lower()}#{number}@followup:{review_source['source']}:{review_source['comment_id']}"
     elif kind == "review":
         # 指令文本 = 全部对方评论（含行内），不是只有最新一条——
         # 2026-11-05 实录：yhmo 三条意见同时在场，"取最新一条"让 fix
@@ -569,7 +582,6 @@ def _dispatch_pr_fix(repo: str, number: int, *, dry_run: bool = False,
         key = f"{repo}#{number}@review:{digest}"
     else:
         key = f"{repo}#{number}@{head_sha[:12]}"
-    attempts = _attempts()
     if key in attempts and not force and attempts[key].get("reason") != "dispatch failed":
         return {"dispatched": False, "reason": f"already attempted: {key}"}
 
@@ -614,6 +626,7 @@ def _dispatch_pr_fix(repo: str, number: int, *, dry_run: bool = False,
                "review_comment": review_comment[:4000] if kind == "review" else "",
                "review_author": review_author if kind == "review" else "",
                "review_comment_id": review_source["comment_id"] if review_source else None,
+               "review_id": review_id,
                "source_kind": review_source["source"] if review_source else None}
     from scout_v2.console_models import read_models
     model = read_models(DATA_ROOT).get("repair_model")
@@ -677,6 +690,8 @@ def _thread(repo: str, number: int, limit: int | None = 10) -> list[dict]:
                             "body": body if limit is None else body[:COMMENT_TEXT_LIMIT],
                             "url": comment.get("html_url"),
                             "thread_id": comment.get("in_reply_to_id") or comment["id"],
+                            "review_id": comment.get("pull_request_review_id") or
+                                         (comment["id"] if source == "review" else None),
                             "path": comment.get("path"), "line": comment.get("line"),
                             "original_line": comment.get("original_line"),
                             "diff_hunk": comment.get("diff_hunk"), "review_state": comment.get("state"),

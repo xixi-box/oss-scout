@@ -1313,6 +1313,19 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
                     if not is_human_followup_author(str(trigger.get("author") or ""), trigger.get("author_type")):
                         _audit(root, "pr_followup_no_approval", key, "non-human trigger")
                         return {"ok": True, "outcome": "no_approval"}
+                responses = body.get("responses") or []
+                drafts = {item["id"]: str(item.get("draft") or "")[:1000] for item in responses}
+                if body.get("preview") is True:
+                    if repo.lower() != "python/cpython" or num != 161543 or len(responses) != 5:
+                        raise ValueError("invalid CPython preview result")
+                    card = feishu_app.build_pr_approval_card(
+                        {**body, "targets": pr_approval.review_targets(responses)}, drafts=drafts, preview=True)
+                    chat = feishu_app.find_group_chat_id()
+                    ok, detail = feishu_app.send_card_to_chat(chat, card, message_uuid=body["job_id"])
+                    if not ok:
+                        raise RuntimeError(f"Feishu preview delivery failed: {detail}")
+                    _audit(root, "pr_review_preview_delivered", key, body["job_id"])
+                    return {"ok": True, "outcome": "preview"}
                 record = pr_approval.stage(root, body)
                 if not record:
                     _audit(root, "pr_followup_no_approval", key, str(body.get("test_result"))[:200])
@@ -1323,7 +1336,7 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
                         raise RuntimeError("Feishu approval chat unavailable")
                     ok, detail = feishu_app.send_card_to_chat(
                         chat, feishu_app.build_pr_approval_card(
-                            record, draft=str(body.get("reply") or "").strip()[:1000]),
+                            record, draft=str(body.get("reply") or "").strip()[:1000], drafts=drafts),
                         message_uuid=record["job_id"])
                     if not ok or not detail:
                         raise RuntimeError(f"Feishu approval delivery failed: {detail}")
@@ -1471,6 +1484,8 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
                     or not operator or (allowed and operator != allowed)):
                 return JSONResponse({"toast": {"type": "error", "content": "无法验证审批人或卡片"}}, status_code=403)
             edited = form_value.get("reply_text")
+            drafts, selected = {}, []
+            submitted = edited if isinstance(edited, str) else None
             if time.time() >= expires:
                 return JSONResponse({"toast": {"type": "error", "content": "审批已过期（保留 7 天）"}})
             if record.get("source_author"):
@@ -1480,12 +1495,22 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
             if not record.get("complete") and record.get("has_reply", bool(record.get("reply"))):
                 if not isinstance(edited, str) or (not record.get("commit_sha") and not edited.strip()):
                     return JSONResponse({"toast": {"type": "error", "content": "请确认卡片已填写并提交回复"}})
+            if record.get("targets"):
+                fields = {target["id"]: f"reply_{i}" for i, target in enumerate(record["targets"])
+                          if target["has_draft"]}
+                drafts = {target: form_value[field] for target, field in fields.items()
+                          if isinstance(form_value.get(field), str)}
+                selected = form_value.get("selected_replies") or []
+                if (not isinstance(selected, list) or any(
+                        not isinstance(target, str) or not drafts.get(target, "").strip() for target in selected)
+                        or (not selected and not record.get("commit_sha") and not record.get("complete"))):
+                    return JSONResponse({"toast": {"type": "error", "content": "请选择要发送的回复并填写内容"}})
+                submitted = {target: drafts[target] for target in selected}
 
             def approve():
                 key = f"{record['repo']}#{record['number']}"
                 try:
-                    done = pr_approval.publish(root, job_id, edited if isinstance(edited, str) else None,
-                                               _post_pr_comment)
+                    done = pr_approval.publish(root, job_id, submitted, _post_pr_comment)
                     if done.get("already_complete"):
                         return
                     if done.get("pushed"):
@@ -1497,17 +1522,19 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
                     elif done.get("reply_status") == "failed":
                         _audit(root, "pr_reply_failed", key, job_id)
                     card = feishu_app.build_pr_approval_card(
-                        done, complete=True, draft=(edited or "").strip()[:1000])
+                        done, complete=True, draft=(edited or "").strip()[:1000], drafts=drafts)
                 except sqlite3.OperationalError as exc:
                     if "locked" in str(exc):
                         return
                     _audit(root, "pr_approval_failed", key, str(exc)[:200])
                     card = feishu_app.build_pr_approval_card(
-                        record, draft=(edited or "").strip()[:1000], error="确认未完成，请稍后重试")
+                        record, draft=(edited or "").strip()[:1000], drafts=drafts, selected=selected,
+                        error="确认未完成，请稍后重试")
                 except Exception as exc:
                     _audit(root, "pr_approval_failed", key, str(exc)[:200])
                     card = feishu_app.build_pr_approval_card(
-                        record, draft=(edited or "").strip()[:1000], error=f"确认未完成：{exc}")
+                        record, draft=(edited or "").strip()[:1000], drafts=drafts, selected=selected,
+                        error=f"确认未完成：{exc}")
                 feishu_app.update_card_message(msg_id, card)
 
             if record.get("complete"):

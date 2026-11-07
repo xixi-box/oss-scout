@@ -62,6 +62,21 @@ def cleanup(root: Path) -> None:
                         path.unlink()
 
 
+def review_targets(responses: list) -> list:
+    targets = []
+    seen = set()
+    for response in responses:
+        key = response["id"]
+        if (not re.fullmatch(r"(inline|review|issue):[1-9][0-9]*", key)
+                or key != f"{response['source']}:{response['thread_id']}" or key in seen):
+            raise ValueError("invalid or duplicate reply target")
+        seen.add(key)
+        targets.append({**{field: response.get(field) for field in
+                           ("id", "source", "thread_id", "url", "author", "body", "action")},
+                        "has_draft": bool(response.get("draft"))})
+    return targets
+
+
 def stage(root: Path, result: dict) -> dict:
     job_id = str(result.get("job_id") or "")
     path, bundle_path = _paths(root, job_id)
@@ -80,7 +95,8 @@ def stage(root: Path, result: dict) -> dict:
     if bool(commit) != bool(blob) or len(blob) > 6 * 1024 * 1024:
         raise ValueError("missing or oversized approval bundle")
     reply = str(result.get("reply") or "").strip()[:1000]
-    if not commit and not reply:
+    targets = review_targets(result.get("responses") or [])
+    if not commit and not reply and not any(target["has_draft"] for target in targets):
         return {}
     trigger = result.get("trigger") or {}
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -98,6 +114,8 @@ def stage(root: Path, result: dict) -> dict:
                           source_kind=trigger.get("source"), comment_id=trigger.get("thread_id"),
                           source_author=trigger.get("author"), source_comment=trigger.get("body"),
                           source_url=trigger.get("url"))
+            if targets:
+                record["targets"] = targets
         return dict(record)
 
 
@@ -130,7 +148,7 @@ def _push(record: dict, bundle: Path) -> None:
         git("push", remote, f"{commit}:refs/heads/{branch}")
 
 
-def publish(root: Path, job_id: str, edited_reply: str | None, post_comment) -> dict:
+def publish(root: Path, job_id: str, edited_reply: str | dict | None, post_comment) -> dict:
     path, bundle = _paths(root, job_id)
     # This lock covers network calls without blocking issue queue transactions.
     with sqlite3.connect(root / "state" / "pr_approval_publish.sqlite3", timeout=0) as lock:
@@ -140,11 +158,18 @@ def publish(root: Path, job_id: str, edited_reply: str | None, post_comment) -> 
             raise ValueError("审批已过期（保留 7 天）")
         if record.get("complete"):
             return {**record, "already_complete": True}
-        has_reply = record.get("has_reply", bool(record.get("reply")))
-        if has_reply and edited_reply is None:
-            raise ValueError("飞书卡片没有提交回复字段，请重试")
-        reply = (edited_reply or "").strip()[:1000] if has_reply else ""
-        if not record["commit_sha"] and not reply:
+        if record.get("targets"):
+            if not isinstance(edited_reply, dict):
+                raise ValueError("飞书卡片没有提交评审回复")
+            pending = [(t["id"], t["source"], t["thread_id"], edited_reply[t["id"]].strip()[:1000])
+                       for t in record["targets"] if t["has_draft"] and t["id"] in edited_reply]
+        else:
+            has_reply = record.get("has_reply", bool(record.get("reply")))
+            if has_reply and not isinstance(edited_reply, str):
+                raise ValueError("飞书卡片没有提交回复字段，请重试")
+            pending = [("", record["source_kind"], record["comment_id"], edited_reply.strip()[:1000])] if has_reply else []
+        pending = [item for item in pending if item[3]]
+        if not record["commit_sha"] and not pending:
             raise ValueError("请在飞书卡片中填写要发送的回复")
         repo, number = record["repo"], record["number"]
         if not monitored_repo(repo):
@@ -161,25 +186,33 @@ def publish(root: Path, job_id: str, edited_reply: str | None, post_comment) -> 
             with queue_transaction(root, path=path, backup=False) as stored:
                 stored["pushed"] = True
             bundle.unlink(missing_ok=True)
-        reply_status = "none"
-        if reply:
-            inline = record["source_kind"] == "inline"
+        statuses = dict(record.get("reply_statuses") or {})
+        comments_by_kind = {}
+        for target_id, source, thread_id, reply in pending:
+            if target_id in statuses:
+                continue
+            inline = source == "inline"
             endpoint = f"repos/{repo}/{'pulls' if inline else 'issues'}/{number}/comments"
-            marker = f"<!-- oss-scout-reply:{job_id} -->"
+            marker = f"<!-- oss-scout-reply:{job_id}{':' + target_id if target_id else ''} -->"
             try:
-                comments = gh_pages(endpoint, 100)
+                if inline not in comments_by_kind:
+                    comments_by_kind[inline] = gh_pages(endpoint, 100)
+                comments = comments_by_kind[inline]
                 sent = comments is not None and any(
                     marker in (c.get("body") or "") and (c.get("user") or {}).get("login") == "xixi-box"
                     for c in comments)
                 if comments is not None and not sent:
                     sent, _ = post_comment(repo, number, f"{reply}\n\n{marker}",
-                                           kind=record["source_kind"], comment_id=record["comment_id"])
-                reply_status = "sent" if sent else "failed"
+                                           kind=source, comment_id=thread_id)
+                statuses[target_id] = "sent" if sent else "failed"
             except Exception:
-                reply_status = "failed"
+                statuses[target_id] = "failed"
+            with queue_transaction(root, path=path, backup=False) as stored:
+                stored["reply_statuses"] = statuses
         with queue_transaction(root, path=path, backup=False) as stored:
             stored["complete"] = True
-            stored["reply_status"] = reply_status
+            stored["reply_status"] = ("failed" if "failed" in statuses.values() else
+                                      "sent" if "sent" in statuses.values() else "none")
             stored.pop("reply", None)
             stored.pop("approved_reply", None)
             result = dict(stored)

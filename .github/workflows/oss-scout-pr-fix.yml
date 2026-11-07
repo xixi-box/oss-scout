@@ -21,7 +21,7 @@ permissions:
 jobs:
   prfix:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - name: Get oss-scout worker
         uses: actions/checkout@v4
@@ -45,10 +45,18 @@ jobs:
                   not re.fullmatch(r"xixi-box/[A-Za-z0-9_.-]+", j["fork_repo"]) or
                   not re.fullmatch(r"[0-9a-f]{40}", j["head_sha"])):
               raise SystemExit("PR repair target outside the monitored roster or invalid fork")
+          preview = j.get("preview") is True
+          if preview and (j["upstream_repo"], j["pr_number"], j.get("review_id"), j["head_sha"],
+                          j.get("preview_commit")) != (
+                          "python/cpython", 161543, 5812893767, "07b9781c629f029f5362a4924a4b5506c111e275",
+                          "a10fb8582b80fa9080fa80634110c240b2cc282d"):
+              raise SystemExit("unrecognized historical review preview")
           print("pr:", j["upstream_repo"], "#", j["pr_number"],
                 "| branch:", j["branch"], "| head:", j["head_sha"][:10])
           with open(os.environ["GITHUB_OUTPUT"], "a") as f:
               f.write(f"fork_repo={j['fork_repo']}\nbranch={j['branch']}\nhead_sha={j['head_sha']}\n")
+              f.write(f"preview={str(preview).lower()}\n")
+              f.write(f"preview_replay={str(preview and j.get('preview_replay') is True).lower()}\n")
           PY
 
       - name: Checkout PR branch from fork
@@ -57,13 +65,18 @@ jobs:
           FORK_REPO: ${{ steps.job.outputs.fork_repo }}
           BRANCH: ${{ steps.job.outputs.branch }}
           HEAD_SHA: ${{ steps.job.outputs.head_sha }}
+          PREVIEW: ${{ steps.job.outputs.preview }}
         run: |
           set -euo pipefail
           git init -q "$RUNNER_TEMP/repo"
           git -C "$RUNNER_TEMP/repo" remote add origin "https://github.com/${FORK_REPO}.git"
-          git -C "$RUNNER_TEMP/repo" fetch --depth 5 origin "$BRANCH"
-          test "$(git -C "$RUNNER_TEMP/repo" rev-parse FETCH_HEAD)" = "$HEAD_SHA"
-          git -C "$RUNNER_TEMP/repo" checkout -B "$BRANCH" FETCH_HEAD
+          git -C "$RUNNER_TEMP/repo" fetch --depth 12 origin "refs/heads/$BRANCH"
+          if [ "$PREVIEW" = true ]; then
+            git -C "$RUNNER_TEMP/repo" merge-base --is-ancestor "$HEAD_SHA" FETCH_HEAD
+          else
+            test "$(git -C "$RUNNER_TEMP/repo" rev-parse FETCH_HEAD)" = "$HEAD_SHA"
+          fi
+          git -C "$RUNNER_TEMP/repo" checkout -B "$BRANCH" "$HEAD_SHA"
           echo "checked out $(git -C "$RUNNER_TEMP/repo" rev-parse HEAD)"
 
       - name: Install worker requirements
@@ -100,6 +113,7 @@ jobs:
           fi
 
       - name: Install OpenCode CLI
+        if: steps.job.outputs.preview_replay != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -180,6 +194,7 @@ jobs:
                         for line in (tmp / "prfix.json").read_text().splitlines()
                         if line.startswith("##OSSCOUT_PRFIX##"))
           result = json.loads(result)
+          print("Verification:", result.get("test_result") or result.get("skipped") or "unavailable")
           if not result.get("fixed"):
               raise SystemExit(0)
           def git(*args):
@@ -222,6 +237,10 @@ jobs:
           context_file = tmp / "pr-context.json"
           context = json.loads(context_file.read_text()) if context_file.exists() else {}
           sha = os.environ["COMMIT_SHA"]
+          preview = job.get("preview") is True
+          if preview and (not sha or len(result.get("responses") or []) != 5
+                          or not all(item["draft"] for item in result["responses"])):
+              raise SystemExit("CPython preview did not produce a verified commit and five replies")
           bundle = tmp / "pr-fix.bundle"
           if sha and bundle.stat().st_size > 6 * 1024 * 1024:
               raise SystemExit("approval bundle exceeds 6 MiB")
@@ -230,10 +249,12 @@ jobs:
               "repo": job["upstream_repo"], "number": job["pr_number"],
               "job_id": os.environ["JOB_ID"], "run_id": os.environ["RUN_ID"],
               "commit_sha": sha,
-              "bundle": base64.b64encode(bundle.read_bytes()).decode() if sha else "",
+              "bundle": base64.b64encode(bundle.read_bytes()).decode() if sha and not preview else "",
+              "preview": preview,
               "test_result": result.get("test_result") or result.get("skipped") or "workflow failed",
               "changed_files": result.get("changed_files") or [],
               "reply": (result.get("reply") or "") if sha or not result.get("fixed") else "",
+              "responses": (result.get("responses") or []) if sha or not result.get("fixed") else [],
               "summary": result.get("summary") or "", "trigger": context.get("trigger"),
               "title": (context.get("pr") or {}).get("title", ""),
           }

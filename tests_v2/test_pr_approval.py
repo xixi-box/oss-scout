@@ -88,3 +88,45 @@ def test_cleanup_scrubs_legacy_and_expires_record_and_package(tmp_path, monkeypa
     monkeypatch.setattr(pr_approval.time, "time", lambda: expires)
     pr_approval.cleanup(tmp_path)
     assert not path.exists() and not bundle.exists()
+
+
+def test_one_review_push_then_only_selected_threads(tmp_path, monkeypatch):
+    from scout_v2.feishu_app import build_pr_approval_card
+    job_id = "prfix-" + "3" * 32
+    head = "a" * 40
+    responses = [
+        {"id": f"inline:{i}", "source": "inline", "thread_id": i, "author": "maintainer",
+         "body": "```suggestion\n    new_code()\n```", "action": "change", "draft": f"Draft {i}"}
+        for i in range(1, 6)
+    ]
+    record = pr_approval.stage(tmp_path, {
+        "job_id": job_id, "repo": "python/cpython", "number": 161543,
+        "fork_repo": "xixi-box/cpython", "branch": "topic", "head_sha": head,
+        "commit_sha": "b" * 40, "bundle": "cGFja2FnZQ==", "responses": responses,
+    })
+    metadata, bundle = pr_approval._paths(tmp_path, job_id)
+    assert "Draft 1" not in metadata.read_text(encoding="utf-8")
+    card = build_pr_approval_card(record, drafts={r["id"]: r["draft"] for r in responses}, preview=True)
+    form = card["elements"][-1]["elements"]
+    assert len(form[0]["options"]) == 5
+    assert [part["name"] for part in form if part["tag"] == "input"] == [f"reply_{i}" for i in range(5)]
+    assert "```suggestion" not in str(card)
+    assert form[-1]["value"]["do"] == "preview_pr_followup"
+    monkeypatch.setattr(pr_approval, "gh_read", lambda _: {
+        "state": "open", "user": {"login": "xixi-box"},
+        "head": {"repo": {"full_name": "xixi-box/cpython"}, "ref": "topic", "sha": head},
+    })
+    monkeypatch.setattr(pr_approval, "gh_pages", lambda *_: [])
+    events = []
+    monkeypatch.setattr(pr_approval, "_push", lambda *_: events.append("push"))
+
+    def post(repo, number, text, *, kind, comment_id):
+        assert not bundle.exists()
+        assert kind == "inline"
+        events.append((comment_id, text.splitlines()[0]))
+        return comment_id == 2, ""
+
+    result = pr_approval.publish(tmp_path, job_id, {"inline:2": "Edited two", "inline:5": "Edited five"}, post)
+    assert events == ["push", (2, "Edited two"), (5, "Edited five")]
+    assert result["reply_statuses"] == {"inline:2": "sent", "inline:5": "failed"}
+    assert "Edited" not in metadata.read_text(encoding="utf-8")
