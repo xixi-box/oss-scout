@@ -115,13 +115,13 @@ class TestRepairLoopConcurrency:
         root = tmp_path
         (root / "queue").mkdir(parents=True)
         (root / "queue" / "candidates.json").write_text(_json.dumps({
-            "acme/real#1": {"id": "acme/real#1", "repo": "acme/real", "number": 1,
+            "docker/compose#1": {"id": "docker/compose#1", "repo": "docker/compose", "number": 1,
                             "status": "new", "blockers": [],
                             "ai_verdict": {"usable": True, "reason": "clear bug"}},
         }), encoding="utf-8")
         ready = drain_ai_graded(root, limit=5, dry_run=True)
         assert len(ready) == 1
-        assert ready[0]["id"] == "acme/real#1"
+        assert ready[0]["id"] == "docker/compose#1"
 
     def test_ai_no_is_not_drained(self, tmp_path):
         """AI 判定 NO 的候选不进 drain。"""
@@ -131,7 +131,7 @@ class TestRepairLoopConcurrency:
         root = tmp_path
         (root / "queue").mkdir(parents=True)
         (root / "queue" / "candidates.json").write_text(_json.dumps({
-            "acme/real#2": {"id": "acme/real#2", "repo": "acme/real", "number": 2,
+            "docker/compose#2": {"id": "docker/compose#2", "repo": "docker/compose", "number": 2,
                             "status": "new", "blockers": [],
                             "ai_verdict": {"usable": False, "reason": "needs design"}},
         }), encoding="utf-8")
@@ -145,7 +145,7 @@ class TestRepairLoopConcurrency:
         root = tmp_path
         (root / "queue").mkdir(parents=True)
         (root / "queue" / "candidates.json").write_text(_json.dumps({
-            "acme/real#3": {"id": "acme/real#3", "repo": "acme/real", "number": 3,
+            "docker/compose#3": {"id": "docker/compose#3", "repo": "docker/compose", "number": 3,
                             "status": "new", "blockers": ["docs_only"],
                             "ai_verdict": {"usable": True, "reason": "looks fine"}},
         }), encoding="utf-8")
@@ -212,24 +212,24 @@ class TestStagedCandidates:
         """暂存项必须排在当天新扫的前面。"""
         from scout_v2.workers.auto_pipeline import drain_ai_graded
         root = self._root(tmp_path, {
-            "a/fresh#2": {"id": "a/fresh#2", "repo": "a/fresh", "number": 2,
+            "docker/compose#2": {"id": "docker/compose#2", "repo": "docker/compose", "number": 2,
                           "status": "new", "blockers": [],
                           "discovered_at": self._ts(0.1),
                           "ai_verdict": {"usable": True}},
-            "a/old#1": {"id": "a/old#1", "repo": "a/old", "number": 1,
+            "docker/compose#1": {"id": "docker/compose#1", "repo": "docker/compose", "number": 1,
                         "status": "staged", "blockers": [],
                         "staged_at": self._ts(1.0),
                         "discovered_at": self._ts(1.0),
                         "ai_verdict": {"usable": True}},
         })
         ready = drain_ai_graded(root, limit=1, dry_run=True)
-        assert [r["id"] for r in ready] == ["a/old#1"]
+        assert [r["id"] for r in ready] == ["docker/compose#1"]
 
     def test_batch_limit_does_not_spend_daily_quota(self, tmp_path):
         """额度只剩 1 条时，新扫到的其余候选标 staged 并记时间。"""
         from scout_v2.workers.auto_pipeline import drain_ai_graded
         entries = {
-            f"a/r#{i}": {"id": f"a/r#{i}", "repo": "a/r", "number": i,
+            f"docker/compose#{i}": {"id": f"docker/compose#{i}", "repo": "docker/compose", "number": i,
                          "status": "new", "blockers": [],
                          "discovered_at": self._ts(0.05 * i),
                          "ai_verdict": {"usable": True}}
@@ -246,7 +246,7 @@ class TestStagedCandidates:
         """超过 3 天的暂存不再参与派发。"""
         from scout_v2.workers.auto_pipeline import drain_ai_graded
         root = self._root(tmp_path, {
-            "a/stale#1": {"id": "a/stale#1", "repo": "a/stale", "number": 1,
+            "docker/compose#1": {"id": "docker/compose#1", "repo": "docker/compose", "number": 1,
                           "status": "staged", "blockers": [],
                           "staged_at": self._ts(5.0),
                           "ai_verdict": {"usable": True}},
@@ -257,18 +257,18 @@ class TestStagedCandidates:
         """已经在暂存里的不能被刷新 staged_at，否则永远不会过期。"""
         from scout_v2.workers.auto_pipeline import drain_ai_graded
         root = self._root(tmp_path, {
-            "a/keep#1": {"id": "a/keep#1", "repo": "a/keep", "number": 1,
+            "docker/compose#1": {"id": "docker/compose#1", "repo": "docker/compose", "number": 1,
                          "status": "staged", "blockers": [],
                          "staged_at": self._ts(1.5),
                          "ai_verdict": {"usable": True}},
-            "a/new#2": {"id": "a/new#2", "repo": "a/new", "number": 2,
+            "docker/compose#2": {"id": "docker/compose#2", "repo": "docker/compose", "number": 2,
                         "status": "new", "blockers": [],
                         "discovered_at": self._ts(0.02),
                         "ai_verdict": {"usable": True}},
         })
         drain_ai_graded(root, limit=1, dry_run=False)
         q = self._read(root)
-        assert q["a/keep#1"]["staged_at"] == self._ts(1.5)
+        assert q["docker/compose#1"]["staged_at"] == self._ts(1.5)
 
 
 class TestInternalRepoExcluded:
