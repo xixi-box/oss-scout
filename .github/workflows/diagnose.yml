@@ -1,4 +1,4 @@
-name: Migrate four Feishu ledgers to linked keys
+name: Verify and synchronize Feishu ledger columns
 on:
   workflow_dispatch:
     inputs:
@@ -14,5 +14,59 @@ jobs:
         env:
           EXPECTED_REVISION: ${{ inputs.revision }}
         run: test "$(docker inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' oss-scout)" = "$EXPECTED_REVISION"
-      - name: Migrate and verify Feishu fields
-        run: docker exec -w /app oss-scout python scripts/migrate_feishu_links.py
+      - name: Sync and verify the four Feishu tables
+        run: |
+          docker exec -i -w /app oss-scout python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          from dashboard.app import _sync_bitables
+          from scout_v2 import feishu_bitable as b, feishu_app as a
+
+          root = Path(os.environ.get("OSSCOUT_DASHBOARD_ROOT", "/data"))
+          synced = _sync_bitables(root)
+          print("sync", json.dumps(synced, ensure_ascii=False), flush=True)
+          schemas = {
+              "pr": ("pr_table_id", b.PR_FIELDS),
+              "repos": ("repo_table_id", b.LINK_FIELDS),
+              "scan": ("scan_table_id", b.SCAN_FIELDS),
+              "candidates": ("cand_table_id", b.CAND_FIELDS),
+          }
+          if any(name not in synced or "error" in synced[name] or "skipped" not in synced[name]
+                 or "updated" not in synced[name] for name in schemas):
+              raise RuntimeError("The four table snapshots were not successfully synchronized")
+
+          binding = b.load_binding(root)
+          base = b._binding_app_token(root)
+          assert binding["app_token"] == base
+          token = a.tenant_token()
+
+          def read_fields(url):
+              body = a._request("GET", url + "?page_size=100", token=token)
+              assert body.get("code") == 0 and not body["data"].get("has_more")
+              return body["data"]["items"]
+
+          targets = {}
+          for name, (key, schema) in schemas.items():
+              table = binding[key]
+              url = f"https://open.feishu.cn/open-apis/bitable/v1/apps/{base}/tables/{table}/fields"
+              expected = {col["field_name"]: col["type"] for col in schema}
+              fields = read_fields(url)
+              present = {col["field_name"]: col["type"] for col in fields}
+              assert all(present.get(field) == kind for field, kind in expected.items()), name
+              assert [col["field_name"] for col in fields if col.get("is_primary")] == ["键"], name
+              targets[name] = (table, url, expected, fields)
+
+          for name, (table, url, expected, fields) in targets.items():
+              for field in fields:
+                  if field["field_name"] not in expected:
+                      result = a._request("DELETE", f"{url}/{field['field_id']}", token=token)
+                      assert result.get("code") == 0, (name, result.get("code"))
+              assert {col["field_name"]: col["type"] for col in read_fields(url)} == expected, name
+              rows = [row["fields"] for row in b.record_pages(base, table) if row.get("fields", {}).get("键")]
+              assert all(row["键"][0].get("link", "").startswith("https://github.com/") for row in rows), name
+              counts = {field: sum(bool(row.get(field)) for row in rows) for field in expected}
+              assert not rows or all(counts.values()), (name, counts)
+              print("verified", json.dumps({"table": name, "columns": counts}, ensure_ascii=False), flush=True)
+          PY
