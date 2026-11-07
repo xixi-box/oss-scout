@@ -241,6 +241,9 @@ jobs:
           if preview and (not sha or len(result.get("responses") or []) != 5
                           or not all(item["draft"] for item in result["responses"])):
               raise SystemExit("CPython preview did not produce a verified commit and five replies")
+          if preview and job.get("preview_verify_only") is True:
+              print(f"Verified {len(result['responses'])} review replies and staged commit {sha}")
+              raise SystemExit(0)
           bundle = tmp / "pr-fix.bundle"
           if sha and bundle.stat().st_size > 6 * 1024 * 1024:
               raise SystemExit("approval bundle exceeds 6 MiB")
