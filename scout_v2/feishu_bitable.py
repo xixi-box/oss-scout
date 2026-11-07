@@ -1,12 +1,14 @@
 """飞书多维表格的链接台账与批量差量同步。"""
 from __future__ import annotations
 
+import datetime as dt
 import json
 import os
 import re
 import threading
 from pathlib import Path
 from urllib.parse import urlencode
+from zoneinfo import ZoneInfo
 
 from . import feishu_app
 
@@ -18,6 +20,15 @@ _BINDING_LOCK = threading.RLock()
 CAND_TABLE_NAME = "候选池"
 SCAN_TABLE_NAME = "扫描发现"
 LINK_FIELDS = [{"field_name": "键", "type": 1}]
+DATE_FORMAT = {"date_formatter": "yyyy-MM-dd HH:mm"}
+PR_FIELDS = [*LINK_FIELDS, {"field_name": "标题", "type": 1},
+             {"field_name": "PR 状态", "type": 1},
+             {"field_name": "创建时间", "type": 5, "property": DATE_FORMAT}]
+SCAN_FIELDS = [*LINK_FIELDS, {"field_name": "发现时间", "type": 5, "property": DATE_FORMAT},
+               *({"field_name": name, "type": 1} for name in ("最终结果", "粗筛结果", "细筛结果"))]
+CAND_FIELDS = [*LINK_FIELDS, {"field_name": "标题", "type": 1},
+               {"field_name": "处理状态", "type": 1},
+               {"field_name": "入队时间", "type": 5, "property": DATE_FORMAT}]
 
 
 def _state_path(root: Path) -> Path:
@@ -79,32 +90,65 @@ def link_key(label: str, kind: str) -> list[dict]:
     return [{"type": "url", "text": label, "link": f"https://github.com/{path}"}]
 
 
+def _timestamp(value) -> int | None:
+    if not value:
+        return None
+    try:
+        parsed = dt.datetime.fromisoformat(value)
+    except (ValueError, TypeError):
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=ZoneInfo("Asia/Shanghai"))
+    return int(parsed.timestamp() * 1000)
+
+
 def row_to_fields(row: dict) -> dict:
-    return {"键": link_key(f"{row['repo']}#{row['number']}", "pull")}
+    return {"键": link_key(f"{row['repo']}#{row['number']}", "pull"),
+            "标题": row.get("title") or None, "PR 状态": row.get("state") or None,
+            "创建时间": _timestamp(row.get("created_at"))}
 
 
 def repo_row_to_fields(row: dict) -> dict:
     return {"键": link_key(row["repo"], "repo")}
 
 
-def issue_row_to_fields(row: dict) -> dict:
-    return {"键": link_key(row["key"], "issues")}
+def scan_row_to_fields(row: dict) -> dict:
+    status = row.get("status") or ""
+    coarse, fine = row.get("coarse_reason"), row.get("fine_reason")
+    if status in {"blocked", "unknown_repo", "too_fresh"}:
+        result, coarse, fine = "粗筛淘汰", coarse or "未通过", "未执行"
+    elif status in {"queued", "rejected", "retry"}:
+        result = {"queued": "通过", "rejected": "细筛淘汰", "retry": "待重试"}[status]
+        coarse = "通过"
+        fine = fine or {"queued": "通过", "rejected": "未通过", "retry": "待重试"}[status]
+    else:
+        result = status or None
+    return {"键": link_key(row["key"], "issues"), "发现时间": _timestamp(row.get("first_seen")),
+            "最终结果": result, "粗筛结果": coarse or None, "细筛结果": fine or None}
+
+
+def cand_row_to_fields(row: dict) -> dict:
+    return {"键": link_key(row["key"], "issues"), "标题": row.get("title") or None,
+            "处理状态": row.get("queue_state") or None,
+            "入队时间": _timestamp(row.get("discovered_at"))}
 
 
 def ensure_columns(app_token: str, table_id: str, fields: list) -> None:
-    """给已存在的表补缺失的字段（如扫描发现后加的 入队状态 列）。"""
+    """Add the fields declared by the sync schema if they are missing."""
     tok = feishu_app.tenant_token()
     body = feishu_app._request(
         "GET", f"https://open.feishu.cn/open-apis/bitable/v1/apps/{app_token}"
                f"/tables/{table_id}/fields?page_size=100", token=tok)
     if body.get("code") not in (0, None):
-        return
+        raise RuntimeError(f"list fields: {body.get('code')} {body.get('msg')}")
     existing = {f.get("field_name") for f in (body.get("data") or {}).get("items") or []}
     for spec in fields:
         if spec.get("field_name") not in existing:
-            feishu_app._request(
+            result = feishu_app._request(
                 "POST", f"https://open.feishu.cn/open-apis/bitable/v1/apps/{app_token}"
                         f"/tables/{table_id}/fields", spec, token=tok)
+            if result.get("code") not in (0, None):
+                raise RuntimeError(f"create field {spec['field_name']}: {result.get('code')} {result.get('msg')}")
 
 
 def find_or_create_table(app_token: str, table_name: str = TABLE_NAME,
@@ -193,7 +237,7 @@ def _fingerprint(fields: dict) -> str:
 
 def sync_rows(root: Path, rows: list[dict], *, force: bool = False) -> dict:
     """把 PR 行同步进「PR 记录」表。见 sync_table()。"""
-    return sync_table(root, rows, table_name=TABLE_NAME, fields=LINK_FIELDS,
+    return sync_table(root, rows, table_name=TABLE_NAME, fields=PR_FIELDS,
                       to_fields=row_to_fields, binding_key="pr_table_id",
                       force=force)
 

@@ -89,13 +89,22 @@ class TestBuildRows:
 
 
 class TestRowToFields:
-    def test_key_is_the_only_column_and_contains_a_link(self):
+    def test_pr_columns_and_link(self):
         assert fb.row_to_fields(_row()) == {"键": [{
             "type": "url", "text": "docker/compose#14450",
             "link": "https://github.com/docker/compose/pull/14450",
-        }]}
+        }], "标题": "fix: thing", "PR 状态": "merged", "创建时间": 1793598607000}
         assert fb.repo_row_to_fields({"repo": "a/b"})["键"][0]["link"] == "https://github.com/a/b"
-        assert fb.issue_row_to_fields({"key": "a/b#9"})["键"][0]["link"] == "https://github.com/a/b/issues/9"
+        assert fb.cand_row_to_fields({"key": "a/b#9"})["键"][0]["link"] == "https://github.com/a/b/issues/9"
+
+
+    def test_coarse_rejection_does_not_claim_fine_screen_ran(self):
+        fields = fb.scan_row_to_fields({"key": "a/b#9", "status": "blocked",
+                                        "coarse_reason": "label", "fine_reason": "not screened"})
+        assert fields["最终结果"] == "粗筛淘汰"
+        assert fields["粗筛结果"] == "label"
+        assert fields["细筛结果"] == "未执行"
+        assert set(fields) == {field["field_name"] for field in fb.SCAN_FIELDS}
 
 
 @pytest.fixture()
@@ -112,7 +121,7 @@ class TestSyncDiff:
     def test_explicit_complete_empty_snapshot_prunes_old_rows(self, tmp_path, fake):
         fake.records = {"r1": {"键": "a/b#1"}}
         out = fb.sync_table(tmp_path, [], table_name=fb.CAND_TABLE_NAME,
-                            fields=fb.LINK_FIELDS, to_fields=fb.issue_row_to_fields,
+                            fields=fb.CAND_FIELDS, to_fields=fb.cand_row_to_fields,
                             binding_key="cand_table_id", allow_empty=True)
         assert out["pruned"] == 1
         assert fake.deleted == ["r1"]
@@ -209,7 +218,7 @@ class TestSyncDiff:
         fb.sync_rows(tmp_path, [_row(state="open")])
         fb.sync_rows(tmp_path, [_row(state="closed")])
         assert len(fake.records) == 1
-        assert fake.records["r1"] == fb.row_to_fields(_row())
+        assert fake.records["r1"] == fb.row_to_fields(_row(state="closed"))
 
 
 class TestLedgerScope:

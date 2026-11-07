@@ -129,12 +129,12 @@ def _sync_bitables(root: Path) -> dict:
     spec.loader.exec_module(mod)
     results = {}
     tables = [
-        ("pr", mod.build_pr_rows, fb.TABLE_NAME, fb.row_to_fields, "pr_table_id", None),
-        ("repos", mod.build_repo_rows, fb.REPO_TABLE_NAME, fb.repo_row_to_fields, "repo_table_id", root / "configs/repositories.yaml"),
-        ("scan", mod.build_scan_rows, fb.SCAN_TABLE_NAME, fb.issue_row_to_fields, "scan_table_id", root / "state/seen.json"),
-        ("candidates", mod.build_candidate_rows, fb.CAND_TABLE_NAME, fb.issue_row_to_fields, "cand_table_id", root / "queue/candidates.json"),
+        ("pr", mod.build_pr_rows, fb.TABLE_NAME, fb.PR_FIELDS, fb.row_to_fields, "pr_table_id", None),
+        ("repos", mod.build_repo_rows, fb.REPO_TABLE_NAME, fb.LINK_FIELDS, fb.repo_row_to_fields, "repo_table_id", root / "configs/repositories.yaml"),
+        ("scan", mod.build_scan_rows, fb.SCAN_TABLE_NAME, fb.SCAN_FIELDS, fb.scan_row_to_fields, "scan_table_id", root / "state/seen.json"),
+        ("candidates", mod.build_candidate_rows, fb.CAND_TABLE_NAME, fb.CAND_FIELDS, fb.cand_row_to_fields, "cand_table_id", root / "queue/candidates.json"),
     ]
-    for name, build, table, convert, binding, source in tables:
+    for name, build, table, fields, convert, binding, source in tables:
         try:
             # Builders tolerate corrupt/missing files by returning []; validate first.
             if source:
@@ -144,7 +144,7 @@ def _sync_bitables(root: Path) -> dict:
             if name == "pr" and not rows:
                 results[name] = {"skipped": "no complete GitHub snapshot"}
                 continue
-            results[name] = fb.sync_table(root, rows, table_name=table, fields=fb.LINK_FIELDS,
+            results[name] = fb.sync_table(root, rows, table_name=table, fields=fields,
                                           to_fields=convert, binding_key=binding,
                                           allow_empty=source is not None)
             _audit(root, "bitable_sync_" + name, table, json.dumps(results[name]))
