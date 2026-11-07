@@ -1,4 +1,4 @@
-name: Trace two screened issues in live audit
+name: Verify live scan decisions
 on:
   workflow_dispatch:
 jobs:
@@ -6,29 +6,32 @@ jobs:
     runs-on: [self-hosted, aliyun]
     timeout-minutes: 5
     steps:
-      - name: Read candidate records and publication audit
+      - name: Read the two historical scan records
         run: |
           docker exec -i -w /app oss-scout python - <<'PY'
-          import json, os, sqlite3
+          import json, os, time
           from pathlib import Path
+          from scout_v2 import feishu_bitable as b
           root = Path(os.environ.get("OSSCOUT_DASHBOARD_ROOT", "/data"))
-          keys = {"nodejs/node#67314", "clickhouse/clickhouse#129926", "bytedance/deer-flow#7972"}
-          for filename in ("state/seen.json", "queue/candidates.json"):
-              data = json.loads((root / filename).read_text())
-              for key, item in data.items():
-                  if key.lower() in keys:
-                      print(filename, key, {k: item.get(k) for k in (
-                          "status", "why", "first_seen", "discovered_at", "staged_at", "eligible_at",
-                          "started_at", "updated_at", "attempts", "abort_reason", "blockers", "pr_url") if k in item})
-          with sqlite3.connect((root/"state/scout_v2.sqlite3").as_uri()+"?mode=ro", uri=True) as db:
-              print("publications", db.execute("SELECT day,url,repo,head,remote_id FROM publications WHERE day='2026-11-07' OR day IS NULL").fetchall())
-          for line in (root / "state/worklog.jsonl").read_text().splitlines():
-              try: row = json.loads(line)
-              except ValueError: continue
-              ts = str(row.get("ts", ""))
-              action = str(row.get("action", ""))
-              if (str(row.get("target", "")).lower() in keys
-                  or ("2026-11-07T20:24" <= ts < "2026-11-07T21:03" and
-                      action in {"pipeline_pr_open", "dispatch_error", "auto_repair_error", "orphan_requires_review"})):
-                  print("audit", ts, action, row.get("target"), str(row.get("result", ""))[:650])
+          app = b._binding_app_token(root)
+          table = b.load_binding(root)["scan_table_id"]
+          expected = {"clickhouse/clickhouse#129926": "129001", "nodejs/node#67314": "67160"}
+          for attempt in range(4):
+              found = {}
+              for rec in b.record_pages(app, table):
+                  fields = rec.get("fields") or {}
+                  key = b._key_label(fields.get("键")).lower()
+                  if key in expected:
+                      found[key] = {k: b._norm_field(fields.get(k)) for k in ("最终结果", "粗筛结果", "细筛结果")}
+                  if len(found) == len(expected):
+                      break
+              if all(str(found.get(key, {}).get("最终结果") or "").startswith("旧版开工检查拦截")
+                     and hit in found[key]["最终结果"] for key, hit in expected.items()):
+                  break
+              time.sleep(15)
+          print("verified_scan_rows", json.dumps(found, ensure_ascii=False))
+          for key, hit in expected.items():
+              row = found[key]
+              assert row["最终结果"].startswith("旧版开工检查拦截") and hit in row["最终结果"], row
+              assert row["粗筛结果"] == "通过" and "OpenJev" in row["细筛结果"], row
           PY
