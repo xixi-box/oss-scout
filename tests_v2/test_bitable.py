@@ -99,7 +99,7 @@ class TestRowToFields:
 
 
     def test_single_select_migration_and_unchanged_options(self, monkeypatch):
-        spec = next(f for f in fb.CAND_FIELDS if f["field_name"] == "处理状态")
+        spec = next(f for f in fb.PR_FIELDS if f["field_name"] == "PR 状态")
         field = {"field_id": "fld1", "field_name": spec["field_name"], "type": 1}
         updates = []
 

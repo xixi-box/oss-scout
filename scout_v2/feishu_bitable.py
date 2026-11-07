@@ -33,7 +33,7 @@ PR_FIELDS = [*LINK_FIELDS, {"field_name": "标题", "type": 1},
 SCAN_FIELDS = [*LINK_FIELDS, {"field_name": "发现时间", "type": 5, "property": DATE_FORMAT},
                *({"field_name": name, "type": 1} for name in ("最终结果", "粗筛结果", "细筛结果"))]
 CAND_FIELDS = [*LINK_FIELDS, {"field_name": "标题", "type": 1},
-               _status_field("处理状态", {"待执行": 34, "暂存": 45, "执行中": 40}),
+               {"field_name": "处理状态", "type": 1},
                {"field_name": "入队时间", "type": 5, "property": DATE_FORMAT}]
 
 
