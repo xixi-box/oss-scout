@@ -151,6 +151,19 @@ def configured(root: Path) -> bool:
     return feishu_app.app_configured() and bool(_binding_app_token(root))
 
 
+def pr_table_url(root: Path) -> str:
+    """Resolve the existing PR table without discovering or creating a new one."""
+    import re
+    binding = load_binding(root)
+    app, table = _binding_app_token(root), str(binding.get("pr_table_id") or "")
+    if app == "IiMGbnljvaosNdsBOyUcQFkEnhd" and not table:
+        return f"https://my.feishu.cn/base/{app}?table=tblQktvgCCvceN9a"
+    if (app == binding.get("app_token") and re.fullmatch(r"[A-Za-z0-9]+", app)
+            and re.fullmatch(r"tbl[A-Za-z0-9]+", table)):
+        return f"https://my.feishu.cn/base/{app}?table={table}"
+    return ""
+
+
 def _iso_to_ms(v) -> int | None:
     if not v:
         return None

@@ -626,7 +626,8 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen
     # 无法自己读 model_policy.yaml。
     try:
         from .repair import resolve_model
-        job.model = resolve_model()
+        from scout_v2.console_models import read_models
+        job.model = read_models(root).get("repair_model") or resolve_model()
     except Exception as e:  # noqa: BLE001
         return _abort_release(f"no model resolved: {str(e)[:160]}",
                              give_back=True)   # 配置/凭证问题
@@ -961,10 +962,12 @@ def _defer_entry(entry: dict, root: Path) -> None:
     import datetime as dt
     import yaml
     now = business_now()
-    hour = 4
+    hour, minute = 4, 0
     cfg = root / "configs/dashboard.yaml"
     if cfg.exists():
-        hour = int((yaml.safe_load(cfg.read_text(encoding="utf-8")) or {}).get("staged_flush_hour_local", 4))
+        schedule = yaml.safe_load(cfg.read_text(encoding="utf-8")) or {}
+        hour = int(schedule.get("staged_flush_hour_local", 4))
+        minute = int(schedule.get("staged_flush_minute_local", 0))
     entry["status"] = "staged"
     entry.setdefault("staged_at", now.isoformat(timespec="seconds"))
     due = entry.get("eligible_at")
@@ -973,7 +976,7 @@ def _defer_entry(entry: dict, root: Path) -> None:
         due_time = due_time.replace(tzinfo=now.tzinfo)
     if due_time is None or due_time <= now:
         entry["eligible_at"] = dt.datetime.combine(now.date() + dt.timedelta(days=1),
-                                                  dt.time(hour), tzinfo=now.tzinfo).isoformat()
+                                                  dt.time(hour, minute), tzinfo=now.tzinfo).isoformat()
 
 
 STAGED_STATUS = "staged"          # 今天额度用完了，留到明天再处理

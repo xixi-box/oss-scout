@@ -323,7 +323,7 @@ def main() -> int:
         return 0
 
     from .repair import resolve_model
-    model = resolve_model()
+    model = payload.get("model") or resolve_model()
     client = OpenCodeClient(timeout_seconds=1800, workdir=repo_dir)
     prompt = build_prompt(payload)
     ok, detail = client.run(model, prompt)

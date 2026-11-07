@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OSS Scout · 开源贡献运行台</title>
+<style>
+:root{color-scheme:light;--ink:#17243b;--muted:#596b82;--line:#e1e8f2;--surface:#fff;--bg:#f4f7fb;--blue:#285ade;--green:#087d65;--violet:#7550ca;--amber:#a85708}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 "Segoe UI","Microsoft YaHei",sans-serif}button,input,select{font:inherit}button{cursor:pointer}a{color:var(--blue)}button:focus-visible,input:focus-visible,svg:focus-visible{outline:2px solid var(--blue);outline-offset:3px}
+header{background:#fff;border-bottom:1px solid var(--line)}.top,main{max-width:1450px;margin:auto;padding:0 32px}.top{height:68px;display:flex;align-items:center;gap:14px}.logo{display:grid;place-items:center;background:#e8efff;color:#244dc2;width:36px;height:36px;border-radius:10px;font-weight:750}.brand{font-weight:700;font-size:16px}.top .meta{margin-left:auto}.pill{display:inline-block;border-radius:999px;background:#edf2fb;color:#3d5575;padding:3px 9px;font-size:12px;white-space:nowrap}.green{background:#e6f7f0;color:#086048}.orange{background:#fff0db;color:#884708}
+main{padding-top:27px;padding-bottom:32px}.eyebrow{font-size:12px;color:var(--muted);letter-spacing:.08em}.headline{display:flex;align-items:end;justify-content:space-between;gap:14px;margin-bottom:20px}h1,h2,p{margin:0}h1{font-size:32px;line-height:1.22;letter-spacing:-.035em;margin:5px 0 6px}h2{font-size:17px}.muted,.meta{color:var(--muted)}.small{font-size:12px}.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:13px;margin-bottom:16px}.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:17px 19px;min-width:0}.stat strong{display:block;font-size:28px;line-height:1.25;margin:5px 0;font-variant-numeric:tabular-nums}.layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(310px,350px);gap:16px;align-items:start}.stack{display:grid;gap:14px}.section{display:flex;justify-content:space-between;align-items:center;gap:9px}.section p{margin-top:3px}
+.controls{display:flex;flex-wrap:wrap;gap:7px}.button,.controls button{background:#fff;border:1px solid var(--line);color:var(--ink);padding:6px 10px;border-radius:8px}.controls button[aria-pressed=true]{background:#e9efff;color:#1f49c4;border-color:#cbd8ff}.button.primary{background:#285ade;color:white;border-color:#285ade}
+.legend{display:flex;gap:11px;flex-wrap:wrap;margin:13px 0 2px}.legend button{display:flex;align-items:center;gap:6px;background:transparent;border:0;color:var(--ink);padding:3px}.legend button[aria-pressed=false]{opacity:.5;text-decoration:line-through}.dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--c);flex:none}.chart{position:relative}svg{display:block;width:100%;height:auto;min-height:180px;touch-action:pan-y}svg text{font:12px "Segoe UI","Microsoft YaHei",sans-serif;fill:var(--muted)}.tip{position:absolute;top:17px;pointer-events:none;min-width:128px;padding:8px 10px;background:#fff;border:1px solid #d9e3f2;border-radius:8px;box-shadow:0 6px 18px #223c6620;font-size:12px;line-height:1.55}.tip b{display:block;margin-bottom:2px}.tip span{display:flex;justify-content:space-between;gap:12px}
+.events{border-top:1px solid var(--line);padding-top:12px}.event-tabs{margin:9px 0}.list{padding:0;margin:8px 0 0;list-style:none}.list li{padding:8px 0;border-bottom:1px solid #edf1f7;display:flex;justify-content:space-between;align-items:center;gap:9px}.list li:last-child{border:0}#event-list{max-height:208px;overflow:auto;padding-right:8px}.item{font-weight:600;overflow-wrap:anywhere}.item small{display:block;color:var(--muted);font-weight:400}.empty{padding:17px 4px;color:var(--muted)}
+.schedule{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:10px 0 4px}.schedule input{border:1px solid var(--line);border-radius:8px;padding:5px 7px;color:var(--ink)}.notice{margin-top:8px;min-height:19px;color:var(--green);font-size:12px}.config{margin-top:16px}.forms{display:grid;grid-template-columns:1fr 1fr;gap:17px;margin-top:13px}.form{display:grid;grid-template-columns:1fr 1fr;gap:8px 10px}.form h3{grid-column:1/-1;margin:0;font-size:14px}.form label{display:grid;gap:3px;color:var(--muted);font-size:12px}.form input{width:100%;min-width:0;border:1px solid var(--line);padding:7px 8px;border-radius:8px;color:var(--ink)}.config .footer{margin-top:12px;display:flex;align-items:center;gap:10px}.warn{color:var(--amber)}
+a.button,button.button{text-decoration:none;white-space:nowrap}a:focus-visible{outline:2px solid var(--blue);outline-offset:3px}
+.refresh{display:flex;flex-wrap:wrap;justify-content:flex-end;align-items:center;gap:8px}.spinner{width:14px;height:14px;border:2px solid #dce6fa;border-top-color:var(--blue);border-radius:50%;animation:spin .8s linear infinite;flex:none}@keyframes spin{to{transform:rotate(360deg)}}@media(prefers-reduced-motion:reduce){.spinner{animation:none}}
+@media(max-width:950px){.layout{grid-template-columns:1fr}.stack{grid-template-columns:1fr 1fr}.top,main{padding-left:18px;padding-right:18px}}
+@media(max-width:560px){.stats,.forms,.stack{grid-template-columns:1fr 1fr}.forms,.stack{grid-template-columns:1fr}.headline{align-items:start}.section{flex-wrap:wrap}.top{gap:7px}.top .meta{font-size:11px}.card{padding:13px}.tip{min-width:105px;font-size:11px}}
+</style>
+<header><div class="top"><div class="logo" aria-hidden="true">OS</div><span class="brand">OSS Scout</span><span class="pill" id="mode-label">运行台</span><span class="meta">北京时间 UTC+8</span></div></header>
+<main>
+<div class="headline"><div><p class="eyebrow">运行监控</p><h1>开源贡献运行台</h1><p class="muted">从仓库扫描到 PR 发布，按分钟查看每一步。</p></div><div class="refresh"><span class="pill green">50 个仓库 · 每分钟扫描</span><span id="refresh-time" class="small muted" aria-label="最近刷新时间"></span></div></div>
+<div class="stats">
+  <div class="card stat"><span class="muted">窗口内粗筛</span><strong id="stat-coarse">—</strong><span class="small muted">按 issue 计数</span></div>
+  <div class="card stat"><span class="muted">窗口内细筛</span><strong id="stat-fine">—</strong><span class="small muted">OpenJev · 每次处理一轮</span></div>
+  <div class="card stat"><span class="muted">今日新 PR</span><strong id="stat-pr">—</strong><span class="small muted">确认创建后占额</span></div>
+  <div class="card stat"><span class="muted">暂存队列</span><strong id="stat-queue">—</strong><span class="small muted">按入队时间处理</span></div>
+</div>
+<div class="layout">
+<section class="card">
+  <div class="section"><div><h2>分钟活动趋势</h2><p class="small muted">按完成时间计数 · 悬停看计数，点击查看该分钟明细</p></div><div class="controls" id="ranges" aria-label="时间范围"><button data-range="15" aria-pressed="true">15 分钟</button><button data-range="30" aria-pressed="false">30 分钟</button><button data-range="60" aria-pressed="false">60 分钟</button></div></div>
+  <div class="legend" id="legend"></div>
+  <div class="chart" id="chart"><svg id="plot" viewBox="0 0 820 255" tabindex="0" role="group" aria-label="分钟折线图，左右方向键选择分钟"></svg><div class="tip" id="tip" hidden></div></div>
+  <div class="events"><div class="section"><h2 id="selected-time">分钟明细</h2><span id="minute-status" class="pill"></span></div><div id="event-tabs" class="controls event-tabs"></div><ul id="event-list" class="list"></ul></div>
+</section>
+<aside class="stack" aria-label="PR 记录、修复记录和暂存队列">
+  <section class="card"><div class="section"><h2>工作中</h2><span class="pill" id="running-count"></span></div>
+  <div class="controls event-tabs" id="running-filter" aria-label="筛选工作中任务"></div>
+  <ul class="list" id="running-list" aria-live="polite"></ul></section>
+  <section class="card"><div class="section"><h2>今日 PR 记录</h2><a class="button" id="all-pr-link" href="/console/pr-table" target="_blank" rel="noopener noreferrer">总 PR 记录 ↗</a></div>
+  <ul class="list" id="today-pr-list"></ul><p class="small muted" id="ledger-notice" role="status" hidden></p></section>
+  <section class="card"><h2>修复记录</h2>
+  <ul class="list" id="repair-list"></ul></section>
+  <section class="card"><div class="section"><h2>暂存 issue</h2><span class="pill orange" id="queue-count">FIFO</span></div>
+  <form id="schedule" class="schedule"><label for="trigger" class="small">每日触发</label><input id="trigger" type="time" value="04:00" required><button class="button" type="submit">保存</button><button class="button primary" id="run" type="button" disabled>手动触发</button></form>
+  <p id="queue-next" class="small muted">共用当天剩余额度</p>
+  <ul class="list" id="queue-list"></ul><div class="notice" id="queue-notice" role="status"></div></section>
+</aside>
+</div>
+<section class="card config"><div class="section"><div><h2>模型与凭据</h2><p class="small muted">凭据在服务器保存，应用于新任务。密钥留空会保留当前值。</p></div><span class="pill" id="model-state">读取配置中</span></div>
+<form id="models" autocomplete="off"><div class="forms">
+<div class="form"><h3>OpenCode Go <span class="muted small">· 修复与回复草稿</span></h3><label>修复模型<input name="repair_model" required></label><label>PR 分类与回复模型<input name="reply_model" required></label><label>API 密钥<input name="opencode_key" type="password" placeholder="留空保留" autocomplete="new-password"></label></div>
+<div class="form"><h3>Codiv <span class="muted small">· issue 细筛</span></h3><label>Base URL<input name="codiv_base" type="url" required></label><label>模型<input name="codiv_model" required></label><label>API 密钥<input name="codiv_key" type="password" placeholder="留空保留" autocomplete="new-password"></label></div>
+</div><div class="footer"><button class="button" type="submit" disabled>保存模型配置</button><span class="notice" id="model-notice" role="status"></span></div></form></section>
+</main>
+<script>
+(() => {
+  const byId=id=>document.getElementById(id);
+  const kinds=[
+    {key:"coarse",name:"粗筛",color:"#285ade"},
+    {key:"fine",name:"细筛",color:"#087d65"},
+    {key:"pr",name:"PR 动作",color:"#7550ca"},
+    {key:"reply",name:"评论触发飞书回复",color:"#bc346d"},
+    {key:"retry",name:"失败 / 重试",color:"#a85708"}
+  ];
+  const link=(repo,number,type="issues")=>
+    `<a href="https://github.com/${repo}/${type}/${number}" target="_blank" rel="noopener noreferrer">${repo} #${number}</a>`;
+  const escapeHtml=value=>String(value).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  const live=["/console-demo","/console"].includes(location.pathname) && location.protocol!=="file:";
+  let rows=Array.from({length:60},()=>({time:"—",coarse:[],fine:[],pr:[],reply:[],retry:[]}));
+  const timeFormat=new Intl.DateTimeFormat("zh-CN",{
+    hour:"2-digit",minute:"2-digit",hour12:false,timeZone:"Asia/Shanghai"
+  });
+  const showTime=stamp=>{
+    if(!stamp)return "时间待确认";
+    const value=new Date(/(?:Z|[+-]\d{2}:\d{2})$/.test(stamp)?stamp:stamp+"+08:00");
+    return Number.isNaN(value.valueOf())?"时间待确认":timeFormat.format(value);
+  };
+  let running=[],runningFilter="all",workingAvailable=false,refreshing=false;
+  function renderRunning(){
+    const visible=running.filter(e=>runningFilter==="all"||e.kind===runningFilter);
+    byId("running-count").textContent=workingAvailable?visible.length+" 项":"—";
+    byId("running-list").innerHTML=visible.map(e=>
+      `<li><span class="item">${link(e.repo,e.number,e.kind==="created"?"issues":"pull")}<small>${e.kind==="created"?"新 PR，工作中":"已有 PR 修复中"} · <a href="${e.workflow}" target="_blank" rel="noopener noreferrer">查看工作流 ↗</a></small></span><span class="spinner" aria-hidden="true"></span></li>`).join("")||`<li class="empty">${workingAvailable?"该类型暂无进行中的任务。":live?"暂时无法确认工作流状态。":"请通过服务器版查看实际运行的任务。"}</li>`;
+  }
+  function renderRecords(id,entries,empty){
+    byId(id).innerHTML=entries.map(e=>
+      `<li><span class="item">${link(e.repo,e.number,"pull")}<small>${showTime(e.time)}</small></span></li>`).join("")||`<li class="empty">${empty}</li>`;
+  }
+  const filters=byId("running-filter");
+  filters.innerHTML=[["all","全部"],["created","新 PR"],["repair","已有 PR"]].map(([key,label])=>
+    `<button type="button" data-running="${key}" aria-pressed="${key==="all"}">${label}</button>`).join("");
+  filters.addEventListener("click",e=>{
+    if(!e.target.dataset.running)return;
+    runningFilter=e.target.dataset.running;
+    for(const button of filters.children)button.setAttribute("aria-pressed",button===e.target);
+    renderRunning();
+  });
+  async function refresh(){
+    if(refreshing)return;
+    if(!live){
+      byId("mode-label").textContent="本地样稿";
+      byId("refresh-time").textContent="本地样稿 · 未连接运行数据";
+      for(const id of ["today-pr-list","repair-list"])renderRecords(id,[],"连接服务器后显示实际记录。");
+      renderRunning();
+      return;
+    }
+    refreshing=true;
+    try{
+      const response=await fetch("/api/console-demo/activity",{cache:"no-store"});
+      if(!response.ok)throw new Error();
+      const data=await response.json();
+      const previousTime=rows[selected]?.time;
+      const wasLatest=selected===59;
+      rows=data.rows;
+      const previousIndex=rows.findIndex(row=>row.time===previousTime);
+      selected=wasLatest||previousIndex<60-count?59:previousIndex;
+      render();
+      running=data.working;
+      workingAvailable=data.working_available;
+      renderRecords("today-pr-list",data.today,"今日暂无已确认的新 PR。");
+      renderRecords("repair-list",data.repairs,"暂无已确认推送的修复。");
+      byId("stat-pr").textContent=data.today.length+" / 5";
+      byId("stat-queue").textContent=data.queue.length;
+      byId("queue-count").textContent="FIFO · "+data.queue.length+" 条";
+      byId("queue-list").innerHTML=data.queue.map(e=>
+        `<li><span class="item">${link(e.repo,e.number)}<small>${showTime(e.time)} 暂存${e.eligible_at?" · "+showTime(e.eligible_at)+" 可消费":""}</small></span></li>`).join("")||'<li class="empty">暂存队列为空。</li>';
+      if(!scheduleDirty)byId("trigger").value=data.schedule;
+      byId("refresh-time").textContent="更新于 "+timeFormat.format(new Date())+" · 每 5 秒";
+    }catch{
+      running=[];
+      workingAvailable=false;
+      byId("refresh-time").textContent="更新失败";
+    }finally{
+      refreshing=false;
+      renderRunning();
+    }
+  }
+  if(live)setInterval(refresh,5000);
+  let count=15,selected=59,tab="all",hidden=new Set(),scheduleDirty=false;
+  if(!live)byId("all-pr-link").addEventListener("click",e=>{
+    e.preventDefault();
+    const notice=byId("ledger-notice");
+    notice.textContent="连接服务器后可打开现有飞书 PR 记录表。";
+    notice.hidden=false;
+  });
+  const plot=byId("plot"),tip=byId("tip"),legend=byId("legend"),tabs=byId("event-tabs");
+  const L=40,R=803,T=14,B=223;
+  let Y=10;
+  const x=(j,n)=>L+j*(R-L)/(n-1),y=n=>B-(B-T)*n/Y;
+  function tooltip(j){
+    const row=rows[j];tip.innerHTML="<b>"+row.time+"</b>"+kinds.filter(k=>!hidden.has(k.key)).map(k=>"<span>"+k.name+" <strong>"+row[k.key].length+"</strong></span>").join("");
+    tip.hidden=false;
+    const pct=x(j-(60-count),count)/820;
+    tip.style.left=Math.max(0,Math.min(byId("chart").clientWidth-138,pct*byId("chart").clientWidth+8))+"px";
+  }
+  function render(){
+    const sample=rows.slice(-count);
+    for(const key of ["coarse","fine"]) byId("stat-"+key).textContent=sample.reduce((n,r)=>n+r[key].length,0);
+    legend.innerHTML=kinds.map(k=>`<button data-series="${k.key}" aria-pressed="${!hidden.has(k.key)}"><i class="dot" style="--c:${k.color}"></i>${k.name}</button>`).join("");
+    const peak=Math.max(5,...sample.flatMap(row=>kinds.map(k=>row[k.key].length)));
+    const step=Math.ceil(peak/5);
+    Y=step*5;
+    const grid=[0,1,2,3,4,5].map(i=>i*step).map(n=>`<line x1="${L}" x2="${R}" y1="${y(n)}" y2="${y(n)}" stroke="#e3ebf6"/><text x="29" y="${y(n)+4}" text-anchor="end">${n}</text>`).join("");
+    const marks=sample.map((r,j)=>j===0||j===count-1||j%Math.ceil(count/6)===0?`<text x="${x(j,count)}" y="246" text-anchor="${j===0?"start":j===count-1?"end":"middle"}">${r.time}</text>`:"").join("");
+    const series=kinds.filter(k=>!hidden.has(k.key)).map(k=>`<polyline points="${sample.map((r,j)=>x(j,count)+","+y(r[k.key].length)).join(" ")}" fill="none" stroke="${k.color}" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"/>`).join("");
+    const sx=x(selected-(60-count),count);
+    plot.innerHTML=grid+marks+series+`<line x1="${sx}" x2="${sx}" y1="${T}" y2="${B}" stroke="#8498b8" stroke-dasharray="3 4"/>`+
+      kinds.filter(k=>!hidden.has(k.key)).map(k=>`<circle cx="${sx}" cy="${y(rows[selected][k.key].length)}" r="4" fill="${k.color}" stroke="white" stroke-width="1.4"/>`).join("");
+    const row=rows[selected], total=kinds.reduce((n,k)=>n+row[k.key].length,0);
+    byId("selected-time").textContent=row.time+" 分钟明细";
+    byId("minute-status").textContent=total?total+" 条已完成记录":"0 条已完成动作";
+    tabs.innerHTML=[{key:"all",name:"全部"},...kinds].map(k=>`<button data-tab="${k.key}" aria-pressed="${tab===k.key}">${k.name} ${k.key==="all"?total:row[k.key].length}</button>`).join("");
+    byId("event-list").innerHTML=kinds.filter(k=>tab==="all"||tab===k.key).flatMap(k=>row[k.key].map(e=>{
+      return `<li><span class="item">${link(e.repo,e.number,e.type)}<small>${escapeHtml(e.detail)} · ${row.time} 完成</small></span><span class="pill">${k.name}</span></li>`;
+    })).join("")||'<li class="empty">该分钟没有此类事件。</li>';
+  }
+  const indexFor=e=>{const b=plot.getBoundingClientRect();return 60-count+Math.round(Math.min(1,Math.max(0,((e.clientX-b.left)/b.width*820-L)/(R-L)))*(count-1));};
+  plot.addEventListener("pointermove",e=>tooltip(indexFor(e)));
+  plot.addEventListener("pointerleave",()=>tip.hidden=true);
+  plot.addEventListener("click",e=>{selected=indexFor(e);render();tooltip(selected);});
+  plot.addEventListener("keydown",e=>{if(!["ArrowLeft","ArrowRight"].includes(e.key))return;e.preventDefault();selected=Math.max(60-count,Math.min(59,selected+(e.key==="ArrowLeft"?-1:1)));render();tooltip(selected);});
+  byId("ranges").addEventListener("click",e=>{if(!e.target.dataset.range)return;count=+e.target.dataset.range;selected=Math.max(selected,60-count);for(const b of byId("ranges").children)b.setAttribute("aria-pressed",b===e.target);tip.hidden=true;render();});
+  legend.addEventListener("click",e=>{const k=e.target.closest("button")?.dataset.series;if(!k)return;if(hidden.has(k))hidden.delete(k);else hidden.add(k);render();});
+  tabs.addEventListener("click",e=>{if(!e.target.dataset.tab)return;tab=e.target.dataset.tab;render();});
+  byId("trigger").addEventListener("input",()=>scheduleDirty=true);
+  byId("schedule").addEventListener("submit",async e=>{
+    e.preventDefault();
+    const value=byId("trigger").value;
+    if(!live)return;
+    try{
+      const response=await fetch("/api/console/schedule",{
+        method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({time:value})
+      });
+      if(!response.ok)throw new Error();
+      scheduleDirty=false;
+      byId("queue-notice").textContent="每日暂存消费时间已更新为北京时间 "+value+"。";
+      refresh();
+    }catch{
+      byId("queue-notice").textContent="保存消费时间失败，请重试。";
+    }
+  });
+  const runButton=byId("run");
+  const queueNotice=byId("queue-notice");
+  if(live){
+    runButton.disabled=false;
+    runButton.textContent="手动触发实际消费";
+    runButton.addEventListener("click",async ()=>{
+      runButton.disabled=true;
+      try{
+        const response=await fetch("/api/pipeline/run",{method:"POST"});
+        if(!response.ok)throw new Error();
+        const result=await response.json();
+        queueNotice.textContent=result.dispatched.length?"已请求服务器消费。工作流开始后会出现在「工作中」。":"本次没有启动新的候选。";
+        refresh();
+      }catch{
+        queueNotice.textContent="触发失败，请刷新后重试。";
+      }finally{
+        runButton.disabled=false;
+      }
+    });
+  }else{
+    queueNotice.textContent="本地样稿无法发起实际任务。";
+  }
+  const models=byId("models");
+  async function loadModels(){
+    if(!live){
+      byId("model-state").textContent="本地样稿";
+      return;
+    }
+    try{
+      const response=await fetch("/api/console/models",{cache:"no-store"});
+      if(!response.ok)throw new Error();
+      const data=await response.json();
+      for(const key of ["repair_model","reply_model","codiv_base","codiv_model"]){
+        models.elements.namedItem(key).value=data[key];
+      }
+      byId("model-state").textContent="OpenCode "+(data.opencode_configured?"已配置":"待配置")+
+        " · Codiv "+(data.codiv_configured?"已配置":"待配置");
+      models.querySelector('button[type="submit"]').disabled=false;
+    }catch{
+      byId("model-state").textContent="配置暂不可用";
+    }
+  }
+  models.addEventListener("submit",async e=>{
+    e.preventDefault();
+    if(!live)return;
+    const submit=e.submitter;
+    submit.disabled=true;
+    try{
+      const response=await fetch("/api/console/models",{
+        method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify(Object.fromEntries(new FormData(models)))
+      });
+      const data=await response.json();
+      byId("model-notice").textContent=response.ok?"已保存，应用于之后启动的任务。":
+        typeof data.detail==="string"?data.detail:"模型配置保存失败。";
+      if(response.ok)await loadModels();
+    }catch{
+      byId("model-notice").textContent="模型配置保存失败。";
+    }finally{
+      for(const input of models.querySelectorAll('input[type="password"]'))input.value="";
+      submit.disabled=false;
+    }
+  });
+  loadModels();
+  render();
+  refresh();
+})();
+</script>
+</html>

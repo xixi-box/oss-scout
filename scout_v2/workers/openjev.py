@@ -4,14 +4,18 @@ import json
 import os
 import urllib.error
 import urllib.request
+from pathlib import Path
 from urllib.parse import urlsplit
 
 
 class OpenJevClient:
-    def __init__(self):
-        self.key = os.environ.get("TYPESAFE_API_KEY", "").strip()
-        self.base = os.environ.get("TYPESAFE_BASE_URL", "https://api.codiv.ai").strip().rstrip("/")
-        self.model = os.environ.get("TYPESAFE_MODEL", "openjev-latest").strip()
+    def __init__(self, root: Path | None = None):
+        from scout_v2.console_models import read_models
+        root = root or Path(os.environ.get("OSSCOUT_DASHBOARD_ROOT") or Path(__file__).resolve().parents[2])
+        values = read_models(root)
+        self.key = (values.get("codiv_key") or os.environ.get("TYPESAFE_API_KEY", "")).strip()
+        self.base = (values.get("codiv_base") or os.environ.get("TYPESAFE_BASE_URL", "https://api.codiv.ai")).strip().rstrip("/")
+        self.model = (values.get("codiv_model") or os.environ.get("TYPESAFE_MODEL", "openjev-latest")).strip()
 
     def score_issue(self, state: dict) -> dict:
         verdict = {"usable": None, "model": self.model, "provider": "codiv"}

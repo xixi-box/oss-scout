@@ -257,6 +257,12 @@ def load_scorer_config(root: Path) -> dict:
             except Exception:  # noqa: BLE001
                 cfg["api_key"] = ""
     cfg.setdefault("model", DEFAULT_MODEL)
+    from scout_v2.console_models import read_models
+    overrides = read_models(root)
+    if overrides.get("reply_model"):
+        cfg["model"] = overrides["reply_model"]
+    if overrides.get("opencode_key"):
+        cfg["api_key"] = overrides["opencode_key"]
     return cfg
 
 

@@ -1,4 +1,5 @@
 name: oss-scout pr fix worker
+run-name: ${{ inputs.job_id }}
 
 # 我们自己的 PR 上 CI 挂了、且判定与我们的改动相关时，在这个分支上跑 opencode
 # 修复并推新 commit（带签名，不 force-push）。

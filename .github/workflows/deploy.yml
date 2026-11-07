@@ -87,6 +87,7 @@ jobs:
     name: Deploy to ${{ github.event.inputs.target_env }} (self-hosted)
     needs: build
     runs-on: [self-hosted, "${{ github.event.inputs.target_env }}"]
+    timeout-minutes: 18
     concurrency:
       group: atomic-${{ github.repository }}-${{ github.event.inputs.target_env }}
       cancel-in-progress: false
@@ -201,11 +202,17 @@ jobs:
           chmod 600 "$DEPLOY_DIR/.env"
           echo "compose written to $DEPLOY_DIR/compose.yaml"
 
-          echo "$ALIYUN_ACR_PASSWORD" | docker login "$ALIYUN_ACR_REGISTRY"             -u "$ALIYUN_ACR_USERNAME" --password-stdin
+          for attempt in 1 2 3; do
+            if echo "$ALIYUN_ACR_PASSWORD" | timeout 45 docker login "$ALIYUN_ACR_REGISTRY" -u "$ALIYUN_ACR_USERNAME" --password-stdin; then
+              break
+            fi
+            if [ "$attempt" = 3 ]; then exit 1; fi
+            sleep 10
+          done
           # 数据目录属主必须是容器运行用户（scout=1000），否则 entrypoint 无法 seed / 写状态
           mkdir -p /opt/oss-scout-data/{state/runs,queue,artifacts,configs}
           chown -R 1000:1000 /opt/oss-scout-data 2>/dev/null || true
-          docker compose -f "$DEPLOY_DIR/compose.yaml" pull || true
+          docker compose -f "$DEPLOY_DIR/compose.yaml" pull
           docker compose -f "$DEPLOY_DIR/compose.yaml" up -d --remove-orphans
           # 清理同仓库旧镜像（保留本次 SHA 与 latest）。
           # 只清 dangling 不够：带 tag 的历史版本会永久堆积（2026-10-27 磁盘打满事故）
@@ -224,3 +231,4 @@ jobs:
           done
           curl -fsS --max-time 5 http://127.0.0.1:18787/login > /dev/null
           docker exec oss-scout python /app/scripts/runtime_status.py --screening
+          docker exec oss-scout python /app/scripts/verify_console.py

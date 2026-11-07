@@ -21,7 +21,7 @@ from pathlib import Path
 
 import yaml
 from fastapi import FastAPI, Form, Query, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -765,7 +765,7 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
             return await call_next(request)
         if path.startswith("/api/"):
             return JSONResponse({"detail": "unauthenticated"}, status_code=401)
-        url = str(request.url_for("login_page")) + f"?next={path}"
+        url = f"/login?next={path}"
         return RedirectResponse(url, status_code=303)
 
     @app.get("/login", response_class=HTMLResponse, name="login_page")
@@ -880,6 +880,113 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
         o = ds.overview()
         return render(request, "overview.html",
                       {"o": o, "recent": o["recent_worklog"], "active": "/"})
+
+    @app.get("/console-demo", include_in_schema=False)
+    @app.get("/console")
+    def console_demo():
+        return FileResponse(templates_dir / "oss-scout-console-demo.html", media_type="text/html")
+
+    @app.get("/api/console-demo/activity")
+    def console_demo_activity():
+        from .console_activity import snapshot
+        return JSONResponse(snapshot(ds), headers={"Cache-Control": "no-store"})
+
+    @app.get("/console/pr-table")
+    def console_pr_table():
+        from scout_v2.feishu_bitable import pr_table_url
+        url = pr_table_url(root)
+        if not url:
+            return HTMLResponse("现有 PR 记录表还没有绑定。", status_code=503)
+        return RedirectResponse(url, status_code=303)
+
+    @app.post("/api/console/schedule")
+    def console_schedule(body: dict):
+        import datetime as dt
+        import re
+        from scout_v2.state_store import business_now, queue_transaction
+
+        value = str(body.get("time") or "")
+        if not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", value):
+            return JSONResponse({"detail": "请输入有效的北京时间。"}, status_code=400)
+        now = business_now()
+        hour, minute = map(int, value.split(":"))
+        path = root / "configs/dashboard.yaml"
+        with queue_transaction(root) as queue:
+            cfg = yaml.safe_load(path.read_text(encoding="utf-8")) if path.exists() else {}
+            cfg = cfg or {}
+            cfg.update(staged_flush_hour_local=hour, staged_flush_minute_local=minute)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            _atomic_write_text(path, yaml.safe_dump(cfg, allow_unicode=True))
+            for entry in queue.values():
+                if entry.get("status") != "staged" or not entry.get("eligible_at"):
+                    continue
+                try:
+                    due = dt.datetime.fromisoformat(entry["eligible_at"])
+                    due = due.astimezone(now.tzinfo) if due.tzinfo else due.replace(tzinfo=now.tzinfo)
+                except (ValueError, TypeError):
+                    continue
+                if due > now:
+                    entry["eligible_at"] = due.replace(hour=hour, minute=minute).isoformat()
+        _audit(root, "console_schedule", "queue", value)
+        return {"time": value}
+
+    model_lock = _thr.Lock()
+
+    @app.get("/api/console/models")
+    def console_models():
+        from scout_v2.console_models import read_models
+        from scout_v2.workers.issue_scorer import load_scorer_config
+        from scout_v2.workers.openjev import OpenJevClient
+        from scout_v2.workers.repair import resolve_model
+
+        values = read_models(root)
+        reply = load_scorer_config(root)
+        codiv = OpenJevClient(root)
+        return JSONResponse({
+            "repair_model": values.get("repair_model") or resolve_model(),
+            "reply_model": reply["model"], "opencode_configured": bool(reply.get("api_key")),
+            "codiv_base": codiv.base, "codiv_model": codiv.model, "codiv_configured": bool(codiv.key),
+        }, headers={"Cache-Control": "no-store"})
+
+    @app.post("/api/console/models")
+    def console_save_models(body: dict):
+        import re
+        import subprocess
+        from urllib.parse import urlsplit
+        from scout_v2.console_models import read_models, write_models
+        from scout_v2.workers.auto_pipeline import _actions_runner_repo
+
+        fields = ("repair_model", "reply_model", "codiv_base", "codiv_model", "opencode_key", "codiv_key")
+        if any(not isinstance(body.get(key, ""), str) or len(body.get(key, "")) > 512 for key in fields):
+            return JSONResponse({"detail": "模型或密钥字段格式有误。"}, status_code=400)
+        values = {key: body.get(key, "").strip() for key in fields}
+        base = urlsplit(values["codiv_base"])
+        if (base.scheme != "https" or not base.hostname or
+                not (base.hostname == "codiv.ai" or base.hostname.endswith(".codiv.ai")) or
+                base.username or base.password or base.query or base.fragment):
+            return JSONResponse({"detail": "Codiv Base URL 需要使用官方 codiv.ai HTTPS 地址。"}, status_code=400)
+        patterns = {"repair_model": r"opencode-go/[\w.-]+", "reply_model": r"[\w.-]+",
+                    "codiv_model": r"[\w./-]+"}
+        if any(not re.fullmatch(pattern, values[key]) for key, pattern in patterns.items()):
+            return JSONResponse({"detail": "模型名称格式有误。"}, status_code=400)
+        with model_lock:
+            prior = read_models(root)
+            if values["opencode_key"]:
+                runner_repos = {_actions_runner_repo(root), "xixi-box/oss-scout"}
+                if len(runner_repos) != 1:
+                    return JSONResponse({"detail": "两个 Actions 仓库需要分别更新 OpenCode 密钥。"}, status_code=409)
+                try:
+                    changed = subprocess.run(
+                        ["gh", "secret", "set", "OPENCODE_API_KEY", "-R", runner_repos.pop()],
+                        input=values["opencode_key"], text=True, capture_output=True, timeout=25)
+                    if changed.returncode:
+                        raise RuntimeError("secret update failed")
+                except (OSError, subprocess.TimeoutExpired, RuntimeError):
+                    return JSONResponse({"detail": "无法更新 GitHub Actions 的 OpenCode 密钥，请检查服务器权限。"},
+                                        status_code=502)
+            write_models(root, {**prior, **{k: v for k, v in values.items() if v}})
+        _audit(root, "console_models", "providers", "settings updated")
+        return {"ok": True}
 
     @app.get("/fragment/overview-cards", response_class=HTMLResponse)
     def overview_cards(request: Request):
@@ -1284,6 +1391,7 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
                     state["fix_result"] = extra
                     draft = draft_reply(repo, num, context=state)
                     if draft.get("drafted"):
+                        _audit(root, "pr_reply_drafted", key, "drafted=True after repair")
                         _notify_draft(root, state, draft)
                 except Exception as exc:
                     _audit(root, "pr_draft_error", key, str(exc)[:200])
@@ -1462,6 +1570,29 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
         items = body.get("issues")
         if not isinstance(items, list):
             return JSONResponse({"detail": "issues must be a list"}, status_code=400)
+        coarse = body.get("coarse_rejected")
+        if isinstance(coarse, list):
+            import datetime as dt
+            from scout_v2.state_store import Worklog, business_now
+            now = business_now()
+            try:
+                stamp = dt.datetime.fromisoformat(body["coarse_completed_at"])
+                if stamp.tzinfo is None or abs((now - stamp).total_seconds()) > 3600:
+                    raise ValueError("invalid telemetry time")
+            except (KeyError, TypeError, ValueError):
+                return JSONResponse({"detail": "invalid coarse_completed_at"}, status_code=400)
+            worklog = Worklog(root / "state/worklog.jsonl")
+            reasons = {"excluded_label", "not_open_unassigned_issue"}
+            for event in coarse[:2000]:
+                if not isinstance(event, dict):
+                    continue
+                repo, number, reason = (event.get(k) for k in ("repo", "number", "reason"))
+                if (isinstance(repo, str) and type(number) is int and number > 0
+                        and isinstance(reason, str) and reason in reasons and modifiable_repo(repo)):
+                    worklog.append({"ts": stamp.isoformat(), "action": "pipeline_coarse_screen",
+                                    "target": f"{repo}#{number}", "result": reason})
+            if not items:
+                return JSONResponse({"stored": 0})
         # 字段收敛：只保留白名单，防注入超大/异常结构
         clean = []
         for it in items:

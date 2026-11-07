@@ -6,10 +6,16 @@ const EXCLUDED_LABELS = ["invalid", "wontfix", "duplicate", "question", "stale",
   "awaiting more info", "awaiting-more-info", "needs more info", "needs-repro",
   "documentation"];
 
-function collectIssue(issues, repo, it) {
-  if (it.pull_request || (it.assignees && it.assignees.length)) return;
+function collectIssue(issues, repo, it, rejected) {
+  if (it.pull_request || (it.assignees && it.assignees.length)) {
+    rejected.push({ repo, number: it.number, reason: "not_open_unassigned_issue" });
+    return;
+  }
   const labels = (it.labels || []).map(l => typeof l === "string" ? l : l.name);
-  if (labels.some(l => EXCLUDED_LABELS.includes(l.toLowerCase()))) return;
+  if (labels.some(l => EXCLUDED_LABELS.includes(l.toLowerCase()))) {
+    rejected.push({ repo, number: it.number, reason: "excluded_label" });
+    return;
+  }
   issues.push({
     repo, number: it.number, title: it.title, url: it.html_url,
     created_at: it.created_at, updated_at: it.updated_at, labels,
@@ -110,8 +116,8 @@ async function deliverIssues(env, issues, repoCount, now, budget) {
 }
 
 async function issueBatch(env, repos, marks, now, budget) {
-  const result = { issues: [], completed: [], errors: [] };
-  let pending = repos.map(repo => ({ repo, cursor: null, issues: [] }));
+  const result = { issues: [], rejected: [], completed: [], errors: [] };
+  let pending = repos.map(repo => ({ repo, cursor: null, issues: [], rejected: [] }));
   while (pending.length) {
     const fields = pending.map((item, index) => {
       const [owner, name] = item.repo.split("/");
@@ -151,7 +157,7 @@ async function issueBatch(env, repos, marks, now, budget) {
         collectIssue(item.issues, item.repo, { ...node, html_url: node.url,
           created_at: node.createdAt, updated_at: node.updatedAt,
           assignees: node.assignees.nodes, labels: node.labels.nodes,
-          comments: node.comments.totalCount, reactions: { total_count: node.reactions.totalCount } });
+          comments: node.comments.totalCount, reactions: { total_count: node.reactions.totalCount } }, item.rejected);
       }
       if (connection.pageInfo.hasNextPage) {
         if (!connection.pageInfo.endCursor || connection.pageInfo.endCursor === item.cursor) {
@@ -161,6 +167,7 @@ async function issueBatch(env, repos, marks, now, budget) {
         next.push({ ...item, cursor: connection.pageInfo.endCursor });
       } else {
         result.issues.push(...item.issues);
+        result.rejected.push(...item.rejected);
         result.completed.push(item.repo);
       }
     });
@@ -186,6 +193,7 @@ async function pollIssues(env, now, budget) {
   // longer than the bootstrap window. This is initialization, not advancement.
   if (bootstrap) await env.SEEN.put("watermarks", JSON.stringify(marks));
   const issues = [];
+  const rejected = [];
   const completed = [];
   const errors = [];
   // Ten repositories per GraphQL call: fifty repositories normally cost five
@@ -193,10 +201,21 @@ async function pollIssues(env, now, budget) {
   for (let start = 0; start < repos.length; start += 10) {
     const batch = await issueBatch(env, repos.slice(start, start + 10), marks, now, budget);
     issues.push(...batch.issues);
+    rejected.push(...batch.rejected);
     completed.push(...batch.completed);
     errors.push(...batch.errors);
   }
+  const completedAt = new Date().toISOString();
   await deliverIssues(env, issues, repos.length, now, budget);
+  // Telemetry does not hold back a discovery cursor or consume its delivery budget.
+  if (rejected.length && env.INGEST_URL && env.INGEST_TOKEN && budget.remaining) {
+    try {
+      await request(env.INGEST_URL, { method: "POST",
+        headers: { "Content-Type": "application/json", "X-Ingest-Token": env.INGEST_TOKEN },
+        body: JSON.stringify({ issues: [], coarse_completed_at: completedAt, coarse_rejected: rejected })
+      }, budget);
+    } catch (e) { console.warn("Coarse screening activity unavailable"); }
+  }
   if (now.getUTCMinutes() % 30 === 0) {
     await checkpoint(env, "watermarks", marks, completed, now);
     await env.SEEN.put("diag", JSON.stringify({ at: now.toISOString(),

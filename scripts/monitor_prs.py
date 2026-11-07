@@ -587,6 +587,10 @@ def _dispatch_pr_fix(repo: str, number: int, *, dry_run: bool = False,
                "review_comment": review_comment[:4000] if kind == "review" else "",
                "review_author": review_author if kind == "review" else "",
                "review_comment_id": review_source["comment_id"] if review_source else None}
+    from scout_v2.console_models import read_models
+    model = read_models(DATA_ROOT).get("repair_model")
+    if model:
+        payload["model"] = model
     import base64 as _b64
     fix_b64 = _b64.b64encode(json.dumps(payload, ensure_ascii=False).encode()).decode()
     job_id = f"prfix-{repo.replace('/', '-')}-{number}-{key.rsplit('@', 1)[-1][:12]}"

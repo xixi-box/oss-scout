@@ -845,6 +845,12 @@ def screen_issue(eng, it: dict, *, lane: str, timeline: list | None = None) -> t
         blockers.append("excluded_label")
     if it.get("state_reason") == "duplicate":
         blockers.append("confirmed_duplicate")
+    def record(action, result):
+        if getattr(eng, "root", None) is not None:
+            from scout_v2.workers.auto_pipeline import log
+            log(eng.root, action, f"{repo}#{number}", result)
+
+    record("coarse_screen", ",".join(blockers) if blockers else "通过机械条件")
     title, body = str(it.get("title") or ""), str(it.get("body_excerpt") or "")
     claim_sents = _claimish_sentences(body)
     verdict = {"usable": None, "reason": "not screened"}
@@ -873,6 +879,8 @@ def screen_issue(eng, it: dict, *, lane: str, timeline: list | None = None) -> t
                 "repo_rules": repo_rules_text(repo)})
         except Exception as ex:
             verdict = {"usable": None, "reason": f"scorer error: {ex}"[:200]}
+        outcome = {True: "通过", False: "拒绝", None: "待重试"}[verdict.get("usable")]
+        record("fine_screen", f"{outcome} · {verdict.get('reason', '')}")
     return blockers, verdict
 
 
