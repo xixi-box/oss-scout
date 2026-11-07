@@ -112,6 +112,7 @@ jobs:
       FEISHU_VERIFICATION_TOKEN: ${{ secrets.FEISHU_VERIFICATION_TOKEN }}
       # 可选：固定通知群 ID。设了就不需要 im:chat:readonly 权限去列群
       FEISHU_CHAT_ID: ${{ secrets.FEISHU_CHAT_ID }}
+      FEISHU_PR_APPROVER_OPEN_ID: ${{ secrets.FEISHU_PR_APPROVER_OPEN_ID }}
       # PR 台账所在的多维表格（用户自建并分享给应用的 base）
       FEISHU_BITABLE_APP_TOKEN: ${{ secrets.FEISHU_BITABLE_APP_TOKEN }}
       DASHBOARD_PUBLIC_URL: ${{ secrets.DASHBOARD_PUBLIC_URL }}
@@ -167,6 +168,7 @@ jobs:
                 - FEISHU_APP_SECRET=\${FEISHU_APP_SECRET}
                 - FEISHU_VERIFICATION_TOKEN=\${FEISHU_VERIFICATION_TOKEN}
                 - FEISHU_CHAT_ID=\${FEISHU_CHAT_ID}
+                - FEISHU_PR_APPROVER_OPEN_ID=\${FEISHU_PR_APPROVER_OPEN_ID}
                 - FEISHU_BITABLE_APP_TOKEN=\${FEISHU_BITABLE_APP_TOKEN}
                 - DASHBOARD_PUBLIC_URL=\${DASHBOARD_PUBLIC_URL}
                 # git/外网经宿主 sing-box（docker0 网桥入站）；国内直连域走 NO_PROXY
@@ -196,6 +198,7 @@ jobs:
             echo "FEISHU_APP_SECRET=$FEISHU_APP_SECRET"
             echo "FEISHU_VERIFICATION_TOKEN=$FEISHU_VERIFICATION_TOKEN"
             echo "FEISHU_CHAT_ID=$FEISHU_CHAT_ID"
+            echo "FEISHU_PR_APPROVER_OPEN_ID=$FEISHU_PR_APPROVER_OPEN_ID"
             echo "FEISHU_BITABLE_APP_TOKEN=$FEISHU_BITABLE_APP_TOKEN"
             echo "DASHBOARD_PUBLIC_URL=$DASHBOARD_PUBLIC_URL"
           } > "$DEPLOY_DIR/.env"

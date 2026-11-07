@@ -810,10 +810,20 @@ def refresh_issue(item: dict, *, root: Path | None = None) -> tuple[dict, list[s
         blockers.append("已有修复 PR" + (f" · {refs[0]}" if refs else ""))
     if check.is_duplicate:
         blockers.append("confirmed_duplicate")
-    return issue_screening_snapshot(item, issue, comments), blockers, timeline
+    return issue_screening_snapshot(item, issue, comments, timeline), blockers, timeline
 
 
-def issue_screening_snapshot(item: dict, issue: dict, comments: list) -> dict:
+def issue_screening_snapshot(item: dict, issue: dict, comments: list, timeline=()) -> dict:
+    related_prs = {}
+    for event in timeline:
+        source = (event.get("source") or {}).get("issue") or {}
+        pr = source.get("pull_request")
+        if pr and source.get("html_url"):
+            related_prs[source["html_url"]] = {
+                "url": source["html_url"], "title": source.get("title"),
+                "state": "merged" if pr.get("merged_at") else source.get("state"),
+                "author": (source.get("user") or {}).get("login"),
+            }
     return {**item, "title": issue.get("title") or "", "body_excerpt": issue.get("body") or "",
             "created_at": issue.get("created_at"), "state_reason": issue.get("state_reason"),
             "reporter": (issue.get("user") or {}).get("login"),
@@ -822,9 +832,10 @@ def issue_screening_snapshot(item: dict, issue: dict, comments: list) -> dict:
             "updated_at": issue.get("updated_at") or "", "state": issue.get("state"),
             "pull_request": bool(issue.get("pull_request")), "assignees": issue.get("assignees") or [],
             "labels": [l["name"] for l in issue.get("labels") or []],
-            "comments": len(comments), "context_complete": True,
+            "comments": len(comments), "context_complete": True, "related_prs": list(related_prs.values()),
             "issue_comments": [{"author": (c.get("user") or {}).get("login", "?"),
                                 "association": c.get("author_association", ""),
+                                "url": c.get("html_url"),
                                 "created_at": c.get("created_at"), "updated_at": c.get("updated_at"),
                                 "body": c.get("body") or ""} for c in comments]}
 

@@ -1,15 +1,7 @@
 name: oss-scout pr fix worker
 run-name: ${{ inputs.job_id }}
 
-# 我们自己的 PR 上 CI 挂了、且判定与我们的改动相关时，在这个分支上跑 opencode
-# 修复并推新 commit（带签名，不 force-push）。
-#
-# 与 repair workflow 的区别：repair 面向"修一个上游 issue"（复现→补丁→开 PR）；
-# 这里面向"已开出的 PR 上补 CI"——checkout 我们 fork 的分支，修完推回同一分支，
-# 不开新 PR。触发者是 VPS 的 pr-watch 循环（monitor_prs.dispatch_pr_fix），
-# 每个 (pr, head_sha) 只派一次，防循环。
-#
-# 输入统一走 base64 JSON（log 片段里什么字符都可能有，表单直传会碎）。
+# Prepare a verified commit and reply draft for Feishu approval.
 
 on:
   workflow_dispatch:
@@ -35,6 +27,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           path: worker
+          persist-credentials: false
 
       - name: Decode payload
         id: job
@@ -153,156 +146,108 @@ jobs:
           os.chmod(p, 0o600)
           PY
 
-      - name: Run opencode fix
-        shell: bash
+      - name: Collect PR evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd "$GITHUB_WORKSPACE/worker"
+          python3 -m scout_v2.workers.pr_fix --collect-context \
+            --fix "$RUNNER_TEMP/fix.json" --repo-dir "$RUNNER_TEMP/repo" \
+            --context "$RUNNER_TEMP/pr-context.json"
+
+      - name: Prepare fix and reply
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
         run: |
           set -euo pipefail
           cd "$GITHUB_WORKSPACE/worker"
-          PYTHONPATH="$GITHUB_WORKSPACE/worker" python3 -m scout_v2.workers.pr_fix \
-            --fix "$RUNNER_TEMP/fix.json" \
-            --repo-dir "$RUNNER_TEMP/repo" | tee "$RUNNER_TEMP/prfix.json"
+          python3 -m scout_v2.workers.pr_fix --fix "$RUNNER_TEMP/fix.json" \
+            --repo-dir "$RUNNER_TEMP/repo" --context "$RUNNER_TEMP/pr-context.json" \
+            --decision "$RUNNER_TEMP/pr-decision.json" > "$RUNNER_TEMP/prfix.json"
 
-      - name: Commit and push to the PR branch
+      - name: Save tested commit without pushing
         id: stage
-        shell: bash
         env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
           HEAD_SHA: ${{ steps.job.outputs.head_sha }}
-          FORK_REPO: ${{ steps.job.outputs.fork_repo }}
-          BRANCH: ${{ steps.job.outputs.branch }}
         run: |
           set -euo pipefail
           cd "$RUNNER_TEMP/repo"
-          if [ -z "$(git status --porcelain)" ]; then
-            echo "no changes produced"
-            # opencode 判定"无需变更"（修复已在分支上/意见已被覆盖）也是
-            # 一个需要上报的结果：不回调的话，看板/飞书永远停在"进行中"，
-            # 且 15 分钟监控循环会因为派发记录在而跳过、却因为状态没更新
-            # 而反复给用户发同一张卡片（2026-11-05 实录）。
-            echo "outcome=nochange" >> "$GITHUB_OUTPUT"
-            python3 - <<'PY2'
-          import json, os, urllib.request
-          j = json.load(open(os.environ["RUNNER_TEMP"] + "/fix.json"))
-          payload = {"repo": j["upstream_repo"], "number": j["pr_number"],
-                     "kind": j.get("kind") or "ci", "pushed": False,
-                     "no_change": True, "fork_repo": j["fork_repo"]}
-          token = os.environ.get("INGEST_TOKEN", "")
-          url = (os.environ.get("DASHBOARD_URL", "") or "").rstrip("/")                 + "/api/pr/reply/fix-result"
-          if not token or not url.startswith("http"):
-              raise SystemExit(0)
-          req = urllib.request.Request(
-              url, data=json.dumps(payload).encode(), method="POST",
-              headers={"Content-Type": "application/json",
-                       "X-Ingest-Token": token})
-          try:
-              with urllib.request.urlopen(req, timeout=30) as resp:
-                  print("callback:", resp.status)
-          except Exception as e:
-              print("callback failed (best-effort):", str(e)[:150])
-          PY2
-            exit 0
-          fi
-          # worker 按仓库形态跑过测试（go test / pytest / npm test）。验证不过
-          # 或认不出怎么验证就不推——把没验过的补丁推到别人 PR 上比不推更糟。
-          python3 - <<'PY'
-          import json, os, re, sys
-          out = open(os.environ["RUNNER_TEMP"] + "/prfix.json", encoding="utf-8").read()
-          m = re.search(r"##OSSCOUT_PRFIX##(.*)", out, re.S)
-          if not m:
-              sys.exit("worker produced no result marker; refusing to push")
-          res = json.loads(m.group(1).strip().split("\n")[0])
-          print("worker result:", {k: res.get(k) for k in
-                                   ("fixed", "test_ok", "test_result")})
-          if not res.get("test_ok"):
-              sys.exit("tests did not pass or could not run -> refusing to push")
-          PY
-          git config user.name "wangshun"
-          git config user.email "96341168+xixi-box@users.noreply.github.com"
-          git add -A
-          MSG=$(python3 - <<'PY'
-          import json, os
-          j = json.load(open(os.environ["RUNNER_TEMP"] + "/fix.json"))
-          kind = j.get("kind") or "ci"
-          subject = (("fix: address review on PR #%d" if kind == "review"
-                      else "fix: address CI failures on PR #%d") % j["pr_number"])
-          print(subject + "\n\n"
-                "Signed-off-by: wangshun <96341168+xixi-box@users.noreply.github.com>")
-          PY
-          )
-          git commit -q -m "$MSG"
-
-          # 直接推 PR 分支：代码修改不需要人放行（验过的补丁就是该推的）。
-          # 人只对"对外文字"负责——回复在飞书卡片里等人点发送。
           python3 - <<'PY'
           import json, os, subprocess
-          j = json.load(open(os.environ["RUNNER_TEMP"] + "/fix.json"))
-          pr = json.loads(subprocess.check_output(
-              ["gh", "api", f"repos/{j['upstream_repo']}/pulls/{int(j['pr_number'])}"]))
-          head = pr.get("head") or {}
-          if (pr.get("state") != "open" or (pr.get("user") or {}).get("login") != "xixi-box" or
-                  (head.get("repo") or {}).get("full_name", "").lower() != j["fork_repo"].lower() or
-                  head.get("ref") != j["branch"] or head.get("sha") != j["head_sha"]):
-              raise SystemExit("PR branch changed or ownership check failed")
+          from pathlib import Path
+          tmp = Path(os.environ["RUNNER_TEMP"])
+          result = next(line.split("##OSSCOUT_PRFIX##", 1)[1]
+                        for line in (tmp / "prfix.json").read_text().splitlines()
+                        if line.startswith("##OSSCOUT_PRFIX##"))
+          result = json.loads(result)
+          if not result.get("fixed"):
+              raise SystemExit(0)
+          def git(*args):
+              return subprocess.check_output(["git", *args], text=True).strip()
+          head = os.environ["HEAD_SHA"]
+          if git("rev-parse", "HEAD") != head:
+              raise SystemExit("worker changed HEAD before staging")
+          job = json.loads((tmp / "fix.json").read_text())
+          git("add", "-A")
+          if git("write-tree") != result["tested_tree"]:
+              raise SystemExit("staged patch does not match the tested tree")
+          git("-c", "core.hooksPath=/dev/null", "-c", "user.name=wangshun",
+              "-c", "user.email=96341168+xixi-box@users.noreply.github.com",
+              "commit", "--signoff", "-m", f"fix: follow up on PR #{job['pr_number']}")
+          git("update-ref", "refs/heads/oss-scout-approval", "HEAD")
+          git("bundle", "create", str(tmp / "pr-fix.bundle"), "refs/heads/oss-scout-approval", f"^{head}")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              output.write(f"commit_sha={git('rev-parse', 'HEAD')}\n")
           PY
-          git push \
-            "https://x-access-token:$GH_TOKEN@github.com/$FORK_REPO.git" \
-            "HEAD:$BRANCH"
-          SHA=$(git rev-parse HEAD)
-          echo "pushed $SHA to $FORK_REPO@$BRANCH"
-          echo "pushed_sha=$SHA" >> "$GITHUB_OUTPUT"
-          echo "outcome=pushed" >> "$GITHUB_OUTPUT"
 
-      - name: Record result for the dashboard
-        if: always() && steps.stage.outputs.outcome != 'nochange'
-        continue-on-error: true   # 遥测性质：回调挂了不该把整个修复运行标红
-        shell: bash
-        # 注意：一个 step 只能有一个 env 键。GitHub 的解析器拒绝重复键，
-        # PyYAML 却静默容忍（取后者）——2026-11-04 这里的重复 env 让
-        # 文件被 GitHub 判为非法，每次 push 都多一个红叉，且 review 修复
-        # 的 workflow_dispatch 一起瘫痪。
+      - name: Deliver approval candidate to dashboard
+        if: always() && steps.job.outcome == 'success'
         env:
           INGEST_TOKEN: ${{ secrets.CF_INGEST_TOKEN }}
           DASHBOARD_URL: ${{ secrets.DASHBOARD_PUBLIC_URL }}
-          PUSHED_SHA: ${{ steps.stage.outputs.pushed_sha }}
+          JOB_ID: ${{ inputs.job_id }}
+          RUN_ID: ${{ github.run_id }}
+          COMMIT_SHA: ${{ steps.stage.outputs.commit_sha }}
         run: |
-          set -uo pipefail
           python3 - <<'PY'
-          import json, os, re, urllib.request
-          base = os.environ["RUNNER_TEMP"]
-          j = json.load(open(base + "/fix.json"))
-          try:
-              out = open(base + "/prfix.json", encoding="utf-8").read()
-          except OSError:
-              out = ""
-          m = re.search(r"##OSSCOUT_PRFIX##(.*)", out, re.S)
-          res = json.loads(m.group(1).strip().split("\n")[0]) if m else {}
-
-          # 把结果送回看板，好让飞书卡片从"进行中"变成"可发送"。
-          # 失败只是状态没更新，不影响已经推送好的提交。
-          payload = {"repo": j["upstream_repo"], "number": j["pr_number"],
-                     "kind": j.get("kind") or "ci",
-                     "review_comment_id": j.get("review_comment_id"),
-                     "test_ok": res.get("test_ok"),
-                     "test_result": res.get("test_result"),
-                     "changed_files": res.get("changed_files") or [],
-                     "pushed": bool(os.environ.get("PUSHED_SHA")),
-                     "pushed_sha": os.environ.get("PUSHED_SHA", ""),
-                     "fork_repo": j["fork_repo"]}
-          token = os.environ.get("INGEST_TOKEN", "")
-          url = (os.environ.get("DASHBOARD_URL", "") or "").rstrip("/") \
-              + "/api/pr/reply/fix-result"
-          if not token or not url.startswith("http"):
-              print("no ingest token/url; skipping callback")
-              raise SystemExit(0)
+          import base64, json, os, time, urllib.request
+          from pathlib import Path
+          tmp = Path(os.environ["RUNNER_TEMP"])
+          job = json.loads((tmp / "fix.json").read_text())
+          output = tmp / "prfix.json"
+          lines = output.read_text().splitlines() if output.exists() else []
+          marker = next((line.split("##OSSCOUT_PRFIX##", 1)[1] for line in lines
+                         if line.startswith("##OSSCOUT_PRFIX##")), "{}")
+          result = json.loads(marker)
+          context_file = tmp / "pr-context.json"
+          context = json.loads(context_file.read_text()) if context_file.exists() else {}
+          sha = os.environ["COMMIT_SHA"]
+          bundle = tmp / "pr-fix.bundle"
+          if sha and bundle.stat().st_size > 6 * 1024 * 1024:
+              raise SystemExit("approval bundle exceeds 6 MiB")
+          payload = {
+              **{k: job.get(k) for k in ("branch", "head_sha", "fork_repo", "kind")},
+              "repo": job["upstream_repo"], "number": job["pr_number"],
+              "job_id": os.environ["JOB_ID"], "run_id": os.environ["RUN_ID"],
+              "commit_sha": sha,
+              "bundle": base64.b64encode(bundle.read_bytes()).decode() if sha else "",
+              "test_result": result.get("test_result") or result.get("skipped") or "workflow failed",
+              "changed_files": result.get("changed_files") or [],
+              "reply": (result.get("reply") or "") if sha or not result.get("fixed") else "",
+              "summary": result.get("summary") or "", "trigger": context.get("trigger"),
+              "title": (context.get("pr") or {}).get("title", ""),
+          }
           req = urllib.request.Request(
-              url, data=json.dumps(payload).encode(), method="POST",
-              headers={"Content-Type": "application/json",
-                       "X-Ingest-Token": token})
-          try:
-              with urllib.request.urlopen(req, timeout=30) as r:
-                  print("callback:", r.status, r.read()[:200])
-          except Exception as e:
-              print("callback failed:", str(e)[:200])
+              os.environ["DASHBOARD_URL"].rstrip("/") + "/api/pr/reply/fix-result",
+              data=json.dumps(payload).encode(), method="POST",
+              headers={"Content-Type": "application/json", "X-Ingest-Token": os.environ["INGEST_TOKEN"]})
+          for attempt in range(3):
+              try:
+                  with urllib.request.urlopen(req, timeout=45) as response:
+                      print("approval result delivered:", response.status)
+                  break
+              except OSError:
+                  if attempt == 2:
+                      raise
+                  time.sleep(5 * (attempt + 1))
           PY

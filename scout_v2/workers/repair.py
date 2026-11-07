@@ -354,7 +354,7 @@ def opencode_patch_producer(job: Job, work_dir: Path, context: str,
         model = model or (job.model or "").strip() or resolve_model()
         rules = repo_rules_block(job.repo)
         (work_dir / TASK_FILE).write_text(
-            FIX_PROMPT.format(context=context[:6000], rules=rules or "(none)"),
+            FIX_PROMPT.format(context=context, rules=rules or "(none)"),
             encoding="utf-8")
         ok, detail = client.run(model, RUN_TASK_MSG)
         diff_early = _git(["diff"], work_dir).stdout

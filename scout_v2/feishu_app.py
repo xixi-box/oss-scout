@@ -229,6 +229,47 @@ def build_reply_card(repo: str, number: int, issue_title: str,
     }
 
 
+def build_pr_approval_card(record: dict, *, complete: bool = False, error: str = "") -> dict:
+    repo, number = record["repo"], record["number"]
+    link = f"https://github.com/{repo}/pull/{number}"
+    run_id = str(record.get("run_id") or "")
+    sha = record.get("commit_sha") or ""
+    draft = record.get("reply") or ""
+    elements = [{"tag": "div", "text": {"tag": "lark_md", "content":
+                 f"[{repo}#{number}]({link})" +
+                 (f" · [测试记录](https://github.com/xixi-box/oss-scout/actions/runs/{run_id})"
+                  if run_id.isdigit() else "")}}]
+    for value in (
+        record.get("title"),
+        f"{record['source_author']}：{record.get('source_comment') or ''}" if record.get("source_author") else "",
+        record.get("summary"),
+        (f"{'已推送' if complete else '已提交，待推送'} {sha[:12]}\n"
+         f"测试：{record.get('test_result') or ''}\n"
+         + "\n".join(record.get("changed_files") or [])) if sha else "",
+        f"已回复：{record['approved_reply']}" if complete and record.get("approved_reply") else "",
+        error,
+    ):
+        if value:
+            elements.append({"tag": "div", "text": {"tag": "plain_text", "content": str(value)[:1200]}})
+    if not complete:
+        button = {"tag": "button", "type": "primary", "name": "confirm",
+                  "text": {"tag": "plain_text", "content": (
+                      "确认推送并回复" if sha and draft else "确认推送" if sha else "确认回复")},
+                  "value": {"do": "approve_pr_followup", "job_id": record["job_id"]}}
+        form = []
+        if draft:
+            form.append({"tag": "input", "name": "reply_text", "default_value": draft,
+                         "input_type": "multiline_text", "rows": 6, "max_length": 1000,
+                         "width": "fill", "placeholder": {"tag": "plain_text", "content": "编辑回复草稿"}})
+        button["action_type"] = "form_submit"
+        elements.append({"tag": "form", "name": "approval", "elements": form + [button]})
+    return {"config": {"wide_screen_mode": True, "update_multi": True},
+            "header": {"template": "green" if complete else "orange",
+                       "title": {"tag": "plain_text", "content":
+                                 f"{'PR 跟进已完成' if complete else 'PR 跟进待确认'}：{repo}#{number}"}},
+            "elements": elements}
+
+
 def update_card_message(message_id: str, card: dict) -> tuple[bool, str]:
     """原地更新已发出的卡片（im/v1/messages PATCH）。
 
@@ -280,18 +321,21 @@ def build_sent_card(repo: str, number: int, reply_text: str,
     }
 
 
-def send_card_to_chat(chat_id: str, card: dict) -> tuple[bool, str]:
+def send_card_to_chat(chat_id: str, card: dict, *, message_uuid: str = "") -> tuple[bool, str]:
     tok = tenant_token()
     if not tok:
         return False, "no tenant token (check FEISHU_APP_ID/SECRET)"
     try:
+        message = {"receive_id": chat_id, "msg_type": "interactive",
+                   "content": json.dumps(card, ensure_ascii=False)}
+        if message_uuid:
+            message["uuid"] = message_uuid
         body = _request(
             "POST",
             "https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=chat_id",
-            {"receive_id": chat_id, "msg_type": "interactive", "content":
-             json.dumps(card, ensure_ascii=False)}, token=tok)
+            message, token=tok)
         ok = body.get("code") == 0
-        return ok, ("" if ok else str(body)[:300])
+        return ok, (str((body.get("data") or {}).get("message_id") or "") if ok else str(body)[:300])
     except urllib.error.HTTPError as e:
         # 飞书把"卡片非法"的原因放在错误体里（如 max_length exceed）。
         # 只报 "HTTP Error 400" 等于让人再去猜一轮，这里把原因带出去。

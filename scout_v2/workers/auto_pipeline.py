@@ -481,8 +481,8 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen
         # The live snapshot passes the same mechanical issue rules as intake.
         source = getattr(recheck, "screening_source", None)
         if source:
-            issue, comments, _timeline = source
-            fresh = issue_screening_snapshot(entry, issue, comments)
+            issue, comments, timeline = source
+            fresh = issue_screening_snapshot(entry, issue, comments, timeline)
             blockers = coarse_issue_blockers(eng, fresh, lane=lane)
             action = "coarse_screen" if rescreen else "prestart_coarse_screen"
             log(root, action, key, ",".join(blockers) if blockers else "通过机械条件")
@@ -631,11 +631,6 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen
               idempotency_key=f"repair:{repo}:{base_sha}:{number}",
               execution_scope="project_contribution",
               policy_snapshot_id=eng.snapshot_id(),
-              # 给的上下文要足够 agent 自己判断：完整标题 + 正文（截到 6000，
-              # 之前 3000 会砍掉复现步骤和预期行为）
-              context=(f"{entry.get('title', '')}\n\n"
-                       f"URL: https://github.com/{repo}/issues/{number}\n\n"
-                       f"{(entry.get('body_excerpt') or '')[:6000]}"),
               max_estimated_compute_usd=0.5)
     # 测试框架由 agent 现场判断（2026-10-28）：控制器不再预设 pytest。
     # 之前在这里硬编码探测，"探测不到就放弃"，等于把能力锁死在 Python+pytest。
@@ -663,20 +658,38 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen
     job.publish["branch"] += f"-{job.job_id.rsplit('-', 1)[-1][:8]}"
     job.publish["body"] += f"\n\n<!-- oss-scout-job:{job.job_id} -->"
     head = f"{FORK_OWNER}:{job.publish['branch']}"
+    context = fresh if fresh is not None else entry
+    evidence = {k: context.get(k) for k in (
+        "title", "body_excerpt", "reporter", "reporter_association", "labels",
+        "assignees", "issue_comments", "related_prs")}
+    evidence["url"] = f"https://github.com/{repo}/issues/{number}"
+    context_path = root / "artifacts" / "issue-context" / f"{job.job_id}.json"
+    try:
+        from ..state_store import atomic_json_write
+        context_path.parent.mkdir(parents=True, exist_ok=True)
+        atomic_json_write(context_path, evidence)
+        job.context = f"oss-scout-snapshot:{job.job_id}"
+    except OSError as e:
+        return _abort_release(f"issue snapshot unavailable: {str(e)[:150]}", give_back=True)
     if not ledger.reserve_publication(eng.tz_name, eng.max_claims_per_day,
                                       job.job_id, repo, head, runner_repo):
+        context_path.unlink(missing_ok=True)
         return _abort_release("publication slot unavailable")
     try:
         backend, remote_id, extra = _submit_job(root, job, eng)
     except Exception as e:  # noqa: BLE001
         if re.search(r"workflow_dispatch failed:.*(?:HTTP (?:403|404|422)|disabled workflow)", str(e), re.I):
             ledger.finish_publication(job.job_id)
+            context_path.unlink(missing_ok=True)
         return _abort_release(f"backend unavailable: {str(e)[:200]}",
                              give_back=True)   # 后端故障
     summary["steps"].append(f"backend={backend} ({extra.get('note', '')})")
 
     ledger.set_publication_run(job.job_id, remote_id)
-    collected = _collect(root, backend, remote_id, extra)
+    try:
+        collected = _collect(root, backend, remote_id, extra)
+    finally:
+        context_path.unlink(missing_ok=True)
     runner_pr = _runner_published(collected)
     if runner_pr and runner_pr.get("created") and runner_pr.get("pr"):
         ledger.expect_publication(job.job_id, runner_pr["pr"])

@@ -123,6 +123,33 @@ class TestFormSubmit:
         r = cb(client, card_click({"repo": "docker/compose"}, {}))
         assert r.status_code == 400
 
+    def test_followup_card_is_bound_to_delivered_message(self, client, monkeypatch):
+        from scout_v2 import feishu_app, pr_approval
+        monkeypatch.setattr(feishu_app, "find_group_chat_id", lambda: "oc_test")
+        cards = []
+
+        def send(chat, card, **kwargs):
+            cards.append(card)
+            return True, "om_delivered"
+
+        monkeypatch.setattr(feishu_app, "send_card_to_chat", send)
+        published = []
+        monkeypatch.setattr(pr_approval, "publish", lambda *args: published.append(args))
+        job_id = "prfix-" + "2" * 32
+        payload = {"job_id": job_id, "repo": "docker/compose", "number": 7,
+                   "fork_repo": "xixi-box/compose", "branch": "topic", "head_sha": "a" * 40,
+                   "reply": "Here is the explanation."}
+        for _ in range(2):
+            result = client.post("/api/pr/reply/fix-result", json=payload, headers={"X-Ingest-Token": "t"})
+            assert result.status_code == 200
+        assert len(cards) == 1
+        assert "确认回复" in str(cards[0])
+        assert not published
+        click = card_click({"do": "approve_pr_followup", "job_id": job_id}, {})
+        click["event"]["context"] = {"open_message_id": "om_another"}
+        assert cb(client, click).status_code == 403
+        assert not published
+
 
 class TestDraftsOnPrsPage:
     """「起草之后我怎么知道」——草稿必须出现在 PR 管理页顶部，可编辑可发送。"""

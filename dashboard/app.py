@@ -382,57 +382,20 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
         except Exception:  # noqa: BLE001 — 额度算不出来就当作没额度，宁可不做
             return 0
 
-    def _handle_pr_event(root: Path, ev: dict) -> None:
-        """Worker 即时推来的 PR 评论 → 与扫描循环相同的处理链。
-
-        在后台线程运行（可能烧几分钟 AI/Actions），失败只写审计。
-        处理链：加载 monitor_prs → 构造 classify 输入 → address_review /
-        answer_question / fix_ci 分派 → 起草回复 → 飞书卡片。
-        去重：dispatch 靠 review digest，draft 靠 for_comment——与扫描
-        循环共用一套机制，不会重复。
-        """
+    def _handle_pr_event(root: Path, ev: dict) -> dict:
+        from scripts.monitor_prs import dispatch_pr_fix
+        repo, number = str(ev["repo"]), int(ev["number"])
+        key = f"{repo}#{number}"
         try:
-            repo = str(ev.get("repo") or "")
-            num = int(ev.get("number") or 0)
-            if not repo or not num or not modifiable_repo(repo):
-                return
-            import importlib.util
-            spec = importlib.util.spec_from_file_location(
-                "monitor_prs",
-                Path(__file__).resolve().parents[1] / "scripts" / "monitor_prs.py")
-            mod = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(mod)
-            key = f"{repo}#{num}"
-            state = mod.pr_state(repo, num)
-            state.update({"repo": repo, "number": num})
-            cls = mod.classify(state)
-            action = cls.get("action", "wait")
-            _audit(root, "pr_event_classified", key,
-                   f"{action} reason={str(cls.get('reason'))[:100]}")
-            if action == "address_review":
-                fix_out = mod.dispatch_pr_fix(
-                    repo, num, kind="review",
-                    review_comment=str(state.get("latest_body") or ""),
-                    review_author=str(state.get("latest_author") or ""))
-                _audit(root, "pr_review_fix_dispatch", key,
-                       f"dispatched={fix_out.get('dispatched')} "
-                       f"reason={str(fix_out.get('reason'))[:120]}")
-                if fix_out.get("dispatched"):
-                    _mark_reply(key, "draft", fix_state="pending",
-                                fix_fork=str(fix_out.get("fork_repo") or ""))
-            elif action == "answer_question":
-                draft = mod.draft_reply(repo, num, context=state)
-                _audit(root, "pr_reply_drafted", key,
-                       f"drafted={draft.get('drafted')} "
-                       f"reason={str(draft.get('reason'))[:80]}")
-                if draft.get("drafted"):
-                    _notify_draft(root, state, draft)
-        except Exception as e:  # noqa: BLE001 — 通知永不影响主流程
-            try:
-                _audit(root, "pr_event_error",
-                       f"{ev.get('repo')}#{ev.get('number')}", str(e)[:200])
-            except Exception:  # noqa: BLE001
-                pass
+            result = dispatch_pr_fix(
+                repo, number, kind="followup", comment_id=ev.get("comment_id"),
+                source_kind=ev.get("source_kind"))
+            if result.get("dispatched") or ev.get("comment_id"):
+                _audit(root, "pr_review_fix_dispatch", key, str(result.get("reason"))[:160])
+            return result
+        except Exception as exc:
+            _audit(root, "pr_event_error", key, str(exc)[:200])
+            return {}
 
     def _dispatch(keys: list[str] | None = None, limit: int = 8, *, rescreen: bool = False,
                   just_screened: str | None = None) -> list[str]:
@@ -598,13 +561,7 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
             _t.sleep(120)
             while True:
                 try:
-                    import importlib.util
-                    spec = importlib.util.spec_from_file_location(
-                        "monitor_prs", root.parent / "scripts" / "monitor_prs.py"
-                        if (root.parent / "scripts" / "monitor_prs.py").exists()
-                        else Path(__file__).resolve().parents[1] / "scripts" / "monitor_prs.py")
-                    mod = importlib.util.module_from_spec(spec)
-                    spec.loader.exec_module(mod)
+                    from scripts import monitor_prs as mod
                     results = mod.run(dry_run=False)
 
                     # 同步 PR 列表给 Worker（评论通道的输入）。
@@ -627,66 +584,17 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
                     except Exception:  # noqa: BLE001
                         pass
 
-                    from scout_v2.notify import feishu_send
                     for r in results:
                         key = f"{r['repo']}#{r['number']}"
                         action = r.get("action")
-                        if action == "fix_ci":
-                            _audit(root, "pr_ci_failed", key,
-                                   str(r.get("failing_checks"))[:200])
-                            # L1/L2：外因已过滤、按 head_sha 去重后派 opencode
-                            # 上我们的 fork 分支修。失败本身不阻塞循环。
+                        followup = _handle_pr_event(root, r)
+                        if action == "fix_ci" and not followup.get("dispatched"):
                             try:
                                 out = mod.dispatch_pr_fix(r["repo"], r["number"])
                                 _audit(root, "pr_fix_dispatch", key,
-                                       f"dispatched={out.get('dispatched')} "
-                                       f"reason={str(out.get('reason'))[:120]}")
-                                if out.get("dispatched"):
-                                    feishu_send(
-                                        f"🔧 CI 挂红，已派自动修复：{key}",
-                                        f"失败检查：{', '.join(r.get('failing_checks') or [])[:120]}")
-                            except Exception as e:  # noqa: BLE001
+                                       f"dispatched={out.get('dispatched')} reason={out.get('reason')}")
+                            except Exception as e:
                                 _audit(root, "pr_fix_error", key, str(e)[:200])
-                        elif action == "address_review":
-                            # 维护者提了具体修改要求 → 先派 opencode 落实，
-                            # 再起草回复说明改了什么。草稿仍待人审才发。
-                            # 顺序有意义：回复里要写"改了什么"，得先改完。
-                            _audit(root, "pr_needs_reply", key,
-                                   f"{action} from {r.get('latest_author')}: "
-                                   f"{str(r.get('latest_excerpt'))[:150]}")
-                            fix_out = {}
-                            try:
-                                fix_out = mod.dispatch_pr_fix(
-                                    r["repo"], r["number"], kind="review",
-                                    review_comment=str(r.get("latest_body") or ""),
-                                    review_author=str(r.get("latest_author") or ""))
-                                _audit(root, "pr_review_fix_dispatch", key,
-                                       f"dispatched={fix_out.get('dispatched')} "
-                                       f"kind={fix_out.get('kind')} "
-                                       f"reason={str(fix_out.get('reason'))[:120]}")
-                                if fix_out.get("dispatched"):
-                                    # 先标 pending：卡片要能说"正在改"，
-                                    # 等 workflow 回调再翻成 pushed
-                                    _mark_reply(key, "draft", fix_state="pending",
-                                                fix_fork=str(
-                                                    fix_out.get("fork_repo") or ""))
-                            except Exception as e:  # noqa: BLE001
-                                _audit(root, "pr_review_fix_error", key, str(e)[:200])
-                        elif action == "answer_question":
-                            # 只问问题、没要求改代码 → 只起草回复
-                            _audit(root, "pr_needs_reply", key,
-                                   f"{action} from {r.get('latest_author')}: "
-                                   f"{str(r.get('latest_excerpt'))[:150]}")
-                            try:
-                                draft = mod.draft_reply(r["repo"], r["number"],
-                                                        context=r)
-                                _audit(root, "pr_reply_drafted", key,
-                                       f"drafted={draft.get('drafted')} "
-                                       f"reason={str(draft.get('reason'))[:80]}")
-                                if draft.get("drafted"):
-                                    _notify_draft(root, r, draft)
-                            except Exception as e:  # noqa: BLE001
-                                _audit(root, "pr_draft_error", key, str(e)[:200])
 
                 except Exception as e:  # noqa: BLE001
                     try:
@@ -1388,6 +1296,38 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
         if not modifiable_repo(repo):
             return JSONResponse({"detail": "repository outside monitored roster"}, status_code=403)
         key = f"{repo}#{num}"
+        if body.get("job_id"):
+            from scout_v2 import feishu_app, pr_approval
+            from scout_v2.state_store import queue_transaction
+            from starlette.concurrency import run_in_threadpool
+
+            def deliver():
+                record = pr_approval.stage(root, body)
+                if not record:
+                    _audit(root, "pr_followup_no_approval", key, str(body.get("test_result"))[:200])
+                    return {"ok": True, "outcome": "no_approval"}
+                if not record.get("message_id") and not record.get("complete"):
+                    chat = feishu_app.find_group_chat_id()
+                    if not chat:
+                        raise RuntimeError("Feishu approval chat unavailable")
+                    ok, detail = feishu_app.send_card_to_chat(
+                        chat, feishu_app.build_pr_approval_card(record),
+                        message_uuid=record["job_id"])
+                    if not ok or not detail:
+                        raise RuntimeError(f"Feishu approval delivery failed: {detail}")
+                    path, _ = pr_approval._paths(root, record["job_id"])
+                    with queue_transaction(root, path=path) as stored:
+                        stored.update(message_id=detail, chat_id=chat)
+                    _audit(root, "pr_approval_ready", key, record["job_id"])
+                return {"ok": True}
+
+            try:
+                return JSONResponse(await run_in_threadpool(deliver))
+            except ValueError as exc:
+                return JSONResponse({"detail": str(exc)}, status_code=400)
+            except Exception as exc:
+                _audit(root, "pr_approval_delivery_error", key, str(exc)[:200])
+                return JSONResponse({"detail": "approval delivery failed"}, status_code=502)
         # no_change = opencode 判断"无需变更"（修复已在分支上/意见已被
         # 覆盖）。这不是失败——必须落账并记入去重表，否则 15 分钟监控
         # 循环会对同一条 PR 反复派发、反复给用户发同一张卡片
@@ -1512,6 +1452,46 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
         action = (event.get("action") or {})
         form_value = action.get("form_value") or {}
         value = action.get("value") or {}
+        if value.get("do") == "approve_pr_followup":
+            from scout_v2 import feishu_app, pr_approval
+            job_id = str(value.get("job_id") or "")
+            context = event.get("context") or {}
+            msg_id = str(context.get("open_message_id") or (body.get("context") or {}).get("open_message_id")
+                         or body.get("open_message_id") or "")
+            try:
+                path, _ = pr_approval._paths(root, job_id)
+                record = json.loads(path.read_text(encoding="utf-8"))
+            except (ValueError, OSError):
+                return JSONResponse({"toast": {"type": "error", "content": "审批记录不存在"}})
+            operator = (event.get("operator") or {}).get("open_id") or body.get("open_id")
+            allowed = os.environ.get("FEISHU_PR_APPROVER_OPEN_ID", "").strip()
+            if (not msg_id or msg_id != record.get("message_id")
+                    or not operator or (allowed and operator != allowed)):
+                return JSONResponse({"toast": {"type": "error", "content": "无法验证审批人或卡片"}}, status_code=403)
+            edited = form_value.get("reply_text")
+
+            def approve():
+                key = f"{record['repo']}#{record['number']}"
+                try:
+                    done = pr_approval.publish(root, job_id, edited if isinstance(edited, str) else None,
+                                               _post_pr_comment)
+                    if done.get("commit_sha"):
+                        _mark_reply(key, "sent" if done.get("approved_reply") else "completed",
+                                    fix_state="pushed", fix_sha=done["commit_sha"], fix_fork=done["fork_repo"])
+                        _audit(root, "pr_fix_result", key, f"pushed=True commit={done['commit_sha']}")
+                    if done.get("approved_reply"):
+                        _audit(root, "pr_reply_sent", key, job_id)
+                    card = feishu_app.build_pr_approval_card(done, complete=True)
+                except Exception as exc:
+                    _audit(root, "pr_approval_failed", key, str(exc)[:200])
+                    card = feishu_app.build_pr_approval_card(record, error=f"确认未完成：{exc}")
+                feishu_app.update_card_message(msg_id, card)
+
+            if record.get("complete"):
+                return JSONResponse({"card": {"type": "raw", "data":
+                                     feishu_app.build_pr_approval_card(record, complete=True)}})
+            _thr.Thread(target=approve, daemon=True).start()
+            return JSONResponse({"toast": {"type": "info", "content": "已收到确认，完成后会更新这张卡片"}})
         repo = str(value.get("repo") or form_value.get("repo") or "").strip()
         num_s = str(value.get("number") or form_value.get("number") or "").strip()
         reply_text = str(form_value.get("reply_text")
@@ -1651,6 +1631,20 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
         _audit(root, "ingest_issues", f"{len(clean)} items", f"durably stored={stored}")
         return JSONResponse({"queued": stored, "received": len(clean), "dispatched": [], "stored": stored})
 
+    @app.get("/api/ingest/issue-context/{job_id}")
+    def api_issue_context(job_id: str, request: Request):
+        from fastapi.responses import FileResponse
+        import re
+        expect = (D.cloudflare_cfg(ds).get("ingest_token") or "").strip()
+        if not expect or not hmac.compare_digest(request.headers.get("X-Ingest-Token", ""), expect):
+            return JSONResponse({"detail": "forbidden"}, status_code=403)
+        if not re.fullmatch(r"job-[0-9a-f-]{36}", job_id):
+            return JSONResponse({"detail": "invalid job ID"}, status_code=400)
+        path = root / "artifacts" / "issue-context" / f"{job_id}.json"
+        if not path.is_file():
+            return JSONResponse({"detail": "snapshot unavailable"}, status_code=404)
+        return FileResponse(path, media_type="application/json")
+
     @app.post("/api/ingest/pr-comments")
     async def api_ingest_pr_comments(request: Request):
         """Worker 推过来的 PR 新评论（我们自己开出去的 PR）。
@@ -1686,6 +1680,7 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
         except Exception:  # noqa: BLE001
             seen = {}
         watch_path = root / "state" / "pr_watch.jsonl"
+        from scripts.monitor_prs import _classify_by_rules, _is_noise_bot, MY_LOGINS
 
         fresh = 0
         for ev in raw[:200]:
@@ -1693,29 +1688,19 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
                 continue
             cid = str(ev.get("comment_id") or "")
             repo = str(ev.get("repo", ""))[:120]
-            num = int(ev.get("number") or 0)
+            try:
+                num = int(ev.get("number") or 0)
+            except (TypeError, ValueError):
+                continue
             if not cid or not repo or not num or cid in seen or not modifiable_repo(repo):
                 continue
             seen[cid] = {"at": time.strftime("%Y-%m-%dT%H:%M:%S"),
                          "repo": repo, "number": num}
-            # 复用 PR 监控的分类逻辑，保证两条通道判定一致
-            try:
-                import importlib.util
-                spec = importlib.util.spec_from_file_location(
-                    "monitor_prs",
-                    Path(__file__).resolve().parents[1] / "scripts" / "monitor_prs.py")
-                mod = importlib.util.module_from_spec(spec)
-                spec.loader.exec_module(mod)
-                cls = mod.classify({
-                    "comments": [{"author": {"login": ev.get("author", "")},
-                                  "body": ev.get("body", ""),
-                                  "createdAt": cid}],
-                    "statusCheckRollup": [],
-                    "repo": repo, "number": num, "title": "",
-                })
-                action = cls.get("action", "wait")
-            except Exception:  # noqa: BLE001
-                action = "unknown"
+            author = str(ev.get("author") or "")
+            comment = str(ev.get("body") or "")
+            human = bool(author and author not in MY_LOGINS and not author.endswith("[bot]")
+                         and not _is_noise_bot(author, comment))
+            action = _classify_by_rules(comment, {"author": {"login": author}})[0] if human else "wait"
             rec = {"ts": time.strftime("%Y-%m-%dT%H:%M:%S"), "source": "worker",
                    "repo": repo, "number": num, "action": action,
                    "author": str(ev.get("author", ""))[:60],
@@ -1729,11 +1714,10 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
             # 起草回复→飞书通知）。Worker 每分钟推一次，这条通道让维护者
             # 意见的响应延迟从"最多 15 分钟"压到"约 1 分钟"。
             # 不在 HTTP 请求里做（可能烧几分钟 AI/Actions）——后台线程。
-            if action in ("address_review", "answer_question"):
-                ev_copy = dict(ev)
-                ev_copy["action"] = action
-                _thr.Thread(target=_handle_pr_event,
-                            args=(root, ev_copy), daemon=True).start()
+            if cid.isdigit() and human and comment.strip():
+                _thr.Thread(target=_handle_pr_event, args=(root, {
+                    "repo": repo, "number": num, "comment_id": int(cid), "source_kind": "issue",
+                }), daemon=True).start()
 
         if fresh:
             tmp = seen_path.with_suffix(".json.tmp")

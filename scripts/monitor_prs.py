@@ -505,15 +505,14 @@ def dispatch_pr_fix(repo: str, number: int, **kwargs) -> dict:
 
 def _dispatch_pr_fix(repo: str, number: int, *, dry_run: bool = False,
                     kind: str = "ci", review_comment: str = "",
-                    review_author: str = "", force: bool = False) -> dict:
+                    review_author: str = "", force: bool = False,
+                    comment_id: int | None = None, source_kind: str | None = None) -> dict:
     """对挂红的 PR（或需按 review 改的 PR）派一轮 opencode 修复。
 
     kind="ci"       CI 挂红，修到绿
     kind="review"   维护者提了具体修改要求，落实要求
 
-    两者走同一条流水线（checkout 我们的 fork 分支 → 改 → 带签名提交推送），
-    区别只在 payload 里带什么指令、以及去重键——CI 按 head_sha 去重（推新
-    commit 才算新一轮），review 按评论内容去重（同一条要求只落实一次）。
+    两者走同一条待审批流水线。CI 按 head_sha 去重，评论跟进按来源和评论 ID 去重。
 
     返回 {dispatched, reason, ...}。外因不派、非我们的 fork 不派、已修过不派。
     """
@@ -527,7 +526,27 @@ def _dispatch_pr_fix(repo: str, number: int, *, dry_run: bool = False,
 
     head_sha = head.get("headRefOid", "")
     review_source = None
-    if kind == "review":
+    if kind == "followup":
+        from datetime import datetime, timedelta, timezone
+        thread = _thread(repo, number, limit=None)
+        human = [c for c in thread if c["body"].strip() and c["author"]
+                 and c["author"] not in MY_LOGINS and c["author_type"] != "Bot"
+                 and not c["author"].endswith("[bot]") and not _is_noise_bot(c["author"], c["body"])]
+        if comment_id is not None:
+            human = [c for c in human if c["comment_id"] == comment_id and c["source"] == source_kind]
+        else:
+            since = (datetime.now(timezone.utc) - timedelta(hours=48)).strftime("%Y-%m-%dT%H:%M:%SZ")
+            human = [c for c in human if c["created_at"] >= since]
+        review_source = human[-1] if human else None
+        if not review_source:
+            return {"dispatched": False, "reason": "no actionable human comment"}
+        if any(c["author"] in MY_LOGINS and c["created_at"] > review_source["created_at"]
+               and ((c["source"] == "inline" and c["thread_id"] == review_source["thread_id"])
+                    if review_source["source"] == "inline"
+                    else comment_id is None and c["source"] == "issue") for c in thread):
+            return {"dispatched": False, "reason": "already replied"}
+        key = f"{repo.lower()}#{number}@followup:{review_source['source']}:{review_source['comment_id']}"
+    elif kind == "review":
         # 指令文本 = 全部对方评论（含行内），不是只有最新一条——
         # 2026-11-05 实录：yhmo 三条意见同时在场，"取最新一条"让 fix
         # 指令变成了机器人的 CI 通报，两条真要求被挤丢了。
@@ -546,7 +565,7 @@ def _dispatch_pr_fix(repo: str, number: int, *, dry_run: bool = False,
     else:
         key = f"{repo}#{number}@{head_sha[:12]}"
     attempts = _attempts()
-    if key in attempts and not force:
+    if key in attempts and not force and attempts[key].get("reason") != "dispatch failed":
         return {"dispatched": False, "reason": f"already attempted: {key}"}
 
     if kind == "ci":
@@ -557,11 +576,14 @@ def _dispatch_pr_fix(repo: str, number: int, *, dry_run: bool = False,
                              "dispatched": False, "reason": why}
             _save_attempts(attempts)
             return {"dispatched": False, "reason": why}
-    else:
+    elif kind == "review":
         if not review_comment.strip():
             return {"dispatched": False, "reason": "empty review comment"}
         failing = []
         why = f"review request from {review_author or 'maintainer'}"
+    else:
+        failing = []
+        why = f"comment from {review_source['author']}"
 
     if dry_run:
         return {"dispatched": False, "reason": f"dry-run: would fix ({why})"}
@@ -569,7 +591,7 @@ def _dispatch_pr_fix(repo: str, number: int, *, dry_run: bool = False,
     # bot 评论一起带给 agent：changeset 缺失这类机械要求就是修复项（L2）
     raw = _gh(["api", f"repos/{repo}/issues/{number}/comments", "--jq",
                r'.[] | select(.body | test("changeset|changelog|CLAUDE|coderabbit|'
-               r'sonarqube|lint|format"; "i")) | "\(.user.login)\t\(.body)"'])
+               r'sonarqube|lint|format"; "i")) | "\(.user.login)\t\(.body)"']) if kind == "ci" else ""
     comments = []
     for line in (raw or "").splitlines()[:8]:
         parts = line.split("\t", 1)
@@ -586,14 +608,15 @@ def _dispatch_pr_fix(repo: str, number: int, *, dry_run: bool = False,
                "failing": failing[:6], "comments": comments,
                "review_comment": review_comment[:4000] if kind == "review" else "",
                "review_author": review_author if kind == "review" else "",
-               "review_comment_id": review_source["comment_id"] if review_source else None}
+               "review_comment_id": review_source["comment_id"] if review_source else None,
+               "source_kind": review_source["source"] if review_source else None}
     from scout_v2.console_models import read_models
     model = read_models(DATA_ROOT).get("repair_model")
     if model:
         payload["model"] = model
     import base64 as _b64
     fix_b64 = _b64.b64encode(json.dumps(payload, ensure_ascii=False).encode()).decode()
-    job_id = f"prfix-{repo.replace('/', '-')}-{number}-{key.rsplit('@', 1)[-1][:12]}"
+    job_id = "prfix-" + hashlib.sha256(key.encode()).hexdigest()[:32]
     attempts[key] = {"ts": time.strftime("%Y-%m-%dT%H:%M:%S"), "kind": kind,
                      "dispatched": False, "reason": "dispatch pending confirmation"}
     _save_attempts(attempts)
@@ -607,7 +630,6 @@ def _dispatch_pr_fix(repo: str, number: int, *, dry_run: bool = False,
                      "reason": why if ok else "dispatch failed"}
     _save_attempts(attempts)
     return {"dispatched": ok, "reason": why, "job_id": job_id, "kind": kind,
-            # 改动会被 pr-fix 直接推到这个 fork 分支的 PR 分支上
             "fork_repo": payload["fork_repo"],
             "branch": payload["branch"]}
 
@@ -621,7 +643,7 @@ def _save_attempts(data: dict) -> None:
 REPLIES_FILE = DATA_ROOT / "state" / "pr_replies.json"
 
 
-def _thread(repo: str, number: int, limit: int = 10) -> list[dict]:
+def _thread(repo: str, number: int, limit: int | None = 10) -> list[dict]:
     """PR 上的全部人话：issue 层评论 + 行内 review 评论，按时间合并。
 
     2026-11-04 实录（agentgateway#4264）：维护者把修改要求写在行内评论里，
@@ -632,18 +654,30 @@ def _thread(repo: str, number: int, limit: int = 10) -> list[dict]:
     out = []
     for source, endpoint in (
             ("issue", f"repos/{repo}/issues/{number}/comments"),
-            ("inline", f"repos/{repo}/pulls/{number}/comments")):
+            ("inline", f"repos/{repo}/pulls/{number}/comments"),
+            ("review", f"repos/{repo}/pulls/{number}/reviews")):
         raw = _gh(["api", f"{endpoint}?per_page=100", "--paginate", "--slurp"])
+        if not raw and limit is None:
+            raise RuntimeError(f"unable to read PR {source} discussion")
         for page in json.loads(raw or "[]"):
             for comment in page:
-                out.append({"created_at": comment["created_at"],
+                if not (comment.get("created_at") or comment.get("submitted_at")):
+                    continue
+                body = comment.get("body") or ""
+                out.append({"created_at": comment.get("created_at") or comment["submitted_at"],
                             "author": (comment.get("user") or {}).get("login", ""),
+                            "author_type": (comment.get("user") or {}).get("type"),
                             "association": comment.get("author_association"),
                             "comment_id": comment["id"],
-                            "body": (comment.get("body") or "")[:COMMENT_TEXT_LIMIT],
+                            "body": body if limit is None else body[:COMMENT_TEXT_LIMIT],
+                            "url": comment.get("html_url"),
+                            "thread_id": comment.get("in_reply_to_id") or comment["id"],
+                            "path": comment.get("path"), "line": comment.get("line"),
+                            "original_line": comment.get("original_line"),
+                            "diff_hunk": comment.get("diff_hunk"), "review_state": comment.get("state"),
                             "source": source})
     out.sort(key=lambda c: c["created_at"])
-    return out[-limit:]
+    return out if limit is None else out[-limit:]
 
 
 MY_LOGINS = ("xixi-box",)

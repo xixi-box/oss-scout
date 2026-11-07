@@ -1,0 +1,140 @@
+"""Durable, per-job approval for changes to an existing PR."""
+from __future__ import annotations
+
+import base64
+import json
+import os
+import re
+import sqlite3
+import subprocess
+import tempfile
+from pathlib import Path
+
+from .git_host import gh_pages, gh_read
+from .roster import monitored_repo
+from .state_store import queue_transaction
+
+JOB_ID = re.compile(r"prfix-[0-9a-f]{32}")
+SHA = re.compile(r"[0-9a-f]{40}")
+
+
+def _paths(root: Path, job_id: str) -> tuple[Path, Path]:
+    if not JOB_ID.fullmatch(job_id):
+        raise ValueError("invalid approval ID")
+    directory = root / "artifacts" / "pr-approvals"
+    return directory / f"{job_id}.json", directory / f"{job_id}.bundle"
+
+
+def stage(root: Path, result: dict) -> dict:
+    job_id = str(result.get("job_id") or "")
+    path, bundle_path = _paths(root, job_id)
+    repo = str(result.get("repo") or "")
+    fork = str(result.get("fork_repo") or "")
+    branch = str(result.get("branch") or "")
+    base = str(result.get("head_sha") or "")
+    commit = str(result.get("commit_sha") or "")
+    number = result.get("number")
+    if (not monitored_repo(repo) or type(number) is not int or number <= 0
+            or not re.fullmatch(r"xixi-box/[A-Za-z0-9_.-]+", fork)
+            or not SHA.fullmatch(base) or (commit and not SHA.fullmatch(commit))
+            or not branch or branch.startswith("-")):
+        raise ValueError("invalid PR approval target")
+    blob = base64.b64decode(result.get("bundle") or "", validate=True)
+    if bool(commit) != bool(blob) or len(blob) > 6 * 1024 * 1024:
+        raise ValueError("missing or oversized approval bundle")
+    reply = str(result.get("reply") or "").strip()[:1000]
+    if not commit and not reply:
+        return {}
+    trigger = result.get("trigger") or {}
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with queue_transaction(root, path=path) as record:
+        if not record:
+            if blob:
+                tmp = bundle_path.with_suffix(".tmp")
+                tmp.write_bytes(blob)
+                os.replace(tmp, bundle_path)
+            record.update({k: result.get(k) for k in (
+                "job_id", "run_id", "title", "summary", "test_result", "changed_files")})
+            record.update(repo=repo, number=number, fork_repo=fork, branch=branch,
+                          head_sha=base, commit_sha=commit, reply=reply,
+                          source_kind=trigger.get("source"), comment_id=trigger.get("thread_id"),
+                          source_author=trigger.get("author"), source_comment=trigger.get("body"),
+                          source_url=trigger.get("url"))
+        return dict(record)
+
+
+def _push(record: dict, bundle: Path) -> None:
+    fork, branch = record["fork_repo"], record["branch"]
+    base, commit = record["head_sha"], record["commit_sha"]
+    with tempfile.TemporaryDirectory() as tmp:
+        def git(*args):
+            proc = subprocess.run(
+                ["git", "-C", tmp, "-c", "credential.helper=",
+                 "-c", "credential.helper=!gh auth git-credential", *args],
+                capture_output=True, text=True, timeout=60,
+                env={**os.environ, "GIT_TERMINAL_PROMPT": "0"})
+            if proc.returncode:
+                raise RuntimeError(f"Git {args[0]} failed ({proc.returncode})")
+            return proc.stdout.strip()
+
+        git("init", "--bare", "--quiet")
+        git("check-ref-format", f"refs/heads/{branch}")
+        remote = f"https://github.com/{fork}.git"
+        git("fetch", "--no-tags", "--depth=1", remote, f"refs/heads/{branch}")
+        current = git("rev-parse", "FETCH_HEAD")
+        if current == commit:
+            return
+        if current != base:
+            raise RuntimeError("PR branch changed after testing")
+        git("fetch", "--no-tags", str(bundle.resolve()), "refs/heads/oss-scout-approval")
+        if git("rev-list", "--parents", "-n", "1", "FETCH_HEAD") != f"{commit} {base}":
+            raise RuntimeError("approval bundle does not match the tested commit")
+        git("push", remote, f"{commit}:refs/heads/{branch}")
+
+
+def publish(root: Path, job_id: str, edited_reply: str | None, post_comment) -> dict:
+    path, bundle = _paths(root, job_id)
+    # This lock covers network calls without blocking issue queue transactions.
+    with sqlite3.connect(root / "state" / "pr_approval_publish.sqlite3", timeout=0) as lock:
+        lock.execute("BEGIN IMMEDIATE")
+        record = json.loads(path.read_text(encoding="utf-8"))
+        if record.get("complete"):
+            return record
+        repo, number = record["repo"], record["number"]
+        if not monitored_repo(repo):
+            raise ValueError("repository outside monitored roster")
+        pr = gh_read([f"repos/{repo}/pulls/{number}"]) or {}
+        head = pr.get("head") or {}
+        if (pr.get("state") != "open" or (pr.get("user") or {}).get("login") != "xixi-box"
+                or (head.get("repo") or {}).get("full_name", "").lower() != record["fork_repo"].lower()
+                or head.get("ref") != record["branch"]
+                or head.get("sha") not in {record["head_sha"], record["commit_sha"] or record["head_sha"]}):
+            raise RuntimeError("PR closed or branch changed after testing")
+        if "approved_reply" not in record:
+            reply = record["reply"] if edited_reply is None else edited_reply.strip()[:1000]
+            with queue_transaction(root, path=path) as stored:
+                stored["approved_reply"] = reply if record["reply"] else ""
+            record["approved_reply"] = reply if record["reply"] else ""
+        if record["commit_sha"] and not record.get("pushed"):
+            _push(record, bundle)
+            with queue_transaction(root, path=path) as stored:
+                stored["pushed"] = True
+        reply = record["approved_reply"]
+        if reply:
+            inline = record["source_kind"] == "inline"
+            endpoint = f"repos/{repo}/{'pulls' if inline else 'issues'}/{number}/comments"
+            marker = f"<!-- oss-scout-reply:{job_id} -->"
+            comments = gh_pages(endpoint, 100)
+            if comments is None:
+                raise RuntimeError("could not verify whether the reply was already posted")
+            if not any(marker in (c.get("body") or "") and (c.get("user") or {}).get("login") == "xixi-box"
+                       for c in comments):
+                ok, detail = post_comment(repo, number, f"{reply}\n\n{marker}",
+                                          kind=record["source_kind"], comment_id=record["comment_id"])
+                if not ok:
+                    raise RuntimeError(f"GitHub reply failed: {detail}")
+        with queue_transaction(root, path=path) as stored:
+            stored["complete"] = True
+            result = dict(stored)
+        bundle.unlink(missing_ok=True)
+        return result
