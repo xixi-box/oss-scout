@@ -996,27 +996,51 @@ def build_scan_rows(root) -> list[dict]:
         seen = json.loads(seen_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return []
-    # 入队状态：从候选队列 join（黄=排队中，绿=已解决，红=已失效，
-    # 空=从未入队——被否决/太新鲜/范围外）
-    queue_states: dict = {}
+    queue = {}
     try:
         qpath = root / "queue" / "candidates.json"
         if not qpath.exists():
             qpath = ROOT / "queue" / "candidates.json"
-        q = json.loads(qpath.read_text(encoding="utf-8")) or {}
-        for qkey, qentry in q.items():
-            qentry = qentry or {}
-            st = queue_display_state(qentry.get("status"),
-                                     qentry.get("updated_at"))
-            if st:
-                queue_states[qkey] = st
+        queue = json.loads(qpath.read_text(encoding="utf-8")) or {}
     except (OSError, json.JSONDecodeError):
         pass
+
+    # Earlier competition aborts did not save the reason on the candidate.
+    historical = {key for key, entry in queue.items()
+                  if (entry or {}).get("status") == "aborted_competed"
+                  and not (entry or {}).get("abort_reason")}
+    historical_reasons = {}
+    if historical:
+        try:
+            with (root / "state" / "worklog.jsonl").open(encoding="utf-8") as worklog:
+                for line in worklog:
+                    try:
+                        event = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    key, reason = event.get("target"), str(event.get("result") or "")
+                    if key in historical and event.get("action") == "pipeline_abort" and reason.startswith("competed:"):
+                        historical_reasons[key] = reason
+        except OSError:
+            pass
+
     rows = []
     for key, v in seen.items():
         v = v or {}
         if "#" not in key:
             continue
+        candidate = queue.get(key) or {}
+        candidate_status = str(candidate.get("status") or "")
+        queue_state = queue_display_state(candidate_status, candidate.get("updated_at"))
+        result = ""
+        if candidate_status.startswith("aborted_"):
+            reason = candidate.get("abort_reason")
+            if reason:
+                result = f"开工流程拦截 · {reason}"
+            elif key in historical_reasons:
+                result = f"旧版开工检查拦截 · {historical_reasons[key]}"
+            else:
+                result = f"开工流程拦截 · {candidate_status}"
         rows.append({
             "key": key,
             "status": str(v.get("status") or ""),
@@ -1029,7 +1053,8 @@ def build_scan_rows(root) -> list[dict]:
                                or (v.get("why") if str(v.get("status")) == "rejected"
                                    else "") or ""),
             "first_seen": str(v.get("first_seen") or ""),
-            "queue_state": queue_states.get(key, ""),
+            "queue_state": queue_state,
+            "final_result": result,
         })
     rows.sort(key=lambda r: r["first_seen"], reverse=True)
     return rows

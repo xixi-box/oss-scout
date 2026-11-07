@@ -173,15 +173,36 @@ def test_refresh_fetches_every_comment(monkeypatch):
     def read(args):
         path = args[0]
         calls.append(path)
+        if "/timeline?" in path:
+            return []
+        if path.startswith("search/"):
+            return {"items": []}
         if "/comments?" not in path:
             return {"state": "open", "body": "latest", "labels": []}
         if "page=2" in path:
             return [{"body": "maintainer says stop", "user": {"login": "maintainer"}}]
         return [{"body": "earlier", "user": {"login": "reporter"}}] * 100
     monkeypatch.setattr("scout_v2.git_host.gh_read", read)
-    fresh = d.refresh_issue({"repo": "a/b", "number": 1})
+    fresh, blockers, timeline = d.refresh_issue({"repo": "a/b", "number": 1})
+    assert blockers == timeline == []
+    assert sum("/timeline?" in path for path in calls) == 1
     assert fresh["comments"] == 101
     assert fresh["issue_comments"][-1]["body"] == "maintainer says stop"
+
+
+def test_live_intake_blocks_claim_before_openjev(intake, monkeypatch):
+    ds, issue = intake
+    monkeypatch.setattr("scout_v2.git_host.recheck_candidate", lambda *a, **kw: SimpleNamespace(
+        complete=True, has_claim_signal=True, has_cross_ref_pr=False, open_pr_hits=[],
+        is_duplicate=False, screening_source=({"title": issue["title"], "state": "open"}, [], [])))
+
+    def unexpected_score(*args, **kwargs):
+        pytest.fail("a claimed issue must never reach OpenJev")
+
+    monkeypatch.setattr("scout_v2.workers.openjev.OpenJevClient.score_issue", unexpected_score)
+    assert d.ingest_cloudflare_issues(ds, [issue], refresh=True) == (0, [])
+    seen = json.loads((ds.root / "state/seen.json").read_text())
+    assert seen["a/b#1"]["coarse_reason"] == "claim_signal"
 
 
 def test_default_ledger_time_uses_business_timezone(tmp_path, monkeypatch):
@@ -218,7 +239,7 @@ def test_unconsumed_backlog_waits_for_next_four_am(tmp_path, monkeypatch):
     assert entry["staged_at"] == "2026-11-06T20:00:00+08:00"
 
 
-@pytest.mark.parametrize("mode", ["fresh", "staged", "manual", "staged_blocked"])
+@pytest.mark.parametrize("mode", ["fresh", "immediate", "staged", "manual", "fresh_blocked", "staged_blocked"])
 def test_failed_repair_does_not_spend_publication_quota(tmp_path, monkeypatch, mode):
     (tmp_path / "queue").mkdir()
     (tmp_path / "state").mkdir()
@@ -239,12 +260,18 @@ def test_failed_repair_does_not_spend_publication_quota(tmp_path, monkeypatch, m
                           max_claims_per_day=5, snapshot_id=lambda: "test",
                           repos_cfg={"repositories": {"docker/compose": {}}})
     monkeypatch.setattr(p.PolicyEngine, "load", lambda _: (eng, None))
-    monkeypatch.setattr(p, "recheck_candidate", lambda repo, number, **kw: SimpleNamespace(
-        complete=True, issue_open=True, unassigned=True, has_claim_signal=False,
-        has_cross_ref_pr=False, open_pr_hits=[], is_duplicate=False,
-        screening_source=({"title": "Parser bug", "state": "open", "labels": (
-            [{"name": "documentation"}] if mode == "staged_blocked" and number == 4 else []
-        )}, [], [])))
+    rechecked = []
+
+    def recheck(repo, number, **kwargs):
+        rechecked.append(number)
+        return SimpleNamespace(
+            complete=True, issue_open=True, unassigned=True, has_claim_signal=False,
+            has_cross_ref_pr=False, open_pr_hits=[], is_duplicate=False,
+            screening_source=({"title": "Parser bug", "state": "open", "labels": (
+                [{"name": "documentation"}] if mode.endswith("_blocked") and number == 4 else []
+            )}, [], []))
+
+    monkeypatch.setattr(p, "recheck_candidate", recheck)
     monkeypatch.setattr("scout_v2.workers.cla.preflight", lambda *a: {"blocking": False})
     monkeypatch.setattr("scout_v2.workers.repair.resolve_model", lambda: "test")
     screens = []
@@ -280,16 +307,19 @@ def test_failed_repair_does_not_spend_publication_quota(tmp_path, monkeypatch, m
     monkeypatch.setattr("scout_v2.notify.feishu_send", lambda *a, **kw: None)
     monkeypatch.setattr("scout_v2.workers.cla.sign", lambda *a: {})
     for entry in entries.values():
-        p.candidate_pipeline(tmp_path, entry, rescreen=mode == "manual")
+        p.candidate_pipeline(tmp_path, entry, rescreen=mode == "manual",
+                             immediate=mode == "immediate" and entry["number"] == 1)
+    if mode in {"fresh", "immediate"}:
+        assert rechecked == (list(range(2, 7)) if mode == "immediate" else list(range(1, 7)))
     led = ClaimLedger(tmp_path / "state/scout_v2.sqlite3")
     assert led.count_today("Asia/Shanghai") == 6
     assert led.published_today("Asia/Shanghai") == 5
     led.close()
     assert len(submitted) == 6
-    assert screens == {"fresh": [], "staged": [4, 5, 6], "manual": [1, 2, 3, 4, 5, 6],
-                       "staged_blocked": [5, 6]}[mode]
+    assert screens == {"fresh": [], "immediate": [], "staged": [4, 5, 6], "manual": [1, 2, 3, 4, 5, 6],
+                       "fresh_blocked": [], "staged_blocked": [5, 6]}[mode]
     q = json.loads((tmp_path / "queue/candidates.json").read_text())
-    if mode == "staged_blocked":
+    if mode.endswith("_blocked"):
         assert q["docker/compose#4"]["blockers"] == ["excluded_label"]
         assert q["docker/compose#7"]["status"] == "pr_open"
     else:

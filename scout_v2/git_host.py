@@ -51,12 +51,23 @@ def _is_bot_login(login: str) -> bool:
     return login.endswith("[bot]") or login.endswith("bot")
 
 
-def _explicit_issue_ref(text: str, number: int) -> bool:
-    """文本里是否明写 "#<候选号>"（"Refs #123"/"Fixes #123"）。
-    带词边界：候选 #7883 不会误配 #78830 / #17883。"""
+def _explicit_issue_ref(text: str, number: int, repo: str = "", *, local_ref: bool = True) -> bool:
+    """Recognize an explicit work reference, with the repository scoped to this issue."""
     if not text or number <= 0:
         return False
-    return re.search(rf"#{number}\b", text) is not None
+    local = rf"#{number}(?![\w/])"
+    target = local
+    if repo:
+        qualified = re.escape(repo)
+        target = rf"(?:{qualified}{local}|https://github\.com/{qualified}/issues/{number}(?![\w/]))"
+        if local_ref:
+            target = rf"(?:{local}|{target})"
+    text = re.sub(r"<!--.*?-->", "", text, flags=re.S)
+    return re.search(
+        rf"(?im)^\s*(?:[-*]\s+)?(?:fix(?:es|ed)?|clos(?:e|es|ed)|resolv(?:e|es|ed)|refs?)"
+        rf"\s*:?\s+{target}",
+        text,
+    ) is not None
 
 
 def gh_read(args: list[str], max_retries: int = 2) -> Any | None:
@@ -104,7 +115,9 @@ class RecheckResult:
     assigned_to_me: bool = False        # 闸门池：是否指派给了 xixi-box
     has_claim_signal: bool = False
     has_cross_ref_pr: bool = False
-    open_pr_hits: list[str] = field(default_factory=list)  # 按根因关键词搜到的 open PR
+    open_pr_hits: list[str] = field(default_factory=list)  # 已确认指向同一 issue 的开放 PR
+    similar_prs: list[str] = field(default_factory=list)  # 关键词线索
+    linked_pr_urls: list[str] = field(default_factory=list)
     # 2026-11-03 实录：qdrant#11361 修对了 bug，但关联的 #11360 已被标成 #10465
     # 的 duplicate，真正的修复战场在 #10465（已有 #10470 在推进）。PR 开出几小时
     # 就被 cloud bot 关掉。把"被判重复"和"指向的主 issue"显式记下来。
@@ -116,7 +129,8 @@ class RecheckResult:
     screening_source: tuple[dict, list, list] | None = field(default=None, repr=False)
 
 
-def linked_fix_prs(timeline: list, number: int, my_login: str = "xixi-box") -> list[dict]:
+def linked_fix_prs(timeline: list, number: int, my_login: str = "xixi-box", *,
+                   confirmed_repo: str | None = None) -> list[dict]:
     """Return active cross-references and merged PRs explicitly referencing this issue."""
     linked = []
     for event in timeline:
@@ -132,17 +146,25 @@ def linked_fix_prs(timeline: list, number: int, my_login: str = "xixi-box") -> l
         state = str(src.get("state") or pr.get("state") or "").lower()
         merged = src.get("merged_at") or pr.get("merged_at") or pr.get("merged")
         text = f"{src.get('title') or ''}\n{src.get('body') or ''}"
-        if (state != "closed" and not merged) or (merged and _explicit_issue_ref(text, number)):
+        explicit = _explicit_issue_ref(text, number, confirmed_repo or "")
+        if confirmed_repo is not None:
+            source_repo = re.match(r"https://github\.com/([^/]+/[^/]+)/pull/", src.get("html_url") or "")
+            if source_repo and source_repo[1].lower() != confirmed_repo.lower():
+                explicit = _explicit_issue_ref(text, number, confirmed_repo, local_ref=False)
+            if not (event.get("will_close_target") or explicit):
+                continue
+        if (state != "closed" and not merged) or (merged and (explicit or event.get("will_close_target"))):
             linked.append({"url": src.get("html_url") or pr.get("html_url"), "author": author,
                            "state": "merged" if merged else state, "title": src.get("title")})
     return linked
 
 
 def recheck_candidate(repo: str, number: int, *, my_login: str = "xixi-box",
-                      root_cause_keywords: list[str] | None = None) -> RecheckResult | None:
+                      root_cause_keywords: list[str] | None = None,
+                      use_title_keywords: bool = False) -> RecheckResult | None:
     """认领前复检。任何一次取数失败 → complete=False（调用方应跳过该候选）。"""
     issue = gh_read([f"repos/{repo}/issues/{number}"])
-    comments = gh_pages(f"repos/{repo}/issues/{number}/comments", 30)
+    comments = gh_pages(f"repos/{repo}/issues/{number}/comments", 100)
     if issue is None or comments is None:
         errs = []
         if issue is None:
@@ -202,18 +224,17 @@ def recheck_candidate(repo: str, number: int, *, my_login: str = "xixi-box",
         r.complete = False
         r.errors.append("timeline fetch failed")
     else:
-        r.has_cross_ref_pr = bool(linked_fix_prs(timeline, number, my_login))
+        linked = linked_fix_prs(timeline, number, my_login, confirmed_repo=repo)
+        r.has_cross_ref_pr = bool(linked)
+        r.linked_pr_urls = [pr["url"] for pr in linked if pr.get("url")]
         r.screening_source = (issue, comments, timeline)
     import urllib.parse as _up
-    # 只看 open PR：已关闭/已合并的历史尝试不算竞争（与 cross-ref 判定一致）。
-    #
-    # 命中判定分两档，权衡的是两类错误：
-    #   误判（假阳性）→ 白放弃一个可做的 issue，代价=错过一次机会；
-    #   漏判（假阴性）→ 开了重复 PR，代价=账号声誉，比错过机会严重得多。
-    # 所以对**标识符类**关键词（含 _ 或 .，几乎必然是模块/函数名）严格匹配标题；
-    # 对普通词则要求标题里**至少两个**关键词同时出现，才算同一个问题。
-    # （实测误判来源：mypy#22230 "Spurious note..." 撞上 "spurious blank lines"、
-    #  "Fix unanalyzed __getattr__..."——只共享一个泛词。）
+    # Search results are leads until the PR explicitly identifies this issue.
+    if use_title_keywords:
+        words = [word for word in re.split(r"[^a-zA-Z0-9_.-]+", r.issue_title)
+                 if len(word) >= 5 and not word.isdigit()]
+        identifiers = [word for word in words if "_" in word or "." in word]
+        root_cause_keywords = (identifiers + [word for word in words if word not in identifiers])[:3]
     kws = [k for k in (root_cause_keywords or []) if k]
     strong = [k for k in kws if "_" in k or "." in k]
     weak = [k for k in kws if k not in strong]
@@ -236,44 +257,24 @@ def recheck_candidate(repo: str, number: int, *, my_login: str = "xixi-box",
         need = max(2, (len(weak) + 1) // 2)
         return hits >= need if len(weak) > 1 else hits >= 1
 
-    for kw in kws:
-        q = f"repo:{repo} is:pr is:open {kw}"
-        # 必须 URL 编码：关键词含空格时直接拼进 URL 会让 HTTP/2 请求被拆坏，
-        # GitHub 返回 PROTOCOL_ERROR（2026-10-28 实测 5/5 失败）
+    confirmed, similar = {}, {}
+    for term in dict.fromkeys([str(number), *kws]):
+        q = f"repo:{repo} is:pr is:open {term}"
         res = gh_read([f"search/issues?q={_up.quote(q, safe='')}&per_page=10"])
-        if res is None:
-            # 关键词搜索是辅助信号：失败记录但不判整体不可用
-            # （rate limit 下 search API 比其他端点更容易被拒）
-            r.errors.append(f"pr search failed for {kw!r} (non-fatal)")
+        if not isinstance(res, dict):
+            r.errors.append(f"pr search failed for {term!r} (non-fatal)")
             continue
-        for it in res.get("items", []):
-            # 排除我们自己开的 PR：修复成功开出的 PR 会被关键词搜索命中，
-            # 不排除就会在下一轮复检里被判成"有人抢先"（2026-11-02 实测：
-            # 今天 5 个 PR 对应的候选全被标成 aborted_competed，同时额度被
-            # abort 路径归还，于是同一天连开 5 个）。
-            author = str(((it.get("user") or {}).get("login")) or "")
-            if author and author.lower() == my_login.lower():
+        for item in res.get("items", []):
+            author = str((item.get("user") or {}).get("login") or "")
+            if author.lower() == my_login.lower() or item.get("state") == "closed":
                 continue
-            title = str(it.get("title", ""))
-            # 文本级直接关联兜底（deer-flow#7883 实录：竞争 PR body 写
-            # "Refs #7883"，标题与根因关键词无交集，只按 _relevant 判会漏；
-            # timeline 单页 per_page=100 且按最旧在前返回，活跃 issue 的最新
-            # cross-referenced 事件也可能根本不在返回里）。搜索响应必带全量
-            # body：PR 标题/正文明写 "#<候选号>" 即判竞争，不再要求标题命中。
-            if not (_relevant(title) or _explicit_issue_ref(
-                    f"{title}\n{it.get('body') or ''}", number)):
-                continue
-            r.open_pr_hits.append(f"{repo}#{it['number']}: {title[:80]}")
-    if not kws:
-        # 没有关键词就等于没检查竞争，而这件事最贵的失败是"开了个重复 PR"。
-        # 至少用 issue 编号搜一次（不少 PR 标题会带 #N 或正文 Fixes #N）。
-        q = f"repo:{repo} is:pr is:open {number}"
-        res = gh_read([f"search/issues?q={_up.quote(q, safe='')}&per_page=10"])
-        if res is not None:
-            for it in res.get("items", []):
-                author = str(((it.get("user") or {}).get("login")) or "")
-                if author and author.lower() == my_login.lower():
-                    continue
-                r.open_pr_hits.append(
-                    f"{repo}#{it['number']}: {it.get('title', '')[:80]}")
+            pr_number = item["number"]
+            title = str(item.get("title") or "")
+            label = f"{repo}#{pr_number}: {title[:80]}"
+            if _explicit_issue_ref(f"{title}\n{item.get('body') or ''}", number, repo):
+                confirmed[pr_number] = label
+            elif _relevant(title):
+                similar[pr_number] = label
+    r.open_pr_hits = list(confirmed.values())
+    r.similar_prs = [label for number, label in similar.items() if number not in confirmed]
     return r

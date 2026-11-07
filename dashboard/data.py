@@ -791,24 +791,26 @@ def _claimish_sentences(body: str) -> list[str]:
     return out
 
 
-def refresh_issue(item: dict) -> dict:
-    """Fetch a current issue and every comment before making an AI decision."""
-    from scout_v2.git_host import gh_read
-    repo, number = item["repo"], int(item["number"])
-    issue = gh_read([f"repos/{repo}/issues/{number}"])
-    if not isinstance(issue, dict):
-        raise RuntimeError("issue context unavailable")
-    comments = []
-    page = 1
-    while True:
-        batch = gh_read([f"repos/{repo}/issues/{number}/comments?per_page=100&page={page}"])
-        if not isinstance(batch, list):
-            raise RuntimeError("issue comments unavailable")
-        comments.extend(batch)
-        if len(batch) < 100:
-            break
-        page += 1
-    return issue_screening_snapshot(item, issue, comments)
+def refresh_issue(item: dict, *, root: Path | None = None) -> tuple[dict, list[str], list]:
+    """Get one live snapshot and its mechanical competition checks."""
+    from scout_v2.git_host import recheck_candidate
+
+    check = recheck_candidate(item["repo"], int(item["number"]), use_title_keywords=True)
+    if check is None or not check.complete or check.screening_source is None:
+        raise RuntimeError(f"issue context unavailable: {check.errors if check else []}")
+    issue, comments, timeline = check.screening_source
+    if root is not None and getattr(check, "similar_prs", []):
+        from scout_v2.workers.auto_pipeline import log
+        log(root, "similar_pr", f"{item['repo']}#{item['number']}", "；".join(check.similar_prs))
+    blockers = []
+    if check.has_claim_signal:
+        blockers.append("claim_signal")
+    if check.has_cross_ref_pr or check.open_pr_hits:
+        refs = check.open_pr_hits or check.linked_pr_urls
+        blockers.append("已有修复 PR" + (f" · {refs[0]}" if refs else ""))
+    if check.is_duplicate:
+        blockers.append("confirmed_duplicate")
+    return issue_screening_snapshot(item, issue, comments), blockers, timeline
 
 
 def issue_screening_snapshot(item: dict, issue: dict, comments: list) -> dict:
@@ -827,12 +829,9 @@ def issue_screening_snapshot(item: dict, issue: dict, comments: list) -> dict:
                                 "body": c.get("body") or ""} for c in comments]}
 
 
-def screen_issue(eng, it: dict, *, lane: str, timeline: list | None = None) -> tuple[list[str], dict]:
-    """Apply the same mechanical rules and OpenJev decision at intake and on queue consumption."""
-    from scout_v2.git_host import gh_pages, linked_fix_prs
-    from scout_v2.workers.openjev import OpenJevClient
-
-    repo, number = str(it["repo"]), int(it["number"])
+def coarse_issue_blockers(eng, it: dict, *, lane: str) -> list[str]:
+    """Shared mechanical issue rules for intake and the pre-start check."""
+    repo = str(it["repo"])
     excluded = {"invalid", "wontfix", "duplicate", "question", "stale", "documentation",
                 "awaiting more info", "awaiting-more-info", "needs more info", "needs-repro"}
     labels = [str(l) for l in it.get("labels") or []]
@@ -845,46 +844,70 @@ def screen_issue(eng, it: dict, *, lane: str, timeline: list | None = None) -> t
         blockers.append("excluded_label")
     if it.get("state_reason") == "duplicate":
         blockers.append("confirmed_duplicate")
-    def record(action, result):
-        if getattr(eng, "root", None) is not None:
-            from scout_v2.workers.auto_pipeline import log
-            log(eng.root, action, f"{repo}#{number}", result)
+    return blockers
 
-    record("coarse_screen", ",".join(blockers) if blockers else "通过机械条件")
+
+def record_issue_screen(eng, it: dict, action: str, result: str) -> None:
+    if getattr(eng, "root", None) is not None:
+        from scout_v2.workers.auto_pipeline import log
+        log(eng.root, action, f"{it['repo']}#{it['number']}", result)
+
+
+def screen_issue(eng, it: dict, *, lane: str, live_blockers=(),
+                 timeline: list | None = None) -> tuple[list[str], dict]:
+    """Apply the mechanical gate before asking OpenJev."""
+    from scout_v2.git_host import gh_pages, linked_fix_prs
+
+    blockers = list(dict.fromkeys([*coarse_issue_blockers(eng, it, lane=lane), *live_blockers]))
+    if blockers:
+        record_issue_screen(eng, it, "coarse_screen", ",".join(blockers))
+        return blockers, {"usable": None, "reason": "not screened"}
+
+    number = int(it["number"])
+    if timeline is None:
+        timeline = gh_pages(f"repos/{it['repo']}/issues/{number}/timeline", 100) if it.get("context_complete") else []
+    if timeline is None:
+        reason = "issue timeline unavailable"
+        record_issue_screen(eng, it, "coarse_screen", f"待重试 · {reason}")
+        return [], {"usable": None, "reason": reason}
+    record_issue_screen(eng, it, "coarse_screen", "通过机械条件")
+    return [], fine_screen_issue(eng, it, lane=lane, linked_prs=linked_fix_prs(timeline, number))
+
+
+def fine_screen_issue(eng, it: dict, *, lane: str, linked_prs: list | None = None) -> dict:
+    """Evaluate a snapshot that has already passed the mechanical gate."""
+    from scout_v2.workers.openjev import OpenJevClient
+
+    repo, number = str(it["repo"]), int(it["number"])
     title, body = str(it.get("title") or ""), str(it.get("body_excerpt") or "")
+    labels = [str(label) for label in it.get("labels") or []]
     claim_sents = _claimish_sentences(body)
-    verdict = {"usable": None, "reason": "not screened"}
-    if not blockers:
-        try:
-            if timeline is None:
-                timeline = gh_pages(f"repos/{repo}/issues/{number}/timeline", 100) if it.get("context_complete") else []
-            if timeline is None:
-                raise RuntimeError("issue timeline unavailable")
-            reporter = it.get("reporter")
-            verdict = OpenJevClient().score_issue({
-                "repo": repo, "number": number, "title": title, "labels": labels,
-                "body": body, "issue_url": it.get("url"),
-                "state": it.get("state"), "state_reason": it.get("state_reason"),
-                "created_at": it.get("created_at"), "updated_at": it.get("updated_at"),
-                "reporter": reporter, "reporter_association": it.get("reporter_association"),
-                "assignees": [a.get("login") for a in it.get("assignees") or []],
-                "reactions": it.get("reactions", 0), "lane": lane,
-                "num_comments": int(it.get("comments") or 0),
-                "comments": [{**c, "is_reporter": bool(reporter and c.get("author") == reporter)}
-                             for c in it.get("issue_comments") or []],
-                "linked_pull_requests": linked_fix_prs(timeline, number),
-                "claim_evidence_in_body": claim_sents,
-                "reporter_offered_fix": bool(_RE_OFFER.search(body)),
-                "claimish_signal": bool(claim_sents),
-                "repo_rules": repo_rules_text(repo)})
-        except Exception as ex:
-            verdict = {"usable": None, "reason": f"scorer error: {ex}"[:200]}
-        outcome = {True: "通过", False: "拒绝", None: "待重试"}[verdict.get("usable")]
-        record("fine_screen", f"{outcome} · {verdict.get('reason', '')}")
-    return blockers, verdict
+    try:
+        reporter = it.get("reporter")
+        verdict = OpenJevClient().score_issue({
+            "repo": repo, "number": number, "title": title, "labels": labels,
+            "body": body, "issue_url": it.get("url"),
+            "state": it.get("state"), "state_reason": it.get("state_reason"),
+            "created_at": it.get("created_at"), "updated_at": it.get("updated_at"),
+            "reporter": reporter, "reporter_association": it.get("reporter_association"),
+            "assignees": [a.get("login") for a in it.get("assignees") or []],
+            "reactions": it.get("reactions", 0), "lane": lane,
+            "num_comments": int(it.get("comments") or 0),
+            "comments": [{**c, "is_reporter": bool(reporter and c.get("author") == reporter)}
+                         for c in it.get("issue_comments") or []],
+            "linked_pull_requests": linked_prs or [],
+            "claim_evidence_in_body": claim_sents,
+            "reporter_offered_fix": bool(_RE_OFFER.search(body)),
+            "claimish_signal": bool(claim_sents),
+            "repo_rules": repo_rules_text(repo)})
+    except Exception as ex:
+        verdict = {"usable": None, "reason": f"scorer error: {ex}"[:200]}
+    outcome = {True: "通过", False: "拒绝", None: "待重试"}[verdict.get("usable")]
+    record_issue_screen(eng, it, "fine_screen", f"{outcome} · {verdict.get('reason', '')}")
+    return verdict
 
 
-def ingest_cloudflare_issues(ds, items: list[dict]) -> tuple[int, list[str]]:
+def ingest_cloudflare_issues(ds, items: list[dict], *, refresh: bool = False) -> tuple[int, list[str]]:
     """Mechanical exclusions, then AI; short atomic writes never enclose network IO."""
     import hashlib
     from scout_v2.state_store import atomic_json_write, queue_transaction, business_now
@@ -899,14 +922,20 @@ def ingest_cloudflare_issues(ds, items: list[dict]) -> tuple[int, list[str]]:
         if not repo or number <= 0:
             continue
         key = f"{repo}#{number}"
-        fingerprint = hashlib.sha256(json.dumps(it, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+        live_blockers, timeline = (), None
+        if refresh:
+            it, live_blockers, timeline = refresh_issue(it, root=ds.root)
+        fingerprint_input = [it, live_blockers] if live_blockers else it
+        fingerprint = hashlib.sha256(
+            json.dumps(fingerprint_input, sort_keys=True, ensure_ascii=False).encode()
+        ).hexdigest()
         with queue_transaction(ds.root) as q:
             seen = _read_json(seen_path, {})()
             prior = seen.get(key) or {}
             if key in q or (prior.get("fingerprint") == fingerprint and prior.get("status") in ("blocked", "rejected")):
                 continue
         lane = eng.repo_lane(repo)
-        blockers, verdict = screen_issue(eng, it, lane=lane)
+        blockers, verdict = screen_issue(eng, it, lane=lane, live_blockers=live_blockers, timeline=timeline)
         now = business_now().isoformat(timespec="seconds")
         rec = {"first_seen": prior.get("first_seen") or now, "fingerprint": fingerprint,
                "status": "blocked" if blockers else "queued" if verdict.get("usable") is True else

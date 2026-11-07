@@ -51,7 +51,7 @@ class TestOwnPrIsNotCompetition:
         monkeypatch.setattr(git_host, "gh_read", _fake_gh(
             BASE_ISSUE, [], [],
             [{"number": 88, "title": "fix: crash on empty input",
-              "user": {"login": "someone-else"}}]))
+              "user": {"login": "someone-else"}, "body": "Fixes #7"}]))
         r = git_host.recheck_candidate("acme/real", 7,
                                        root_cause_keywords=["crash", "empty input"])
         assert r.open_pr_hits, "a real competitor must still be detected"
@@ -72,7 +72,7 @@ class TestOwnPrIsNotCompetition:
         timeline = [{"event": "cross-referenced",
                      "source": {"issue": {
                          "number": 99, "state": "open",
-                         "user": {"login": "someone-else"},
+                         "user": {"login": "someone-else"}, "body": "Fixes #7",
                          "pull_request": {"state": "open"}}}}]
         monkeypatch.setattr(git_host, "gh_read", _fake_gh(
             BASE_ISSUE, [], timeline, []))

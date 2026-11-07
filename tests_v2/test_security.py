@@ -119,7 +119,7 @@ class TestClosedPrIsNotCompetition:
         from scout_v2 import git_host as gh
 
         timeline = [{
-            "event": "cross-referenced",
+            "event": "cross-referenced", "will_close_target": pr_state == "open",
             "source": {"issue": {"number": 9, "state": pr_state,
                                  "pull_request": {"merged_at": merged}}},
         }]
@@ -174,8 +174,8 @@ class TestCompetingPrDetection:
         r = gh.recheck_candidate("ansible/ansible", 87799,
                                  root_cause_keywords=["mount_facts"])
         assert r.has_cross_ref_pr is False        # timeline 确实没有
-        assert r.open_pr_hits                     # 但搜索抓到了
-        assert "87459" in r.open_pr_hits[0]
+        assert not r.open_pr_hits
+        assert "87459" in r.similar_prs[0]
 
     def test_no_keywords_still_checks_by_issue_number(self, monkeypatch):
         """不给关键词也不能完全不查竞争。"""
@@ -190,7 +190,7 @@ class TestCompetingPrDetection:
             if "/timeline" in p:
                 return []
             if "search/issues" in p:
-                return {"items": [{"number": 5, "title": "fixes it"}]}
+                return {"items": [{"number": 5, "title": "fixes it", "body": "Fixes #42"}]}
             return {"state": "open", "assignees": [], "title": "t", "body": "b"}
 
         monkeypatch.setattr(gh, "gh_read", fake_read)
@@ -239,20 +239,20 @@ class TestRelevanceTwoTier:
     def test_identifier_keyword_matches_title(self, monkeypatch):
         r = self._run(monkeypatch, ["mount_facts"],
                       ["mount_facts: strip blkid UUID lookup output"])
-        assert r.open_pr_hits
+        assert r.similar_prs and not r.open_pr_hits
 
     def test_identifier_does_not_match_unrelated(self, monkeypatch):
         r = self._run(monkeypatch, ["mount_facts"],
                       ["fix: unrelated thing in another module"])
-        assert not r.open_pr_hits
+        assert not r.similar_prs and not r.open_pr_hits
 
     def test_single_generic_word_is_not_enough(self, monkeypatch):
         """只共享一个泛词不算同一个问题。"""
         r = self._run(monkeypatch, ["Spurious", "despite", "suppressing"],
                       ["Stop --update-data from inserting spurious blank lines"])
-        assert not r.open_pr_hits
+        assert not r.similar_prs and not r.open_pr_hits
 
     def test_two_generic_words_count(self, monkeypatch):
         r = self._run(monkeypatch, ["spurious", "suppressing"],
                       ["fix spurious notes when suppressing errors"])
-        assert r.open_pr_hits
+        assert r.similar_prs and not r.open_pr_hits

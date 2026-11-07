@@ -318,7 +318,8 @@ def _abort_release_impl(msg: str, *, candidate_id: str, ledger, eng,
     return summary
 
 
-def candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen: bool = False) -> dict:
+def candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen: bool = False,
+                       immediate: bool = False) -> dict:
     """A single durable execution lock covers every entrypoint, even other processes."""
     import sqlite3
     root = _data_root(root)
@@ -332,7 +333,7 @@ def candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen:
                 return {"id": entry.get("id"), "abort": "dispatcher busy"}
             raise
         try:
-            return _candidate_pipeline(root, entry, max_files=max_files, rescreen=rescreen)
+            return _candidate_pipeline(root, entry, max_files=max_files, rescreen=rescreen, immediate=immediate)
         except Exception as ex:
             _emergency_release(root, entry.get("id", ""))
             log(root, "crash", entry.get("id", ""), str(ex)[:200])
@@ -341,7 +342,8 @@ def candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen:
         conn.close()
 
 
-def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen: bool = False) -> dict:
+def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen: bool = False,
+                        immediate: bool = False) -> dict:
     """单候选：复检 → 合规 → 后端修复 → 质量闸 → push + PR。"""
     root = _data_root(root)
     repo, number = entry["repo"], entry["number"]
@@ -349,9 +351,11 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen
     summary: dict = {"id": key, "steps": []}
     ledger = None
     qpath = root / "queue/candidates.json"
+    latest = None
     if qpath.exists():
         latest = json.loads(qpath.read_text(encoding="utf-8")).get(key)
         if latest is not None:
+            immediate = immediate and latest == entry
             entry = dict(latest)
             if entry.get("status") not in ("new", "recheck_failed", "staged") or not _eligible(entry):
                 return {**summary, "abort": "candidate not currently eligible"}
@@ -397,72 +401,96 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen
         return {**summary, "abort": "repair workflow unavailable; candidate retained"}
     summary["steps"].append(f"lane={lane}")
 
-    # ---- 实时复检（Playbook §0.2）----
-    # 竞争 PR 搜索只用标题里的根因词；label（如 triaging）不是根因描述，
-    # 用它搜 PR 只会制造无意义查询并放大失败面（2026-10-27 实测）。
-    # 优先取标识符类词（含 _ / . 的模块名、函数名）：实测 ansible#87799 的竞争
-    # PR 标题是 "mount_facts: strip blkid UUID lookup output"，按普通词搜不到，
-    # 按模块名 mount_facts 才能命中。
-    raw_words = [w for w in re.split(r"[^a-zA-Z0-9_.-]+",
-                                     str(entry.get("title", "")))
-                 if len(w) >= 5 and not w.isdigit()]
-    ident = [w for w in raw_words if "_" in w or "." in w]
-    title_words = (ident + [w for w in raw_words if w not in ident])[:3]
-    recheck = recheck_candidate(repo, number, root_cause_keywords=title_words or None)
-    if recheck is None or not recheck.complete:
-        summary["abort"] = f"recheck incomplete: {recheck.errors if recheck else 'None'}"
-        log(root, "abort", key, summary["abort"])
-        # 复检失败会重试（状态 recheck_failed 在 drain 的候选集里）。修复循环
-        # 现在每 60 秒一轮，如果 GitHub 持续抖动就会每分钟打一次。记失败次数，
-        # 超过 3 次就标 escalated 不再自动重试，避免无意义刷 API。
-        n = int(entry.get("recheck_failures") or 0) + 1
-        retry_status = "staged" if entry.get("status") == "staged" else "recheck_failed"
-        mark_candidate(root, key, "escalated" if n >= 3 else retry_status,
-                       extra={"recheck_failures": n, "rescreen_pending": rescreen,
-                              "screen_retry_at": (business_now() + dt.timedelta(minutes=5)).isoformat()})
-        if n >= 3:
-            from ..notify import feishu_send
-            feishu_send(f"⚠️ 候选升级转人工：{key}",
-                        f"复检连续失败 {n} 次：{summary.get('abort', '')[:150]}")
-        return summary
-    if not recheck.issue_open or not recheck.unassigned or recheck.has_claim_signal \
-            or recheck.has_cross_ref_pr or recheck.open_pr_hits:
-        summary["abort"] = (f"competed: open={recheck.issue_open} "
-                            f"unassigned={recheck.unassigned} "
-                            f"claim={recheck.has_claim_signal} "
-                            f"xref={recheck.has_cross_ref_pr} hits={recheck.open_pr_hits[:1]}")
-        log(root, "abort", key, summary["abort"])
-        # 被抢不是我们浪费了机会，必须退坑——否则一个被别人抢走的候选
-        # 会白吃掉当天的 1/5 名额（2026-11-05 实录：claim_days 记了 5 个坑，
-        # 实际只开出 3 个 PR，2 个被 competed 的失败尝试吃掉）。
-        # 防循环靠"同候选今天不再认领"（try_claim 的 already-claimed）
-        # 与 aborted_competed 终态，不靠扣名额。
-        mark_candidate(root, key, "aborted_closed" if not recheck.issue_open else "aborted_competed")
-        return _abort_release(summary["abort"], give_back=True)
+    # Only the synchronous intake handoff can reuse its live coarse check.
+    reuse_screen = immediate and latest is not None and entry.get("status") == "new" and not rescreen
+    recheck = None
+    fresh = None
+    from dashboard.data import coarse_issue_blockers, fine_screen_issue, issue_screening_snapshot
 
-    # 被判重复的 issue 不碰：真正的战场在主 issue 上，修这条等于开第二个平行 PR。
-    # 2026-11-03 实录 qdrant#11360 → 判为 #10465 的 duplicate，而 #10465 已有
-    # #10470 在推进；我们几小时后被 cloud bot 关掉，白烧一轮修复。
-    # 这条独立于"是否 open"：GitHub 上可以先标 duplicate 再关闭，中间有窗口期。
-    if recheck.is_duplicate:
-        target = (f"#{recheck.duplicate_of}" if recheck.duplicate_of
-                  else "an earlier issue")
-        summary["abort"] = f"issue is a duplicate of {target}"
-        log(root, "abort", key, summary["abort"])
-        mark_candidate(root, key, "aborted_duplicate",
-                       extra={"abort_reason": summary["abort"],
-                              "duplicate_of": recheck.duplicate_of})
-        # 重复 issue 提前识别 = 省下一次真实消耗，不是浪费机会 → 退坑
-        return _abort_release(summary["abort"], give_back=True)
+    if reuse_screen:
+        summary["steps"].append("reused live intake screening")
+    else:
+        recheck = recheck_candidate(repo, number, use_title_keywords=True)
+        if recheck is None or not recheck.complete:
+            summary["abort"] = f"recheck incomplete: {recheck.errors if recheck else 'None'}"
+            log(root, "abort", key, summary["abort"])
+            # 复检失败会重试（状态 recheck_failed 在 drain 的候选集里）。修复循环
+            # 现在每 60 秒一轮，如果 GitHub 持续抖动就会每分钟打一次。记失败次数，
+            # 超过 3 次就标 escalated 不再自动重试，避免无意义刷 API。
+            n = int(entry.get("recheck_failures") or 0) + 1
+            retry_status = "staged" if entry.get("status") == "staged" else "recheck_failed"
+            mark_candidate(root, key, "escalated" if n >= 3 else retry_status,
+                           extra={"recheck_failures": n, "rescreen_pending": rescreen,
+                                  "screen_retry_at": (business_now() + dt.timedelta(minutes=5)).isoformat()})
+            if n >= 3:
+                from ..notify import feishu_send
+                feishu_send(f"⚠️ 候选升级转人工：{key}",
+                            f"复检连续失败 {n} 次：{summary.get('abort', '')[:150]}")
+            return summary
+        if getattr(recheck, "similar_prs", []):
+            log(root, "similar_pr", key, "；".join(recheck.similar_prs))
+        if not recheck.issue_open or not recheck.unassigned or recheck.has_claim_signal \
+                or recheck.has_cross_ref_pr or recheck.open_pr_hits:
+            summary["abort"] = (f"competed: open={recheck.issue_open} "
+                                f"unassigned={recheck.unassigned} "
+                                f"claim={recheck.has_claim_signal} "
+                                f"xref={recheck.has_cross_ref_pr} hits={recheck.open_pr_hits[:1]}")
+            log(root, "abort", key, summary["abort"])
+            # 被抢不是我们浪费了机会，必须退坑——否则一个被别人抢走的候选
+            # 会白吃掉当天的 1/5 名额（2026-11-05 实录：claim_days 记了 5 个坑，
+            # 实际只开出 3 个 PR，2 个被 competed 的失败尝试吃掉）。
+            # 防循环靠"同候选今天不再认领"（try_claim 的 already-claimed）
+            # 与 aborted_competed 终态，不靠扣名额。
+            refs = recheck.open_pr_hits or getattr(recheck, "linked_pr_urls", [])
+            reasons = []
+            if not recheck.issue_open:
+                reasons.append("Issue 已关闭")
+            if not recheck.unassigned:
+                reasons.append("已有指派")
+            if recheck.has_claim_signal:
+                reasons.append("已有认领、派单或限制自动修复的信号")
+            if recheck.has_cross_ref_pr or refs:
+                reasons.append("已有修复 PR" + (f" · {refs[0]}" if refs else ""))
+            mark_candidate(root, key, "aborted_closed" if not recheck.issue_open else "aborted_competed",
+                           extra={"abort_reason": "；".join(reasons)})
+            return _abort_release(summary["abort"], give_back=True)
 
-    # 这里原本有一道 pr_invited() 检查（查仓库要不要 invite label 才许开 PR）。
-    # 2026-10-30 删除：门禁已经在**挑选仓库**这一步完成了 —— 会关闭未受邀 PR 的
-    # 仓库根本不进 configs/repositories.yaml，也就不会被发现。留着它是对 39 个
-    # 仓库恒真的空检查（实测空 labels 下 39/40 直接返回 True），而且是带状态的
-    # 运行时判断：它曾在 labels 取不到时两头出错（该拒的放行、该放的拒掉）。
-    # 约束归位到加仓库时：pr_gates.yaml 里 requires_invite: true 的仓库不该入池。
+        # 被判重复的 issue 不碰：真正的战场在主 issue 上，修这条等于开第二个平行 PR。
+        # 2026-11-03 实录 qdrant#11360 → 判为 #10465 的 duplicate，而 #10465 已有
+        # #10470 在推进；我们几小时后被 cloud bot 关掉，白烧一轮修复。
+        # 这条独立于"是否 open"：GitHub 上可以先标 duplicate 再关闭，中间有窗口期。
+        if recheck.is_duplicate:
+            target = (f"#{recheck.duplicate_of}" if recheck.duplicate_of
+                      else "an earlier issue")
+            summary["abort"] = f"issue is a duplicate of {target}"
+            log(root, "abort", key, summary["abort"])
+            mark_candidate(root, key, "aborted_duplicate",
+                           extra={"abort_reason": summary["abort"],
+                                  "duplicate_of": recheck.duplicate_of})
+            # 重复 issue 提前识别 = 省下一次真实消耗，不是浪费机会 → 退坑
+            return _abort_release(summary["abort"], give_back=True)
 
-    summary["steps"].append("recheck ok")
+        # 这里原本有一道 pr_invited() 检查（查仓库要不要 invite label 才许开 PR）。
+        # 2026-10-30 删除：门禁已经在**挑选仓库**这一步完成了 —— 会关闭未受邀 PR 的
+        # 仓库根本不进 configs/repositories.yaml，也就不会被发现。留着它是对 39 个
+        # 仓库恒真的空检查（实测空 labels 下 39/40 直接返回 True），而且是带状态的
+        # 运行时判断：它曾在 labels 取不到时两头出错（该拒的放行、该放的拒掉）。
+        # 约束归位到加仓库时：pr_gates.yaml 里 requires_invite: true 的仓库不该入池。
+
+        # The live snapshot passes the same mechanical issue rules as intake.
+        source = getattr(recheck, "screening_source", None)
+        if source:
+            issue, comments, _timeline = source
+            fresh = issue_screening_snapshot(entry, issue, comments)
+            blockers = coarse_issue_blockers(eng, fresh, lane=lane)
+            action = "coarse_screen" if rescreen else "prestart_coarse_screen"
+            log(root, action, key, ",".join(blockers) if blockers else "通过机械条件")
+            if blockers:
+                reason = ", ".join(blockers)
+                mark_candidate(root, key, "aborted_stale", extra={"blockers": blockers, "abort_reason": reason})
+                return _abort_release("pre-start coarse screening blocked: " + reason)
+
+        summary["steps"].append("recheck ok")
 
     # ---- 车道闸：gated 只做评论对齐，restricted 只做维护者确认过的 ----
     # 2026-10-31 实录：这里原本只拦了 gated，restricted（litellm）直接往下走
@@ -541,18 +569,8 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen
         summary["abort"] = "CLA required"
         return summary
     if rescreen:
-        from dashboard.data import issue_screening_snapshot, screen_issue
-        source = getattr(recheck, "screening_source", None)
-        if source:
-            issue, comments, timeline = source
-            fresh = issue_screening_snapshot(entry, issue, comments)
-            blockers, verdict = screen_issue(eng, fresh, lane=lane, timeline=timeline)
-        else:
-            blockers, verdict = [], {"usable": None, "reason": "current screening evidence unavailable"}
-        if blockers:
-            mark_candidate(root, key, "aborted_stale", extra={"blockers": blockers,
-                                                              "abort_reason": ", ".join(blockers)})
-            return _abort_release("queue coarse screening blocked: " + ", ".join(blockers))
+        verdict = (fine_screen_issue(eng, fresh, lane=lane) if fresh is not None else
+                   {"usable": None, "reason": "current screening evidence unavailable"})
         if verdict.get("usable") is not True:
             retry = verdict.get("usable") is None
             status = (entry.get("status") or "new") if retry else "aborted_stale"

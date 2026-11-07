@@ -20,8 +20,8 @@
 ## 0. 硬规则（违反任何一条 = 立即中止该动作并记录）
 
 1. 每次派发只启动 **1 个合格候选**；B 级只记录不认领；C 级忽略。
-2. 认领前**实时复检**（不许用队列快照）：issue 是否仍 open、assignees 是否为空（闸门池是否指派给我）、
-   新评论里有无认领信号、timeline 有无新关联 PR、按 issue 号+根因关键词搜 open PR。任一命中竞争 → `aborted_competed`，换下一条。
+2. 首次粗筛查当前开放状态、指派、认领信号和竞争 PR。刚筛完且当场拿到执行位时复用结果；等过执行位时刷新并重做机械检查，暂存消费再做一次细筛。
+   按 issue 号和根因关键词搜索开放 PR。关键词命中只记录线索；GitHub 明确关联修复，或 PR 文本明确说明修复目标 issue，才按竞争拦截。
 3. 永不 force-push 任何分支、永不合并上游 PR、永不跳过/篡改 CI。
 4. 上游写失败（403 / `Resource not accessible by integration`）→ 记录 blocker，**本轮不重试同一写**。
 5. issue 被关、标 duplicate、maintainer 明确反对 → `aborted_closed`。

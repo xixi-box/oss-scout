@@ -194,6 +194,19 @@ class TestExplicitRefPr:
              "user": {"login": "someone-else"}, "body": "Refs #7"}])
         assert r.open_pr_hits, "explicit body reference must be caught"
 
+    def test_search_rejects_incidental_cross_repo_and_hidden_refs(self, monkeypatch):
+        r = _recheck(monkeypatch, search_items=[
+            {"number": 88, "title": "widget update", "body": "See also #7"},
+            {"number": 89, "title": "other fix", "body": "Fixes other/repo#7"},
+            {"number": 90, "title": "template only", "body": "<!-- Fixes #7 -->"},
+            {"number": 91, "title": "real fix", "body": "Fixes https://github.com/acme/real/issues/7"},
+        ])
+        assert r.open_pr_hits == ["acme/real#91: real fix"]
+
+    def test_timeline_incidental_mention_is_not_a_fix(self, monkeypatch):
+        r = _recheck(monkeypatch, timeline=self._xref(body="See also #7"))
+        assert not r.has_cross_ref_pr
+
     def test_search_without_ref_or_keywords_passes(self, monkeypatch):
         r = _recheck(monkeypatch, search_items=[
             {"number": 88, "title": "polish input widget",

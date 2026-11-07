@@ -331,18 +331,19 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
     import threading as _thr
     _inflight: dict[str, object] = {}
     _inflight_lock = _thr.Lock()
+    _intake_handoff: set[str] = set()
     # 真正的修复跑在 GitHub Actions runner 上（VPS 只负责派发、提交
     # workflow_dispatch，不 clone 也不编译），所以这里的上限跟 VPS 算力无关，
     # 只用来防止一次性把几百条一起甩给 Actions 打爆自动化的并发配额。
     # repair job 没有 concurrency 组，可以并行跑，实测 3 条同时在飞。
     _MAX_CONCURRENT = 1
 
-    def _run_one(entry: dict, rescreen: bool = False) -> None:
+    def _run_one(entry: dict, rescreen: bool = False, immediate: bool = False) -> None:
         key = str(entry.get("id", ""))
         out = {}
         try:
             from scout_v2.workers.auto_pipeline import candidate_pipeline
-            out = candidate_pipeline(root, entry, rescreen=rescreen)
+            out = candidate_pipeline(root, entry, rescreen=rescreen, immediate=immediate)
             _audit(root, "auto_repair", key, json.dumps(out, ensure_ascii=False)[:400])
         except Exception as e:  # noqa: BLE001
             try:
@@ -429,7 +430,8 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
             except Exception:  # noqa: BLE001
                 pass
 
-    def _dispatch(keys: list[str] | None = None, limit: int = 8, *, rescreen: bool = False) -> list[str]:
+    def _dispatch(keys: list[str] | None = None, limit: int = 8, *, rescreen: bool = False,
+                  just_screened: str | None = None) -> list[str]:
         """派发候选去修复。keys 为空时从队列按 AI 判定挑。
 
         返回本次新派发的 key 列表。不阻塞：线程启动即返回。
@@ -463,12 +465,12 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
                 with _inflight_lock:
                     if len(_inflight) >= _MAX_CONCURRENT:
                         break
-                    if key in _inflight:
+                    if key in _inflight or (key in _intake_handoff and key != just_screened):
                         continue
                     ent = _load_candidate(root, key)
                     if ent is None:
                         continue
-                    th = _thr.Thread(target=_run_one, args=(ent, rescreen), daemon=True,
+                    th = _thr.Thread(target=_run_one, args=(ent, rescreen, key == just_screened), daemon=True,
                                      name=f"repair-{key}")
                     _inflight[key] = th
                 th.start()
@@ -540,15 +542,20 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
                         if not modifiable_repo(item["repo"]):
                             inbox.finish(key, version)
                             continue
-                        item = D.refresh_issue(item)
-                        queued, added = D.ingest_cloudflare_issues(ds, [item])
-                        seen = json.loads((root / "state/seen.json").read_text(encoding="utf-8"))
-                        rec = seen.get(key) or {}
-                        if rec.get("status") == "retry":
-                            raise RuntimeError(rec.get("fine_reason") or "AI unavailable")
-                        inbox.finish(key, version)
-                        if added:
-                            _dispatch()
+                        with _inflight_lock:
+                            _intake_handoff.add(key)
+                        try:
+                            _, added = D.ingest_cloudflare_issues(ds, [item], refresh=True)
+                            seen = json.loads((root / "state/seen.json").read_text(encoding="utf-8"))
+                            rec = seen.get(key) or {}
+                            if rec.get("status") == "retry":
+                                raise RuntimeError(rec.get("fine_reason") or "AI unavailable")
+                            inbox.finish(key, version)
+                            if added:
+                                _dispatch(just_screened=added[0])
+                        finally:
+                            with _inflight_lock:
+                                _intake_handoff.discard(key)
                     except Exception as ex:
                         inbox.finish(key, version, str(ex), attempts)
                         _audit(root, "intake_retry", key, str(ex)[:200])

@@ -122,7 +122,7 @@ class TestRowToFields:
     def test_coarse_rejection_does_not_claim_fine_screen_ran(self):
         fields = fb.scan_row_to_fields({"key": "a/b#9", "status": "blocked",
                                         "coarse_reason": "label", "fine_reason": "not screened"})
-        assert fields["最终结果"] == "粗筛淘汰"
+        assert fields["最终结果"] == "粗筛淘汰 · label"
         assert fields["粗筛结果"] == "label"
         assert fields["细筛结果"] == "未执行"
         assert set(fields) == {field["field_name"] for field in fb.SCAN_FIELDS}
@@ -326,3 +326,26 @@ class TestCandidateRows:
             "a/b#9": self._entry("pr_open")}), encoding="utf-8")
         rows = mp.build_scan_rows(tmp_path)
         assert rows[0]["queue_state"] == "已解决"
+
+
+
+def test_scan_preserves_screen_results_and_shows_later_abort(tmp_path):
+    (tmp_path / "state").mkdir()
+    (tmp_path / "queue").mkdir()
+    keys = ["a/b#1", "a/b#2"]
+    (tmp_path / "state/seen.json").write_text(json.dumps({
+        key: {"status": "queued", "fine_reason": "OpenJev 0.99"} for key in keys
+    }), encoding="utf-8")
+    (tmp_path / "queue/candidates.json").write_text(json.dumps({
+        keys[0]: {"status": "aborted_competed", "abort_reason": "已有修复 PR · a/b#3"},
+        keys[1]: {"status": "aborted_competed"},
+    }), encoding="utf-8")
+    (tmp_path / "state/worklog.jsonl").write_text(json.dumps({
+        "action": "pipeline_abort", "target": keys[1], "result": "competed: hits=['a/b#4']",
+    }) + "\n", encoding="utf-8")
+
+    rows = [fb.scan_row_to_fields(row) for row in mp.build_scan_rows(tmp_path)]
+    assert rows[0]["最终结果"] == "开工流程拦截 · 已有修复 PR · a/b#3"
+    assert rows[1]["最终结果"].startswith("旧版开工检查拦截")
+    assert "a/b#4" in rows[1]["最终结果"]
+    assert all(row["粗筛结果"] == "通过" and row["细筛结果"] == "OpenJev 0.99" for row in rows)

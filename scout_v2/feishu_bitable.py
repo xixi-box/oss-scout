@@ -122,7 +122,7 @@ def scan_row_to_fields(row: dict) -> dict:
     status = row.get("status") or ""
     coarse, fine = row.get("coarse_reason"), row.get("fine_reason")
     if status in {"blocked", "unknown_repo", "too_fresh"}:
-        result, coarse, fine = "粗筛淘汰", coarse or "未通过", "未执行"
+        result, coarse, fine = f"粗筛淘汰 · {coarse}" if coarse else "粗筛淘汰", coarse or "未通过", "未执行"
     elif status in {"queued", "rejected", "retry"}:
         result = {"queued": "通过", "rejected": "细筛淘汰", "retry": "待重试"}[status]
         coarse = "通过"
@@ -130,7 +130,7 @@ def scan_row_to_fields(row: dict) -> dict:
     else:
         result = status or None
     return {"键": link_key(row["key"], "issues"), "发现时间": _timestamp(row.get("first_seen")),
-            "最终结果": result, "粗筛结果": coarse or None, "细筛结果": fine or None}
+            "最终结果": row.get("final_result") or result, "粗筛结果": coarse or None, "细筛结果": fine or None}
 
 
 def cand_row_to_fields(row: dict) -> dict:
