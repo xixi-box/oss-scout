@@ -1,4 +1,4 @@
-name: Verify live scan decisions
+name: Verify live scan outcomes and PR links
 on:
   workflow_dispatch:
 jobs:
@@ -6,32 +6,41 @@ jobs:
     runs-on: [self-hosted, aliyun]
     timeout-minutes: 5
     steps:
-      - name: Read the two historical scan records
+      - name: Verify live scan cells via Feishu API
         run: |
           docker exec -i -w /app oss-scout python - <<'PY'
-          import json, os, time
+          import collections, json, os, time
           from pathlib import Path
           from scout_v2 import feishu_bitable as b
           root = Path(os.environ.get("OSSCOUT_DASHBOARD_ROOT", "/data"))
           app = b._binding_app_token(root)
           table = b.load_binding(root)["scan_table_id"]
-          expected = {"clickhouse/clickhouse#129926": "129001", "nodejs/node#67314": "67160"}
-          for attempt in range(4):
-              found = {}
+          counts = collections.Counter()
+          examples = {}
+          for attempt in range(5):
+              counts.clear()
+              examples.clear()
               for rec in b.record_pages(app, table):
                   fields = rec.get("fields") or {}
-                  key = b._key_label(fields.get("键")).lower()
-                  if key in expected:
-                      found[key] = {k: b._norm_field(fields.get(k)) for k in ("最终结果", "粗筛结果", "细筛结果")}
-                  if len(found) == len(expected):
-                      break
-              if all(str(found.get(key, {}).get("最终结果") or "").startswith("旧版开工检查拦截")
-                     and hit in found[key]["最终结果"] for key, hit in expected.items()):
+                  key = b._key_label(fields.get("键"))
+                  raw = fields.get("最终结果")
+                  value = b._key_label(raw)
+                  category = value.split(" · ", 1)[0]
+                  counts[category] += 1
+                  if category in {"已开 PR", "暂存", "修复失败", "旧版开工检查拦截", "执行中"}:
+                      if category == "已开 PR":
+                          assert isinstance(raw, list) and any(s.get("type") == "url"
+                              and s.get("link", "").startswith("https://github.com/")
+                              and "/pull/" in s["link"] for s in raw), (key, raw)
+                      examples.setdefault(category, {"key": key, "result": raw,
+                          "coarse": b._norm_field(fields.get("粗筛结果")),
+                          "fine": b._norm_field(fields.get("细筛结果"))})
+              if not counts["通过"] and all(counts[status] for status in ("已开 PR", "暂存", "修复失败")):
                   break
-              time.sleep(15)
-          print("verified_scan_rows", json.dumps(found, ensure_ascii=False))
-          for key, hit in expected.items():
-              row = found[key]
-              assert row["最终结果"].startswith("旧版开工检查拦截") and hit in row["最终结果"], row
-              assert row["粗筛结果"] == "通过" and "OpenJev" in row["细筛结果"], row
+              time.sleep(10)
+          selected = {k: counts[k] for k in ("通过", "待执行", "暂存", "执行中", "已开 PR", "修复失败", "旧版开工检查拦截")}
+          print("verified_counts", json.dumps(selected, ensure_ascii=False))
+          print("verified_examples", json.dumps(examples, ensure_ascii=False))
+          assert not counts["通过"]
+          assert all(counts[status] for status in ("已开 PR", "暂存", "修复失败"))
           PY
