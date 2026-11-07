@@ -46,11 +46,11 @@ jobs:
                   not re.fullmatch(r"[0-9a-f]{40}", j["head_sha"])):
               raise SystemExit("PR repair target outside the monitored roster or invalid fork")
           preview = j.get("preview") is True
-          if preview and (j["upstream_repo"], j["pr_number"], j.get("review_id"), j["head_sha"],
-                          j.get("preview_commit")) != (
-                          "python/cpython", 161543, 5812893767, "07b9781c629f029f5362a4924a4b5506c111e275",
-                          "a10fb8582b80fa9080fa80634110c240b2cc282d"):
+          if preview and ((j["upstream_repo"], j["pr_number"], j["kind"]) != ("python/cpython", 161543, "followup")
+                          or type(j.get("review_id")) is not int):
               raise SystemExit("unrecognized historical review preview")
+          if preview and j.get("preview_replay") is True and j.get("preview_commit") != "a10fb8582b80fa9080fa80634110c240b2cc282d":
+              raise SystemExit("unrecognized historical patch")
           print("pr:", j["upstream_repo"], "#", j["pr_number"],
                 "| branch:", j["branch"], "| head:", j["head_sha"][:10])
           with open(os.environ["GITHUB_OUTPUT"], "a") as f:
@@ -238,12 +238,20 @@ jobs:
           context = json.loads(context_file.read_text()) if context_file.exists() else {}
           sha = os.environ["COMMIT_SHA"]
           preview = job.get("preview") is True
-          if preview and (not sha or len(result.get("responses") or []) != 5
-                          or not all(item["draft"] for item in result["responses"])):
-              raise SystemExit("CPython preview did not produce a verified commit and five replies")
+          responses = (result.get("responses") or []) if sha or not result.get("fixed") else []
           if preview and job.get("preview_verify_only") is True:
-              print(f"Verified {len(result['responses'])} review replies and staged commit {sha}")
+              if not responses:
+                  raise SystemExit("review verification did not produce a result")
+              print(f"Verified {len(responses)} review decisions and staged commit {sha or '(none)'}")
               raise SystemExit(0)
+          if preview and not responses:
+              responses = [
+                  {"id": key, "source": item["source"], "thread_id": item["thread_id"],
+                   **{field: item.get(field) for field in
+                      ("url", "author", "body", "path", "line", "start_line", "original_line", "original_start_line")},
+                   "action": "unavailable", "draft": ""}
+                  for key, item in (context.get("targets") or {}).items()
+              ]
           bundle = tmp / "pr-fix.bundle"
           if sha and bundle.stat().st_size > 6 * 1024 * 1024:
               raise SystemExit("approval bundle exceeds 6 MiB")
@@ -254,10 +262,11 @@ jobs:
               "commit_sha": sha,
               "bundle": base64.b64encode(bundle.read_bytes()).decode() if sha and not preview else "",
               "preview": preview,
+              "review_id": job.get("review_id"),
               "test_result": result.get("test_result") or result.get("skipped") or "workflow failed",
               "changed_files": result.get("changed_files") or [],
               "reply": (result.get("reply") or "") if sha or not result.get("fixed") else "",
-              "responses": (result.get("responses") or []) if sha or not result.get("fixed") else [],
+              "responses": responses,
               "summary": result.get("summary") or "", "trigger": context.get("trigger"),
               "title": (context.get("pr") or {}).get("title", ""),
           }

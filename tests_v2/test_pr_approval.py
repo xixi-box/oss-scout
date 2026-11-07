@@ -96,13 +96,16 @@ def test_one_review_push_then_only_selected_threads(tmp_path, monkeypatch):
     head = "a" * 40
     responses = [
         {"id": f"inline:{i}", "source": "inline", "thread_id": i, "author": "maintainer",
-         "body": "```suggestion\n    new_code()\n```", "action": "change", "draft": f"Draft {i}"}
+         "body": "```suggestion\n```" if i == 1 else "```suggestion\n    new_code()\n```",
+         "path": "Lib/platform.py", "original_line": 42, "original_start_line": 40,
+         "action": "change", "draft": f"Draft {i}"}
         for i in range(1, 6)
     ]
     record = pr_approval.stage(tmp_path, {
         "job_id": job_id, "repo": "python/cpython", "number": 161543,
         "fork_repo": "xixi-box/cpython", "branch": "topic", "head_sha": head,
         "commit_sha": "b" * 40, "bundle": "cGFja2FnZQ==", "responses": responses,
+        "run_id": "123456", "test_result": "test_platform",
     })
     metadata, bundle = pr_approval._paths(tmp_path, job_id)
     assert "Draft 1" not in metadata.read_text(encoding="utf-8")
@@ -111,6 +114,9 @@ def test_one_review_push_then_only_selected_threads(tmp_path, monkeypatch):
     assert len(form[0]["options"]) == 5
     assert [part["name"] for part in form if part["tag"] == "input"] == [f"reply_{i}" for i in range(5)]
     assert "```suggestion" not in str(card)
+    assert "建议删除" in form[1]["content"] and "Lib/platform.py · 第 40–42 行" in form[1]["content"]
+    assert "建议替换" in form[3]["content"] and "new_code()" in form[3]["content"]
+    assert "测试记录" not in str(card) and "test_platform" not in str(card)
     assert form[-1]["value"]["do"] == "preview_pr_followup"
     monkeypatch.setattr(pr_approval, "gh_read", lambda _: {
         "state": "open", "user": {"login": "xixi-box"},

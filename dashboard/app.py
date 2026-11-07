@@ -1316,10 +1316,12 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
                 responses = body.get("responses") or []
                 drafts = {item["id"]: str(item.get("draft") or "")[:1000] for item in responses}
                 if body.get("preview") is True:
-                    if repo.lower() != "python/cpython" or num != 161543 or len(responses) != 5:
+                    if (repo.lower() != "python/cpython" or num != 161543 or not responses
+                            or type(body.get("review_id")) is not int):
                         raise ValueError("invalid CPython preview result")
                     card = feishu_app.build_pr_approval_card(
-                        {**body, "targets": pr_approval.review_targets(responses)}, drafts=drafts, preview=True)
+                        {**body, "targets": pr_approval.review_targets(responses)}, drafts=drafts,
+                        preview=True, complete=not (body.get("commit_sha") or any(drafts.values())))
                     chat = feishu_app.find_group_chat_id()
                     ok, detail = feishu_app.send_card_to_chat(chat, card, message_uuid=body["job_id"])
                     if not ok:

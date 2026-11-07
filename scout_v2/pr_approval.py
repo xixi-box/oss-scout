@@ -72,7 +72,8 @@ def review_targets(responses: list) -> list:
             raise ValueError("invalid or duplicate reply target")
         seen.add(key)
         targets.append({**{field: response.get(field) for field in
-                           ("id", "source", "thread_id", "url", "author", "body", "action")},
+                           ("id", "source", "thread_id", "url", "author", "body", "action",
+                            "path", "line", "start_line", "original_line", "original_start_line")},
                         "has_draft": bool(response.get("draft"))})
     return targets
 
@@ -107,7 +108,7 @@ def stage(root: Path, result: dict) -> dict:
                 tmp.write_bytes(blob)
                 os.replace(tmp, bundle_path)
             record.update({k: result.get(k) for k in (
-                "job_id", "run_id", "title", "summary", "test_result", "changed_files")})
+                "job_id", "run_id", "title", "summary", "test_result", "changed_files", "review_id")})
             record.update(repo=repo, number=number, fork_repo=fork, branch=branch,
                           head_sha=base, commit_sha=commit, has_reply=bool(reply),
                           expires_at=time.time() + RETENTION_SECONDS,

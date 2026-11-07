@@ -237,14 +237,14 @@ def build_pr_approval_card(record: dict, *, draft: str = "", drafts: dict | None
 
     repo, number = record["repo"], record["number"]
     link = f"https://github.com/{repo}/pull/{number}"
-    run_id = str(record.get("run_id") or "")
     sha = record.get("commit_sha") or ""
     source_url = str(record.get("source_url") or "")
     source_label = "原行内讨论" if record.get("source_kind") == "inline" else "原评论"
-    elements = [{"tag": "div", "text": {"tag": "lark_md", "content":
-                 f"[{repo}#{number}]({link})" +
-                 (f" · [测试记录](https://github.com/xixi-box/oss-scout/actions/runs/{run_id})"
-                  if run_id.isdigit() else "")}}]
+    review_id = record.get("review_id")
+    links = f"[{repo}#{number}]({link})"
+    if type(review_id) is int:
+        links += f" · [整轮评审]({link}#pullrequestreview-{review_id})"
+    elements = [{"tag": "div", "text": {"tag": "lark_md", "content": links}}]
     if source_url.startswith(link + "#"):
         elements.append({"tag": "div", "text": {"tag": "lark_md",
                          "content": f"[{source_label}]({source_url})"}})
@@ -257,7 +257,6 @@ def build_pr_approval_card(record: dict, *, draft: str = "", drafts: dict | None
         if record.get("source_author") and not targets else "",
         record.get("summary"),
         (f"{'已推送' if record.get('pushed') else '已提交，待推送'} {sha[:12]}\n"
-         f"测试：{record.get('test_result') or ''}\n"
          + "\n".join(record.get("changed_files") or [])) if sha else "",
         (f"回复发送失败\n草稿：{draft}" if draft else "回复发送失败") if status == "failed" and not targets else "",
         (f"已回复：{draft}" if draft else "已回复") if status == "sent" and not targets else "",
@@ -271,12 +270,27 @@ def build_pr_approval_card(record: dict, *, draft: str = "", drafts: dict | None
         target_id = target["id"]
         target_draft = drafts.get(target_id, "")
         target_url = str(target.get("url") or "")
-        label = {"change": "代码修改", "answer": "答复", "skip": "无需处理"}.get(target["action"], "")
+        label = {"change": "代码修改", "answer": "答复", "skip": "无需处理",
+                 "unavailable": "未生成处理结果"}.get(target["action"], "")
         heading = f"**{i + 1}. {label} · {html.escape(str(target.get('author') or ''))}**"
         if target_url.startswith(link + "#") and re.fullmatch(r"[a-zA-Z0-9_-]+", target_url.split("#", 1)[1]):
             heading += f" · [原讨论]({target_url})"
-        source = html.escape(str(target.get("body") or "")[:1000])
-        source = re.sub(r"(?m)^\s*```suggestion[^\n]*$", "\n**建议修改**\n```", source)
+        def suggestion(match):
+            code = match[1]
+            if code.strip():
+                return f"\n**建议替换**\n```\n{code[:800]}\n```"
+            path = target.get("path")
+            end = target.get("line") or target.get("original_line")
+            start = (target.get("start_line") if target.get("line") else target.get("original_start_line")) or end
+            location = ""
+            if path and end:
+                lines = f"{start}–{end}" if start != end else str(end)
+                location = f"\n{html.escape(str(path))} · 第 {lines} 行"
+            return f"\n**建议删除**{location}"
+
+        source = html.escape(str(target.get("body") or "").replace("\r\n", "\n"))
+        source = re.sub(r"(?ms)^[ \t]*```suggestion[^\n]*\n(.*?)^[ \t]*```[ \t]*$", suggestion, source)
+        source = source[:1600]
         details = {"tag": "markdown", "content": f"{heading}\n{source}"}
         if complete:
             elements.append(details)

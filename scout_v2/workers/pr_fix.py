@@ -119,6 +119,8 @@ def collect_context(payload: dict, path: Path) -> None:
     review_id = payload.get("review_id")
     if review_id:
         review = next(c for c in thread if c["source"] == "review" and c["comment_id"] == review_id)
+        if preview and (review["commit_id"] != payload["head_sha"] or trigger.get("review_id") != review_id):
+            raise RuntimeError("preview does not match the submitted review and its commit")
         for item in thread:
             if (item.get("review_id") != review_id or not item["body"].strip()
                     or not is_human_followup_author(item["author"], item["author_type"])):
@@ -512,6 +514,8 @@ Draft any reply for publication after the verified fix is pushed. Do not claim a
         "responses": [
             {"id": key, "source": item["source"], "thread_id": item["thread_id"],
              "url": item["url"], "author": item["author"], "body": item["body"],
+             **{field: item.get(field) for field in
+                ("path", "line", "start_line", "original_line", "original_start_line")},
              "action": decision["responses"][key]["action"],
              "draft": decision["responses"][key]["draft"].strip()[:1000]
                       if decision["responses"][key]["action"] != "skip" else ""}

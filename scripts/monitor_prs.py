@@ -693,7 +693,10 @@ def _thread(repo: str, number: int, limit: int | None = 10) -> list[dict]:
                             "review_id": comment.get("pull_request_review_id") or
                                          (comment["id"] if source == "review" else None),
                             "path": comment.get("path"), "line": comment.get("line"),
+                            "start_line": comment.get("start_line"),
                             "original_line": comment.get("original_line"),
+                            "original_start_line": comment.get("original_start_line"),
+                            "commit_id": comment.get("commit_id"),
                             "diff_hunk": comment.get("diff_hunk"), "review_state": comment.get("state"),
                             "source": source})
     out.sort(key=lambda c: c["created_at"])
