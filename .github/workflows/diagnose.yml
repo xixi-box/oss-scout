@@ -23,8 +23,8 @@ jobs:
               rec = result.get("data", {}).get("record", {}).get("record_id")
               if rec:
                   try:
-                      data = a._request("GET", f"{url}/{rec}", token=token)
-                      print("read-back", data.get("data", {}).get("record", {}).get("fields", {}).get("键"))
+                      data = a._request("GET", f"{url}?page_size=10&text_field_as_array=true", token=token)
+                      print("read-back", data.get("data", {}).get("items", []))
                   finally:
                       deleted = a._request("DELETE", f"{url}/{rec}", token=token)
                       assert deleted.get("code") == 0
