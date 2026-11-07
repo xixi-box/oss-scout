@@ -229,24 +229,34 @@ def build_reply_card(repo: str, number: int, issue_title: str,
     }
 
 
-def build_pr_approval_card(record: dict, *, complete: bool = False, error: str = "") -> dict:
+def build_pr_approval_card(record: dict, *, draft: str = "", complete: bool = False,
+                           error: str = "", preview: bool = False) -> dict:
     repo, number = record["repo"], record["number"]
     link = f"https://github.com/{repo}/pull/{number}"
     run_id = str(record.get("run_id") or "")
     sha = record.get("commit_sha") or ""
-    draft = record.get("reply") or ""
+    source_url = str(record.get("source_url") or "")
+    source_label = "原行内讨论" if record.get("source_kind") == "inline" else "原评论"
     elements = [{"tag": "div", "text": {"tag": "lark_md", "content":
                  f"[{repo}#{number}]({link})" +
                  (f" · [测试记录](https://github.com/xixi-box/oss-scout/actions/runs/{run_id})"
                   if run_id.isdigit() else "")}}]
+    if source_url.startswith(link + "#"):
+        elements.append({"tag": "div", "text": {"tag": "lark_md",
+                         "content": f"[{source_label}]({source_url})"}})
+    if preview:
+        elements.append({"tag": "div", "text": {"tag": "plain_text",
+                         "content": "演示 · 按钮仅预览，不会向 GitHub 写入。"}})
+    status = record.get("reply_status")
     for value in (
         record.get("title"),
         f"{record['source_author']}：{record.get('source_comment') or ''}" if record.get("source_author") else "",
         record.get("summary"),
-        (f"{'已推送' if complete else '已提交，待推送'} {sha[:12]}\n"
+        (f"{'已推送' if record.get('pushed') else '已提交，待推送'} {sha[:12]}\n"
          f"测试：{record.get('test_result') or ''}\n"
          + "\n".join(record.get("changed_files") or [])) if sha else "",
-        f"已回复：{record['approved_reply']}" if complete and record.get("approved_reply") else "",
+        (f"回复发送失败\n草稿：{draft}" if draft else "回复发送失败") if status == "failed" else "",
+        (f"已回复：{draft}" if draft else "已回复") if status == "sent" else "",
         error,
     ):
         if value:
@@ -255,7 +265,8 @@ def build_pr_approval_card(record: dict, *, complete: bool = False, error: str =
         button = {"tag": "button", "type": "primary", "name": "confirm",
                   "text": {"tag": "plain_text", "content": (
                       "确认推送并回复" if sha and draft else "确认推送" if sha else "确认回复")},
-                  "value": {"do": "approve_pr_followup", "job_id": record["job_id"]}}
+                  "value": {"do": "preview_pr_followup" if preview else "approve_pr_followup",
+                            "job_id": record.get("job_id", "")}}
         form = []
         if draft:
             form.append({"tag": "input", "name": "reply_text", "default_value": draft,
@@ -264,9 +275,9 @@ def build_pr_approval_card(record: dict, *, complete: bool = False, error: str =
         button["action_type"] = "form_submit"
         elements.append({"tag": "form", "name": "approval", "elements": form + [button]})
     return {"config": {"wide_screen_mode": True, "update_multi": True},
-            "header": {"template": "green" if complete else "orange",
+            "header": {"template": "red" if status == "failed" else "green" if complete else "orange",
                        "title": {"tag": "plain_text", "content":
-                                 f"{'PR 跟进已完成' if complete else 'PR 跟进待确认'}：{repo}#{number}"}},
+                                 f"{'PR 跟进演示' if preview else 'PR 跟进结果' if complete else 'PR 跟进待确认'}：{repo}#{number}"}},
             "elements": elements}
 
 

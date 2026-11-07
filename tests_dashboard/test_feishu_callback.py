@@ -139,15 +139,28 @@ class TestFormSubmit:
         payload = {"job_id": job_id, "repo": "docker/compose", "number": 7,
                    "fork_repo": "xixi-box/compose", "branch": "topic", "head_sha": "a" * 40,
                    "reply": "Here is the explanation."}
+        robot = {**payload, "kind": "followup",
+                 "trigger": {"author": "sre-ci-robot", "author_type": "User",
+                             "body": "Please assign an approver"}}
+        rejected = client.post("/api/pr/reply/fix-result", json=robot, headers={"X-Ingest-Token": "t"})
+        assert rejected.json()["outcome"] == "no_approval"
+        assert not cards
         for _ in range(2):
             result = client.post("/api/pr/reply/fix-result", json=payload, headers={"X-Ingest-Token": "t"})
             assert result.status_code == 200
         assert len(cards) == 1
         assert "确认回复" in str(cards[0])
+        assert "Here is the explanation." in str(cards[0])
         assert not published
         click = card_click({"do": "approve_pr_followup", "job_id": job_id}, {})
         click["event"]["context"] = {"open_message_id": "om_another"}
         assert cb(client, click).status_code == 403
+        assert not published
+        click["event"]["context"] = {"open_message_id": "om_delivered"}
+        assert cb(client, click).json()["toast"]["type"] == "error"
+        assert not published
+        preview = card_click({"do": "preview_pr_followup"}, {"reply_text": "Demo"})
+        assert cb(client, preview).json()["toast"]["type"] == "info"
         assert not published
 
 

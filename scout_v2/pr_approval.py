@@ -8,6 +8,7 @@ import re
 import sqlite3
 import subprocess
 import tempfile
+import time
 from pathlib import Path
 
 from .git_host import gh_pages, gh_read
@@ -16,6 +17,7 @@ from .state_store import queue_transaction
 
 JOB_ID = re.compile(r"prfix-[0-9a-f]{32}")
 SHA = re.compile(r"[0-9a-f]{40}")
+RETENTION_SECONDS = 7 * 24 * 60 * 60
 
 
 def _paths(root: Path, job_id: str) -> tuple[Path, Path]:
@@ -23,6 +25,41 @@ def _paths(root: Path, job_id: str) -> tuple[Path, Path]:
         raise ValueError("invalid approval ID")
     directory = root / "artifacts" / "pr-approvals"
     return directory / f"{job_id}.json", directory / f"{job_id}.bundle"
+
+
+def cleanup(root: Path) -> None:
+    """Expire packages and records, and scrub drafts left by older releases."""
+    directory = root / "artifacts" / "pr-approvals"
+    if not directory.is_dir():
+        return
+    now = time.time()
+    with sqlite3.connect(root / "state" / "pr_approval_publish.sqlite3", timeout=0) as lock:
+        lock.execute("BEGIN IMMEDIATE")
+        for path in directory.glob("prfix-*"):
+            match = re.match(r"(prfix-[0-9a-f]{32})(?:\.(?:json|bundle|tmp).*)$", path.name)
+            if not match:
+                continue
+            metadata, bundle = _paths(root, match[1])
+            with queue_transaction(root, path=metadata, backup=False) as record:
+                if path == metadata and record:
+                    expires = record.get("expires_at") or path.stat().st_mtime + RETENTION_SECONDS
+                    if expires <= now:
+                        bundle.unlink(missing_ok=True)
+                        path.unlink(missing_ok=True)
+                        # Keep the in-memory record untouched so the transaction won't rewrite it.
+                        continue
+                    record["expires_at"] = expires
+                    if "reply" in record:
+                        record["has_reply"] = bool(record.pop("reply"))
+                    if record.pop("approved_reply", None) and record.get("complete"):
+                        record["reply_status"] = "sent"
+                    if record.get("pushed") or record.get("complete"):
+                        bundle.unlink(missing_ok=True)
+                elif path.name.endswith(".bak") or path.name.endswith(".tmp"):
+                    path.unlink(missing_ok=True)
+                elif path == bundle and not record and path.exists():
+                    if path.stat().st_mtime + RETENTION_SECONDS <= now:
+                        path.unlink()
 
 
 def stage(root: Path, result: dict) -> dict:
@@ -47,7 +84,7 @@ def stage(root: Path, result: dict) -> dict:
         return {}
     trigger = result.get("trigger") or {}
     path.parent.mkdir(parents=True, exist_ok=True)
-    with queue_transaction(root, path=path) as record:
+    with queue_transaction(root, path=path, backup=False) as record:
         if not record:
             if blob:
                 tmp = bundle_path.with_suffix(".tmp")
@@ -56,7 +93,8 @@ def stage(root: Path, result: dict) -> dict:
             record.update({k: result.get(k) for k in (
                 "job_id", "run_id", "title", "summary", "test_result", "changed_files")})
             record.update(repo=repo, number=number, fork_repo=fork, branch=branch,
-                          head_sha=base, commit_sha=commit, reply=reply,
+                          head_sha=base, commit_sha=commit, has_reply=bool(reply),
+                          expires_at=time.time() + RETENTION_SECONDS,
                           source_kind=trigger.get("source"), comment_id=trigger.get("thread_id"),
                           source_author=trigger.get("author"), source_comment=trigger.get("body"),
                           source_url=trigger.get("url"))
@@ -98,8 +136,16 @@ def publish(root: Path, job_id: str, edited_reply: str | None, post_comment) -> 
     with sqlite3.connect(root / "state" / "pr_approval_publish.sqlite3", timeout=0) as lock:
         lock.execute("BEGIN IMMEDIATE")
         record = json.loads(path.read_text(encoding="utf-8"))
+        if time.time() >= (record.get("expires_at") or path.stat().st_mtime + RETENTION_SECONDS):
+            raise ValueError("审批已过期（保留 7 天）")
         if record.get("complete"):
-            return record
+            return {**record, "already_complete": True}
+        has_reply = record.get("has_reply", bool(record.get("reply")))
+        if has_reply and edited_reply is None:
+            raise ValueError("飞书卡片没有提交回复字段，请重试")
+        reply = (edited_reply or "").strip()[:1000] if has_reply else ""
+        if not record["commit_sha"] and not reply:
+            raise ValueError("请在飞书卡片中填写要发送的回复")
         repo, number = record["repo"], record["number"]
         if not monitored_repo(repo):
             raise ValueError("repository outside monitored roster")
@@ -110,31 +156,31 @@ def publish(root: Path, job_id: str, edited_reply: str | None, post_comment) -> 
                 or head.get("ref") != record["branch"]
                 or head.get("sha") not in {record["head_sha"], record["commit_sha"] or record["head_sha"]}):
             raise RuntimeError("PR closed or branch changed after testing")
-        if "approved_reply" not in record:
-            reply = record["reply"] if edited_reply is None else edited_reply.strip()[:1000]
-            with queue_transaction(root, path=path) as stored:
-                stored["approved_reply"] = reply if record["reply"] else ""
-            record["approved_reply"] = reply if record["reply"] else ""
         if record["commit_sha"] and not record.get("pushed"):
             _push(record, bundle)
-            with queue_transaction(root, path=path) as stored:
+            with queue_transaction(root, path=path, backup=False) as stored:
                 stored["pushed"] = True
-        reply = record["approved_reply"]
+            bundle.unlink(missing_ok=True)
+        reply_status = "none"
         if reply:
             inline = record["source_kind"] == "inline"
             endpoint = f"repos/{repo}/{'pulls' if inline else 'issues'}/{number}/comments"
             marker = f"<!-- oss-scout-reply:{job_id} -->"
-            comments = gh_pages(endpoint, 100)
-            if comments is None:
-                raise RuntimeError("could not verify whether the reply was already posted")
-            if not any(marker in (c.get("body") or "") and (c.get("user") or {}).get("login") == "xixi-box"
-                       for c in comments):
-                ok, detail = post_comment(repo, number, f"{reply}\n\n{marker}",
-                                          kind=record["source_kind"], comment_id=record["comment_id"])
-                if not ok:
-                    raise RuntimeError(f"GitHub reply failed: {detail}")
-        with queue_transaction(root, path=path) as stored:
+            try:
+                comments = gh_pages(endpoint, 100)
+                sent = comments is not None and any(
+                    marker in (c.get("body") or "") and (c.get("user") or {}).get("login") == "xixi-box"
+                    for c in comments)
+                if comments is not None and not sent:
+                    sent, _ = post_comment(repo, number, f"{reply}\n\n{marker}",
+                                           kind=record["source_kind"], comment_id=record["comment_id"])
+                reply_status = "sent" if sent else "failed"
+            except Exception:
+                reply_status = "failed"
+        with queue_transaction(root, path=path, backup=False) as stored:
             stored["complete"] = True
+            stored["reply_status"] = reply_status
+            stored.pop("reply", None)
+            stored.pop("approved_reply", None)
             result = dict(stored)
-        bundle.unlink(missing_ok=True)
         return result

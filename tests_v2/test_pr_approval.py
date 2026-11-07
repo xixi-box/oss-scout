@@ -1,12 +1,10 @@
 import base64
 import subprocess
 
-import pytest
-
 from scout_v2 import pr_approval
 
 
-def test_approval_pushes_exact_tested_commit_before_reply_and_recovers(tmp_path, monkeypatch):
+def test_approval_deletes_package_before_reply_and_never_saves_draft(tmp_path, monkeypatch):
     def git(where, *args):
         return subprocess.check_output(
             ["git", "-C", str(where), *args], text=True, stderr=subprocess.PIPE).strip()
@@ -47,20 +45,46 @@ def test_approval_pushes_exact_tested_commit_before_reply_and_recovers(tmp_path,
         "reply": "Fixed.", "trigger": {"source": "inline", "thread_id": 12},
     })
     assert not record.get("complete")
+    metadata, package = pr_approval._paths(tmp_path, job_id)
+    assert "Fixed." not in metadata.read_text(encoding="utf-8")
     assert git(origin, "rev-parse", "topic") == base
     posted = []
 
     def post(repo, number, body, **target):
         assert git(origin, "rev-parse", "topic") == commit
+        assert not package.exists()
         posted.append((body, target))
-        return len(posted) > 1, "temporary failure"
+        return False, "temporary failure"
 
-    with pytest.raises(RuntimeError, match="GitHub reply failed"):
-        pr_approval.publish(tmp_path, job_id, "Edited reply", post)
-    done = pr_approval.publish(tmp_path, job_id, "ignored on retry", post)
+    done = pr_approval.publish(tmp_path, job_id, "Edited reply", post)
     assert done["pushed"] and done["complete"]
-    assert posted[0] == posted[1]
+    assert done["reply_status"] == "failed"
+    assert "Edited reply" not in metadata.read_text(encoding="utf-8")
+    assert not metadata.with_suffix(".json.bak").exists()
     assert posted[0][0].startswith("Edited reply\n")
     assert posted[0][1] == {"kind": "inline", "comment_id": 12}
     assert pr_approval.publish(tmp_path, job_id, None, post)["complete"]
-    assert len(posted) == 2
+    assert len(posted) == 1
+
+
+def test_cleanup_scrubs_legacy_and_expires_record_and_package(tmp_path, monkeypatch):
+    import json
+    import os
+
+    job_id = "prfix-" + "2" * 32
+    path, bundle = pr_approval._paths(tmp_path, job_id)
+    (tmp_path / "state").mkdir()
+    path.parent.mkdir(parents=True)
+    path.write_text(json.dumps({"reply": "legacy draft", "approved_reply": "legacy edit"}))
+    os.utime(path, (100, 100))
+    backup = path.with_suffix(".json.bak")
+    backup.write_text("legacy draft")
+    bundle.write_bytes(b"package")
+    expires = 100 + pr_approval.RETENTION_SECONDS
+    monkeypatch.setattr(pr_approval.time, "time", lambda: expires - 1)
+    pr_approval.cleanup(tmp_path)
+    assert json.loads(path.read_text()) == {"has_reply": True, "expires_at": expires}
+    assert bundle.exists() and not backup.exists()
+    monkeypatch.setattr(pr_approval.time, "time", lambda: expires)
+    pr_approval.cleanup(tmp_path)
+    assert not path.exists() and not bundle.exists()

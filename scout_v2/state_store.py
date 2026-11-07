@@ -37,7 +37,7 @@ def business_now(tz_name: str = "Asia/Shanghai") -> dt.datetime:
 
 
 @contextmanager
-def queue_transaction(root: Path, *, path: Path | None = None):
+def queue_transaction(root: Path, *, path: Path | None = None, backup: bool = True):
     """Serialize queue read/modify/write across threads and processes.
 
     A separate SQLite lock avoids nesting the quota database's transactions.
@@ -54,7 +54,7 @@ def queue_transaction(root: Path, *, path: Path | None = None):
         original = json.dumps(queue, ensure_ascii=False, sort_keys=True)
         yield queue
         if original != json.dumps(queue, ensure_ascii=False, sort_keys=True):
-            atomic_json_write(path, queue)
+            atomic_json_write(path, queue, backup=backup)
         conn.execute("COMMIT")
     except BaseException:
         if conn.in_transaction:

@@ -219,6 +219,7 @@ class TestStagedCandidates:
             "docker/compose#1": {"id": "docker/compose#1", "repo": "docker/compose", "number": 1,
                         "status": "staged", "blockers": [],
                         "staged_at": self._ts(1.0),
+                        "eligible_at": self._ts(0.2),
                         "discovered_at": self._ts(1.0),
                         "ai_verdict": {"usable": True}},
         })

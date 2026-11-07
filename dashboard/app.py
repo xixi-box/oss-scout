@@ -561,6 +561,11 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
             _t.sleep(120)
             while True:
                 try:
+                    from scout_v2.pr_approval import cleanup
+                    cleanup(root)
+                except Exception as exc:
+                    _audit(root, "pr_approval_cleanup_error", "-", str(exc)[:160])
+                try:
                     from scripts import monitor_prs as mod
                     results = mod.run(dry_run=False)
 
@@ -1302,6 +1307,12 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
             from starlette.concurrency import run_in_threadpool
 
             def deliver():
+                if body.get("kind") == "followup":
+                    from scripts.monitor_prs import is_human_followup_author
+                    trigger = body.get("trigger") or {}
+                    if not is_human_followup_author(str(trigger.get("author") or ""), trigger.get("author_type")):
+                        _audit(root, "pr_followup_no_approval", key, "non-human trigger")
+                        return {"ok": True, "outcome": "no_approval"}
                 record = pr_approval.stage(root, body)
                 if not record:
                     _audit(root, "pr_followup_no_approval", key, str(body.get("test_result"))[:200])
@@ -1311,13 +1322,15 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
                     if not chat:
                         raise RuntimeError("Feishu approval chat unavailable")
                     ok, detail = feishu_app.send_card_to_chat(
-                        chat, feishu_app.build_pr_approval_card(record),
+                        chat, feishu_app.build_pr_approval_card(
+                            record, draft=str(body.get("reply") or "").strip()[:1000]),
                         message_uuid=record["job_id"])
                     if not ok or not detail:
                         raise RuntimeError(f"Feishu approval delivery failed: {detail}")
                     path, _ = pr_approval._paths(root, record["job_id"])
-                    with queue_transaction(root, path=path) as stored:
-                        stored.update(message_id=detail, chat_id=chat)
+                    with queue_transaction(root, path=path, backup=False) as stored:
+                        if stored:
+                            stored.update(message_id=detail, chat_id=chat)
                     _audit(root, "pr_approval_ready", key, record["job_id"])
                 return {"ok": True}
 
@@ -1353,21 +1366,6 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
         _mark_reply(key, "draft", **extra)
         _audit(root, "pr_fix_result", key,
                f"pushed={pushed} test={str(body.get('test_result'))[:80]}")
-        if pushed and body.get("kind") == "review" and body.get("review_comment_id"):
-            def draft_after_push():
-                try:
-                    from scripts.monitor_prs import draft_reply, pr_state
-                    state = pr_state(repo, num)
-                    state.update(pr_title=state.get("title"), pr_url=state.get("url"),
-                                 pr_body=state.get("body"), review_comment_id=body["review_comment_id"])
-                    state["fix_result"] = extra
-                    draft = draft_reply(repo, num, context=state)
-                    if draft.get("drafted"):
-                        _audit(root, "pr_reply_drafted", key, "drafted=True after repair")
-                        _notify_draft(root, state, draft)
-                except Exception as exc:
-                    _audit(root, "pr_draft_error", key, str(exc)[:200])
-            _thr.Thread(target=draft_after_push, daemon=True).start()
         return JSONResponse({"ok": True})
 
     @app.post("/api/pr/bitable/sync")
@@ -1452,7 +1450,10 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
         action = (event.get("action") or {})
         form_value = action.get("form_value") or {}
         value = action.get("value") or {}
+        if value.get("do") == "preview_pr_followup":
+            return JSONResponse({"toast": {"type": "info", "content": "演示成功，未向 GitHub 写入"}})
         if value.get("do") == "approve_pr_followup":
+            import sqlite3
             from scout_v2 import feishu_app, pr_approval
             job_id = str(value.get("job_id") or "")
             context = event.get("context") or {}
@@ -1461,35 +1462,56 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
             try:
                 path, _ = pr_approval._paths(root, job_id)
                 record = json.loads(path.read_text(encoding="utf-8"))
+                expires = record.get("expires_at") or path.stat().st_mtime + pr_approval.RETENTION_SECONDS
             except (ValueError, OSError):
-                return JSONResponse({"toast": {"type": "error", "content": "审批记录不存在"}})
+                return JSONResponse({"toast": {"type": "error", "content": "审批记录已过期或不存在"}})
             operator = (event.get("operator") or {}).get("open_id") or body.get("open_id")
             allowed = os.environ.get("FEISHU_PR_APPROVER_OPEN_ID", "").strip()
             if (not msg_id or msg_id != record.get("message_id")
                     or not operator or (allowed and operator != allowed)):
                 return JSONResponse({"toast": {"type": "error", "content": "无法验证审批人或卡片"}}, status_code=403)
             edited = form_value.get("reply_text")
+            if time.time() >= expires:
+                return JSONResponse({"toast": {"type": "error", "content": "审批已过期（保留 7 天）"}})
+            if record.get("source_author"):
+                from scripts.monitor_prs import is_human_followup_author
+                if not is_human_followup_author(record["source_author"]):
+                    return JSONResponse({"toast": {"type": "info", "content": "这是机器人通知，无需发布"}})
+            if not record.get("complete") and record.get("has_reply", bool(record.get("reply"))):
+                if not isinstance(edited, str) or (not record.get("commit_sha") and not edited.strip()):
+                    return JSONResponse({"toast": {"type": "error", "content": "请确认卡片已填写并提交回复"}})
 
             def approve():
                 key = f"{record['repo']}#{record['number']}"
                 try:
                     done = pr_approval.publish(root, job_id, edited if isinstance(edited, str) else None,
                                                _post_pr_comment)
-                    if done.get("commit_sha"):
-                        _mark_reply(key, "sent" if done.get("approved_reply") else "completed",
+                    if done.get("already_complete"):
+                        return
+                    if done.get("pushed"):
+                        _mark_reply(key, "sent" if done.get("reply_status") == "sent" else "completed",
                                     fix_state="pushed", fix_sha=done["commit_sha"], fix_fork=done["fork_repo"])
                         _audit(root, "pr_fix_result", key, f"pushed=True commit={done['commit_sha']}")
-                    if done.get("approved_reply"):
+                    if done.get("reply_status") == "sent":
                         _audit(root, "pr_reply_sent", key, job_id)
-                    card = feishu_app.build_pr_approval_card(done, complete=True)
+                    elif done.get("reply_status") == "failed":
+                        _audit(root, "pr_reply_failed", key, job_id)
+                    card = feishu_app.build_pr_approval_card(
+                        done, complete=True, draft=(edited or "").strip()[:1000])
+                except sqlite3.OperationalError as exc:
+                    if "locked" in str(exc):
+                        return
+                    _audit(root, "pr_approval_failed", key, str(exc)[:200])
+                    card = feishu_app.build_pr_approval_card(
+                        record, draft=(edited or "").strip()[:1000], error="确认未完成，请稍后重试")
                 except Exception as exc:
                     _audit(root, "pr_approval_failed", key, str(exc)[:200])
-                    card = feishu_app.build_pr_approval_card(record, error=f"确认未完成：{exc}")
+                    card = feishu_app.build_pr_approval_card(
+                        record, draft=(edited or "").strip()[:1000], error=f"确认未完成：{exc}")
                 feishu_app.update_card_message(msg_id, card)
 
             if record.get("complete"):
-                return JSONResponse({"card": {"type": "raw", "data":
-                                     feishu_app.build_pr_approval_card(record, complete=True)}})
+                return JSONResponse({"toast": {"type": "info", "content": "这张卡片已处理，请查看卡片结果"}})
             _thr.Thread(target=approve, daemon=True).start()
             return JSONResponse({"toast": {"type": "info", "content": "已收到确认，完成后会更新这张卡片"}})
         repo = str(value.get("repo") or form_value.get("repo") or "").strip()
@@ -1680,7 +1702,7 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
         except Exception:  # noqa: BLE001
             seen = {}
         watch_path = root / "state" / "pr_watch.jsonl"
-        from scripts.monitor_prs import _classify_by_rules, _is_noise_bot, MY_LOGINS
+        from scripts.monitor_prs import _classify_by_rules, is_human_followup_author
 
         fresh = 0
         for ev in raw[:200]:
@@ -1698,8 +1720,7 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
                          "repo": repo, "number": num}
             author = str(ev.get("author") or "")
             comment = str(ev.get("body") or "")
-            human = bool(author and author not in MY_LOGINS and not author.endswith("[bot]")
-                         and not _is_noise_bot(author, comment))
+            human = is_human_followup_author(author)
             action = _classify_by_rules(comment, {"author": {"login": author}})[0] if human else "wait"
             rec = {"ts": time.strftime("%Y-%m-%dT%H:%M:%S"), "source": "worker",
                    "repo": repo, "number": num, "action": action,

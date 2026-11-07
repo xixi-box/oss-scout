@@ -151,6 +151,12 @@ def _is_noise_bot(author: str, body: str) -> bool:
     # bot 发的是"认领/冲突"信息时仍然要留痕，交给后面的规则判
     return not PATTERNS[4][1].search(body or "")
 
+
+def is_human_followup_author(author: str, author_type: str | None = None) -> bool:
+    login = author.lower()
+    return bool(login and login not in (*MY_LOGINS, "sre-ci-robot")
+                and not login.endswith("[bot]") and author_type != "Bot")
+
 # 分类结果缓存：key = "repo#num@created_at"。
 # 监控每 15 分钟扫一遍所有 open PR，没有缓存就是每轮重判同一批评论。
 # 只看最新一条评论，所以缓存键带上它的时间戳就够——新评论自然是新键。
@@ -529,9 +535,8 @@ def _dispatch_pr_fix(repo: str, number: int, *, dry_run: bool = False,
     if kind == "followup":
         from datetime import datetime, timedelta, timezone
         thread = _thread(repo, number, limit=None)
-        human = [c for c in thread if c["body"].strip() and c["author"]
-                 and c["author"] not in MY_LOGINS and c["author_type"] != "Bot"
-                 and not c["author"].endswith("[bot]") and not _is_noise_bot(c["author"], c["body"])]
+        human = [c for c in thread if c["body"].strip()
+                 and is_human_followup_author(c["author"], c.get("author_type"))]
         if comment_id is not None:
             human = [c for c in human if c["comment_id"] == comment_id and c["source"] == source_kind]
         else:
