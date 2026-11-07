@@ -485,31 +485,19 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6) -> dict:
             return summary
         summary["steps"].append("restricted lane: maintainer-confirmed")
 
-    # Re-screen against current context at consumption, including fresh queue items.
-    from dashboard.data import refresh_issue, repo_rules_text
-    from .issue_scorer import GoClient, load_scorer_config
-    try:
-        fresh = refresh_issue(entry)
-        cfg = load_scorer_config(root)
-        if not cfg.get("api_key"):
-            raise RuntimeError("no scorer configured")
-        verdict = GoClient(key=cfg["api_key"], model=cfg.get("model", "deepseek-v4.1-flash")).score_issue({
-            **fresh, "comments": fresh["issue_comments"], "num_comments": fresh["comments"],
-            "repo_rules": repo_rules_text(repo)})
-        if verdict.get("usable") is None:
-            raise RuntimeError(verdict.get("reason") or "AI unavailable")
-    except Exception as ex:
-        mark_candidate(root, key, str(entry.get("status") or "new"),
-                       extra={"screen_retry_at": (business_now() + dt.timedelta(minutes=5)).isoformat(),
-                              "abort_reason": str(ex)[:200]})
-        return {**summary, "abort": "screening unavailable; retained"}
-    if verdict.get("usable") is False:
-        mark_candidate(root, key, "aborted_stale", extra={"abort_reason": verdict.get("reason")})
-        return {**summary, "abort": "AI re-screen rejected"}
-    entry.update(fresh)
-    entry["ai_verdict"] = verdict
-    mark_candidate(root, key, str(entry.get("status") or "new"),
-                   extra={**fresh, "ai_verdict": verdict, "screened_at": business_now().isoformat()})
+    # The inbox already made the AI decision. This stage only verifies live facts.
+    approved = (entry.get("ai_verdict") or {}).get("usable")
+    if approved is None:
+        approved = (entry.get("ai_grade") or {}).get("grade") == "A"
+    if approved is not True:
+        mark_candidate(root, key, "escalated", extra={"abort_reason": "no approved screening verdict"})
+        return _abort_release("candidate has no approved screening verdict")
+    if getattr(recheck, "issue_title", None) is not None:
+        if ((entry.get("ai_verdict") or {}).get("provider") == "codiv"
+                and (recheck.issue_title != entry.get("title") or recheck.issue_body != entry.get("body_excerpt"))):
+            mark_candidate(root, key, "escalated", extra={"abort_reason": "issue title or body changed after screening"})
+            return _abort_release("issue title or body changed after screening")
+        entry = {**entry, "title": recheck.issue_title, "body_excerpt": recheck.issue_body}
 
     # ---- 认领闸 ----
     # 同一条候选今天的尝试次数上限：2026-11-03 实测 deer-flow#7846 在一天内被

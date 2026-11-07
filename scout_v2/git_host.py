@@ -111,6 +111,30 @@ class RecheckResult:
     is_duplicate: bool = False
     duplicate_of: int | None = None     # 主 issue 编号（正文 "duplicate of #N"）
     errors: list[str] = field(default_factory=list)
+    issue_title: str | None = None
+    issue_body: str = ""
+
+
+def linked_fix_prs(timeline: list, number: int, my_login: str = "xixi-box") -> list[dict]:
+    """Return active cross-references and merged PRs explicitly referencing this issue."""
+    linked = []
+    for event in timeline:
+        if not isinstance(event, dict) or event.get("event") != "cross-referenced":
+            continue
+        src = (event.get("source") or {}).get("issue") or {}
+        pr = src.get("pull_request")
+        if not pr:
+            continue
+        author = str((src.get("user") or {}).get("login") or "")
+        if author.lower() == my_login.lower():
+            continue
+        state = str(src.get("state") or pr.get("state") or "").lower()
+        merged = src.get("merged_at") or pr.get("merged_at") or pr.get("merged")
+        text = f"{src.get('title') or ''}\n{src.get('body') or ''}"
+        if (state != "closed" and not merged) or (merged and _explicit_issue_ref(text, number)):
+            linked.append({"url": src.get("html_url") or pr.get("html_url"), "author": author,
+                           "state": "merged" if merged else state, "title": src.get("title")})
+    return linked
 
 
 def recheck_candidate(repo: str, number: int, *, my_login: str = "xixi-box",
@@ -126,7 +150,8 @@ def recheck_candidate(repo: str, number: int, *, my_login: str = "xixi-box",
             errs.append("comments fetch failed")
         return RecheckResult(complete=False, errors=errs)
 
-    r = RecheckResult(complete=True)
+    r = RecheckResult(complete=True, issue_title=issue.get("title") or "",
+                      issue_body=issue.get("body") or "")
     r.issue_open = issue.get("state") == "open"
     assignees = [a.get("login", "") for a in issue.get("assignees") or []]
     r.unassigned = not assignees
@@ -176,39 +201,7 @@ def recheck_candidate(repo: str, number: int, *, my_login: str = "xixi-box",
         r.complete = False
         r.errors.append("timeline fetch failed")
     else:
-        for ev in timeline:
-            if not isinstance(ev, dict) or ev.get("event") != "cross-referenced":
-                continue
-            src = (ev.get("source") or {}).get("issue") or {}
-            pr = src.get("pull_request")
-            if not pr:
-                continue
-            # 自己开的 PR 不算竞争：timeline 的 cross-referenced 拿走的是
-            # source.issue，作者在 source.issue.user.login。不排除的话，我们
-            # 开出的 PR 会让同一个 issue 在后续复检里永久判成 competed。
-            # 这条必须先于状态判断：我们自己 PR 的 body 总写着 Fixes #N。
-            author = str(((src.get("user") or {}).get("login")) or "")
-            if author and author.lower() == my_login.lower():
-                continue
-            # timeline 里 PR 的 state 在 source.issue.state（不在 pull_request
-            # 内），2026-10-28 实测返回 {"state":"closed"}。已关闭未合并 =
-            # 弃坑，不算竞争（自己关掉测试 PR 后事件仍在 timeline 里，
-            # 不复检这个字段会让该 issue 被永久拒绝）。
-            state = str(src.get("state") or pr.get("state") or "").lower()
-            merged = (src.get("merged_at") or pr.get("merged_at")
-                      or pr.get("merged"))
-            if state != "closed" and not merged:
-                r.has_cross_ref_pr = True
-                break
-            # 文本级直接关联（deer-flow#7883 实录：竞争 PR #7887 body 写
-            # "Refs #7883"，18.5h 后合并）：已合并 PR 的标题/正文若明写
-            # "#<候选号>"，照样拦。Refs 类引用不自动关 issue，修复落地后
-            # issue 仍 open——认领这种"已修好仍开放"的 issue 必是重复劳动。
-            # 已关闭未合并（弃坑）维持放行。
-            src_text = f"{src.get('title') or ''}\n{src.get('body') or ''}"
-            if merged and _explicit_issue_ref(src_text, number):
-                r.has_cross_ref_pr = True
-                break
+        r.has_cross_ref_pr = bool(linked_fix_prs(timeline, number, my_login))
     import urllib.parse as _up
     # 只看 open PR：已关闭/已合并的历史尝试不算竞争（与 cross-ref 判定一致）。
     #

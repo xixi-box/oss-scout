@@ -59,8 +59,16 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", type=Path, default=Path(os.environ.get("OSSCOUT_DASHBOARD_ROOT", "/data")))
     parser.add_argument("--worker", action="store_true")
+    parser.add_argument("--screening", action="store_true")
     args = parser.parse_args()
     result = inspect(args.root)
+    if args.screening:
+        from scout_v2.workers.openjev import OpenJevClient
+        sample = {"title": "Synthetic parser crash with empty input",
+                  "body": "The attached two-line reproduction makes parse([]) raise IndexError. "
+                          "Expected an empty result. A focused unit test covers this path.",
+                  "comments": [], "linked_pull_requests": []}
+        result["screening_probe"] = OpenJevClient().score_issue(sample)
     if args.worker:
         import urllib.request
         cfg = yaml.safe_load((args.root / "configs/cloudflare.yaml").read_text(encoding="utf-8"))
@@ -75,6 +83,8 @@ def main() -> int:
     print(json.dumps(result, ensure_ascii=False, indent=2))
     assert result["repositories"] == 50, "repository count changed"
     assert result["daily_cap"] == 5, "daily cap drift"
+    if args.screening:
+        assert result["screening_probe"]["usable"] is not None, "OpenJev screening probe failed"
     return 0
 
 

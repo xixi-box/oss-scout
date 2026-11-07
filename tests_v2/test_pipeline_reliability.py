@@ -20,8 +20,6 @@ def intake(tmp_path, monkeypatch):
                           repo_lane=lambda _: "open")
     monkeypatch.setattr(p.PolicyEngine, "load", lambda _: (eng, None))
     monkeypatch.setattr(d, "repo_rules_text", lambda _: "test rules")
-    monkeypatch.setattr("scout_v2.workers.issue_scorer.load_scorer_config",
-                        lambda _: {"api_key": "fake"})
     ds = SimpleNamespace(root=tmp_path, _cached=lambda k, ttl, fn: fn())
     issue = {"repo": "a/b", "number": 1, "title": "Parser returns wrong value",
              "body_excerpt": "parse('x') returns 2; expected 1"}
@@ -30,7 +28,7 @@ def intake(tmp_path, monkeypatch):
 
 def test_short_precise_report_reaches_ai(intake):
     ds, issue = intake
-    with patch("scout_v2.workers.issue_scorer.GoClient") as cls:
+    with patch("scout_v2.workers.openjev.OpenJevClient") as cls:
         cls.return_value.score_issue.return_value = {"usable": True, "reason": "repro"}
         assert d.ingest_cloudflare_issues(ds, [issue])[0] == 1
 
@@ -38,7 +36,7 @@ def test_short_precise_report_reaches_ai(intake):
 def test_ai_failure_is_retryable(intake):
     ds, issue = intake
     issue["body_excerpt"] *= 20
-    with patch("scout_v2.workers.issue_scorer.GoClient") as cls:
+    with patch("scout_v2.workers.openjev.OpenJevClient") as cls:
         cls.return_value.score_issue.return_value = {"usable": None, "reason": "timeout"}
         assert d.ingest_cloudflare_issues(ds, [issue])[0] == 0
         cls.return_value.score_issue.return_value = {"usable": True, "reason": "repro"}
@@ -48,9 +46,40 @@ def test_ai_failure_is_retryable(intake):
 def test_mechanical_rejection_does_not_call_ai(intake):
     ds, issue = intake
     issue["labels"] = ["duplicate"]
-    with patch("scout_v2.workers.issue_scorer.GoClient") as cls:
+    with patch("scout_v2.workers.openjev.OpenJevClient") as cls:
         d.ingest_cloudflare_issues(ds, [issue])
         cls.return_value.score_issue.assert_not_called()
+
+
+def test_openjev_receives_actor_time_and_linked_pr_evidence(intake, monkeypatch):
+    import io
+    ds, issue = intake
+    issue.update(context_complete=True, reporter="author", reporter_association="CONTRIBUTOR",
+                 issue_comments=[{"author": "author", "association": "CONTRIBUTOR",
+                                  "created_at": "2026-11-07T00:01:00Z", "body": "Reproduction added"}])
+    monkeypatch.setenv("TYPESAFE_API_KEY", "test-key")
+    monkeypatch.setenv("TYPESAFE_BASE_URL", "https://api.codiv.ai")
+    monkeypatch.setenv("TYPESAFE_MODEL", "openjev-latest")
+    monkeypatch.setattr("scout_v2.git_host.gh_pages", lambda *a: [
+        {"event": "cross-referenced", "source": {"issue": {
+            "state": "open", "title": "Related PR", "html_url": "https://github.com/a/b/pull/8",
+            "pull_request": {"url": "https://api.github.com/repos/a/b/pulls/8"},
+            "user": {"login": "other"},
+        }}},
+    ])
+    calls = []
+    def request(req, timeout):
+        calls.append(json.loads(req.data))
+        return io.BytesIO(b'{"model":"openjev-0.1","answers":{"eligible":{"noul":0.8}}}')
+    monkeypatch.setattr("scout_v2.workers.openjev.urllib.request.urlopen", request)
+    assert d.ingest_cloudflare_issues(ds, [issue])[0] == 1
+    assert d.ingest_cloudflare_issues(ds, [issue])[0] == 0
+    assert len(calls) == 1
+    evidence = calls[0]["state"]
+    assert evidence["comments"][0]["is_reporter"]
+    assert evidence["comments"][0]["created_at"] == "2026-11-07T00:01:00Z"
+    assert evidence["linked_pull_requests"][0]["url"].endswith("/8")
+    assert evidence["repo_rules"] == "test rules"
 
 
 def test_competed_candidate_exits_without_uninitialized_ledger(tmp_path, monkeypatch):
@@ -194,7 +223,8 @@ def test_failed_repair_does_not_spend_publication_quota(tmp_path, monkeypatch, i
     (tmp_path / "queue").mkdir()
     (tmp_path / "state").mkdir()
     entries = {f"docker/compose#{i}": {"id": f"docker/compose#{i}", "repo": "docker/compose", "number": i,
-                            "title": "Parser bug", "status": "new", "context_complete": True}
+                            "title": "Parser bug", "status": "new", "context_complete": True,
+                            "ai_verdict": {"usable": True, "provider": "codiv"}}
                for i in range(1, 8)}
     if include_staged:
         from scout_v2.state_store import business_now
@@ -213,11 +243,8 @@ def test_failed_repair_does_not_spend_publication_quota(tmp_path, monkeypatch, i
         has_cross_ref_pr=False, open_pr_hits=[], is_duplicate=False))
     monkeypatch.setattr("scout_v2.workers.cla.preflight", lambda *a: {"blocking": False})
     monkeypatch.setattr("scout_v2.workers.repair.resolve_model", lambda: "test")
-    monkeypatch.setattr(d, "refresh_issue", lambda entry: {**entry, "comments": 0, "issue_comments": []})
-    monkeypatch.setattr("scout_v2.workers.issue_scorer.load_scorer_config",
-                        lambda root: {"api_key": "fake", "model": "test"})
-    monkeypatch.setattr("scout_v2.workers.issue_scorer.GoClient.score_issue",
-                        lambda self, issue: {"usable": True, "reason": "reproduced"})
+    monkeypatch.setattr("scout_v2.workers.openjev.OpenJevClient.score_issue",
+                        lambda *a: pytest.fail("consumption must not call AI"))
     monkeypatch.setattr(p.subprocess, "run", lambda *a, **kw: SimpleNamespace(
         returncode=0, stdout="a" * 40, stderr=""))
     monkeypatch.setattr(p, "_build_router", lambda *a: SimpleNamespace(
@@ -291,7 +318,7 @@ def test_http_ingest_durably_accepts_entire_batch(tmp_path, monkeypatch):
     issues = [{"repo": "a/b", "number": i, "body_excerpt": "x" * 16000,
                "issue_comments": [{"author": "maintainer", "body": "stop"}]}
               for i in range(1, 202)]
-    with patch("scout_v2.workers.issue_scorer.GoClient.score_issue") as score:
+    with patch("scout_v2.workers.openjev.OpenJevClient.score_issue") as score:
         response = TestClient(app).post("/api/ingest/issues", json={"issues": issues},
                                        headers={"X-Ingest-Token": "test"})
         assert response.status_code == 200

@@ -595,8 +595,8 @@ def test_ingest_with_ai_score(fixture_root, monkeypatch):
             return {"usable": True, "reason": "clear crash", "model": "m"}
 
     import dashboard.data as DD
-    import scout_v2.workers.issue_scorer as isc
-    monkeypatch.setattr(isc, "GoClient", FakeScorer)
+    import scout_v2.workers.openjev as isc
+    monkeypatch.setattr(isc, "OpenJevClient", FakeScorer)
     from dashboard.data import DataSource, ingest_cloudflare_issues
     ds = DataSource(fixture_root)
     queued, added = ingest_cloudflare_issues(ds, [{

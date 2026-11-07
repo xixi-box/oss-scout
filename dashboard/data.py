@@ -809,12 +809,17 @@ def refresh_issue(item: dict) -> dict:
             break
         page += 1
     return {**item, "title": issue.get("title") or "", "body_excerpt": issue.get("body") or "",
+            "created_at": issue.get("created_at"), "state_reason": issue.get("state_reason"),
+            "reporter": (issue.get("user") or {}).get("login"),
+            "reporter_association": issue.get("author_association"),
+            "reactions": (issue.get("reactions") or {}).get("total_count", 0),
             "updated_at": issue.get("updated_at") or "", "state": issue.get("state"),
             "pull_request": bool(issue.get("pull_request")), "assignees": issue.get("assignees") or [],
             "labels": [l["name"] for l in issue.get("labels") or []],
             "comments": len(comments), "context_complete": True,
             "issue_comments": [{"author": (c.get("user") or {}).get("login", "?"),
                                 "association": c.get("author_association", ""),
+                                "created_at": c.get("created_at"), "updated_at": c.get("updated_at"),
                                 "body": c.get("body") or ""} for c in comments]}
 
 
@@ -823,12 +828,12 @@ def ingest_cloudflare_issues(ds, items: list[dict]) -> tuple[int, list[str]]:
     import hashlib
     from scout_v2.state_store import atomic_json_write, queue_transaction, business_now
     from scout_v2.repo_policy import PolicyEngine
-    from scout_v2.workers.issue_scorer import load_scorer_config, GoClient
+    from scout_v2.git_host import gh_pages, linked_fix_prs
+    from scout_v2.workers.openjev import OpenJevClient
     eng, err = PolicyEngine.load(ds.root)
     if err or eng is None:
         raise RuntimeError(f"policy unavailable: {err}")
-    scorer_cfg = load_scorer_config(ds.root)
-    scorer = GoClient(key=scorer_cfg["api_key"], model=scorer_cfg.get("model", "deepseek-v4.1-flash")) if scorer_cfg.get("api_key") else None
+    scorer = OpenJevClient()
     seen_path = ds.root / "state/seen.json"
     added = []
     excluded = {"invalid", "wontfix", "duplicate", "question", "stale", "documentation",
@@ -853,15 +858,30 @@ def ingest_cloudflare_issues(ds, items: list[dict]) -> tuple[int, list[str]]:
             blockers.append("not_open_unassigned_issue")
         if excluded.intersection(l.lower() for l in labels):
             blockers.append("excluded_label")
+        if it.get("state_reason") == "duplicate":
+            blockers.append("confirmed_duplicate")
         title, body = str(it.get("title") or ""), str(it.get("body_excerpt") or "")
         claim_sents = _claimish_sentences(body)
-        verdict = {"usable": None, "reason": "no scorer configured"}
-        if not blockers and scorer is not None:
+        verdict = {"usable": None, "reason": "not screened"}
+        if not blockers:
             try:
+                timeline = gh_pages(f"repos/{repo}/issues/{number}/timeline", 100) if it.get("context_complete") else []
+                if timeline is None:
+                    raise RuntimeError("issue timeline unavailable")
+                reporter = it.get("reporter")
                 verdict = scorer.score_issue({
-                    **it, "repo": repo, "number": number, "title": title, "labels": labels,
+                    "repo": repo, "number": number, "title": title, "labels": labels,
+                    "body": body, "issue_url": it.get("url"),
+                    "state": it.get("state"), "state_reason": it.get("state_reason"),
+                    "created_at": it.get("created_at"), "updated_at": it.get("updated_at"),
+                    "reporter": reporter, "reporter_association": it.get("reporter_association"),
+                    "assignees": [a.get("login") for a in it.get("assignees") or []],
+                    "reactions": it.get("reactions", 0), "lane": lane,
                     "num_comments": int(it.get("comments") or 0),
-                    "comments": it.get("issue_comments") or [{"author": "body signal", "body": x} for x in claim_sents],
+                    "comments": [{**c, "is_reporter": bool(reporter and c.get("author") == reporter)}
+                                 for c in it.get("issue_comments") or []],
+                    "linked_pull_requests": linked_fix_prs(timeline, number),
+                    "claim_evidence_in_body": claim_sents,
                     "reporter_offered_fix": bool(_RE_OFFER.search(body)),
                     "claimish_signal": bool(claim_sents),
                     "repo_rules": repo_rules_text(repo)})
@@ -872,6 +892,8 @@ def ingest_cloudflare_issues(ds, items: list[dict]) -> tuple[int, list[str]]:
                "status": "blocked" if blockers else "queued" if verdict.get("usable") is True else
                          "rejected" if verdict.get("usable") is False else "retry",
                "coarse_reason": ",".join(blockers), "fine_reason": str(verdict.get("reason") or "")[:300]}
+        if not blockers:
+            rec["ai_verdict"] = verdict
         with queue_transaction(ds.root) as q:
             seen = _read_json(seen_path, {})()
             if not blockers and verdict.get("usable") is True and key not in q:

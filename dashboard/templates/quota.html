@@ -35,7 +35,7 @@
         <select name="model" class="lane-select" style="min-width:260px">
           {% for m in go_models %}<option value="{{ m }}" {{ 'selected' if m == scorer_cfg.get('model') }}>{{ m }}</option>{% endfor %}
         </select>
-        <button class="btn btn-ghost" type="submit">设为评分模型</button>
+        <button class="btn btn-ghost" type="submit">设为 PR 评论模型</button>
       </form>
       <form method="post" action="/api/opencode/logout" class="inline-form">
         <button class="btn btn-logout" type="submit">退出 OpenCode 登录</button>
@@ -45,7 +45,8 @@
     <a class="btn btn-primary" style="text-decoration:none" href="https://opencode.ai/auth" target="_blank" rel="noopener">登录 OpenCode</a>
     <p class="small muted mt">未检测到登录态（模型列表拉取失败或未登录）。登录后此页会自动显示模型选择。</p>
     {% endif %}
-    <p class="small mt">评分模型：<code>{{ scorer_cfg.get('model', 'deepseek-v4.1-flash') }}</code>（默认 deepseek-v4.1-flash；用于 issue AI 评分，记订阅额度）</p>
+    <p class="small mt">PR 评论分类与回复草稿：<code>{{ scorer_cfg.get('model', 'deepseek-v4.1-flash') }}</code></p>
+    <p class="small">Issue 细筛由 Codiv OpenJev 执行。</p>
     <p>allow_paid_api: <span class="chip {{ 'chip-green' if opencode.allow_paid_api }}">{{ opencode.allow_paid_api }}</span></p>
     <h3 class="mt">401/402/429 错误统计（worklog model/auth）</h3>
     {% if opencode.errors %}

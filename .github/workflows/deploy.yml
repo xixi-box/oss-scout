@@ -95,6 +95,9 @@ jobs:
       DASHBOARD_PASSWORD: ${{ secrets.DASHBOARD_PASSWORD }}
       GH_TOKEN: ${{ secrets.GH_TOKEN }}
       OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+      TYPESAFE_API_KEY: ${{ secrets.TYPESAFE_API_KEY }}
+      TYPESAFE_BASE_URL: ${{ vars.TYPESAFE_BASE_URL || 'https://api.codiv.ai' }}
+      TYPESAFE_MODEL: ${{ vars.TYPESAFE_MODEL || 'openjev-latest' }}
       MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
       MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
       # Cloudflare 凭据：2026-10-31 仓库转公开，token 从 configs/cloudflare.yaml
@@ -151,6 +154,9 @@ jobs:
                 - DASHBOARD_PASSWORD=\${DASHBOARD_PASSWORD}
                 - GH_TOKEN=\${GH_TOKEN}
                 - OPENCODE_API_KEY=\${OPENCODE_API_KEY}
+                - TYPESAFE_API_KEY=\${TYPESAFE_API_KEY}
+                - TYPESAFE_BASE_URL=\${TYPESAFE_BASE_URL}
+                - TYPESAFE_MODEL=\${TYPESAFE_MODEL}
                 - MODAL_TOKEN_ID=\${MODAL_TOKEN_ID}
                 - MODAL_TOKEN_SECRET=\${MODAL_TOKEN_SECRET}
                 - CF_API_TOKEN=\${CF_API_TOKEN}
@@ -177,6 +183,9 @@ jobs:
             echo "DASHBOARD_PASSWORD=$DASHBOARD_PASSWORD"
             echo "GH_TOKEN=$GH_TOKEN"
             echo "OPENCODE_API_KEY=$OPENCODE_API_KEY"
+            echo "TYPESAFE_API_KEY=$TYPESAFE_API_KEY"
+            echo "TYPESAFE_BASE_URL=$TYPESAFE_BASE_URL"
+            echo "TYPESAFE_MODEL=$TYPESAFE_MODEL"
             echo "MODAL_TOKEN_ID=$MODAL_TOKEN_ID"
             echo "MODAL_TOKEN_SECRET=$MODAL_TOKEN_SECRET"
             echo "CF_API_TOKEN=$CF_API_TOKEN"
@@ -214,4 +223,4 @@ jobs:
             sleep 2
           done
           curl -fsS --max-time 5 http://127.0.0.1:18787/login > /dev/null
-          docker exec oss-scout python /app/scripts/runtime_status.py
+          docker exec oss-scout python /app/scripts/runtime_status.py --screening

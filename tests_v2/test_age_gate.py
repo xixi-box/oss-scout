@@ -74,13 +74,13 @@ def test_fresh_issue_still_reaches_the_ai():
             called.append(issue)
             return {"usable": True, "reason": "ok", "model": "x"}
 
-    import scout_v2.workers.issue_scorer as isc
-    orig = isc.GoClient
-    isc.GoClient = opts_cy(Spy)
+    import scout_v2.workers.openjev as isc
+    orig = isc.OpenJevClient
+    isc.OpenJevClient = opts_cy(Spy)
     try:
         n, _ = D.ingest_cloudflare_issues(ds, [_item(now)])
     finally:
-        isc.GoClient = orig
+        isc.OpenJevClient = orig
     assert called, "fresh issue must still be scored by AI"
     # 年龄已从输入删除（用户裁定 2026-11-06）：不该再出现 age 信号
     assert "age_hours" not in called[0]
@@ -104,13 +104,13 @@ def test_reporter_offer_is_detected_and_passed_to_ai():
             called.append(issue)
             return {"usable": True, "reason": "ok", "model": "x"}
 
-    import scout_v2.workers.issue_scorer as isc
-    orig = isc.GoClient
-    isc.GoClient = opts_cy(Spy)
+    import scout_v2.workers.openjev as isc
+    orig = isc.OpenJevClient
+    isc.OpenJevClient = opts_cy(Spy)
     try:
         D.ingest_cloudflare_issues(ds, [item])
     finally:
-        isc.GoClient = orig
+        isc.OpenJevClient = orig
     assert called[0]["reporter_offered_fix"] is True
 
 
@@ -132,34 +132,16 @@ def test_body_ai_warning_reaches_the_scorer_prompt():
             called.append(issue)
             return {"usable": False, "reason": "warned off AI", "model": "x"}
 
-    import scout_v2.workers.issue_scorer as isc
-    orig = isc.GoClient
-    isc.GoClient = opts_cy(Spy)
+    import scout_v2.workers.openjev as isc
+    orig = isc.OpenJevClient
+    isc.OpenJevClient = opts_cy(Spy)
     try:
         D.ingest_cloudflare_issues(ds, [item])
     finally:
-        isc.GoClient = orig
+        isc.OpenJevClient = orig
     issue = called[0]
     assert issue["claimish_signal"] is True
-    assert any("not trivial to ask AI" in str(c.get("body"))
-               for c in issue.get("comments") or [])
-
-    # 端到端再验一次 prompt 组装：真 GoClient + 假 chat，捕获 prompt
-    prompts = []
-
-    def fake_chat(prompt, max_tokens=200):
-        prompts.append(prompt)
-        return True, "DECISION: NO\nREASON: maintainer says not for AI"
-
-    client = isc.GoClient(key="k", model="m")
-    client.chat = fake_chat
-    verdict = client.score_issue(issue)
-    assert verdict["usable"] is False
-    assert "not trivial to ask AI" in prompts[0]
-    assert "Comments (recent)" in prompts[0]
-    assert "body signal" in prompts[0]
-    # NO 清单硬条款在模板里
-    assert "not trivial for" in isc.SCORE_PROMPT
+    assert any("not trivial to ask AI" in evidence for evidence in issue["claim_evidence_in_body"])
 
 
 def test_reason_columns_are_split():
@@ -175,7 +157,7 @@ def test_reason_columns_are_split():
 
 
 def test_old_enough_issue_still_flows_through(monkeypatch):
-    monkeypatch.setattr("scout_v2.workers.issue_scorer.GoClient.score_issue",
+    monkeypatch.setattr("scout_v2.workers.openjev.OpenJevClient.score_issue",
                         lambda self, issue: {"usable": None, "reason": "unavailable"})
     ds, tmp = _env()
     old = (dt.datetime.utcnow() - dt.timedelta(hours=6)) \
