@@ -1,7 +1,7 @@
 """清掉候选池里永远不会被派发的条目。
 
 2026-10-30 实录：池子从 173 换成 40 之后，/data 里还留着 127 条老仓库的候选。
-它们的状态是 new/queued，但 drain_ai_graded 只派发 ai_verdict.usable is True 的
+它们的状态是 new，但 drain_ai_graded 只派发 ai_verdict.usable is True 的
 条目，而这些是 AI 细筛接上之前入队的（usable 全 None），于是永久滞留在池子里
 当噪声：看板上的计数、每轮 drain 的扫描都被它们污染。
 
@@ -54,7 +54,7 @@ def main() -> int:
     q = json.loads(qpath.read_text(encoding="utf-8"))
     before = len(q)
 
-    ACTIVE = ("new", "queued", "queued_hist", "recheck_failed")
+    ACTIVE = ("new", "recheck_failed")
     drop_out_of_pool = [k for k, v in q.items()
                         if v.get("status") in ACTIVE and v.get("repo") not in pool]
     drop_no_verdict = [k for k, v in q.items()

@@ -98,6 +98,27 @@ class TestRowToFields:
         assert fb.cand_row_to_fields({"key": "a/b#9"})["键"][0]["link"] == "https://github.com/a/b/issues/9"
 
 
+    def test_single_select_migration_and_unchanged_options(self, monkeypatch):
+        spec = next(f for f in fb.CAND_FIELDS if f["field_name"] == "处理状态")
+        field = {"field_id": "fld1", "field_name": spec["field_name"], "type": 1}
+        updates = []
+
+        def request(method, url, payload=None, token=None):
+            if method == "GET":
+                return {"code": 0, "data": {"items": [field]}}
+            assert method == "PUT" and url.endswith("/fld1")
+            updates.append(payload)
+            field.update(payload)
+            return {"code": 0}
+
+        monkeypatch.setattr(fb.feishu_app, "tenant_token", lambda: "tok")
+        monkeypatch.setattr(fb.feishu_app, "_request", request)
+        fb.ensure_columns("base", "table", [spec])
+        fb.ensure_columns("base", "table", [spec])
+        assert updates == [spec]
+        options = spec["property"]["options"]
+        assert len({o["color"] for o in options}) == 3
+
     def test_coarse_rejection_does_not_claim_fine_screen_ran(self):
         fields = fb.scan_row_to_fields({"key": "a/b#9", "status": "blocked",
                                         "coarse_reason": "label", "fine_reason": "not screened"})
@@ -268,35 +289,32 @@ class TestLedgerScope:
 
 
 class TestCandidateRows:
-    """候选池表：黄=排队中（含等确认），绿=已解决（PR 已开出），
-    红=已失效（stale/竞争失败/超限/躺超 3 天没轮上）。"""
-
     def _entry(self, status, updated="2026-11-05T01:00:00"):
         return {"id": "a/b#9", "repo": "a/b", "number": 9, "title": "t",
                 "lane": "open", "status": status, "updated_at": updated,
                 "discovered_at": "2026-11-01T00:00:00",
                 "ai_verdict": {"usable": True, "reason": ""}, "blockers": []}
 
-    def test_candidate_table_only_keeps_queued(self, tmp_path, monkeypatch):
-        """候选池 = 当前真实在排队的（用户裁定 2026-11-05）。
-
-        已解决去 PR 记录表查；已失效/范围外/历史一律不进表——
-        表里不留死行，处理状态永远不会为空。
-        """
+    def test_candidate_table_tracks_real_actions_start(self, tmp_path):
         (tmp_path / "queue").mkdir()
         (tmp_path / "queue" / "candidates.json").write_text(json.dumps({
             "a/b#1": self._entry("new"),
-            "a/b#2": self._entry("pr_open"),                      # 已解决 → 踢
-            "a/b#3": self._entry("aborted_stale"),                # 已失效 → 踢
-            "a/b#4": self._entry("needs_maintainer_confirm"),     # 等确认 → 留
-            "a/b#5": self._entry("queued_hist"),                  # 历史 → 踢
-            "a/b#6": self._entry("out_of_scope"),                 # 范围外 → 踢
-            "a/b#7": self._entry("new", updated="2026-10-01T00:00:00"),  # 实际仍在排队 → 留
+            "a/b#2": self._entry("pr_open"),
+            "a/b#3": self._entry("aborted_stale"),
+            "a/b#4": self._entry("needs_maintainer_confirm"),
+            "a/b#5": self._entry("queued"),
+            "a/b#6": dict(self._entry("staged"), discovered_at=None,
+                          staged_at="2026-11-05T04:00:00+08:00"),
+            "a/b#7": self._entry("running"),
+            "A/B#8": self._entry("running"),
         }), encoding="utf-8")
-        rows = mp.build_candidate_rows(tmp_path)
-        states = {r["key"]: r["queue_state"] for r in rows}
-        assert set(states) == {"a/b#1", "a/b#4", "a/b#7"}
-        assert all(v == "排队中" for v in states.values())
+        rows = mp.build_candidate_rows(tmp_path, running_keys={"a/b#8"})
+        fields = {r["key"]: fb.cand_row_to_fields(r) for r in rows}
+        assert {k: f["处理状态"] for k, f in fields.items()} == {
+            "a/b#1": "待执行", "a/b#6": "暂存",
+            "a/b#7": "待执行", "A/B#8": "执行中",
+        }
+        assert fields["a/b#6"]["入队时间"] == fb._timestamp("2026-11-05T04:00:00+08:00")
 
     def test_scan_rows_carry_queue_state(self, tmp_path, monkeypatch):
         (tmp_path / "state").mkdir()

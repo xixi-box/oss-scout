@@ -21,13 +21,19 @@ CAND_TABLE_NAME = "候选池"
 SCAN_TABLE_NAME = "扫描发现"
 LINK_FIELDS = [{"field_name": "键", "type": 1}]
 DATE_FORMAT = {"date_formatter": "yyyy-MM-dd HH:mm"}
+def _status_field(name: str, colors: dict[str, int]) -> dict:
+    return {"field_name": name, "type": 3, "property": {"options": [
+        {"name": value, "color": color} for value, color in colors.items()
+    ]}}
+
+
 PR_FIELDS = [*LINK_FIELDS, {"field_name": "标题", "type": 1},
-             {"field_name": "PR 状态", "type": 1},
+             _status_field("PR 状态", {"open": 34, "merged": 40, "closed": 43}),
              {"field_name": "创建时间", "type": 5, "property": DATE_FORMAT}]
 SCAN_FIELDS = [*LINK_FIELDS, {"field_name": "发现时间", "type": 5, "property": DATE_FORMAT},
                *({"field_name": name, "type": 1} for name in ("最终结果", "粗筛结果", "细筛结果"))]
 CAND_FIELDS = [*LINK_FIELDS, {"field_name": "标题", "type": 1},
-               {"field_name": "处理状态", "type": 1},
+               _status_field("处理状态", {"待执行": 34, "暂存": 45, "执行中": 40}),
                {"field_name": "入队时间", "type": 5, "property": DATE_FORMAT}]
 
 
@@ -130,25 +136,40 @@ def scan_row_to_fields(row: dict) -> dict:
 def cand_row_to_fields(row: dict) -> dict:
     return {"键": link_key(row["key"], "issues"), "标题": row.get("title") or None,
             "处理状态": row.get("queue_state") or None,
-            "入队时间": _timestamp(row.get("discovered_at"))}
+            "入队时间": (_timestamp(row.get("discovered_at"))
+                         or _timestamp(row.get("staged_at")))}
 
 
 def ensure_columns(app_token: str, table_id: str, fields: list) -> None:
-    """Add the fields declared by the sync schema if they are missing."""
+    """Add missing fields and apply the managed single-select palettes."""
     tok = feishu_app.tenant_token()
-    body = feishu_app._request(
-        "GET", f"https://open.feishu.cn/open-apis/bitable/v1/apps/{app_token}"
-               f"/tables/{table_id}/fields?page_size=100", token=tok)
+    url = (f"https://open.feishu.cn/open-apis/bitable/v1/apps/{app_token}"
+           f"/tables/{table_id}/fields")
+    body = feishu_app._request("GET", f"{url}?page_size=100", token=tok)
     if body.get("code") not in (0, None):
         raise RuntimeError(f"list fields: {body.get('code')} {body.get('msg')}")
-    existing = {f.get("field_name") for f in (body.get("data") or {}).get("items") or []}
+    existing = {f["field_name"]: f for f in (body.get("data") or {}).get("items") or []}
     for spec in fields:
-        if spec.get("field_name") not in existing:
-            result = feishu_app._request(
-                "POST", f"https://open.feishu.cn/open-apis/bitable/v1/apps/{app_token}"
-                        f"/tables/{table_id}/fields", spec, token=tok)
-            if result.get("code") not in (0, None):
-                raise RuntimeError(f"create field {spec['field_name']}: {result.get('code')} {result.get('msg')}")
+        name = spec["field_name"]
+        field = existing.get(name)
+        if field is None:
+            result = feishu_app._request("POST", url, spec, token=tok)
+        elif spec["type"] == 3:
+            old_options = (field.get("property") or {}).get("options") or []
+            old = {option["name"]: option for option in old_options}
+            desired = spec["property"]["options"]
+            if field["type"] == 3 and [
+                {"name": option["name"], "color": option.get("color")} for option in old_options
+            ] == desired:
+                continue
+            # Keep option IDs so a palette update preserves existing selections.
+            options = [{**old.get(option["name"], {}), **option} for option in desired]
+            result = feishu_app._request("PUT", f"{url}/{field['field_id']}",
+                                         {**spec, "property": {"options": options}}, token=tok)
+        else:
+            continue
+        if result.get("code") not in (0, None):
+            raise RuntimeError(f"save field {name}: {result.get('code')} {result.get('msg')}")
 
 
 def find_or_create_table(app_token: str, table_name: str = TABLE_NAME,

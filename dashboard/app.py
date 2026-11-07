@@ -16,6 +16,7 @@ import hmac
 import json
 import os
 import secrets
+import threading
 import time
 from pathlib import Path
 
@@ -118,9 +119,13 @@ def _staged_flush_once(root: Path, cfg: dict) -> dict:
     return {"processed": len(results), "results": results}
 
 
-def _sync_bitables(root: Path) -> dict:
+_BITABLE_SYNC_LOCK = threading.Lock()
+
+
+def _sync_bitables(root: Path, *, ds=None, candidates_only=False, candidate_cache=None) -> dict:
     """Independent table snapshots; a failed source cannot clear remote data."""
     from scout_v2 import feishu_bitable as fb
+    from .console_activity import running_candidate_keys
     import importlib.util
     if not fb.configured(root):
         return {"configured": False}
@@ -135,19 +140,30 @@ def _sync_bitables(root: Path) -> dict:
         ("candidates", mod.build_candidate_rows, fb.CAND_TABLE_NAME, fb.CAND_FIELDS, fb.cand_row_to_fields, "cand_table_id", root / "queue/candidates.json"),
     ]
     for name, build, table, fields, convert, binding, source in tables:
+        if candidates_only and name != "candidates":
+            continue
         try:
-            # Builders tolerate corrupt/missing files by returning []; validate first.
-            if source:
-                raw = source.read_text(encoding="utf-8")
-                yaml.safe_load(raw) if source.suffix == ".yaml" else json.loads(raw)
-            rows = build(root)
-            if name == "pr" and not rows:
-                results[name] = {"skipped": "no complete GitHub snapshot"}
-                continue
-            results[name] = fb.sync_table(root, rows, table_name=table, fields=fields,
-                                          to_fields=convert, binding_key=binding,
-                                          allow_empty=source is not None)
-            _audit(root, "bitable_sync_" + name, table, json.dumps(results[name]))
+            with _BITABLE_SYNC_LOCK:
+                # Builders tolerate corrupt/missing files by returning []; validate first.
+                if source:
+                    raw = source.read_text(encoding="utf-8")
+                    yaml.safe_load(raw) if source.suffix == ".yaml" else json.loads(raw)
+                if name == "candidates":
+                    running = running_candidate_keys(ds if ds is not None else D.DataSource(root))
+                    rows = build(root, running)
+                    if candidates_only and candidate_cache is not None and rows == candidate_cache.get(name):
+                        continue
+                else:
+                    rows = build(root)
+                if name == "pr" and not rows:
+                    results[name] = {"skipped": "no complete GitHub snapshot"}
+                    continue
+                results[name] = fb.sync_table(root, rows, table_name=table, fields=fields,
+                                              to_fields=convert, binding_key=binding,
+                                              allow_empty=source is not None)
+                if name == "candidates" and candidate_cache is not None:
+                    candidate_cache[name] = rows
+                _audit(root, "bitable_sync_" + name, table, json.dumps(results[name]))
         except Exception as ex:
             results[name] = {"error": str(ex)[:200]}
             _audit(root, "bitable_sync_error", name, str(ex)[:200])
@@ -338,7 +354,7 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
                 _inflight.pop(key, None)
             current = _load_candidate(root, key) or {}
             if out.get("abort") != "dispatcher busy" and current.get("status") not in (
-                    "new", "queued", "recheck_failed", "staged"):
+                    "new", "recheck_failed", "staged"):
                 _dispatch(rescreen=rescreen)
 
     def _publications_left() -> int:
@@ -435,7 +451,7 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
                 from scout_v2.workers.auto_pipeline import _stage_candidates
                 queued = json.loads((root / "queue/candidates.json").read_text(encoding="utf-8"))
                 _stage_candidates(root, [k for k, e in queued.items()
-                                        if e.get("status") in ("new", "queued", "recheck_failed", "staged")])
+                                        if e.get("status") in ("new", "recheck_failed", "staged")])
                 return started
             room = min(room, left)
             if room <= 0:
@@ -675,12 +691,17 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
             if os.environ.get("OSSCOUT_DISABLE_AUTO_REPAIR") == "1":
                 return
             time.sleep(10)
+            full_sync_at = 0.0
+            candidate_cache = {}
             while True:
+                full = time.monotonic() >= full_sync_at
                 try:
-                    _sync_bitables(root)
+                    _sync_bitables(root, ds=ds, candidates_only=not full, candidate_cache=candidate_cache)
+                    if full:
+                        full_sync_at = time.monotonic() + 900
                 except Exception as ex:
                     _audit(root, "bitable_sync_error", "-", str(ex)[:200])
-                time.sleep(900)
+                time.sleep(30)
         _thr.Thread(target=_loop, daemon=True, name="bitable-sync").start()
 
     def _cf_poll_loop():
@@ -722,7 +743,7 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
         with queue_transaction(root) as q:
             for key, entry in q.items():
                 if entry.get("status") == "running" or (key in previously_started and entry.get("status") in (
-                        "new", "queued", "recheck_failed", "staged")):
+                        "new", "recheck_failed", "staged")):
                     entry.update(status="escalated", abort_reason="controller restarted; inspect remote run before retry")
                     _audit(root, "orphan_requires_review", key, "daily start retained")
 
@@ -1400,9 +1421,8 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
 
     @app.post("/api/pr/bitable/sync")
     def api_pr_bitable_sync():
-        """手动触发一次多维表格同步（也在 pr_watch 循环里 15 分钟一次）。"""
-        import importlib.util
-        return JSONResponse(_sync_bitables(root))
+        """手动触发一次多维表格全量同步。"""
+        return JSONResponse(_sync_bitables(root, ds=ds))
 
     @app.post("/api/pr/reply/send")
     def api_pr_reply_send(request: Request, repo: str = Form(""),

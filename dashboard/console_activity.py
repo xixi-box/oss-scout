@@ -47,6 +47,35 @@ def _active(run, repo, number, kind, runner_repo):
     return None
 
 
+def _running_new_prs(ds, pending):
+    running = []
+    available = True
+    for job_id, repo, head, runner_repo, run_id in pending:
+        issue = re.fullmatch(r"[^:]+:fix/issue-(\d+)-[0-9a-f]+-[0-9a-f]+", head)
+        if not issue or not monitored_repo(repo):
+            continue
+        if run_id:
+            run = _github(ds, f"repos/{runner_repo}/actions/runs/{run_id}")
+            available &= run is not None
+        else:
+            runs = _github(ds, f"repos/{runner_repo}/actions/workflows/oss-scout-repair.yml/runs?status=in_progress")
+            available &= runs is not None
+            run = next((r for r in (runs or {}).get("workflow_runs", [])
+                        if r.get("display_title") == f"repair {job_id}"), None)
+        if run and run.get("display_title") == f"repair {job_id}":
+            item = _active(run, repo, int(issue[1]), "created", runner_repo)
+            if item:
+                running.append(item)
+
+    return running, available
+
+
+def running_candidate_keys(ds):
+    pending, _ = _publications(ds, business_now().date().isoformat())
+    running, _ = _running_new_prs(ds, pending)
+    return {f"{item['repo'].lower()}#{item['number']}" for item in running}
+
+
 def snapshot(ds):
     tz = "Asia/Shanghai"
     now = business_now(tz)
@@ -61,7 +90,7 @@ def snapshot(ds):
 
     pending, urls = _publications(ds, day)
     worklog = ds.worklog()
-    records, repairs, running = [], [], []
+    records, repairs = [], []
     publication_times = {}
     minute = now.replace(second=0, microsecond=0)
     first_minute = minute - dt.timedelta(minutes=59)
@@ -109,23 +138,7 @@ def snapshot(ds):
             stamp = (_github(ds, f"repos/{pr[1]}/pulls/{pr[2]}") or {}).get("created_at")
         records.append(dict(repo=pr[1], number=int(pr[2]), time=stamp))
 
-    available = True
-    for job_id, repo, head, runner_repo, run_id in pending:
-        issue = re.fullmatch(r"[^:]+:fix/issue-(\d+)-[0-9a-f]+-[0-9a-f]+", head)
-        if not issue or not monitored_repo(repo):
-            continue
-        if run_id:
-            run = _github(ds, f"repos/{runner_repo}/actions/runs/{run_id}")
-            available &= run is not None
-        else:
-            runs = _github(ds, f"repos/{runner_repo}/actions/workflows/oss-scout-repair.yml/runs?status=in_progress")
-            available &= runs is not None
-            run = next((r for r in (runs or {}).get("workflow_runs", [])
-                        if r.get("display_title") == f"repair {job_id}"), None)
-        if run and run.get("display_title") == f"repair {job_id}":
-            item = _active(run, repo, int(issue[1]), "created", runner_repo)
-            if item:
-                running.append(item)
+    running, available = _running_new_prs(ds, pending)
 
     try:
         attempts = json.loads((ds.root / "state/pr_fix_attempted.json").read_text(encoding="utf-8"))

@@ -353,7 +353,7 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen
         latest = json.loads(qpath.read_text(encoding="utf-8")).get(key)
         if latest is not None:
             entry = dict(latest)
-            if entry.get("status") not in ("new", "queued", "recheck_failed", "staged") or not _eligible(entry):
+            if entry.get("status") not in ("new", "recheck_failed", "staged") or not _eligible(entry):
                 return {**summary, "abort": "candidate not currently eligible"}
 
     rescreen = rescreen or bool(entry.get("staged_at") or entry.get("rescreen_pending")) or entry.get("status") == "staged"
@@ -374,7 +374,7 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen
 
     if not monitored_repo(repo) or lane in ("unknown", "observe"):
         summary["abort"] = f"lane={lane} no action"
-        # 必须写终态，否则状态留在 new/queued，drain 每轮都会重新取到它。
+        # 必须写终态，否则状态留在 new，drain 每轮都会重新取到它。
         # 2026-10-30 实测：修复循环改成 60 秒后，旧名单遗留的
         # anomalyco/opencode、deepset-ai/haystack 候选每分钟被重试一次，
         # 每次都 lane=unknown 空转。
@@ -569,7 +569,7 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen
     # The queue lock protects state across days; the ledger serializes the cap.
     with queue_transaction(root) as q:
         current = q.get(key)
-        if current is not None and current.get("status") not in ("new", "queued", "recheck_failed", "staged"):
+        if current is not None and current.get("status") not in ("new", "recheck_failed", "staged"):
             ledger.close()
             return {**summary, "abort": "candidate already running or terminal"}
         if current is not None and not _order_candidates([(key, current)]):
@@ -946,7 +946,7 @@ def _stage_candidates(root: Path, keys: list[str]) -> int:
     with queue_transaction(root) as q:
         for key in keys:
             e = q.get(key)
-            if isinstance(e, dict) and e.get("status") in ("new", "queued", "recheck_failed", "staged"):
+            if isinstance(e, dict) and e.get("status") in ("new", "recheck_failed", "staged"):
                 if e.get("status") == "staged" and _stage_age_days(e) > STAGE_TTL_DAYS:
                     e["status"] = "stage_expired"
                     continue
@@ -1077,7 +1077,7 @@ def drain_ai_graded(root: Path, limit: int = 3, dry_run: bool = True,
     root = _data_root(root)
     qpath = root / "queue" / "candidates.json"
     q = json.loads(qpath.read_text(encoding="utf-8"))
-    ACTIVE = ("new", "queued", "recheck_failed", STAGED_STATUS)
+    ACTIVE = ("new", "recheck_failed", STAGED_STATUS)
     eligible: list[tuple[str, dict]] = []
     for key, e in q.items():
         if e.get("status") not in ACTIVE:

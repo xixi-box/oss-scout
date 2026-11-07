@@ -1038,11 +1038,11 @@ def build_scan_rows(root) -> list[dict]:
 # ---- 候选池/扫描发现的入队状态：黄=排队中，绿=已解决，红=已失效 ----
 
 _QUEUE_YELLOW = {"new", "staged", "needs_maintainer_confirm", "needs_cla",
-                 "gated_alignment_only", "running", "queued", "recheck_failed"}
+                 "gated_alignment_only", "running", "recheck_failed"}
 _QUEUE_GREEN = {"pr_open", "merged", "completed"}
 _QUEUE_RED = {"aborted_stale", "stage_expired", "escalated", "aborted_competed",
               "aborted_duplicate", "aborted_closed", "aborted_no_evidence",
-              "aborted_blocked_design", "aborted_pipeline", "queued_hist"}
+              "aborted_blocked_design", "aborted_pipeline"}
 QUEUE_EXPIRE_DAYS = 3
 
 
@@ -1094,33 +1094,29 @@ def recheck_still_worth(key: str, title: str = "") -> tuple[bool, str]:
         return True, f"recheck error (kept): {str(e)[:100]}"
 
 
-def build_candidate_rows(root) -> list[dict]:
-    """「候选池」表的行：queue/candidates.json 全量镜像 + 派生状态。"""
+def build_candidate_rows(root, running_keys=()) -> list[dict]:
+    """候选池只展示可执行、暂存或正在派发/执行的候选。"""
     qpath = root / "queue" / "candidates.json"
-    if not qpath.exists():
-        qpath = ROOT / "queue" / "candidates.json"
     try:
-        q = json.loads(qpath.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+        queue = json.loads(qpath.read_text(encoding="utf-8"))
+    except FileNotFoundError:
         return []
     rows = []
-    for key, entry in (q or {}).items():
-        entry = entry or {}
+    for key, entry in sorted(queue.items()):
+        status = entry.get("status")
+        if key.lower() in running_keys and status in {"running", "escalated"}:
+            display = "执行中"
+        elif status == "staged":
+            display = "暂存"
+        elif status in {"new", "recheck_failed", "running"}:
+            display = "待执行"
+        else:
+            continue
         rows.append({
             "key": key,
             "title": str(entry.get("title") or "")[:300],
-            "lane": str(entry.get("lane") or ""),
-            "queue_state": queue_display_state(entry.get("status"),
-                                               entry.get("updated_at")),
-            "ai_verdict": str(((entry.get("ai_verdict") or {}).get("reason"))
-                              or "")[:250],
-            "discovered_at": entry.get("discovered_at") or "",
-            "updated_at": entry.get("updated_at") or "",
-            "pr_url": entry.get("pr_url") or "",
-            "note": ("正在修复；" if entry.get("status") == "running" else "") + "；".join(str(b) for b in (entry.get("blockers") or []))[:300],
+            "queue_state": display,
+            "discovered_at": entry.get("discovered_at"),
+            "staged_at": entry.get("staged_at"),
         })
-    rows.sort(key=lambda r: r["key"])
-    # 候选池 = 当前真实在排队的（用户裁定 2026-11-05，二次收窄）：
-    # 只留"排队中"。已解决去 PR 记录表查，已失效/范围外/历史一律踢出——
-    # 表里不留死行，处理状态也永远不会为空。
-    return [r for r in rows if r["queue_state"] == "排队中"]
+    return rows
