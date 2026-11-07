@@ -89,21 +89,13 @@ class TestBuildRows:
 
 
 class TestRowToFields:
-    def test_key_and_link(self):
-        f = fb.row_to_fields(_row())
-        assert f["键"] == "docker/compose#14450"
-        assert f["链接"]["link"].endswith("/pull/14450")
-        assert f["PR号"] == 14450
-
-    def test_datetimes_are_ms(self):
-        f = fb.row_to_fields(_row())
-        assert isinstance(f["创建时间"], int)
-        assert f["创建时间"] > 10**12      # 毫秒级时间戳
-
-    def test_empty_optional_fields_are_omitted(self):
-        f = fb.row_to_fields(_row(action="", reply_status="", fix_state="", note=""))
-        for col in ("最近动作", "回复状态", "修改状态", "备注", "回复状态"):
-            assert col not in f
+    def test_key_is_the_only_column_and_contains_a_link(self):
+        assert fb.row_to_fields(_row()) == {"键": [{
+            "type": "url", "text": "docker/compose#14450",
+            "link": "https://github.com/docker/compose/pull/14450",
+        }]}
+        assert fb.repo_row_to_fields({"repo": "a/b"})["键"][0]["link"] == "https://github.com/a/b"
+        assert fb.issue_row_to_fields({"key": "a/b#9"})["键"][0]["link"] == "https://github.com/a/b/issues/9"
 
 
 @pytest.fixture()
@@ -120,7 +112,7 @@ class TestSyncDiff:
     def test_explicit_complete_empty_snapshot_prunes_old_rows(self, tmp_path, fake):
         fake.records = {"r1": {"键": "a/b#1"}}
         out = fb.sync_table(tmp_path, [], table_name=fb.CAND_TABLE_NAME,
-                            fields=fb.CAND_FIELDS, to_fields=fb.cand_row_to_fields,
+                            fields=fb.LINK_FIELDS, to_fields=fb.issue_row_to_fields,
                             binding_key="cand_table_id", allow_empty=True)
         assert out["pruned"] == 1
         assert fake.deleted == ["r1"]
@@ -173,11 +165,11 @@ class TestSyncDiff:
                 for rec in payload["records"]:
                     rid = f"r{len(self.records)+1}"
                     self.records[rid] = rec["fields"]
-                    self.created.append(rec["fields"]["键"])
+                    self.created.append(fb._key_label(rec["fields"]["键"]))
                 return {"code": 0}
             if url.endswith("records/batch_update"):
                 for rec in payload["records"]:
-                    self.records[rec["record_id"]] = rec["fields"]
+                    self.records[rec["record_id"]].update(rec["fields"])
                     self.updated.append(rec["record_id"])
                 return {"code": 0}
             if url.endswith("records/batch_delete"):
@@ -199,9 +191,11 @@ class TestSyncDiff:
         assert out["skipped"] == 1 and out["created"] == 0
 
     def test_changed_row_updates_not_creates(self, fake, tmp_path):
-        fb.sync_rows(tmp_path, [_row(state="open")])
+        fake.records = {"r1": {"键": "docker/compose#14450", "状态": "open"}}
         out = fb.sync_rows(tmp_path, [_row(state="merged")])
         assert out["updated"] == 1 and out["created"] == 0
+        assert fake.records["r1"]["键"] == fb.row_to_fields(_row())["键"]
+        assert fb.sync_rows(tmp_path, [_row()])["skipped"] == 1
 
     def test_binding_is_cached(self, fake, tmp_path):
         """table_id 按表名各存一份（base 里有多张表，互相不覆盖）。"""
@@ -215,7 +209,7 @@ class TestSyncDiff:
         fb.sync_rows(tmp_path, [_row(state="open")])
         fb.sync_rows(tmp_path, [_row(state="closed")])
         assert len(fake.records) == 1
-        assert fake.records["r1"]["状态"] == "closed"
+        assert fake.records["r1"] == fb.row_to_fields(_row())
 
 
 class TestLedgerScope:
@@ -245,7 +239,7 @@ class TestLedgerScope:
     def test_sync_prunes_out_of_scope_records(self, fake, tmp_path):
         # 直灌一条口径外的（模拟"口径收紧之前已经进了表"的历史记录）
         def keys_in_table():
-            return {fs.get("键") for fs in fake.records.values()}
+            return {fb._key_label(fs.get("键")) for fs in fake.records.values()}
 
         fb.sync_rows(tmp_path, [_row(repo="xixi-box/safedock", number=1,
                                      state="merged")])
@@ -262,54 +256,6 @@ class TestLedgerScope:
         out = fb.sync_rows(tmp_path, [])
         assert out.get("pruned", 0) == 0
         assert len(fake.records) == 1
-
-
-class TestNumberNormalization:
-    """数字列回传字符串不归一化，指纹永远对不上——扫描表 1300+ 行每 15
-    分钟被整表重写一遍就是这么来的。"""
-
-    def test_issue_number_and_stars_normalized(self, monkeypatch, tmp_path):
-        captured = {}
-
-        class Fake:
-            def request(self, method, url, payload=None, token=None):
-                if "/tables?" in url:
-                    return {"code": 0, "data": {"items": [
-                        {"table_id": "tblS", "name": fb.SCAN_TABLE_NAME}]}}
-                if "/fields?page_size=" in url:
-                    # 已存在的列与 SCAN_FIELDS 对齐（含新拆的粗筛/细筛原因），
-                    # 否则 ensure_columns 会尝试 POST 建字段
-                    return {"code": 0, "data": {"items": [
-                        {"field_name": f["field_name"]} for f in fb.SCAN_FIELDS]}}
-                if url.endswith("/fields"):
-                    return {"code": 0, "data": {}}
-                if "/records?page_size=" in url:
-                    # 模拟真实回传形态：其他列原样回来，唯独数字列
-                    # 变成字符串（飞书读端的已知行为）
-                    return {"code": 0, "data": {"items": [
-                        {"record_id": "r1", "fields": {
-                            "键": "a/b#9", "仓库": "a/b", "issue号": "9",
-                            "状态": "queued",
-                            "链接": {"text": "a/b#9",
-                                     "link": "https://github.com/a/b/issues/9"},
-                            "发现时间": 1793840400000}}]}}
-                raise AssertionError(url)
-
-        fake = Fake()
-        monkeypatch.setattr(fb.feishu_app, "tenant_token", lambda: "tok")
-        monkeypatch.setattr(fb.feishu_app, "_request", fake.request)
-        monkeypatch.setenv("FEISHU_BITABLE_APP_TOKEN", "app1")
-
-        rows = [{"key": "a/b#9", "status": "queued", "why": "",
-                 "first_seen": "2026-11-05T01:00:00"}]
-        out = fb.sync_table(tmp_path, rows, table_name=fb.SCAN_TABLE_NAME,
-                            fields=fb.SCAN_FIELDS,
-                            to_fields=fb.scan_row_to_fields,
-                            binding_key="scan_table_id")
-        # 存量行的 issue号 是字符串 "9"，写入侧是 int 9——归一化后应当
-        # 被识别为"无变化"而不是整行重写
-        assert out["updated"] == 0, out
-        assert out["skipped"] == 1
 
 
 class TestCandidateRows:
@@ -353,14 +299,3 @@ class TestCandidateRows:
             "a/b#9": self._entry("pr_open")}), encoding="utf-8")
         rows = mp.build_scan_rows(tmp_path)
         assert rows[0]["queue_state"] == "已解决"
-
-    def test_cand_converter_colors_and_fields(self):
-        f = fb.cand_row_to_fields({
-            "key": "a/b#9", "title": "t", "lane": "open",
-            "queue_state": "排队中", "ai_verdict": "ok",
-            "discovered_at": "2026-11-05T01:00:00Z",
-            "updated_at": "2026-11-05T02:00:00Z",
-            "pr_url": "https://github.com/a/b/pull/1", "note": "n"})
-        assert f["处理状态"] == "排队中"
-        assert f["issue号"] == 9
-        assert f["PR链接"]["link"].endswith("/pull/1")

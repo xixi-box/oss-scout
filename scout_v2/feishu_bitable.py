@@ -1,27 +1,12 @@
-"""飞书多维表格：我们所有 PR 的记录同步。
-
-分工：
-  monitor_prs.build_pr_rows()  从 GitHub + 本地状态拼出"每条 PR 一行"的数据
-  本模块                        只管飞书侧：找表格、建字段、增改记录
-
-表格结构（键列是 repo#number，重跑不重复）：
-  键 | 仓库 | PR号 | 标题 | 状态 | 最近动作 | 回复状态 | 修改状态 |
-  创建时间 | 最近活动 | 关闭时间 | 链接 | 备注
-
-设计约束：
-  - 记录用"键"做 upsert：改字段走 batch_update，新的走 batch_create，
-    不删除——PR 关闭了也应该留在表里（这正是这张表的意义）。
-  - 配置持久化在 state/feishu_bitable.json（app_token/table_id），
-    找到一次就记住，之后每轮同步零发现成本。
-  - 任何异常都向上抛给调用方记审计，绝不静默——数据没同步出去要说出来。
-"""
+"""飞书多维表格的链接台账与批量差量同步。"""
 from __future__ import annotations
 
 import json
 import os
-import time
+import re
 import threading
 from pathlib import Path
+from urllib.parse import urlencode
 
 from . import feishu_app
 
@@ -30,88 +15,9 @@ REPO_TABLE_NAME = "仓库池"
 STATE_FILE = "feishu_bitable.json"
 _BINDING_LOCK = threading.RLock()
 
-# 「仓库池」表：监控名单 + 池审计（语言/stars/最近 push）。评分列等
-# pool_rates 把指标落盘后再补。
-
-# 「候选池」表：queue/candidates.json 的镜像——真正进入流水线的 issue。
-# 处理状态用颜色语义：黄=排队中（含等确认），绿=已解决（PR 已开出），
-# 红=已失效（stale/竞争失败/尝试超限等）。
 CAND_TABLE_NAME = "候选池"
-CAND_FIELDS = [
-    {"field_name": "键", "type": 1},
-    {"field_name": "仓库", "type": 1},
-    {"field_name": "issue号", "type": 2},
-    {"field_name": "标题", "type": 1},
-    {"field_name": "车道", "type": 1},
-    {"field_name": "处理状态", "type": 3, "property": {"options": [
-        {"name": "排队中", "color": 2},      # 黄
-        {"name": "已解决", "color": 3},      # 绿
-        {"name": "已失效", "color": 0},      # 红
-        {"name": "等确认", "color": 0},
-    ]}},
-    {"field_name": "AI判定", "type": 1},
-    {"field_name": "入队时间", "type": 5},
-    {"field_name": "更新时间", "type": 5},
-    {"field_name": "链接", "type": 15},        # issue 链接
-    {"field_name": "PR链接", "type": 15},      # 开出的 PR
-    {"field_name": "备注", "type": 1},
-]
-
-# 「扫描发现」表：seen.json 的镜像——Worker 扫到的每个 issue 和它的去向
-# （入队 / 被规则否决 / 低分 / 未知仓库）。回答"这个 issue 为什么没被处理"。
 SCAN_TABLE_NAME = "扫描发现"
-SCAN_FIELDS = [
-    {"field_name": "键", "type": 1},
-    {"field_name": "仓库", "type": 1},
-    {"field_name": "issue号", "type": 2},
-    {"field_name": "状态", "type": 1},
-    # 粗筛=规则层否决（提问/文档/计费/标签/范围外）；细筛=AI 判定理由
-    {"field_name": "粗筛原因", "type": 1},
-    {"field_name": "细筛原因", "type": 1},
-    {"field_name": "入队状态", "type": 3, "property": {"options": [
-        {"name": "排队中", "color": 2},
-        {"name": "已解决", "color": 3},
-        {"name": "已失效", "color": 0},
-    ]}},
-    {"field_name": "链接", "type": 15},
-    {"field_name": "发现时间", "type": 5},
-]
-REPO_FIELDS = [
-    {"field_name": "键", "type": 1},
-    {"field_name": "仓库", "type": 1},
-    {"field_name": "owner", "type": 1},
-    {"field_name": "车道", "type": 3, "property": {"options": [
-        {"name": "open"}, {"name": "gated"}, {"name": "restricted"}]}},
-    {"field_name": "语言", "type": 1},
-    {"field_name": "stars", "type": 2},
-    {"field_name": "最近push", "type": 1},
-    {"field_name": "内部", "type": 3, "property": {"options": [
-        {"name": "是"}]}},
-    {"field_name": "备注", "type": 1},
-]
-
-# 字段类型：1 文本 2 数字 3 单选 5 日期时间 15 超链接
-FIELDS = [
-    {"field_name": "键", "type": 1},
-    {"field_name": "仓库", "type": 1},
-    {"field_name": "PR号", "type": 2},
-    {"field_name": "标题", "type": 1},
-    {"field_name": "状态", "type": 3, "property": {"options": [
-        {"name": "open"}, {"name": "merged"}, {"name": "closed"}]}},
-    {"field_name": "最近动作", "type": 3, "property": {"options": [
-        {"name": "fix_ci"}, {"name": "address_review"},
-        {"name": "answer_question"}, {"name": "assignment_note"},
-        {"name": "wait"}, {"name": "unknown"}]}},
-    {"field_name": "回复状态", "type": 3, "property": {"options": [
-        {"name": "待审"}, {"name": "已发送"}, {"name": "已放弃"}]}},
-    {"field_name": "修改状态", "type": 3, "property": {"options": [
-        {"name": "进行中"}, {"name": "已推送"}, {"name": "失败"}]}},
-    {"field_name": "创建时间", "type": 5},
-    {"field_name": "最近活动", "type": 5},
-    {"field_name": "关闭时间", "type": 5},
-    {"field_name": "链接", "type": 15},
-    {"field_name": "备注", "type": 1},
-]
+LINK_FIELDS = [{"field_name": "键", "type": 1}]
 
 
 def _state_path(root: Path) -> Path:
@@ -164,43 +70,25 @@ def pr_table_url(root: Path) -> str:
     return ""
 
 
-def _iso_to_ms(v) -> int | None:
-    if not v:
-        return None
-    try:
-        # GitHub 的时间是 UTC；mktime 按本地时区解释会偏移几个小时，
-        # Windows 上还会直接 OverflowError。timegm 才是 UTC 语义。
-        import calendar
-        return int(calendar.timegm(
-            time.strptime(str(v)[:19], "%Y-%m-%dT%H:%M:%S")) * 1000)
-    except ValueError:
-        return None
+def link_key(label: str, kind: str) -> list[dict]:
+    pattern = r"([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)"
+    match = re.fullmatch(pattern if kind == "repo" else pattern + r"#([0-9]+)", label)
+    if not match:
+        raise ValueError(f"Invalid GitHub key: {label!r}")
+    path = match[1] if kind == "repo" else f"{match[1]}/{kind}/{match[2]}"
+    return [{"type": "url", "text": label, "link": f"https://github.com/{path}"}]
 
 
 def row_to_fields(row: dict) -> dict:
-    """把 build_pr_rows() 的一行转成 Bitable 字段值。"""
-    f = {
-        "键": f"{row['repo']}#{row['number']}",
-        "仓库": row["repo"],
-        "PR号": int(row["number"]),
-        "标题": str(row.get("title") or "")[:800],
-        "链接": {"text": f"{row['repo']}#{row['number']}",
-                 "link": row.get("url") or ""},
-    }
-    for col, key in (("状态", "state"), ("最近动作", "action"),
-                     ("回复状态", "reply_status"), ("修改状态", "fix_state")):
-        v = str(row.get(key) or "").strip()
-        if v:
-            f[col] = v
-    for col, key in (("创建时间", "created_at"), ("最近活动", "updated_at"),
-                     ("关闭时间", "closed_at")):
-        ms = _iso_to_ms(row.get(key))
-        if ms:
-            f[col] = ms
-    note = str(row.get("note") or "").strip()
-    if note:
-        f["备注"] = note[:800]
-    return f
+    return {"键": link_key(f"{row['repo']}#{row['number']}", "pull")}
+
+
+def repo_row_to_fields(row: dict) -> dict:
+    return {"键": link_key(row["repo"], "repo")}
+
+
+def issue_row_to_fields(row: dict) -> dict:
+    return {"键": link_key(row["key"], "issues")}
 
 
 def ensure_columns(app_token: str, table_id: str, fields: list) -> None:
@@ -231,11 +119,11 @@ def find_or_create_table(app_token: str, table_name: str = TABLE_NAME,
     for t in (body.get("data") or {}).get("items") or []:
         if t.get("name") == table_name:
             tid = str(t["table_id"])
-            ensure_columns(app_token, tid, fields or FIELDS)
+            ensure_columns(app_token, tid, fields or LINK_FIELDS)
             return tid
     created = feishu_app._request(
         "POST", f"https://open.feishu.cn/open-apis/bitable/v1/apps/{app_token}/tables",
-        {"table": {"name": table_name, "fields": fields or FIELDS}}, token=tok)
+        {"table": {"name": table_name, "fields": fields or LINK_FIELDS}}, token=tok)
     if created.get("code") != 0:
         raise RuntimeError(f"create table: {str(created)[:300]}")
     return str((created.get("data") or {}).get("table_id"))
@@ -257,36 +145,45 @@ def _norm_field(v):
     return v
 
 
-def load_records(app_token: str, table_id: str) -> dict:
-    """现有记录：{键: {"record_id":..., "fields": 归一化后的字段}}。分页拉全。"""
+def _key_label(value) -> str:
+    if isinstance(value, list):
+        return "".join(str(seg.get("text") or "") for seg in value if isinstance(seg, dict))
+    return str(value or "")
+
+
+def record_pages(app_token: str, table_id: str):
+    """Yield raw records, including rich text links and blank primary cells."""
     tok = feishu_app.tenant_token()
-    out: dict = {}
-    page_token = ""
+    params = {"page_size": 500, "text_field_as_array": "true"}
     while True:
         url = (f"https://open.feishu.cn/open-apis/bitable/v1/apps/{app_token}"
-               f"/tables/{table_id}/records?page_size=500")
-        if page_token:
-            url += f"&page_token={page_token}"
+               f"/tables/{table_id}/records?{urlencode(params)}")
         body = feishu_app._request("GET", url, token=tok)
-        if body.get("code") not in (0, None):
+        if body.get("code") != 0:
             raise RuntimeError(f"list records: {str(body)[:200]}")
         data = body.get("data") or {}
-        # 数字列飞书回传字符串、文本列回传段落——不归一化的话每轮同步的
-        # 指纹永远对不上，整表每 15 分钟被无意义重写一遍（扫描表 1300+ 行）
-        NUMBER_FIELDS = ("PR号", "issue号", "stars")
-        for it in data.get("items") or []:
-            fields = {k: _norm_field(v) for k, v in (it.get("fields") or {}).items()}
-            for col in NUMBER_FIELDS:
-                if isinstance(fields.get(col), str) and fields[col].isdigit():
-                    fields[col] = int(fields[col])
-            key = str(fields.get("键") or "")
-            if key:
-                out[key] = {"record_id": str(it.get("record_id")),
-                            "fields": fields}
-        if data.get("has_more") and data.get("page_token"):
-            page_token = data["page_token"]
-        else:
+        yield from data.get("items") or []
+        if not data.get("has_more"):
             break
+        page_token = data.get("page_token")
+        if not page_token or page_token == params.get("page_token"):
+            raise RuntimeError("Invalid Feishu records page cursor")
+        params["page_token"] = page_token
+
+
+def load_records(app_token: str, table_id: str) -> dict:
+    out = {}
+    for record in record_pages(app_token, table_id):
+        raw = record.get("fields") or {}
+        key = _key_label(raw.get("键"))
+        if not key:
+            continue
+        fields = {name: _norm_field(value) for name, value in raw.items()}
+        if isinstance(raw.get("键"), list):
+            segments = raw["键"]
+            if len(segments) == 1 and segments[0].get("type") == "url" and segments[0].get("link"):
+                fields["键"] = [{name: segments[0][name] for name in ("type", "text", "link")}]
+        out[key] = {"record_id": str(record["record_id"]), "fields": fields}
     return out
 
 
@@ -294,85 +191,9 @@ def _fingerprint(fields: dict) -> str:
     return json.dumps(fields, ensure_ascii=False, sort_keys=True, default=str)
 
 
-def repo_row_to_fields(row: dict) -> dict:
-    f = {
-        "键": row["repo"],
-        "仓库": row["repo"],
-        "owner": str(row["repo"]).split("/", 1)[0],
-    }
-    if row.get("lane"):
-        f["车道"] = str(row["lane"])
-    if row.get("lang"):
-        f["语言"] = str(row["lang"])
-    if isinstance(row.get("stars"), int):
-        f["stars"] = row["stars"]
-    if row.get("pushed"):
-        f["最近push"] = str(row["pushed"])[:10]
-    if row.get("internal"):
-        f["内部"] = "是"
-    if row.get("note"):
-        f["备注"] = str(row["note"])[:800]
-    return f
-
-
-def scan_row_to_fields(row: dict) -> dict:
-    repo, _, num = str(row.get("key") or "").partition("#")
-    f = {
-        "键": row.get("key") or "",
-        "仓库": repo,
-    }
-    if num.isdigit():
-        f["issue号"] = int(num)
-        f["链接"] = {"text": f"{repo}#{num}",
-                     "link": f"https://github.com/{repo}/issues/{num}"}
-    if row.get("status"):
-        f["状态"] = str(row["status"])
-    if row.get("coarse_reason"):
-        f["粗筛原因"] = str(row["coarse_reason"])[:500]
-    if row.get("fine_reason"):
-        f["细筛原因"] = str(row["fine_reason"])[:500]
-    if row.get("queue_state"):
-        f["入队状态"] = str(row["queue_state"])
-    if row.get("first_seen"):
-        ms = _iso_to_ms(str(row["first_seen"]).replace(" ", "T"))
-        if ms:
-            f["发现时间"] = ms
-    return f
-
-
-def cand_row_to_fields(row: dict) -> dict:
-    f = {
-        "键": row.get("key") or "",
-        "仓库": str(row.get("key") or "").partition("#")[0],
-    }
-    num = str(row.get("key") or "").partition("#")[2]
-    if num.isdigit():
-        f["issue号"] = int(num)
-        repo = f["仓库"]
-        f.setdefault("链接", {"text": f"{repo}#{num}",
-                              "link": f"https://github.com/{repo}/issues/{num}"})
-    if row.get("title"):
-        f["标题"] = str(row["title"])[:500]
-    if row.get("lane"):
-        f["车道"] = str(row["lane"])
-    if row.get("queue_state"):
-        f["处理状态"] = str(row["queue_state"])
-    if row.get("ai_verdict"):
-        f["AI判定"] = str(row["ai_verdict"])[:300]
-    for col, key in (("入队时间", "discovered_at"), ("更新时间", "updated_at")):
-        ms = _iso_to_ms(row.get(key))
-        if ms:
-            f[col] = ms
-    if row.get("pr_url"):
-        f["PR链接"] = {"text": "PR", "link": str(row["pr_url"])}
-    if row.get("note"):
-        f["备注"] = str(row["note"])[:500]
-    return f
-
-
 def sync_rows(root: Path, rows: list[dict], *, force: bool = False) -> dict:
     """把 PR 行同步进「PR 记录」表。见 sync_table()。"""
-    return sync_table(root, rows, table_name=TABLE_NAME, fields=FIELDS,
+    return sync_table(root, rows, table_name=TABLE_NAME, fields=LINK_FIELDS,
                       to_fields=row_to_fields, binding_key="pr_table_id",
                       force=force)
 
@@ -398,9 +219,7 @@ def sync_table(root: Path, rows: list[dict], *, table_name: str, fields: list,
         app_token, table_name, fields)
     save_binding(root, {"app_token": app_token, binding_key: table_id})
     ensure_columns(app_token, table_id, fields or [])
-    # 转换器可能产出规格里漏写的列（2026-11-05：候选池行带「链接」而
-    # CAND_FIELDS 没定义它，整批 batch_create 被 FieldNameNotFound 打回）。
-    # 以实际产出的键为准补齐文本列，避免"代码改了一处、表建不出来"。
+    # 兼容其他使用 sync_table 的表，自动补齐转换器产出的字段。
     produced = set()
     for row in rows[:5]:
         produced.update(to_fields(row).keys())
@@ -415,11 +234,11 @@ def sync_table(root: Path, rows: list[dict], *, table_name: str, fields: list,
     all_fields = [to_fields(r) for r in rows]
     to_create, to_update = [], []
     for fields in all_fields:
-        key = fields["键"]
+        key = _key_label(fields["键"])
         hit = existing.get(key)
         if hit is None:
             to_create.append({"fields": fields})
-        elif force or _fingerprint(hit.get("fields") or {}) != _fingerprint(fields):
+        elif force or _fingerprint({name: hit["fields"].get(name) for name in fields}) != _fingerprint(fields):
             to_update.append({"record_id": hit["record_id"], "fields": fields})
 
     def _post(path, payload, method="POST"):
@@ -440,7 +259,7 @@ def sync_table(root: Path, rows: list[dict], *, table_name: str, fields: list,
     # 只在拿到非空行集时执行——GitHub 全挂时 rows 为空，那不能当"全部剔除"。
     pruned = 0
     if rows or allow_empty:
-        incoming = {f["键"] for f in all_fields}
+        incoming = {_key_label(f["键"]) for f in all_fields}
         stale = [hit["record_id"] for key, hit in existing.items()
                  if key not in incoming]
         for i in range(0, len(stale), 500):
