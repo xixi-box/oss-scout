@@ -1,4 +1,4 @@
-name: Inspect candidate queue and Feishu columns
+name: Remove duplicate Feishu queue date
 on:
   workflow_dispatch:
 jobs:
@@ -6,42 +6,44 @@ jobs:
     runs-on: [self-hosted, aliyun]
     timeout-minutes: 5
     steps:
-      - name: Inspect live state read-only
+      - name: Merge duplicate date values and remove the duplicate field
         run: |
           docker exec -i -w /app oss-scout python - <<'PY'
-          import collections, json, os, sqlite3
+          import os
           from pathlib import Path
           from scout_v2 import feishu_bitable as b, feishu_app as a
-          from scout_v2.state_store import business_now
-          root=Path(os.environ.get("OSSCOUT_DASHBOARD_ROOT","/data"))
-          now=business_now()
-          ids={"docker/compose#14476","clickhouse/clickhouse#129858","cockroachdb/cockroach#176230","clickhouse/clickhouse#129827","python/cpython#161489"}
-          queue=json.loads((root/"queue/candidates.json").read_text())
-          seen=json.loads((root/"state/seen.json").read_text())
-          print("now",now.isoformat())
-          with sqlite3.connect((root/"state/scout_v2.sqlite3").as_uri()+"?mode=ro",uri=True) as db:
-              print("publications", db.execute("SELECT day,url,repo,head,remote_id FROM publications WHERE day>=date(?, '-1 day') OR day IS NULL",(now.date().isoformat(),)).fetchall())
-          active={"new","staged","needs_maintainer_confirm","needs_cla","gated_alignment_only","running","queued","recheck_failed"}
-          stats=collections.Counter()
-          for key, row in queue.items():
-              status=row.get("status")
-              if status in active:
-                  has_seen=bool(seen.get(key,{}).get("first_seen"))
-                  stats[(status,bool(row.get("discovered_at")),bool(row.get("staged_at")),has_seen)]+=1
-              if key.lower() in ids:
-                  print("candidate", key, json.dumps({k:row.get(k) for k in ("status","discovered_at","staged_at","eligible_at","screen_retry_at","updated_at","abort_reason","source","blockers")},ensure_ascii=False), "seen_at",seen.get(key,{}).get("first_seen"))
-          print("stats",stats)
-          events=[]
-          for line in (root/"state/worklog.jsonl").read_text().splitlines():
-              try: row=json.loads(line)
-              except ValueError: continue
-              action=str(row.get("action",""))
-              if str(row.get("target","")).lower() in ids or action in {"pipeline_stage","pipeline_pr_open","dashboard_dispatch_error","dashboard_pipeline_error","pipeline_quota","pipeline_abort"}:
-                  events.append({k:row.get(k) for k in ("ts","action","target","result")})
-          for row in [e for e in events if str(e.get('ts')).startswith('2026-11-07')][-90:]: print("event",json.dumps(row,ensure_ascii=False))
-          base=b._binding_app_token(root)
-          table=b.load_binding(root)["cand_table_id"]
-          api=f"https://open.feishu.cn/open-apis/bitable/v1/apps/{base}/tables/{table}/fields?page_size=100"
-          reply=a._request("GET",api,token=a.tenant_token())
-          print("schema",reply.get("code"),[(f["field_name"],f["field_id"],f["type"]) for f in reply.get("data",{}).get("items",[])])
+          root = Path(os.environ.get("OSSCOUT_DASHBOARD_ROOT", "/data"))
+          base = b._binding_app_token(root)
+          table = b.load_binding(root)["cand_table_id"]
+          assert table == "tbly8KB714GtkrC4", table
+          token = a.tenant_token()
+          url = f"https://open.feishu.cn/open-apis/bitable/v1/apps/{base}/tables/{table}"
+          def call(method, path, data=None):
+              reply = a._request(method, url + path, data, token=token)
+              if reply.get("code") != 0:
+                  raise RuntimeError(f"{method} {path}: {reply.get('code')} {reply.get('msg')}")
+              return reply.get("data") or {}
+          keep, remove = "fldf9d3zKa", "fldrItFAWX"
+          label, temporary = "入队时间", "入队时间（重复待删除）"
+          fields = {f["field_id"]: f for f in call("GET", "/fields?page_size=100")["items"]}
+          assert fields[keep]["field_name"] == label and fields[keep]["type"] == 5
+          if remove in fields:
+              dup = fields[remove]
+              assert dup["field_name"] in {label, temporary} and dup["type"] == 5
+              if dup["field_name"] == label:
+                  call("PUT", f"/fields/{remove}", {"field_name": temporary, "type": 5,
+                                                    "property": b.DATE_FORMAT})
+              updates = []
+              for rec in b.record_pages(base, table):
+                  values = rec["fields"]
+                  if not values.get(label) and values.get(temporary):
+                      updates.append({"record_id": rec["record_id"], "fields": {label: values[temporary]}})
+              for i in range(0, len(updates), 500):
+                  call("POST", "/records/batch_update", {"records": updates[i:i+500]})
+              call("DELETE", f"/fields/{remove}")
+              print("copied_from_duplicate", len(updates))
+          dates = [f["field_id"] for f in call("GET", "/fields?page_size=100")["items"]
+                   if f["field_name"] == label]
+          assert dates == [keep], dates
+          print("single_date_field", dates[0])
           PY
