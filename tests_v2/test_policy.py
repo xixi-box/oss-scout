@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent / "fixtures"))
 
 from legacy_samples import LEGACY_WORKLOG_LINES  # noqa: E402
 from scout_v2.repo_policy import PolicyEngine  # noqa: E402
-from scout_v2.state_store import ClaimLedger, Worklog  # noqa: E402
+from scout_v2.state_store import ClaimLedger, Worklog, business_now  # noqa: E402
 
 REPOS_CFG = {
     "defaults": {"unknown_repo_action": "hold_for_review", "min_issue_age_hours": 2,
@@ -106,19 +106,19 @@ class TestFreshness:
 
 class TestDailyClaimLimit:
     def test_worklog_claim_today_blocks_new_claim(self, tmp_path):
-        today = dt.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+        today = business_now().isoformat(timespec="seconds")
         lines = [f'{{"ts": "{today}", "action": "claim", "target": "aaif-goose/goose#1"}}']
         eng = make_engine(tmp_path, worklog_lines=lines)
         assert not eng.authorize("claim", "aaif-goose/goose").allowed
 
     def test_awaiting_assignment_counts_as_claim(self, tmp_path):
-        today = dt.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+        today = business_now().isoformat(timespec="seconds")
         lines = [f'{{"ts": "{today}", "action": "awaiting_assignment", "target": "x#2"}}']
         eng = make_engine(tmp_path, worklog_lines=lines)
         assert not eng.authorize("claim", "aaif-goose/goose").allowed
 
     def test_yesterday_claim_does_not_block(self, tmp_path):
-        yesterday = (dt.datetime.now() - dt.timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%S")
+        yesterday = (business_now() - dt.timedelta(days=1)).isoformat(timespec="seconds")
         lines = [f'{{"ts": "{yesterday}", "action": "claim", "target": "aaif-goose/goose#1"}}']
         eng = make_engine(tmp_path, worklog_lines=lines)
         assert eng.authorize("claim", "aaif-goose/goose").allowed
@@ -177,11 +177,10 @@ class TestInternalRepoDoesNotConsumeQuota:
     def test_fixture_claim_is_ignored(self, tmp_path, monkeypatch):
         from scout_v2.repo_policy import PolicyEngine
         from scout_v2.state_store import Worklog
-        import datetime as dt
 
         self._engine(tmp_path, internal=True)
         wl = Worklog(tmp_path / "state" / "worklog.jsonl")
-        wl.append({"ts": dt.datetime.now().isoformat(timespec="seconds"),
+        wl.append({"ts": business_now().isoformat(timespec="seconds"),
                    "action": "claim", "target": "me/fixture#1"})
         eng, err = PolicyEngine.load(tmp_path)
         assert err is None, err
@@ -191,11 +190,10 @@ class TestInternalRepoDoesNotConsumeQuota:
     def test_real_claim_still_blocks(self, tmp_path):
         from scout_v2.repo_policy import PolicyEngine
         from scout_v2.state_store import Worklog
-        import datetime as dt
 
         self._engine(tmp_path, internal=True)
         wl = Worklog(tmp_path / "state" / "worklog.jsonl")
-        wl.append({"ts": dt.datetime.now().isoformat(timespec="seconds"),
+        wl.append({"ts": business_now().isoformat(timespec="seconds"),
                    "action": "claim", "target": "acme/real#7"})
         eng, err = PolicyEngine.load(tmp_path)
         assert err is None, err

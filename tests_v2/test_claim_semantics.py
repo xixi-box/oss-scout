@@ -16,7 +16,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from scout_v2.state_store import ClaimLedger  # noqa: E402
+from scout_v2.state_store import ClaimLedger, business_now  # noqa: E402
 
 from scout_v2.workers import auto_pipeline as mp  # noqa: E402
 
@@ -102,8 +102,9 @@ class TestAttemptFuseWorklogCount:
     def test_counts_todays_claims_from_worklog(self, tmp_path, monkeypatch):
         (tmp_path / "state").mkdir()
         import datetime as _dt
-        today = _dt.date.today().isoformat()
-        yest = (_dt.date.today() - _dt.timedelta(days=1)).isoformat()
+        day = business_now(TZ).date()
+        today = day.isoformat()
+        yest = (day - _dt.timedelta(days=1)).isoformat()
         lines = []
         for i in range(3):
             lines.append(json.dumps({
