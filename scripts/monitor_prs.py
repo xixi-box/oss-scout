@@ -982,7 +982,7 @@ def build_repo_rows(root) -> list[dict]:
     return rows
 
 
-def build_scan_rows(root) -> list[dict]:
+def build_scan_rows(root, running_keys=(), published=None) -> list[dict]:
     """「扫描发现」表的行：seen.json 全量镜像。
 
     这是发现层的总账——Worker 扫到的每个 issue 都在，含被规则否决和
@@ -1032,15 +1032,21 @@ def build_scan_rows(root) -> list[dict]:
         candidate = queue.get(key) or {}
         candidate_status = str(candidate.get("status") or "")
         queue_state = queue_display_state(candidate_status, candidate.get("updated_at"))
-        result = ""
-        if candidate_status.startswith("aborted_"):
-            reason = candidate.get("abort_reason")
-            if reason:
-                result = f"开工流程拦截 · {reason}"
-            elif key in historical_reasons:
+        pr_url = (published or {}).get(key.lower()) or (
+            candidate.get("pr_url") if candidate_status in _QUEUE_GREEN else None
+        )
+        result = candidate_activity_state(key, candidate_status, running_keys)
+        reason = candidate.get("abort_reason")
+        if not result and not pr_url:
+            if key in historical_reasons:
                 result = f"旧版开工检查拦截 · {historical_reasons[key]}"
-            else:
-                result = f"开工流程拦截 · {candidate_status}"
+            elif candidate_status in {"aborted_no_evidence", "aborted_pipeline"}:
+                result = f"修复失败 · {reason or candidate_status}"
+            elif candidate_status.startswith("aborted_"):
+                result = f"开工流程拦截 · {reason or candidate_status}"
+            elif candidate_status in _SCAN_OTHER_OUTCOMES:
+                label = _SCAN_OTHER_OUTCOMES[candidate_status]
+                result = f"{label} · {reason}" if reason else label
         rows.append({
             "key": key,
             "status": str(v.get("status") or ""),
@@ -1055,6 +1061,7 @@ def build_scan_rows(root) -> list[dict]:
             "first_seen": str(v.get("first_seen") or ""),
             "queue_state": queue_state,
             "final_result": result,
+            "pr_url": pr_url,
         })
     rows.sort(key=lambda r: r["first_seen"], reverse=True)
     return rows
@@ -1119,6 +1126,27 @@ def recheck_still_worth(key: str, title: str = "") -> tuple[bool, str]:
         return True, f"recheck error (kept): {str(e)[:100]}"
 
 
+_SCAN_OTHER_OUTCOMES = {
+    "stage_expired": "暂存已过期",
+    "escalated": "待人工核查",
+    "needs_cla": "开工拦截 · 需要签署 CLA",
+    "needs_maintainer_confirm": "开工拦截 · 等待维护者确认",
+    "gated_alignment_only": "开工拦截 · 仓库要求先沟通",
+    "observe_only": "开工拦截 · 仓库仅观察",
+    "out_of_scope": "开工拦截 · 仓库不在范围内",
+}
+
+
+def candidate_activity_state(key: str, status: str, running_keys) -> str:
+    if key.lower() in running_keys and status in {"running", "escalated"}:
+        return "执行中"
+    if status == "staged":
+        return "暂存"
+    if status in {"new", "recheck_failed", "running"}:
+        return "待执行"
+    return ""
+
+
 def build_candidate_rows(root, running_keys=()) -> list[dict]:
     """候选池只展示可执行、暂存或正在派发/执行的候选。"""
     qpath = root / "queue" / "candidates.json"
@@ -1128,14 +1156,8 @@ def build_candidate_rows(root, running_keys=()) -> list[dict]:
         return []
     rows = []
     for key, entry in sorted(queue.items()):
-        status = entry.get("status")
-        if key.lower() in running_keys and status in {"running", "escalated"}:
-            display = "执行中"
-        elif status == "staged":
-            display = "暂存"
-        elif status in {"new", "recheck_failed", "running"}:
-            display = "待执行"
-        else:
+        display = candidate_activity_state(key, entry.get("status"), running_keys)
+        if not display:
             continue
         rows.append({
             "key": key,

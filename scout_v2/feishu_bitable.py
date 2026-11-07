@@ -124,13 +124,20 @@ def scan_row_to_fields(row: dict) -> dict:
     if status in {"blocked", "unknown_repo", "too_fresh"}:
         result, coarse, fine = f"粗筛淘汰 · {coarse}" if coarse else "粗筛淘汰", coarse or "未通过", "未执行"
     elif status in {"queued", "rejected", "retry"}:
-        result = {"queued": "通过", "rejected": "细筛淘汰", "retry": "待重试"}[status]
+        result = {"queued": None, "rejected": "细筛淘汰", "retry": "待重试"}[status]
+        if status == "rejected" and fine:
+            result = f"{result} · {fine}"
         coarse = "通过"
         fine = fine or {"queued": "通过", "rejected": "未通过", "retry": "待重试"}[status]
     else:
         result = status or None
+    result = row.get("final_result") or result
+    pr_url = str(row.get("pr_url") or "")
+    pr = re.fullmatch(r"https://github\.com/([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)/pull/([0-9]+)", pr_url)
+    if pr:
+        result = [{"type": "url", "text": f"已开 PR · {pr[1]}#{pr[2]}", "link": pr_url}]
     return {"键": link_key(row["key"], "issues"), "发现时间": _timestamp(row.get("first_seen")),
-            "最终结果": row.get("final_result") or result, "粗筛结果": coarse or None, "细筛结果": fine or None}
+            "最终结果": result, "粗筛结果": coarse or None, "细筛结果": fine or None}
 
 
 def cand_row_to_fields(row: dict) -> dict:
@@ -202,6 +209,8 @@ def _norm_field(v):
     "看起来变了"，白白重写整张表。
     """
     if isinstance(v, list):
+        if any(isinstance(seg, dict) and seg.get("type") == "url" and seg.get("link") for seg in v):
+            return [{name: seg[name] for name in ("type", "text", "link") if name in seg} for seg in v]
         parts = [str(seg.get("text") or "") for seg in v
                  if isinstance(seg, dict) and seg.get("text") is not None]
         return "".join(parts) if parts else v
@@ -244,10 +253,6 @@ def load_records(app_token: str, table_id: str) -> dict:
         if not key:
             continue
         fields = {name: _norm_field(value) for name, value in raw.items()}
-        if isinstance(raw.get("键"), list):
-            segments = raw["键"]
-            if len(segments) == 1 and segments[0].get("type") == "url" and segments[0].get("link"):
-                fields["键"] = [{name: segments[0][name] for name in ("type", "text", "link")}]
         out[key] = {"record_id": str(record["record_id"]), "fields": fields}
     return out
 

@@ -122,10 +122,10 @@ def _staged_flush_once(root: Path, cfg: dict) -> dict:
 _BITABLE_SYNC_LOCK = threading.Lock()
 
 
-def _sync_bitables(root: Path, *, ds=None, candidates_only=False, candidate_cache=None) -> dict:
+def _sync_bitables(root: Path, *, ds=None, activity_only=False, activity_cache=None) -> dict:
     """Independent table snapshots; a failed source cannot clear remote data."""
     from scout_v2 import feishu_bitable as fb
-    from .console_activity import running_candidate_keys
+    from .console_activity import candidate_activity
     import importlib.util
     if not fb.configured(root):
         return {"configured": False}
@@ -139,8 +139,10 @@ def _sync_bitables(root: Path, *, ds=None, candidates_only=False, candidate_cach
         ("scan", mod.build_scan_rows, fb.SCAN_TABLE_NAME, fb.SCAN_FIELDS, fb.scan_row_to_fields, "scan_table_id", root / "state/seen.json"),
         ("candidates", mod.build_candidate_rows, fb.CAND_TABLE_NAME, fb.CAND_FIELDS, fb.cand_row_to_fields, "cand_table_id", root / "queue/candidates.json"),
     ]
+    activity = None
     for name, build, table, fields, convert, binding, source in tables:
-        if candidates_only and name != "candidates":
+        tracks_activity = name in {"scan", "candidates"}
+        if activity_only and not tracks_activity:
             continue
         try:
             with _BITABLE_SYNC_LOCK:
@@ -148,10 +150,12 @@ def _sync_bitables(root: Path, *, ds=None, candidates_only=False, candidate_cach
                 if source:
                     raw = source.read_text(encoding="utf-8")
                     yaml.safe_load(raw) if source.suffix == ".yaml" else json.loads(raw)
-                if name == "candidates":
-                    running = running_candidate_keys(ds if ds is not None else D.DataSource(root))
-                    rows = build(root, running)
-                    if candidates_only and candidate_cache is not None and rows == candidate_cache.get(name):
+                if tracks_activity:
+                    if activity is None:
+                        activity = candidate_activity(ds if ds is not None else D.DataSource(root))
+                    running, published = activity
+                    rows = build(root, running, published) if name == "scan" else build(root, running)
+                    if activity_only and activity_cache is not None and rows == activity_cache.get(name):
                         continue
                 else:
                     rows = build(root)
@@ -161,8 +165,8 @@ def _sync_bitables(root: Path, *, ds=None, candidates_only=False, candidate_cach
                 results[name] = fb.sync_table(root, rows, table_name=table, fields=fields,
                                               to_fields=convert, binding_key=binding,
                                               allow_empty=source is not None)
-                if name == "candidates" and candidate_cache is not None:
-                    candidate_cache[name] = rows
+                if tracks_activity and activity_cache is not None:
+                    activity_cache[name] = rows
                 _audit(root, "bitable_sync_" + name, table, json.dumps(results[name]))
         except Exception as ex:
             results[name] = {"error": str(ex)[:200]}
@@ -699,11 +703,11 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
                 return
             time.sleep(10)
             full_sync_at = 0.0
-            candidate_cache = {}
+            activity_cache = {}
             while True:
                 full = time.monotonic() >= full_sync_at
                 try:
-                    _sync_bitables(root, ds=ds, candidates_only=not full, candidate_cache=candidate_cache)
+                    _sync_bitables(root, ds=ds, activity_only=not full, activity_cache=activity_cache)
                     if full:
                         full_sync_at = time.monotonic() + 900
                 except Exception as ex:

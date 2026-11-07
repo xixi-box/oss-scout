@@ -421,6 +421,7 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen
             retry_status = "staged" if entry.get("status") == "staged" else "recheck_failed"
             mark_candidate(root, key, "escalated" if n >= 3 else retry_status,
                            extra={"recheck_failures": n, "rescreen_pending": rescreen,
+                                  "abort_reason": summary["abort"],
                                   "screen_retry_at": (business_now() + dt.timedelta(minutes=5)).isoformat()})
             if n >= 3:
                 from ..notify import feishu_send

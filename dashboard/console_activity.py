@@ -70,10 +70,26 @@ def _running_new_prs(ds, pending):
     return running, available
 
 
-def running_candidate_keys(ds):
+def candidate_activity(ds):
     pending, _ = _publications(ds, business_now().date().isoformat())
     running, _ = _running_new_prs(ds, pending)
-    return {f"{item['repo'].lower()}#{item['number']}" for item in running}
+    active = {f"{item['repo'].lower()}#{item['number']}" for item in running}
+    published = {}
+    conn = ds._open_ro()
+    if conn is not None:
+        try:
+            for repo, head, url in conn.execute(
+                "SELECT repo,head,url FROM publications WHERE day IS NOT NULL AND url IS NOT NULL ORDER BY day,rowid"
+            ):
+                issue = re.fullmatch(r"[^:]+:fix/issue-(\d+)-[0-9a-f]+-[0-9a-f]+", head)
+                if issue:
+                    published[f"{repo.lower()}#{issue[1]}"] = url
+        except sqlite3.OperationalError as exc:
+            if "no such table: publications" not in str(exc):
+                raise
+        finally:
+            conn.close()
+    return active, published
 
 
 def snapshot(ds):

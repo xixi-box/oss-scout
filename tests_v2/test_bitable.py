@@ -147,6 +147,16 @@ class TestSyncDiff:
         assert out["pruned"] == 1
         assert fake.deleted == ["r1"]
 
+    def test_scan_result_hyperlink_survives_readback_without_rewrite(self, fake, tmp_path):
+        row = {"key": "a/b#1", "status": "queued", "pr_url": "https://github.com/a/b/pull/2"}
+        kwargs = dict(table_name=fb.SCAN_TABLE_NAME, fields=fb.SCAN_FIELDS,
+                      to_fields=fb.scan_row_to_fields, binding_key="scan_table_id")
+        assert fb.sync_table(tmp_path, [row], **kwargs)["created"] == 1
+        link = fake.records["r1"]["最终结果"][0]
+        assert link == {"type": "url", "text": "已开 PR · a/b#2", "link": row["pr_url"]}
+        fake.records["r1"]["最终结果"][0] = {**link, "extra": "returned by Feishu"}
+        assert fb.sync_table(tmp_path, [row], **kwargs)["skipped"] == 1
+
     def test_unknown_empty_snapshot_keeps_old_rows(self, tmp_path, fake):
         fake.records = {"r1": {"键": "a/b#1"}}
         out = fb.sync_rows(tmp_path, [])
@@ -349,3 +359,33 @@ def test_scan_preserves_screen_results_and_shows_later_abort(tmp_path):
     assert rows[1]["最终结果"].startswith("旧版开工检查拦截")
     assert "a/b#4" in rows[1]["最终结果"]
     assert all(row["粗筛结果"] == "通过" and row["细筛结果"] == "OpenJev 0.99" for row in rows)
+
+
+
+def test_scan_outcomes_follow_candidate_and_publication_state(tmp_path):
+    (tmp_path / "state").mkdir()
+    (tmp_path / "queue").mkdir()
+    entries = {
+        "a/b#1": {"status": "new"},
+        "a/b#2": {"status": "staged"},
+        "a/b#3": {"status": "running"},
+        "a/b#4": {"status": "running"},
+        "a/b#5": {"status": "aborted_no_evidence", "abort_reason": "缺少复现证据"},
+        "a/b#6": {"status": "needs_cla", "abort_reason": "人工签署"},
+        "a/b#7": {"status": "pr_open", "pr_url": "https://github.com/a/b/pull/17"},
+        "a/b#8": {"status": "escalated", "abort_reason": "控制器重启"},
+    }
+    (tmp_path / "state/seen.json").write_text(json.dumps({
+        key: {"status": "queued", "fine_reason": "OpenJev 0.99"}
+        for key in [*entries, "a/b#9"]
+    }), encoding="utf-8")
+    (tmp_path / "queue/candidates.json").write_text(json.dumps(entries), encoding="utf-8")
+    rows = mp.build_scan_rows(tmp_path, {"a/b#3"}, {"a/b#8": "https://github.com/a/b/pull/18"})
+    fields = {row["key"]: fb.scan_row_to_fields(row) for row in rows}
+    assert [fields[f"a/b#{i}"]["最终结果"] for i in (1, 2, 3, 4, 5, 6, 9)] == [
+        "待执行", "暂存", "执行中", "待执行", "修复失败 · 缺少复现证据",
+        "开工拦截 · 需要签署 CLA · 人工签署", None,
+    ]
+    assert fields["a/b#7"]["最终结果"][0]["link"] == "https://github.com/a/b/pull/17"
+    assert fields["a/b#8"]["最终结果"][0]["link"] == "https://github.com/a/b/pull/18"
+    assert all(row["粗筛结果"] == "通过" and row["细筛结果"] == "OpenJev 0.99" for row in fields.values())
