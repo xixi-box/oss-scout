@@ -218,15 +218,15 @@ def test_unconsumed_backlog_waits_for_next_four_am(tmp_path, monkeypatch):
     assert entry["staged_at"] == "2026-11-06T20:00:00+08:00"
 
 
-@pytest.mark.parametrize("include_staged", [False, True])
-def test_failed_repair_does_not_spend_publication_quota(tmp_path, monkeypatch, include_staged):
+@pytest.mark.parametrize("mode", ["fresh", "staged", "manual", "staged_blocked"])
+def test_failed_repair_does_not_spend_publication_quota(tmp_path, monkeypatch, mode):
     (tmp_path / "queue").mkdir()
     (tmp_path / "state").mkdir()
     entries = {f"docker/compose#{i}": {"id": f"docker/compose#{i}", "repo": "docker/compose", "number": i,
                             "title": "Parser bug", "status": "new", "context_complete": True,
                             "ai_verdict": {"usable": True, "provider": "codiv"}}
                for i in range(1, 8)}
-    if include_staged:
+    if mode.startswith("staged"):
         from scout_v2.state_store import business_now
         now = business_now()
         for i in (4, 5, 6):
@@ -236,15 +236,20 @@ def test_failed_repair_does_not_spend_publication_quota(tmp_path, monkeypatch, i
                                                 dt.time(4), tzinfo=now.tzinfo).isoformat())
     (tmp_path / "queue/candidates.json").write_text(json.dumps(entries))
     eng = SimpleNamespace(repo_lane=lambda _: "open", tz_name="Asia/Shanghai",
-                          max_claims_per_day=5, snapshot_id=lambda: "test")
+                          max_claims_per_day=5, snapshot_id=lambda: "test",
+                          repos_cfg={"repositories": {"docker/compose": {}}})
     monkeypatch.setattr(p.PolicyEngine, "load", lambda _: (eng, None))
-    monkeypatch.setattr(p, "recheck_candidate", lambda *a, **kw: SimpleNamespace(
+    monkeypatch.setattr(p, "recheck_candidate", lambda repo, number, **kw: SimpleNamespace(
         complete=True, issue_open=True, unassigned=True, has_claim_signal=False,
-        has_cross_ref_pr=False, open_pr_hits=[], is_duplicate=False))
+        has_cross_ref_pr=False, open_pr_hits=[], is_duplicate=False,
+        screening_source=({"title": "Parser bug", "state": "open", "labels": (
+            [{"name": "documentation"}] if mode == "staged_blocked" and number == 4 else []
+        )}, [], [])))
     monkeypatch.setattr("scout_v2.workers.cla.preflight", lambda *a: {"blocking": False})
     monkeypatch.setattr("scout_v2.workers.repair.resolve_model", lambda: "test")
+    screens = []
     monkeypatch.setattr("scout_v2.workers.openjev.OpenJevClient.score_issue",
-                        lambda *a: pytest.fail("consumption must not call AI"))
+                        lambda self, issue: screens.append(issue["number"]) or {"usable": True})
     monkeypatch.setattr(p.subprocess, "run", lambda *a, **kw: SimpleNamespace(
         returncode=0, stdout="a" * 40, stderr=""))
     monkeypatch.setattr(p, "_build_router", lambda *a: SimpleNamespace(
@@ -275,14 +280,20 @@ def test_failed_repair_does_not_spend_publication_quota(tmp_path, monkeypatch, i
     monkeypatch.setattr("scout_v2.notify.feishu_send", lambda *a, **kw: None)
     monkeypatch.setattr("scout_v2.workers.cla.sign", lambda *a: {})
     for entry in entries.values():
-        p.candidate_pipeline(tmp_path, entry)
+        p.candidate_pipeline(tmp_path, entry, rescreen=mode == "manual")
     led = ClaimLedger(tmp_path / "state/scout_v2.sqlite3")
     assert led.count_today("Asia/Shanghai") == 6
     assert led.published_today("Asia/Shanghai") == 5
     led.close()
     assert len(submitted) == 6
+    assert screens == {"fresh": [], "staged": [4, 5, 6], "manual": [1, 2, 3, 4, 5, 6],
+                       "staged_blocked": [5, 6]}[mode]
     q = json.loads((tmp_path / "queue/candidates.json").read_text())
-    assert q["docker/compose#7"]["status"] == "staged"
+    if mode == "staged_blocked":
+        assert q["docker/compose#4"]["blockers"] == ["excluded_label"]
+        assert q["docker/compose#7"]["status"] == "pr_open"
+    else:
+        assert q["docker/compose#7"]["status"] == "staged"
 
 
 def test_publication_reconciled_on_github_creation_day(tmp_path, monkeypatch):

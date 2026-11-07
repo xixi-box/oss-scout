@@ -113,6 +113,7 @@ class RecheckResult:
     errors: list[str] = field(default_factory=list)
     issue_title: str | None = None
     issue_body: str = ""
+    screening_source: tuple[dict, list, list] | None = field(default=None, repr=False)
 
 
 def linked_fix_prs(timeline: list, number: int, my_login: str = "xixi-box") -> list[dict]:
@@ -202,6 +203,7 @@ def recheck_candidate(repo: str, number: int, *, my_login: str = "xixi-box",
         r.errors.append("timeline fetch failed")
     else:
         r.has_cross_ref_pr = bool(linked_fix_prs(timeline, number, my_login))
+        r.screening_source = (issue, comments, timeline)
     import urllib.parse as _up
     # 只看 open PR：已关闭/已合并的历史尝试不算竞争（与 cross-ref 判定一致）。
     #

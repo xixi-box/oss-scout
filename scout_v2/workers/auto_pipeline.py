@@ -318,7 +318,7 @@ def _abort_release_impl(msg: str, *, candidate_id: str, ledger, eng,
     return summary
 
 
-def candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6) -> dict:
+def candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen: bool = False) -> dict:
     """A single durable execution lock covers every entrypoint, even other processes."""
     import sqlite3
     root = _data_root(root)
@@ -332,7 +332,7 @@ def candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6) -> dict:
                 return {"id": entry.get("id"), "abort": "dispatcher busy"}
             raise
         try:
-            return _candidate_pipeline(root, entry, max_files=max_files)
+            return _candidate_pipeline(root, entry, max_files=max_files, rescreen=rescreen)
         except Exception as ex:
             _emergency_release(root, entry.get("id", ""))
             log(root, "crash", entry.get("id", ""), str(ex)[:200])
@@ -341,7 +341,7 @@ def candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6) -> dict:
         conn.close()
 
 
-def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6) -> dict:
+def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen: bool = False) -> dict:
     """单候选：复检 → 合规 → 后端修复 → 质量闸 → push + PR。"""
     root = _data_root(root)
     repo, number = entry["repo"], entry["number"]
@@ -355,6 +355,8 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6) -> dict:
             entry = dict(latest)
             if entry.get("status") not in ("new", "queued", "recheck_failed", "staged") or not _eligible(entry):
                 return {**summary, "abort": "candidate not currently eligible"}
+
+    rescreen = rescreen or bool(entry.get("staged_at") or entry.get("rescreen_pending")) or entry.get("status") == "staged"
 
     def _abort_release(msg: str, *, give_back: bool = True) -> dict:
         # 委托模块级实现（显式传参）。2026-11-06 实录：模块级版本曾漏参
@@ -414,8 +416,10 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6) -> dict:
         # 现在每 60 秒一轮，如果 GitHub 持续抖动就会每分钟打一次。记失败次数，
         # 超过 3 次就标 escalated 不再自动重试，避免无意义刷 API。
         n = int(entry.get("recheck_failures") or 0) + 1
-        mark_candidate(root, key, "escalated" if n >= 3 else "recheck_failed",
-                       extra={"recheck_failures": n, "screen_retry_at": (business_now() + dt.timedelta(minutes=5)).isoformat()})
+        retry_status = "staged" if entry.get("status") == "staged" else "recheck_failed"
+        mark_candidate(root, key, "escalated" if n >= 3 else retry_status,
+                       extra={"recheck_failures": n, "rescreen_pending": rescreen,
+                              "screen_retry_at": (business_now() + dt.timedelta(minutes=5)).isoformat()})
         if n >= 3:
             from ..notify import feishu_send
             feishu_send(f"⚠️ 候选升级转人工：{key}",
@@ -485,14 +489,15 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6) -> dict:
             return summary
         summary["steps"].append("restricted lane: maintainer-confirmed")
 
-    # The inbox already made the AI decision. This stage only verifies live facts.
+    # Fresh automatic dispatch reuses the inbox verdict. Delayed or manual
+    # dispatch evaluates the current evidence again before claiming work.
     approved = (entry.get("ai_verdict") or {}).get("usable")
     if approved is None:
         approved = (entry.get("ai_grade") or {}).get("grade") == "A"
     if approved is not True:
         mark_candidate(root, key, "escalated", extra={"abort_reason": "no approved screening verdict"})
         return _abort_release("candidate has no approved screening verdict")
-    if getattr(recheck, "issue_title", None) is not None:
+    if not rescreen and getattr(recheck, "issue_title", None) is not None:
         if ((entry.get("ai_verdict") or {}).get("provider") == "codiv"
                 and (recheck.issue_title != entry.get("title") or recheck.issue_body != entry.get("body_excerpt"))):
             mark_candidate(root, key, "escalated", extra={"abort_reason": "issue title or body changed after screening"})
@@ -528,13 +533,38 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6) -> dict:
         summary["abort"] = f"CLA preflight unavailable: {ex}"
         mark_candidate(root, key, str(entry.get("status") or "new"), extra={
             "screen_retry_at": (business_now() + dt.timedelta(minutes=5)).isoformat(),
-            "abort_reason": summary["abort"]})
+            "abort_reason": summary["abort"], "rescreen_pending": rescreen})
         return summary
     if pre.get("blocking"):
         mark_candidate(root, key, "needs_cla", extra={"abort_reason": str(pre.get("detail")),
                                                      "cla_sign_url": pre.get("url", "")})
         summary["abort"] = "CLA required"
         return summary
+    if rescreen:
+        from dashboard.data import issue_screening_snapshot, screen_issue
+        source = getattr(recheck, "screening_source", None)
+        if source:
+            issue, comments, timeline = source
+            fresh = issue_screening_snapshot(entry, issue, comments)
+            blockers, verdict = screen_issue(eng, fresh, lane=lane, timeline=timeline)
+        else:
+            blockers, verdict = [], {"usable": None, "reason": "current screening evidence unavailable"}
+        if blockers:
+            mark_candidate(root, key, "aborted_stale", extra={"blockers": blockers,
+                                                              "abort_reason": ", ".join(blockers)})
+            return _abort_release("queue coarse screening blocked: " + ", ".join(blockers))
+        if verdict.get("usable") is not True:
+            retry = verdict.get("usable") is None
+            status = (entry.get("status") or "new") if retry else "aborted_stale"
+            reason = str(verdict.get("reason") or "no eligibility verdict")
+            mark_candidate(root, key, status, extra={"abort_reason": reason, "rescreen_pending": retry,
+                "screen_retry_at": (business_now() + dt.timedelta(minutes=5)).isoformat() if retry else None})
+            return _abort_release(f"queue fine screening {'unavailable' if retry else 'rejected'}: {reason}")
+        entry = {**fresh, "ai_verdict": verdict, "screened_at": business_now().isoformat(),
+                 "rescreen_pending": False}
+        mark_candidate(root, key, str(entry.get("status") or "new"),
+                       extra={k: v for k, v in entry.items() if k != "updated_at"})
+        summary["steps"].append("queue coarse and fine screening passed")
     ledger = ClaimLedger(root / "state/scout_v2.sqlite3")
     # The queue lock protects state across days; the ledger serializes the cap.
     with queue_transaction(root) as q:
@@ -549,6 +579,8 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6) -> dict:
         if not ok:
             if current is not None and "daily limit" in reason:
                 _defer_entry(current, root)
+            elif current is not None and "already claimed" in reason:
+                current.update(status="escalated", abort_reason=reason)
             summary["abort"] = f"claim budget: {reason}"
             ledger.close()
             return summary
@@ -1024,7 +1056,7 @@ def _order_candidates(entries: list[tuple[str, dict]],
 
 
 def drain_ai_graded(root: Path, limit: int = 3, dry_run: bool = True,
-                    max_new_claims: int = 0) -> list[dict]:
+                    max_new_claims: int = 0, *, rescreen: bool = False) -> list[dict]:
     """扫描候选池：AI 判定可处理、无客观否决、未处理过的 → 逐条走后端 pipeline。
 
     2026-10-30（用户裁定）：入口只看 AI 的二元判断。规则打分那套加分表
@@ -1079,7 +1111,7 @@ def drain_ai_graded(root: Path, limit: int = 3, dry_run: bool = True,
     for e in picked:
         key = str(e.get("id", ""))
         try:
-            out.append(candidate_pipeline(root, e))
+            out.append(candidate_pipeline(root, e, rescreen=rescreen))
         except Exception as ex:  # noqa: BLE001
             log(root, "crash", key,
                 f"unhandled: {type(ex).__name__}: {str(ex)[:200]}")

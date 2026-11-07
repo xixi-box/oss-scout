@@ -114,7 +114,7 @@ def _atomic_write_text(path: Path, text: str) -> None:
 def _staged_flush_once(root: Path, cfg: dict) -> dict:
     """Compatibility entrypoint: use the same eligible FIFO and daily ledger."""
     from scout_v2.workers.auto_pipeline import drain_ai_graded
-    results = drain_ai_graded(root, limit=5, dry_run=False)
+    results = drain_ai_graded(root, limit=5, dry_run=False, rescreen=True)
     return {"processed": len(results), "results": results}
 
 
@@ -321,12 +321,12 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
     # repair job 没有 concurrency 组，可以并行跑，实测 3 条同时在飞。
     _MAX_CONCURRENT = 1
 
-    def _run_one(entry: dict) -> None:
+    def _run_one(entry: dict, rescreen: bool = False) -> None:
         key = str(entry.get("id", ""))
         out = {}
         try:
             from scout_v2.workers.auto_pipeline import candidate_pipeline
-            out = candidate_pipeline(root, entry)
+            out = candidate_pipeline(root, entry, rescreen=rescreen)
             _audit(root, "auto_repair", key, json.dumps(out, ensure_ascii=False)[:400])
         except Exception as e:  # noqa: BLE001
             try:
@@ -339,7 +339,7 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
             current = _load_candidate(root, key) or {}
             if out.get("abort") != "dispatcher busy" and current.get("status") not in (
                     "new", "queued", "recheck_failed", "staged"):
-                _dispatch()
+                _dispatch(rescreen=rescreen)
 
     def _publications_left() -> int:
         """Number of new PRs that may still be published today."""
@@ -413,7 +413,7 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
             except Exception:  # noqa: BLE001
                 pass
 
-    def _dispatch(keys: list[str] | None = None, limit: int = 8) -> list[str]:
+    def _dispatch(keys: list[str] | None = None, limit: int = 8, *, rescreen: bool = False) -> list[str]:
         """派发候选去修复。keys 为空时从队列按 AI 判定挑。
 
         返回本次新派发的 key 列表。不阻塞：线程启动即返回。
@@ -452,7 +452,7 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
                     ent = _load_candidate(root, key)
                     if ent is None:
                         continue
-                    th = _thr.Thread(target=_run_one, args=(ent,), daemon=True,
+                    th = _thr.Thread(target=_run_one, args=(ent, rescreen), daemon=True,
                                      name=f"repair-{key}")
                     _inflight[key] = th
                 th.start()
@@ -1178,7 +1178,7 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
 
     @app.post("/api/pipeline/run")
     def api_pipeline_run(request: Request):
-        return JSONResponse({"dispatched": _dispatch()})
+        return JSONResponse({"dispatched": _dispatch(rescreen=True)})
 
     @app.get("/api/pr/replies")
     def api_pr_replies():

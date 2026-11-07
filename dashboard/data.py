@@ -808,6 +808,10 @@ def refresh_issue(item: dict) -> dict:
         if len(batch) < 100:
             break
         page += 1
+    return issue_screening_snapshot(item, issue, comments)
+
+
+def issue_screening_snapshot(item: dict, issue: dict, comments: list) -> dict:
     return {**item, "title": issue.get("title") or "", "body_excerpt": issue.get("body") or "",
             "created_at": issue.get("created_at"), "state_reason": issue.get("state_reason"),
             "reporter": (issue.get("user") or {}).get("login"),
@@ -823,21 +827,65 @@ def refresh_issue(item: dict) -> dict:
                                 "body": c.get("body") or ""} for c in comments]}
 
 
+def screen_issue(eng, it: dict, *, lane: str, timeline: list | None = None) -> tuple[list[str], dict]:
+    """Apply the same mechanical rules and OpenJev decision at intake and on queue consumption."""
+    from scout_v2.git_host import gh_pages, linked_fix_prs
+    from scout_v2.workers.openjev import OpenJevClient
+
+    repo, number = str(it["repo"]), int(it["number"])
+    excluded = {"invalid", "wontfix", "duplicate", "question", "stale", "documentation",
+                "awaiting more info", "awaiting-more-info", "needs more info", "needs-repro"}
+    labels = [str(l) for l in it.get("labels") or []]
+    blockers = []
+    if repo not in (eng.repos_cfg.get("repositories") or {}) or lane in ("unknown", "observe"):
+        blockers.append("repo_not_actionable")
+    if it.get("pull_request") or it.get("assignees") or it.get("state", "open") != "open":
+        blockers.append("not_open_unassigned_issue")
+    if excluded.intersection(l.lower() for l in labels):
+        blockers.append("excluded_label")
+    if it.get("state_reason") == "duplicate":
+        blockers.append("confirmed_duplicate")
+    title, body = str(it.get("title") or ""), str(it.get("body_excerpt") or "")
+    claim_sents = _claimish_sentences(body)
+    verdict = {"usable": None, "reason": "not screened"}
+    if not blockers:
+        try:
+            if timeline is None:
+                timeline = gh_pages(f"repos/{repo}/issues/{number}/timeline", 100) if it.get("context_complete") else []
+            if timeline is None:
+                raise RuntimeError("issue timeline unavailable")
+            reporter = it.get("reporter")
+            verdict = OpenJevClient().score_issue({
+                "repo": repo, "number": number, "title": title, "labels": labels,
+                "body": body, "issue_url": it.get("url"),
+                "state": it.get("state"), "state_reason": it.get("state_reason"),
+                "created_at": it.get("created_at"), "updated_at": it.get("updated_at"),
+                "reporter": reporter, "reporter_association": it.get("reporter_association"),
+                "assignees": [a.get("login") for a in it.get("assignees") or []],
+                "reactions": it.get("reactions", 0), "lane": lane,
+                "num_comments": int(it.get("comments") or 0),
+                "comments": [{**c, "is_reporter": bool(reporter and c.get("author") == reporter)}
+                             for c in it.get("issue_comments") or []],
+                "linked_pull_requests": linked_fix_prs(timeline, number),
+                "claim_evidence_in_body": claim_sents,
+                "reporter_offered_fix": bool(_RE_OFFER.search(body)),
+                "claimish_signal": bool(claim_sents),
+                "repo_rules": repo_rules_text(repo)})
+        except Exception as ex:
+            verdict = {"usable": None, "reason": f"scorer error: {ex}"[:200]}
+    return blockers, verdict
+
+
 def ingest_cloudflare_issues(ds, items: list[dict]) -> tuple[int, list[str]]:
     """Mechanical exclusions, then AI; short atomic writes never enclose network IO."""
     import hashlib
     from scout_v2.state_store import atomic_json_write, queue_transaction, business_now
     from scout_v2.repo_policy import PolicyEngine
-    from scout_v2.git_host import gh_pages, linked_fix_prs
-    from scout_v2.workers.openjev import OpenJevClient
     eng, err = PolicyEngine.load(ds.root)
     if err or eng is None:
         raise RuntimeError(f"policy unavailable: {err}")
-    scorer = OpenJevClient()
     seen_path = ds.root / "state/seen.json"
     added = []
-    excluded = {"invalid", "wontfix", "duplicate", "question", "stale", "documentation",
-                "awaiting more info", "awaiting-more-info", "needs more info", "needs-repro"}
     for it in items:
         repo, number = str(it.get("repo") or ""), int(it.get("number") or 0)
         if not repo or number <= 0:
@@ -849,44 +897,8 @@ def ingest_cloudflare_issues(ds, items: list[dict]) -> tuple[int, list[str]]:
             prior = seen.get(key) or {}
             if key in q or (prior.get("fingerprint") == fingerprint and prior.get("status") in ("blocked", "rejected")):
                 continue
-        labels = [str(l) for l in it.get("labels") or []]
         lane = eng.repo_lane(repo)
-        blockers = []
-        if repo not in (eng.repos_cfg.get("repositories") or {}) or lane in ("unknown", "observe"):
-            blockers.append("repo_not_actionable")
-        if it.get("pull_request") or it.get("assignees") or it.get("state", "open") != "open":
-            blockers.append("not_open_unassigned_issue")
-        if excluded.intersection(l.lower() for l in labels):
-            blockers.append("excluded_label")
-        if it.get("state_reason") == "duplicate":
-            blockers.append("confirmed_duplicate")
-        title, body = str(it.get("title") or ""), str(it.get("body_excerpt") or "")
-        claim_sents = _claimish_sentences(body)
-        verdict = {"usable": None, "reason": "not screened"}
-        if not blockers:
-            try:
-                timeline = gh_pages(f"repos/{repo}/issues/{number}/timeline", 100) if it.get("context_complete") else []
-                if timeline is None:
-                    raise RuntimeError("issue timeline unavailable")
-                reporter = it.get("reporter")
-                verdict = scorer.score_issue({
-                    "repo": repo, "number": number, "title": title, "labels": labels,
-                    "body": body, "issue_url": it.get("url"),
-                    "state": it.get("state"), "state_reason": it.get("state_reason"),
-                    "created_at": it.get("created_at"), "updated_at": it.get("updated_at"),
-                    "reporter": reporter, "reporter_association": it.get("reporter_association"),
-                    "assignees": [a.get("login") for a in it.get("assignees") or []],
-                    "reactions": it.get("reactions", 0), "lane": lane,
-                    "num_comments": int(it.get("comments") or 0),
-                    "comments": [{**c, "is_reporter": bool(reporter and c.get("author") == reporter)}
-                                 for c in it.get("issue_comments") or []],
-                    "linked_pull_requests": linked_fix_prs(timeline, number),
-                    "claim_evidence_in_body": claim_sents,
-                    "reporter_offered_fix": bool(_RE_OFFER.search(body)),
-                    "claimish_signal": bool(claim_sents),
-                    "repo_rules": repo_rules_text(repo)})
-            except Exception as ex:
-                verdict = {"usable": None, "reason": f"scorer error: {ex}"[:200]}
+        blockers, verdict = screen_issue(eng, it, lane=lane)
         now = business_now().isoformat(timespec="seconds")
         rec = {"first_seen": prior.get("first_seen") or now, "fingerprint": fingerprint,
                "status": "blocked" if blockers else "queued" if verdict.get("usable") is True else
@@ -898,7 +910,7 @@ def ingest_cloudflare_issues(ds, items: list[dict]) -> tuple[int, list[str]]:
             seen = _read_json(seen_path, {})()
             if not blockers and verdict.get("usable") is True and key not in q:
                 q[key] = {**it, "id": key, "repo": repo, "number": number, "lane": lane,
-                          "labels": labels, "blockers": [], "ai_verdict": verdict,
+                          "blockers": [], "ai_verdict": verdict,
                           "discovered_at": now, "status": "new", "lease": None,
                           "source": "cloudflare-worker", "screened_at": now,
                           "url": it.get("url") or f"https://github.com/{repo}/issues/{number}"}
