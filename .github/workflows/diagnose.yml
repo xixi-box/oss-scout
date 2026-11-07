@@ -13,7 +13,7 @@ jobs:
           from scout_v2 import feishu_bitable as b, feishu_app as a
           root = Path(os.environ.get("OSSCOUT_DASHBOARD_ROOT", "/data"))
           base = b._binding_app_token(root)
-          tid = b.load_binding(root)["native_preview_settings"]
+          tid = b.find_or_create_table(base, "键链接格式临时验证", [{"field_name": "键", "type": 1}])
           url = f"https://open.feishu.cn/open-apis/bitable/v1/apps/{base}/tables/{tid}/records"
           token = a.tenant_token()
           link = "https://github.com/xixi-box/oss-scout"
@@ -28,4 +28,6 @@ jobs:
                   finally:
                       deleted = a._request("DELETE", f"{url}/{rec}", token=token)
                       assert deleted.get("code") == 0
+          deleted = a._request("DELETE", url.rsplit("/", 1)[0], token=token)
+          assert deleted.get("code") == 0
           PY
