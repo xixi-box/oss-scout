@@ -1,4 +1,4 @@
-name: Remove duplicate Feishu queue date
+name: Verify live Feishu queue and PR colors
 on:
   workflow_dispatch:
 jobs:
@@ -6,44 +6,48 @@ jobs:
     runs-on: [self-hosted, aliyun]
     timeout-minutes: 5
     steps:
-      - name: Merge duplicate date values and remove the duplicate field
+      - name: Read status options and synchronized rows
         run: |
           docker exec -i -w /app oss-scout python - <<'PY'
-          import os
+          import collections, json, os
           from pathlib import Path
           from scout_v2 import feishu_bitable as b, feishu_app as a
           root = Path(os.environ.get("OSSCOUT_DASHBOARD_ROOT", "/data"))
           base = b._binding_app_token(root)
-          table = b.load_binding(root)["cand_table_id"]
-          assert table == "tbly8KB714GtkrC4", table
+          binding = b.load_binding(root)
           token = a.tenant_token()
-          url = f"https://open.feishu.cn/open-apis/bitable/v1/apps/{base}/tables/{table}"
-          def call(method, path, data=None):
-              reply = a._request(method, url + path, data, token=token)
-              if reply.get("code") != 0:
-                  raise RuntimeError(f"{method} {path}: {reply.get('code')} {reply.get('msg')}")
-              return reply.get("data") or {}
-          keep, remove = "fldf9d3zKa", "fldrItFAWX"
-          label, temporary = "入队时间", "入队时间（重复待删除）"
-          fields = {f["field_id"]: f for f in call("GET", "/fields?page_size=100")["items"]}
-          assert fields[keep]["field_name"] == label and fields[keep]["type"] == 5
-          if remove in fields:
-              dup = fields[remove]
-              assert dup["field_name"] in {label, temporary} and dup["type"] == 5
-              if dup["field_name"] == label:
-                  call("PUT", f"/fields/{remove}", {"field_name": temporary, "type": 5,
-                                                    "property": b.DATE_FORMAT})
-              updates = []
-              for rec in b.record_pages(base, table):
-                  values = rec["fields"]
-                  if not values.get(label) and values.get(temporary):
-                      updates.append({"record_id": rec["record_id"], "fields": {label: values[temporary]}})
-              for i in range(0, len(updates), 500):
-                  call("POST", "/records/batch_update", {"records": updates[i:i+500]})
-              call("DELETE", f"/fields/{remove}")
-              print("copied_from_duplicate", len(updates))
-          dates = [f["field_id"] for f in call("GET", "/fields?page_size=100")["items"]
-                   if f["field_name"] == label]
-          assert dates == [keep], dates
-          print("single_date_field", dates[0])
+          queue = json.loads((root / "queue/candidates.json").read_text())
+          for binding_key, schema, label in [("cand_table_id", b.CAND_FIELDS, "处理状态"),
+                                             ("pr_table_id", b.PR_FIELDS, "PR 状态")]:
+              table = binding[binding_key]
+              url = f"https://open.feishu.cn/open-apis/bitable/v1/apps/{base}/tables/{table}/fields?page_size=100"
+              reply = a._request("GET", url, token=token)
+              assert reply["code"] == 0, reply["msg"]
+              fields = reply["data"]["items"]
+              assert collections.Counter(f["field_name"] for f in fields) == collections.Counter(
+                  f["field_name"] for f in schema), binding_key
+              field = next(f for f in fields if f["field_name"] == label)
+              assert field["type"] == 3, field
+              desired = next(f["property"]["options"] for f in schema if f["field_name"] == label)
+              actual = {o["name"]: o["color"] for o in field["property"]["options"]}
+              print(binding_key, "colors", actual)
+              assert actual == {o["name"]: o["color"] for o in desired}
+              records = b.load_records(base, table)
+              states = collections.Counter(row["fields"].get(label) for row in records.values())
+              print(binding_key, "row_counts", dict(states))
+              assert set(states) <= actual.keys()
+              if binding_key == "cand_table_id":
+                  dates = {key: row["fields"].get("入队时间") for key, row in records.items()}
+                  fallback = {key: b._timestamp(entry["staged_at"]) for key, entry in queue.items()
+                              if key in dates and not entry.get("discovered_at") and entry.get("staged_at")}
+                  mismatched = [key for key, expected in fallback.items() if dates[key] != expected]
+                  print("date_blanks", sum(not v for v in dates.values()),
+                        "staged_at_backfills", len(fallback), "mismatches", mismatched)
+                  assert not mismatched
+                  assert all(queue[key].get("status") != "queued" for key in dates if key in queue)
+          for line in (root / "state/worklog.jsonl").read_text().splitlines()[-400:]:
+              try: entry = json.loads(line)
+              except ValueError: continue
+              if str(entry.get("action", "")).startswith("bitable_sync"):
+                  print(entry.get("ts"), entry.get("action"), entry.get("target"), entry.get("result"))
           PY
