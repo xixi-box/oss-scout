@@ -85,8 +85,11 @@ def mark_candidate(root: Path, key: str, status: str,
 def _emergency_release(root: Path, candidate_id: str = "", tz_name: str = "Asia/Shanghai") -> None:
     """Never silently rerun an interrupted remote write."""
     if candidate_id:
-        mark_candidate(root, candidate_id, "escalated",
-                       extra={"abort_reason": "controller interrupted; inspect remote job before retry"})
+        with queue_transaction(root) as queue:
+            candidate = queue.get(candidate_id)
+            if candidate and candidate.get("status") == "running":
+                candidate.update(status="escalated", updated_at=business_now(tz_name).isoformat(timespec="seconds"),
+                                 abort_reason="controller interrupted; inspect remote job before retry")
 
 
 def _build_router(root: Path, job: Job, engine: PolicyEngine) -> JobRouter:
@@ -137,7 +140,8 @@ def _actions_workflow_name(root: Path) -> str:
     return "oss-scout-repair.yml"
 
 
-def _reconcile_publication(ledger: ClaimLedger, tz_name: str) -> dict | None:
+def _reconcile_publication(ledger: ClaimLedger, tz_name: str, *, root: Path | None = None,
+                           worker_result: dict | None = None) -> dict | None:
     """Resolve the previous writer before another job can publish."""
     pending = ledger.pending_publication()
     if pending is None:
@@ -159,14 +163,95 @@ def _reconcile_publication(ledger: ClaimLedger, tz_name: str) -> dict | None:
     pr = next((p for p in prs if (p.get("user") or {}).get("login") == FORK_OWNER
                and (p.get("html_url") == expected_url
                     or f"<!-- oss-scout-job:{job_id} -->" in (p.get("body") or ""))), None)
-    if pr is None:
-        if expected_url:
-            return None
+    if pr is None and expected_url:
+        return None
+    created = dt.datetime.fromisoformat(pr["created_at"].replace("Z", "+00:00")) if pr else None
+    issue = re.fullmatch(r"[^:]+:fix/issue-(\d+)-[0-9a-f]+(?:-[0-9a-f]+)?", head)
+    if root is not None and issue:
+        recovery = worker_result is None
+        key = f"{repo}#{issue[1]}"
+        if pr:
+            status = "pr_open"
+            extra = {"pr_url": pr["html_url"], "repair_outcome": "succeeded", "abort_reason": ""}
+        else:
+            result = worker_result
+            if recovery:
+                result = ActionsBackend(runner_repo=runner_repo, artifact_dir=root / "artifacts").collect(str(remote_id))
+            result = result or {}
+            if result.get("job_id") != job_id:
+                if (run.get("conclusion") == "success"
+                        and "no artifacts and logs unavailable" in (result.get("unverified_items") or [])):
+                    return None
+                result = {}
+            publication = result.get("publish") or {}
+            if publication.get("created") and publication.get("pr"):
+                ledger.expect_publication(job_id, publication["pr"])
+                return None
+            outcome = result.get("outcome")
+            details = result.get("unverified_items") or []
+            if outcome and outcome != "succeeded":
+                status = "aborted_no_evidence"
+                reason = f"修复结果 {outcome}，未发布 PR"
+                if details:
+                    reason += f" · {details[0]}"
+            elif outcome == "succeeded":
+                reason = "修复完成，但未发布 PR"
+                if publication.get("error"):
+                    reason += f" · {publication['error']}"
+                status = "aborted_pipeline"
+            elif run.get("conclusion") in ("failure", "cancelled", "timed_out"):
+                status, reason = "aborted_pipeline", f"工作流已结束（{run['conclusion']}），未发布 PR"
+            else:
+                status, reason = "escalated", "工作流已结束，未发布 PR，修复结果无法确认"
+            extra = {"repair_outcome": outcome or "unknown", "abort_reason": reason[:300]}
+        # Save the candidate first. If the controller stops here, the pending
+        # publication still exists and the same result can safely be reconciled.
+        with queue_transaction(root) as queue:
+            actual_key = next((k for k in queue if k.lower() == key.lower()), key)
+            candidate = queue.get(actual_key)
+            if candidate is not None:
+                candidate.update(status=status, updated_at=business_now().isoformat(timespec="seconds"),
+                                 repair_job_id=job_id, repair_run_id=str(remote_id),
+                                 workflow_conclusion=run.get("conclusion"), **extra)
+        if recovery:
+            if pr:
+                log(root, "pr_open", key, f"{pr['html_url']} (reconciled from Actions)")
+            else:
+                log(root, "reconciled", key, f"{status} · {extra['abort_reason']}")
+    if pr:
+        ledger.finish_publication(job_id, day=business_day(created, tz_name), url=pr["html_url"])
+    else:
         ledger.finish_publication(job_id)
-        return {}
-    created = dt.datetime.fromisoformat(pr["created_at"].replace("Z", "+00:00"))
-    ledger.finish_publication(job_id, day=business_day(created, tz_name), url=pr["html_url"])
-    return pr
+    if root is not None:
+        try:
+            (root / "artifacts" / "issue-context" / f"{job_id}.json").unlink(missing_ok=True)
+        except OSError:
+            pass
+    return pr or {}
+
+
+def recover_pending_publication(root: Path, tz_name: str = "Asia/Shanghai") -> bool:
+    """Recover completed Actions runs even when the queue has no next candidate."""
+    import sqlite3
+
+    root = _data_root(root)
+    (root / "state").mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(root / "state/dispatcher.sqlite3", timeout=0, isolation_level=None)
+    try:
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+        except sqlite3.OperationalError as exc:
+            if "locked" in str(exc).lower():
+                return False
+            raise
+        ledger = ClaimLedger(root / "state/scout_v2.sqlite3")
+        try:
+            return ledger.pending_publication() is not None and _reconcile_publication(
+                ledger, tz_name, root=root) is not None
+        finally:
+            ledger.close()
+    finally:
+        conn.close()
 
 
 def _actions_runner_repo(root: Path) -> str:
@@ -388,7 +473,7 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen
         return summary
     budget = ClaimLedger(root / "state/scout_v2.sqlite3")
     try:
-        if _reconcile_publication(budget, eng.tz_name) is None:
+        if _reconcile_publication(budget, eng.tz_name, root=root) is None:
             return {**summary, "abort": "previous publication awaiting reconciliation"}
         if budget.published_today(eng.tz_name) >= eng.max_claims_per_day:
             _stage_candidates(root, [key])
@@ -686,14 +771,14 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen
     summary["steps"].append(f"backend={backend} ({extra.get('note', '')})")
 
     ledger.set_publication_run(job.job_id, remote_id)
-    try:
-        collected = _collect(root, backend, remote_id, extra)
-    finally:
-        context_path.unlink(missing_ok=True)
+    collected = _collect(root, backend, remote_id, extra)
     runner_pr = _runner_published(collected)
     if runner_pr and runner_pr.get("created") and runner_pr.get("pr"):
         ledger.expect_publication(job.job_id, runner_pr["pr"])
-    receipt = _reconcile_publication(ledger, eng.tz_name)
+    receipt = _reconcile_publication(
+        ledger, eng.tz_name, root=root,
+        worker_result={**(collected.get("result") or {}), "publish": runner_pr},
+    )
     if receipt is None:
         return _abort_release("publication outcome unconfirmed; awaiting reconciliation")
     res = Result.from_dict(collected["result"]) if isinstance(collected.get("result"), dict) \
@@ -718,7 +803,7 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen
         # 原因必须落到候选条目上：只写 worklog 的话，事后统计（如 2026-10-31
         # 排查 66 条 aborted_no_evidence）得去解析一整个 JSONL 才能拿到分布。
         mark_candidate(root, key, "aborted_no_evidence",
-                       extra={"abort_reason": _r["abort"][:300],
+                       extra={"abort_reason": (res.unverified_items[0] if res.unverified_items else _r["abort"])[:300],
                               "repair_outcome": res.outcome,
                               "repro": bool(res.reproduced_on_base),
                               "fixed": bool(res.fixed_on_patch)})

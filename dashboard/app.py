@@ -335,6 +335,7 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
     import threading as _thr
     _inflight: dict[str, object] = {}
     _inflight_lock = _thr.Lock()
+    _bitable_wake = _thr.Event()
     _intake_handoff: set[str] = set()
     # 真正的修复跑在 GitHub Actions runner 上（VPS 只负责派发、提交
     # workflow_dispatch，不 clone 也不编译），所以这里的上限跟 VPS 算力无关，
@@ -360,6 +361,7 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
             current = _load_candidate(root, key) or {}
             if out.get("abort") != "dispatcher busy" and current.get("status") not in (
                     "new", "recheck_failed", "staged"):
+                _bitable_wake.set()
                 _dispatch(rescreen=rescreen)
 
     def _publications_left() -> int:
@@ -465,6 +467,9 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
             _t.sleep(30)   # 启动后先等容器就绪
             while True:
                 try:
+                    from scout_v2.workers.auto_pipeline import recover_pending_publication
+                    if recover_pending_publication(root):
+                        _bitable_wake.set()
                     cfg = D.dashboard_settings(ds)
                     interval = int(cfg.get("auto_repair_seconds", 60))
                     if interval <= 0:
@@ -618,6 +623,7 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
             full_sync_at = 0.0
             activity_cache = {}
             while True:
+                _bitable_wake.clear()
                 full = time.monotonic() >= full_sync_at
                 try:
                     _sync_bitables(root, ds=ds, activity_only=not full, activity_cache=activity_cache)
@@ -625,7 +631,7 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
                         full_sync_at = time.monotonic() + 900
                 except Exception as ex:
                     _audit(root, "bitable_sync_error", "-", str(ex)[:200])
-                time.sleep(30)
+                _bitable_wake.wait(30)
         _thr.Thread(target=_loop, daemon=True, name="bitable-sync").start()
 
     def _cf_poll_loop():

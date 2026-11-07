@@ -347,6 +347,61 @@ def test_publication_reconciled_on_github_creation_day(tmp_path, monkeypatch):
     ledger.close()
 
 
+@pytest.mark.parametrize("published", [False, True])
+def test_controller_restart_recovers_candidate_and_feishu_status(tmp_path, monkeypatch, published):
+    from scripts.monitor_prs import build_candidate_rows, build_scan_rows
+
+    key = "nodejs/node#67320"
+    job = "job-123"
+    url = "https://github.com/nodejs/node/pull/67399"
+    (tmp_path / "queue").mkdir()
+    queue = tmp_path / "queue/candidates.json"
+    queue.write_text(json.dumps({key: {"status": "escalated", "title": "Fix test runner"}}))
+    ledger = ClaimLedger(tmp_path / "state/scout_v2.sqlite3")
+    tz = "Asia/Shanghai"
+    (tmp_path / "state/seen.json").write_text(json.dumps({key: {"status": "ai_passed"}}))
+    assert ledger.reserve_publication(tz, 5, job, "nodejs/node",
+                                      "xixi-box:fix/issue-67320-5f602d5-ab588978", "xixi-box/oss-scout")
+    ledger.close()
+    run = {"id": 703, "display_title": f"repair {job}", "status": "in_progress"}
+    created = p.business_now(tz).isoformat()
+    prs = [{"body": f"<!-- oss-scout-job:{job} -->", "created_at": created,
+            "user": {"login": "xixi-box"}, "html_url": url}] if published else []
+
+    def gh_read(args):
+        if "/workflows/" in args[0]:
+            return {"workflow_runs": [run]}
+        return prs if args[0].endswith("/pulls") else run
+
+    monkeypatch.setattr(p, "gh_read", gh_read)
+    result = {"outcome": "inconclusive", "unverified_items": ["no artifacts and logs unavailable"]}
+    monkeypatch.setattr(p.ActionsBackend, "collect", lambda self, run_id: result)
+    assert not p.recover_pending_publication(tmp_path)
+    assert json.loads(queue.read_text(encoding="utf-8"))[key]["status"] == "escalated"
+    run.update(status="completed", conclusion="success")
+    if not published:
+        assert not p.recover_pending_publication(tmp_path)
+        result.update(job_id=job, outcome="failed", unverified_items=["Only tests changed"])
+
+    assert p.recover_pending_publication(tmp_path)
+    entry = json.loads(queue.read_text(encoding="utf-8"))[key]
+    assert entry["status"] == ("pr_open" if published else "aborted_no_evidence")
+    assert entry["repair_run_id"] == "703"
+    assert entry["workflow_conclusion"] == "success"
+    assert (entry["pr_url"] == url if published else "Only tests changed" in entry["abort_reason"])
+    assert build_candidate_rows(tmp_path, {key}) == []
+    scan, = build_scan_rows(tmp_path, {key})
+    if published:
+        assert scan["pr_url"] == url
+    else:
+        assert "Only tests changed" in scan["final_result"]
+    ledger = ClaimLedger(tmp_path / "state/scout_v2.sqlite3")
+    assert ledger.pending_publication() is None
+    assert ledger.published_today(tz) == int(published)
+    ledger.close()
+    assert not p.recover_pending_publication(tmp_path)
+
+
 def test_http_ingest_durably_accepts_entire_batch(tmp_path, monkeypatch):
     from fastapi.testclient import TestClient
     from dashboard.app import create_app
