@@ -98,8 +98,8 @@ class TestAuth:
 class TestFormSubmit:
     def test_send_posts_comment_and_marks_sent(self, client, tmp_path, monkeypatch):
         rp = tmp_path / "state" / "pr_replies.json"
-        rp.write_text(json.dumps({"acme/real#7": {
-            "status": "draft", "draft": "old text", "repo": "acme/real",
+        rp.write_text(json.dumps({"docker/compose#7": {
+            "status": "draft", "draft": "old text", "repo": "docker/compose",
             "number": 7}}), encoding="utf-8")
         calls = []
 
@@ -111,16 +111,16 @@ class TestFormSubmit:
         import subprocess as sp_mod
         monkeypatch.setattr(sp_mod, "run", fake_run)
         r = cb(client, card_click(
-            {"do": "send", "repo": "acme/real", "number": "7"},
+            {"do": "send", "repo": "docker/compose", "number": "7"},
             {"reply_text": "edited by human in feishu"}))
         assert r.status_code == 200
         assert calls and any("/issues/7/comments" in str(a) for a in calls[0])
         data = json.loads(rp.read_text(encoding="utf-8"))
-        assert data["acme/real#7"]["status"] == "sent"
-        assert data["acme/real#7"]["sent_body"] == "edited by human in feishu"
+        assert data["docker/compose#7"]["status"] == "sent"
+        assert data["docker/compose#7"]["sent_body"] == "edited by human in feishu"
 
     def test_missing_fields_rejected(self, client):
-        r = cb(client, card_click({"repo": "acme/real"}, {}))
+        r = cb(client, card_click({"repo": "docker/compose"}, {}))
         assert r.status_code == 400
 
 
@@ -129,7 +129,7 @@ class TestDraftsOnPrsPage:
 
     def test_pending_draft_shown_on_prs_page(self, client, tmp_path):
         rp = tmp_path / "state" / "pr_replies.json"
-        rp.write_text(json.dumps({"acme/real#7": {
+        rp.write_text(json.dumps({"docker/compose#7": {
             "status": "draft",
             "to_author": "maintainer",
             "drafted_at": "2026-11-04T01:00:00",
@@ -138,11 +138,11 @@ class TestDraftsOnPrsPage:
         assert r.status_code == 200
         assert "回复草稿" in r.text
         assert "Thanks! Fixed in the new commit." in r.text
-        assert "acme/real#7" in r.text
+        assert "docker/compose#7" in r.text
 
     def test_sent_draft_not_shown_as_pending(self, client, tmp_path):
         rp = tmp_path / "state" / "pr_replies.json"
-        rp.write_text(json.dumps({"acme/real#7": {
+        rp.write_text(json.dumps({"docker/compose#7": {
             "status": "sent", "draft": "already sent"}}), encoding="utf-8")
         r = client.get("/prs")
         assert r.status_code == 200
@@ -151,12 +151,12 @@ class TestDraftsOnPrsPage:
 
 class TestReplySendApi:
     def test_send_requires_all_fields(self, client):
-        r = client.post("/api/pr/reply/send", data={"repo": "acme/real"})
+        r = client.post("/api/pr/reply/send", data={"repo": "docker/compose"})
         assert r.status_code == 400
 
     def test_send_posts_and_marks_sent(self, client, tmp_path, monkeypatch):
         rp = tmp_path / "state" / "pr_replies.json"
-        rp.write_text(json.dumps({"acme/real#7": {
+        rp.write_text(json.dumps({"docker/compose#7": {
             "status": "draft", "draft": "Thanks, fixed."}}), encoding="utf-8")
         posted = []
 
@@ -169,29 +169,29 @@ class TestReplySendApi:
         import subprocess as sp_mod
         monkeypatch.setattr(sp_mod, "run", fake_run)
         r = client.post("/api/pr/reply/send", data={
-            "repo": "acme/real", "number": 7, "body": "Thanks, fixed."})
+            "repo": "docker/compose", "number": 7, "body": "Thanks, fixed."})
         assert r.status_code == 200
         assert posted and any("/issues/7/comments" in str(a) for a in posted[0])
         data = json.loads(rp.read_text(encoding="utf-8"))
-        assert data["acme/real#7"]["status"] == "sent"
+        assert data["docker/compose#7"]["status"] == "sent"
 
     def test_send_failure_reported(self, client, monkeypatch):
         import subprocess as sp
         monkeypatch.setattr(sp, "run", lambda cmd, **k: sp.CompletedProcess(
             cmd, 1, "", "gh: failed"))
         r = client.post("/api/pr/reply/send", data={
-            "repo": "acme/real", "number": 7, "body": "x"})
+            "repo": "docker/compose", "number": 7, "body": "x"})
         assert r.status_code == 502
 
     def test_dismiss_marks_dismissed(self, client, tmp_path):
         rp = tmp_path / "state" / "pr_replies.json"
-        rp.write_text(json.dumps({"acme/real#7": {"status": "draft"}}),
+        rp.write_text(json.dumps({"docker/compose#7": {"status": "draft"}}),
                       encoding="utf-8")
         r = client.post("/api/pr/reply/dismiss",
-                        data={"repo": "acme/real", "number": 7})
+                        data={"repo": "docker/compose", "number": 7})
         assert r.status_code == 200
         data = json.loads(rp.read_text(encoding="utf-8"))
-        assert data["acme/real#7"]["status"] == "dismissed"
+        assert data["docker/compose#7"]["status"] == "dismissed"
 
 
 class TestSendOnlyPostsComment:
@@ -203,14 +203,14 @@ class TestSendOnlyPostsComment:
 
     def _with_fix(self, tmp_path, state):
         rp = tmp_path / "state" / "pr_replies.json"
-        rp.write_text(json.dumps({"acme/real#7": {
+        rp.write_text(json.dumps({"docker/compose#7": {
             "status": "draft", "draft": "x", "fix_state": state,
             "fix_sha": "c" * 40, "fix_fork": "xixi-box/real"}}),
             encoding="utf-8")
 
     def _submit(self, client):
         return cb(client, card_click(
-            {"do": "send", "repo": "acme/real", "number": "7"},
+            {"do": "send", "repo": "docker/compose", "number": "7"},
             {"reply_text": "thanks, done"}))
 
     def test_no_git_operations_on_send(self, client, tmp_path, monkeypatch):
@@ -238,23 +238,23 @@ class TestSendOnlyPostsComment:
         assert r.status_code == 200
         data = json.loads((tmp_path / "state" / "pr_replies.json")
                           .read_text(encoding="utf-8"))
-        assert data["acme/real#7"]["status"] == "sent"
+        assert data["docker/compose#7"]["status"] == "sent"
 
 
 class TestFixResultEndpoint:
     """workflow 回报"改动已暂存"，卡片据此从 pending 翻成 ready。"""
 
     def test_requires_token(self, client):
-        r = client.post("/api/pr/reply/fix-result", json={"repo": "a/b", "number": 1})
+        r = client.post("/api/pr/reply/fix-result", json={"repo": "docker/compose", "number": 1})
         # 测试环境 cloudflare.yaml 里 ingest_token 是 "t"
         assert r.status_code == 403
 
     def test_records_pushed_state(self, client, tmp_path):
         rp = tmp_path / "state" / "pr_replies.json"
-        rp.write_text(json.dumps({"a/b#1": {"status": "draft"}}), encoding="utf-8")
+        rp.write_text(json.dumps({"docker/compose#1": {"status": "draft"}}), encoding="utf-8")
         r = client.post("/api/pr/reply/fix-result",
                         headers={"X-Ingest-Token": "t"},
-                        json={"repo": "a/b", "number": 1, "test_ok": True,
+                        json={"repo": "docker/compose", "number": 1, "test_ok": True,
                               "test_result": "go test rc=0",
                               "changed_files": ["pkg/watch/x_test.go"],
                               "pushed": True,
@@ -262,17 +262,17 @@ class TestFixResultEndpoint:
                               "fork_repo": "xixi-box/b"})
         assert r.status_code == 200
         data = json.loads(rp.read_text(encoding="utf-8"))
-        e = data["a/b#1"]
+        e = data["docker/compose#1"]
         assert e["fix_state"] == "pushed"
         assert e["fix_sha"] == "d" * 40
 
     def test_failed_fix_is_not_reported_as_pushed(self, client, tmp_path):
         rp = tmp_path / "state" / "pr_replies.json"
-        rp.write_text(json.dumps({"a/b#1": {"status": "draft"}}), encoding="utf-8")
+        rp.write_text(json.dumps({"docker/compose#1": {"status": "draft"}}), encoding="utf-8")
         client.post("/api/pr/reply/fix-result", headers={"X-Ingest-Token": "t"},
-                    json={"repo": "a/b", "number": 1, "pushed": False,
+                    json={"repo": "docker/compose", "number": 1, "pushed": False,
                           "test_ok": False, "test_result": "rc=1"})
-        e = json.loads(rp.read_text(encoding="utf-8"))["a/b#1"]
+        e = json.loads(rp.read_text(encoding="utf-8"))["docker/compose#1"]
         assert e["fix_state"] == "failed"
 
 
@@ -286,20 +286,20 @@ class TestTokenLocation:
 
     def test_header_token_is_accepted(self, client, tmp_path):
         rp = tmp_path / "state" / "pr_replies.json"
-        rp.write_text(json.dumps({"acme/real#7": {"status": "draft"}}),
+        rp.write_text(json.dumps({"docker/compose#7": {"status": "draft"}}),
                       encoding="utf-8")
         import subprocess as sp
         import unittest.mock as m
         with m.patch.object(sp, "run", lambda cmd, **k: sp.CompletedProcess(
                 cmd, 0, "https://x", "")):
             r = cb(client, card_click(
-                {"do": "send", "repo": "acme/real", "number": "7"},
+                {"do": "send", "repo": "docker/compose", "number": "7"},
                 {"reply_text": "ok"}))
         assert r.status_code == 200
 
     def test_event_token_alone_is_rejected(self, client):
         """event.token 是更新卡片的凭证，不能拿来当验证依据。"""
-        payload = card_click({"do": "send", "repo": "acme/real", "number": "7"},
+        payload = card_click({"do": "send", "repo": "docker/compose", "number": "7"},
                              {"reply_text": "x"})
         payload["header"]["token"] = ""
         r = cb(client, payload)
@@ -308,14 +308,14 @@ class TestTokenLocation:
     def test_response_wraps_card_as_raw(self, client, tmp_path):
         """卡片更新要求 card={type:"raw", data:{...}}；裸 card 不会生效。"""
         rp = tmp_path / "state" / "pr_replies.json"
-        rp.write_text(json.dumps({"acme/real#7": {"status": "draft"}}),
+        rp.write_text(json.dumps({"docker/compose#7": {"status": "draft"}}),
                       encoding="utf-8")
         import subprocess as sp
         import unittest.mock as m
         with m.patch.object(sp, "run", lambda cmd, **k: sp.CompletedProcess(
                 cmd, 0, "https://x", "")):
             r = cb(client, card_click(
-                {"do": "send", "repo": "acme/real", "number": "7"},
+                {"do": "send", "repo": "docker/compose", "number": "7"},
                 {"reply_text": "ok"}))
         body = r.json()
         assert body["card"]["type"] == "raw"
@@ -330,7 +330,7 @@ class TestInlineReplyRouting:
 
     def test_inline_kind_uses_replies_endpoint(self, client, tmp_path):
         rp = tmp_path / "state" / "pr_replies.json"
-        rp.write_text(json.dumps({"acme/real#7": {"status": "draft"}}),
+        rp.write_text(json.dumps({"docker/compose#7": {"status": "draft"}}),
                       encoding="utf-8")
         import subprocess as sp
         seen = []
@@ -341,19 +341,19 @@ class TestInlineReplyRouting:
 
         import unittest.mock as m
         with m.patch.object(sp, "run", fake_run):
-            r = self._submit_with(client, {"do": "send", "repo": "acme/real",
+            r = self._submit_with(client, {"do": "send", "repo": "docker/compose",
                                            "number": "7", "kind": "inline",
                                            "comment_id": "12345"})
         assert r.status_code == 200
         assert any("pulls/7/comments/12345/replies" in c for c in seen), seen
         assert not any("/issues/7/comments" in c for c in seen)
         data = json.loads(rp.read_text(encoding="utf-8"))
-        assert data["acme/real#7"]["sent_kind"] == "inline"
-        assert data["acme/real#7"]["sent_comment_id"] == "12345"
+        assert data["docker/compose#7"]["sent_kind"] == "inline"
+        assert data["docker/compose#7"]["sent_comment_id"] == "12345"
 
     def test_issue_kind_stays_issue_level(self, client, tmp_path):
         rp = tmp_path / "state" / "pr_replies.json"
-        rp.write_text(json.dumps({"acme/real#7": {"status": "draft"}}),
+        rp.write_text(json.dumps({"docker/compose#7": {"status": "draft"}}),
                       encoding="utf-8")
         import subprocess as sp
         seen = []
@@ -364,7 +364,7 @@ class TestInlineReplyRouting:
 
         import unittest.mock as m
         with m.patch.object(sp, "run", fake_run):
-            r = self._submit_with(client, {"do": "send", "repo": "acme/real",
+            r = self._submit_with(client, {"do": "send", "repo": "docker/compose",
                                            "number": "7", "kind": "issue",
                                            "comment_id": ""})
         assert r.status_code == 200
@@ -373,7 +373,7 @@ class TestInlineReplyRouting:
 
     def test_missing_kind_defaults_to_issue(self, client, tmp_path):
         rp = tmp_path / "state" / "pr_replies.json"
-        rp.write_text(json.dumps({"acme/real#7": {"status": "draft"}}),
+        rp.write_text(json.dumps({"docker/compose#7": {"status": "draft"}}),
                       encoding="utf-8")
         import subprocess as sp
         seen = []
@@ -384,7 +384,7 @@ class TestInlineReplyRouting:
 
         import unittest.mock as m
         with m.patch.object(sp, "run", fake_run):
-            r = self._submit_with(client, {"do": "send", "repo": "acme/real",
+            r = self._submit_with(client, {"do": "send", "repo": "docker/compose",
                                            "number": "7"})
         assert r.status_code == 200
         assert any("/issues/7/comments" in c for c in seen)
@@ -410,13 +410,13 @@ class TestNoChangeOutcome:
 
     def test_no_change_records_nochange_state(self, client, tmp_path):
         rp = tmp_path / "state" / "pr_replies.json"
-        rp.write_text(json.dumps({"a/b#1": {"status": "draft"}}), encoding="utf-8")
+        rp.write_text(json.dumps({"docker/compose#1": {"status": "draft"}}), encoding="utf-8")
         r = client.post("/api/pr/reply/fix-result",
                         headers={"X-Ingest-Token": "t"},
-                        json={"repo": "a/b", "number": 1, "no_change": True,
+                        json={"repo": "docker/compose", "number": 1, "no_change": True,
                               "pushed": False})
         assert r.status_code == 200
-        e = json.loads(rp.read_text(encoding="utf-8"))["a/b#1"]
+        e = json.loads(rp.read_text(encoding="utf-8"))["docker/compose#1"]
         assert e["fix_state"] == "nochange"
 
     def test_nochange_card_status_line(self):

@@ -25,6 +25,7 @@ def _load_monitor(tmp_path: Path):
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     # 去重/草稿文件指到临时目录，别污染真实 state
+    (tmp_path / "state").mkdir(exist_ok=True)
     mod.ATTEMPTS_FILE = tmp_path / "state" / "pr_fix_attempted.json"
     mod.REPLIES_FILE = tmp_path / "state" / "pr_replies.json"
     return mod
@@ -73,7 +74,8 @@ class TestDispatchDedup:
     def test_same_head_only_once(self, mod, monkeypatch):
         monkeypatch.setattr(mod, "pr_head", lambda r, n: {
             "headRefName": "fix/1", "headRefOid": "a" * 40,
-            "isCrossRepository": True,
+            "isCrossRepository": True, "state": "OPEN",
+            "author": {"login": "xixi-box"}, "headRepository": {"name": "compose"},
             "headRepositoryOwner": {"login": "xixi-box"}})
         monkeypatch.setattr(mod, "failing_details", lambda r, n: [
             {"name": "tests", "excerpt": "FAILED test_x - AssertionError"}])
@@ -89,9 +91,9 @@ class TestDispatchDedup:
         monkeypatch.setattr(mod, "_gh", fake_gh)
         monkeypatch.setattr(mod, "run_gh", fake_run_gh)
 
-        r1 = mod.dispatch_pr_fix("acme/real", 7)
+        r1 = mod.dispatch_pr_fix("docker/compose", 7)
         assert r1["dispatched"] is True
-        r2 = mod.dispatch_pr_fix("acme/real", 7)
+        r2 = mod.dispatch_pr_fix("docker/compose", 7)
         assert r2["dispatched"] is False and "already" in r2["reason"]
         assert len(dispatched) == 1
 
@@ -99,18 +101,20 @@ class TestDispatchDedup:
         monkeypatch.setattr(mod, "failing_details", lambda r, n: [
             {"name": "tests", "excerpt": "FAILED test_x - AssertionError"}])
         heads = [{"headRefName": "fix/1", "headRefOid": "a" * 40,
-                  "isCrossRepository": True,
+                  "isCrossRepository": True, "state": "OPEN",
+            "author": {"login": "xixi-box"}, "headRepository": {"name": "compose"},
                   "headRepositoryOwner": {"login": "xixi-box"}},
                  {"headRefName": "fix/1", "headRefOid": "b" * 40,
-                  "isCrossRepository": True,
+                  "isCrossRepository": True, "state": "OPEN",
+            "author": {"login": "xixi-box"}, "headRepository": {"name": "compose"},
                   "headRepositoryOwner": {"login": "xixi-box"}}]
         it = iter(heads)
         monkeypatch.setattr(mod, "pr_head", lambda r, n: next(it))
         monkeypatch.setattr(mod, "_gh", lambda args, timeout=90: "")
         monkeypatch.setattr(mod, "run_gh", lambda args, timeout=90: 0)
 
-        r1 = mod.dispatch_pr_fix("acme/real", 7)
-        r2 = mod.dispatch_pr_fix("acme/real", 7)
+        r1 = mod.dispatch_pr_fix("docker/compose", 7)
+        r2 = mod.dispatch_pr_fix("docker/compose", 7)
         assert r1["dispatched"] is True
         assert r2["dispatched"] is True, "new head sha must allow another attempt"
 
@@ -119,18 +123,19 @@ class TestDispatchDedup:
             "headRefName": "patch-1", "headRefOid": "c" * 40,
             "isCrossRepository": False,
             "headRepositoryOwner": {"login": "someone"}})
-        r = mod.dispatch_pr_fix("acme/real", 7)
+        r = mod.dispatch_pr_fix("docker/compose", 7)
         assert r["dispatched"] is False
         assert "fork" in r["reason"]
 
     def test_external_failure_recorded_not_dispatched(self, mod, monkeypatch):
         monkeypatch.setattr(mod, "pr_head", lambda r, n: {
             "headRefName": "fix/1", "headRefOid": "d" * 40,
-            "isCrossRepository": True,
+            "isCrossRepository": True, "state": "OPEN",
+            "author": {"login": "xixi-box"}, "headRepository": {"name": "compose"},
             "headRepositoryOwner": {"login": "xixi-box"}})
         monkeypatch.setattr(mod, "failing_details", lambda r, n: [
             {"name": "check-issue-link", "excerpt": ""}])
-        r = mod.dispatch_pr_fix("acme/real", 7)
+        r = mod.dispatch_pr_fix("docker/compose", 7)
         assert r["dispatched"] is False
         # 记录在案，同 sha 不再反复尝试
         assert len(mod._attempts()) == 1
@@ -156,17 +161,18 @@ class TestPayloadBuild:
 
         monkeypatch.setattr(mod, "pr_head", lambda r, n: {
             "headRefName": "fix/1", "headRefOid": "e" * 40,
-            "isCrossRepository": True,
+            "isCrossRepository": True, "state": "OPEN",
+            "author": {"login": "xixi-box"}, "headRepository": {"name": "compose"},
             "headRepositoryOwner": {"login": "xixi-box"}})
         monkeypatch.setattr(mod, "failing_details", lambda r, n: [
             {"name": "changeset", "excerpt": "no changeset"}])
         monkeypatch.setattr(mod, "_gh", fake_gh)
         monkeypatch.setattr(mod, "run_gh", fake_run_gh)
 
-        mod.dispatch_pr_fix("acme/real", 7)
+        mod.dispatch_pr_fix("docker/compose", 7)
         assert any("changeset" in c.get("body", "").lower()
                    for c in captured["payload"].get("comments", []))
-        assert captured["payload"]["fork_repo"] == "xixi-box/real"
+        assert captured["payload"]["fork_repo"] == "xixi-box/compose"
 
 
 class TestPrFixPrompt:

@@ -111,6 +111,7 @@ class GoClient:
     def chat(self, prompt: str, max_tokens: int = 200) -> tuple[bool, str]:
         """单轮补全。返回 (ok, text|error_detail)。瞬时错误 tenacity 重试；4xx 不重试。"""
         body = json.dumps({"model": self.model,
+                           "max_tokens": max_tokens,
                            "messages": [{"role": "user", "content": prompt}]}).encode()
         try:
             d = self._chat_once(body)

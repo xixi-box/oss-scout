@@ -8,6 +8,8 @@ state/dashboard_password.txt（gitignore，首启时展示一次）。
 """
 from __future__ import annotations
 
+from scout_v2.roster import monitored_repo as modifiable_repo
+
 import base64
 import hashlib
 import hmac
@@ -339,8 +341,8 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
                     "new", "queued", "recheck_failed", "staged"):
                 _dispatch()
 
-    def _claims_left() -> int:
-        """当日还剩几个新认领额度。上限 0（或不限）时返回一个很大的数。"""
+    def _publications_left() -> int:
+        """Number of new PRs that may still be published today."""
         try:
             from scout_v2.repo_policy import PolicyEngine
             from scout_v2.state_store import ClaimLedger
@@ -352,7 +354,7 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
                 return 10 ** 6
             led = ClaimLedger(root / "state" / "scout_v2.sqlite3")
             try:
-                used = led.count_today(eng.tz_name)
+                used = led.published_today(eng.tz_name)
             finally:
                 led.close()
             return max(0, cap - used)
@@ -371,7 +373,7 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
         try:
             repo = str(ev.get("repo") or "")
             num = int(ev.get("number") or 0)
-            if not repo or not num:
+            if not repo or not num or not modifiable_repo(repo):
                 return
             import importlib.util
             spec = importlib.util.spec_from_file_location(
@@ -397,12 +399,6 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
                 if fix_out.get("dispatched"):
                     _mark_reply(key, "draft", fix_state="pending",
                                 fix_fork=str(fix_out.get("fork_repo") or ""))
-                draft = mod.draft_reply(repo, num, context=state)
-                _audit(root, "pr_reply_drafted", key,
-                       f"drafted={draft.get('drafted')} "
-                       f"reason={str(draft.get('reason'))[:80]} fix_kind=review")
-                if draft.get("drafted"):
-                    _notify_draft(root, state, draft)
             elif action == "answer_question":
                 draft = mod.draft_reply(repo, num, context=state)
                 _audit(root, "pr_reply_drafted", key,
@@ -434,7 +430,7 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
             expire_staged(root)
             with _inflight_lock:
                 room = _MAX_CONCURRENT - len(_inflight)
-            left = _claims_left()
+            left = _publications_left()
             if left <= 0:
                 from scout_v2.workers.auto_pipeline import _stage_candidates
                 queued = json.loads((root / "queue/candidates.json").read_text(encoding="utf-8"))
@@ -524,7 +520,11 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
                         if key in queue:
                             inbox.finish(key, version)
                             continue
-                        item = D.refresh_issue(json.loads(payload))
+                        item = json.loads(payload)
+                        if not modifiable_repo(item["repo"]):
+                            inbox.finish(key, version)
+                            continue
+                        item = D.refresh_issue(item)
                         queued, added = D.ingest_cloudflare_issues(ds, [item])
                         seen = json.loads((root / "state/seen.json").read_text(encoding="utf-8"))
                         rec = seen.get(key) or {}
@@ -645,17 +645,6 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
                                                     fix_out.get("fork_repo") or ""))
                             except Exception as e:  # noqa: BLE001
                                 _audit(root, "pr_review_fix_error", key, str(e)[:200])
-                            try:
-                                draft = mod.draft_reply(r["repo"], r["number"],
-                                                        context=r)
-                                _audit(root, "pr_reply_drafted", key,
-                                       f"drafted={draft.get('drafted')} "
-                                       f"reason={str(draft.get('reason'))[:80]} "
-                                       f"fix_kind=review")
-                                if draft.get("drafted"):
-                                    _notify_draft(root, r, draft)
-                            except Exception as e:  # noqa: BLE001
-                                _audit(root, "pr_draft_error", key, str(e)[:200])
                         elif action == "answer_question":
                             # 只问问题、没要求改代码 → 只起草回复
                             _audit(root, "pr_needs_reply", key,
@@ -1211,6 +1200,8 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
         行内发言行内回、行外发言行外回——发错层对话就断线了。
         """
         import subprocess as sp
+        if not modifiable_repo(repo):
+            return False, "repository outside monitored roster"
         if kind == "inline" and str(comment_id or "").isdigit():
             endpoint = (f"repos/{repo}/pulls/{number}/comments/"
                         f"{comment_id}/replies")
@@ -1226,18 +1217,11 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
         return r.returncode == 0, (r.stderr or "")[:200]
 
     def _mark_reply(key: str, status: str, **extra) -> None:
+        from scout_v2.state_store import queue_transaction
         rp = root / "state" / "pr_replies.json"
-        try:
-            replies = json.loads(rp.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            replies = {}
-        entry = replies.get(key) or {}
-        entry.update({"status": status, **extra})
-        replies[key] = entry
-        tmp = rp.with_suffix(".json.tmp")
-        tmp.write_text(json.dumps(replies, ensure_ascii=False, indent=1),
-                       encoding="utf-8")
-        os.replace(tmp, rp)
+        with queue_transaction(root, path=rp) as replies:
+            entry = replies.setdefault(key, {})
+            entry.update({"status": status, **extra})
 
     @app.post("/api/pr/reply/fix-result")
     async def api_pr_reply_fix_result(request: Request):
@@ -1262,6 +1246,8 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
         num = body.get("number")
         if not repo or not isinstance(num, int):
             return JSONResponse({"detail": "repo/number required"}, status_code=400)
+        if not modifiable_repo(repo):
+            return JSONResponse({"detail": "repository outside monitored roster"}, status_code=403)
         key = f"{repo}#{num}"
         # no_change = opencode 判断"无需变更"（修复已在分支上/意见已被
         # 覆盖）。这不是失败——必须落账并记入去重表，否则 15 分钟监控
@@ -1275,7 +1261,7 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
             _audit(root, "pr_fix_result", key, "no_change")
             return JSONResponse({"ok": True, "outcome": "no_change"})
 
-        pushed = bool(body.get("pushed", body.get("test_ok")))
+        pushed = body.get("pushed") is True and bool(body.get("pushed_sha"))
         extra = {"fix_state": "pushed" if pushed else "failed",
                  "fix_test_result": str(body.get("test_result") or "")[:200],
                  "fix_changed": [str(c)[:120] for c in
@@ -1288,6 +1274,18 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
         _mark_reply(key, "draft", **extra)
         _audit(root, "pr_fix_result", key,
                f"pushed={pushed} test={str(body.get('test_result'))[:80]}")
+        if pushed and body.get("kind") == "review":
+            def draft_after_push():
+                try:
+                    from scripts.monitor_prs import draft_reply, pr_state
+                    state = pr_state(repo, num)
+                    state["fix_result"] = extra
+                    draft = draft_reply(repo, num, context=state)
+                    if draft.get("drafted"):
+                        _notify_draft(root, state, draft)
+                except Exception as exc:
+                    _audit(root, "pr_draft_error", key, str(exc)[:200])
+            _thr.Thread(target=draft_after_push, daemon=True).start()
         return JSONResponse({"ok": True})
 
     @app.post("/api/pr/bitable/sync")
@@ -1532,7 +1530,7 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
             cid = str(ev.get("comment_id") or "")
             repo = str(ev.get("repo", ""))[:120]
             num = int(ev.get("number") or 0)
-            if not cid or not repo or not num or cid in seen:
+            if not cid or not repo or not num or cid in seen or not modifiable_repo(repo):
                 continue
             seen[cid] = {"at": time.strftime("%Y-%m-%dT%H:%M:%S"),
                          "repo": repo, "number": num}

@@ -1,4 +1,5 @@
 name: oss-scout repair worker
+run-name: repair ${{ inputs.job_id }}
 
 # 由 oss-scout 控制器（VPS）workflow_dispatch 调用，在本仓库的托管 runner 上执行
 # repair：clone **目标仓库**到 base_sha → 按目标仓库自己的依赖跑测试 → opencode
@@ -181,6 +182,8 @@ jobs:
           import json, os, pathlib, sys
           sys.path.insert(0, os.environ["GITHUB_WORKSPACE"] + "/worker")
           from scout_v2.workers.publish_remote import publish_from_env
+          from scout_v2.schemas import Job, Result
+          from scout_v2.workers.quality_gate import verify_result
 
           tmp = pathlib.Path(os.environ["RUNNER_TEMP"])
           job = json.loads((tmp / "job.json").read_text())
@@ -192,10 +195,12 @@ jobs:
           if not res_file.is_file():
               print("no result.json; refusing to publish"); sys.exit(0)
           res = json.loads(res_file.read_text())
+          report = verify_result(Result.from_dict(res), Job.from_dict(job),
+                                 expected_base_sha=job["base_sha"])
           ok = (res.get("outcome") == "succeeded"
-                and res.get("reproduced_on_base") and res.get("fixed_on_patch"))
+                and res.get("reproduced_on_base") and res.get("fixed_on_patch") and report.ok)
           if not ok:
-              print(f"evidence chain not satisfied ({res.get('outcome')}); refusing to publish")
+              print(f"evidence chain not satisfied ({res.get('outcome')}, {report.errors}); refusing to publish")
               sys.exit(0)
 
           out = publish_from_env(job, tmp / "repo", tmp / "artifacts")

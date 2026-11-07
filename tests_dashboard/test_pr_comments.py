@@ -38,7 +38,9 @@ def _offline_classifier(monkeypatch):
 
 
 @pytest.fixture()
-def client(tmp_path: Path) -> TestClient:
+def client(tmp_path: Path, monkeypatch) -> TestClient:
+    monkeypatch.setenv("OSSCOUT_DASHBOARD_ROOT", str(tmp_path))
+    monkeypatch.setattr("scout_v2.workers.issue_scorer.load_scorer_config", lambda _: {})
     (tmp_path / "state").mkdir(parents=True)
     (tmp_path / "queue").mkdir(parents=True)
     (tmp_path / "configs").mkdir(parents=True)
@@ -47,7 +49,7 @@ def client(tmp_path: Path) -> TestClient:
                         "ingest_token": TOKEN}), encoding="utf-8")
     (tmp_path / "configs" / "repositories.yaml").write_text(
         yaml.safe_dump({"defaults": {"requires_invite": False},
-                        "repositories": {"acme/real": {"lane": "open"}}}),
+                        "repositories": {"docker/compose": {"lane": "open"}}}),
         encoding="utf-8")
     (tmp_path / "configs" / "pr_gates.yaml").write_text(
         yaml.safe_dump({"defaults": {"requires_invite": True}, "repositories": {}}),
@@ -84,9 +86,14 @@ class TestAuth:
 
 
 class TestClassification:
+    def test_company_pr_comment_is_dropped(self, client):
+        r = _post(client, {"events": [{"repo": "deep-optica/example", "number": 7,
+                   "comment_id": 101, "author": "maintainer", "body": "please fix"}]})
+        assert r.json()["new"] == 0
+
     def test_review_comment_is_recorded(self, client, tmp_path):
         r = _post(client, {"events": [{
-            "repo": "acme/real", "number": 7, "comment_id": 1001,
+            "repo": "docker/compose", "number": 7, "comment_id": 1001,
             "author": "maintainer",
             "body": "please add a test for the empty case"}]})
         assert r.status_code == 200
@@ -94,11 +101,11 @@ class TestClassification:
         rows = [json.loads(l) for l in
                 (tmp_path / "state" / "pr_watch.jsonl").read_text(encoding="utf-8").splitlines()]
         assert rows[-1]["action"] == "address_review"
-        assert rows[-1]["repo"] == "acme/real"
+        assert rows[-1]["repo"] == "docker/compose"
         assert rows[-1]["number"] == 7
 
     def test_duplicate_comment_is_dropped(self, client):
-        body = {"events": [{"repo": "acme/real", "number": 7, "comment_id": 2002,
+        body = {"events": [{"repo": "docker/compose", "number": 7, "comment_id": 2002,
                             "author": "m", "body": "please fix"}]}
         assert _post(client, body).json()["new"] == 1
         # Worker 的窗口有 10 分钟重叠，同一条会被推多次
@@ -106,7 +113,7 @@ class TestClassification:
 
     def test_ci_style_comment_stays_wait(self, client, tmp_path):
         _post(client, {"events": [{
-            "repo": "acme/real", "number": 8, "comment_id": 3003,
+            "repo": "docker/compose", "number": 8, "comment_id": 3003,
             "author": "changeset-bot[bot]",
             "body": "No changeset found in this PR"}]})
         rows = [json.loads(l) for l in
@@ -117,7 +124,7 @@ class TestClassification:
         r = _post(client, {"events": [
             {"repo": "", "number": 0, "comment_id": ""},   # 缺字段
             "not-a-dict",
-            {"repo": "acme/real", "number": 9, "comment_id": 4004,
+            {"repo": "docker/compose", "number": 9, "comment_id": 4004,
              "author": "m", "body": "please change this"},
         ]})
         assert r.status_code == 200
@@ -128,14 +135,14 @@ class TestReplyDraftApi:
     """L3：草拟自动、发送人审。send/dismiss 都要审计。"""
 
     def test_send_requires_all_fields(self, client):
-        r = client.post("/api/pr/reply/send", data={"repo": "acme/real"})
+        r = client.post("/api/pr/reply/send", data={"repo": "docker/compose"})
         assert r.status_code == 400
 
     def test_send_posts_and_marks_sent(self, client, tmp_path, monkeypatch):
         import subprocess as sp
         # 预置一条草稿
         rp = tmp_path / "state" / "pr_replies.json"
-        rp.write_text(json.dumps({"acme/real#7": {
+        rp.write_text(json.dumps({"docker/compose#7": {
             "status": "draft", "draft": "Thanks, fixed in the new commit."}}),
             encoding="utf-8")
         posted = []
@@ -144,42 +151,42 @@ class TestReplyDraftApi:
             if cmd[:2] == ["gh", "api"]:
                 posted.append(cmd)
             return sp.CompletedProcess(cmd, 0,
-                                       "https://github.com/acme/real/pull/7#comment", "")
+                                       "https://github.com/docker/compose/pull/7#comment", "")
 
         monkeypatch.setattr("subprocess.run", fake_run)
         r = client.post("/api/pr/reply/send", data={
-            "repo": "acme/real", "number": 7,
+            "repo": "docker/compose", "number": 7,
             "body": "Thanks, fixed in the new commit."})
         assert r.status_code == 200
         assert posted and any("/issues/7/comments" in str(a) for a in posted[0])
         data = json.loads(rp.read_text(encoding="utf-8"))
-        assert data["acme/real#7"]["status"] == "sent"
+        assert data["docker/compose#7"]["status"] == "sent"
 
     def test_send_failure_reported(self, client, tmp_path, monkeypatch):
         import subprocess as sp
         monkeypatch.setattr("subprocess.run", lambda cmd, **k: sp.CompletedProcess(
             cmd, 1, "", "gh: failed"))
         r = client.post("/api/pr/reply/send", data={
-            "repo": "acme/real", "number": 7, "body": "x"})
+            "repo": "docker/compose", "number": 7, "body": "x"})
         assert r.status_code == 502
 
     def test_dismiss_marks_dismissed(self, client, tmp_path):
         rp = tmp_path / "state" / "pr_replies.json"
-        rp.write_text(json.dumps({"acme/real#7": {"status": "draft"}}),
+        rp.write_text(json.dumps({"docker/compose#7": {"status": "draft"}}),
                       encoding="utf-8")
         r = client.post("/api/pr/reply/dismiss",
-                        data={"repo": "acme/real", "number": 7})
+                        data={"repo": "docker/compose", "number": 7})
         assert r.status_code == 200
         data = json.loads(rp.read_text(encoding="utf-8"))
-        assert data["acme/real#7"]["status"] == "dismissed"
+        assert data["docker/compose#7"]["status"] == "dismissed"
 
     def test_replies_listing(self, client, tmp_path):
         rp = tmp_path / "state" / "pr_replies.json"
-        rp.write_text(json.dumps({"acme/real#7": {"status": "draft"}}),
+        rp.write_text(json.dumps({"docker/compose#7": {"status": "draft"}}),
                       encoding="utf-8")
         r = client.get("/api/pr/replies")
         assert r.status_code == 200
-        assert r.json()["replies"]["acme/real#7"]["status"] == "draft"
+        assert r.json()["replies"]["docker/compose#7"]["status"] == "draft"
 
 
 class TestDraftsOnPrsPage:
@@ -187,7 +194,7 @@ class TestDraftsOnPrsPage:
 
     def test_pending_draft_shown_on_prs_page(self, client, tmp_path):
         rp = tmp_path / "state" / "pr_replies.json"
-        rp.write_text(json.dumps({"acme/real#7": {
+        rp.write_text(json.dumps({"docker/compose#7": {
             "status": "draft",
             "to_author": "maintainer",
             "drafted_at": "2026-11-04T01:00:00",
@@ -196,11 +203,11 @@ class TestDraftsOnPrsPage:
         assert r.status_code == 200
         assert "回复草稿" in r.text
         assert "Thanks! Fixed in the new commit." in r.text
-        assert "acme/real#7" in r.text
+        assert "docker/compose#7" in r.text
 
     def test_sent_draft_not_shown_as_pending(self, client, tmp_path):
         rp = tmp_path / "state" / "pr_replies.json"
-        rp.write_text(json.dumps({"acme/real#7": {
+        rp.write_text(json.dumps({"docker/compose#7": {
             "status": "sent", "draft": "already sent"}}), encoding="utf-8")
         r = client.get("/prs")
         assert r.status_code == 200

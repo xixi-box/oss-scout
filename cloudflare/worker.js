@@ -217,6 +217,7 @@ async function pollOnce(env) {
 }
 
 async function notifyPrComments(env, now, budget = { remaining: 30 }) {
+  const roster = new Set((env.REPOS || "").split(",").map(repo => repo.trim().toLowerCase()));
   const stored = await env.SEEN.get("prs");
   const list = stored ? JSON.parse(stored)
     : (env.PRS || "").split(",").map(s => s.trim()).filter(Boolean);
@@ -241,7 +242,8 @@ async function notifyPrComments(env, now, budget = { remaining: 30 }) {
     if (budget.remaining <= Math.ceil(events.length / 100)) break;
     const [repo, numRaw] = item.split("#");
     const number = Number(numRaw);
-    if (!repo || !Number.isInteger(number) || number <= 0) continue;
+    const repoKey = repo?.toLowerCase() === "prefecthq/fastmcp" ? "jlowin/fastmcp" : repo?.toLowerCase();
+    if (!repoKey || !roster.has(repoKey) || !Number.isInteger(number) || number <= 0) continue;
     try {
       const since = overlap(marks[item] || legacy, now, 10);
       const comments = await ghPages(`https://api.github.com/repos/${repo}/issues/${number}`

@@ -58,11 +58,12 @@ def test_competed_candidate_exits_without_uninitialized_ledger(tmp_path, monkeyp
     (tmp_path / "state").mkdir()
     (tmp_path / "queue/candidates.json").write_text("{}")
     monkeypatch.setattr(p.PolicyEngine, "load", lambda _: (
-        SimpleNamespace(repo_lane=lambda _: "open"), None))
+        SimpleNamespace(repo_lane=lambda _: "open", tz_name="Asia/Shanghai", max_claims_per_day=5), None))
+    monkeypatch.setattr(p, "gh_read", lambda args: {"state": "active"})
     monkeypatch.setattr(p, "recheck_candidate", lambda *a, **kw: SimpleNamespace(
         complete=True, issue_open=True, unassigned=False, has_claim_signal=False,
         has_cross_ref_pr=False, open_pr_hits=[]))
-    out = p.candidate_pipeline(tmp_path, {"id": "a/b#1", "repo": "a/b", "number": 1})
+    out = p.candidate_pipeline(tmp_path, {"id": "docker/compose#1", "repo": "docker/compose", "number": 1})
     assert "competed" in out["abort"]
 
 
@@ -189,17 +190,17 @@ def test_unconsumed_backlog_waits_for_next_four_am(tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize("include_staged", [False, True])
-def test_failed_repairs_still_stop_at_five_starts(tmp_path, monkeypatch, include_staged):
+def test_failed_repair_does_not_spend_publication_quota(tmp_path, monkeypatch, include_staged):
     (tmp_path / "queue").mkdir()
     (tmp_path / "state").mkdir()
-    entries = {f"a/b#{i}": {"id": f"a/b#{i}", "repo": "a/b", "number": i,
+    entries = {f"docker/compose#{i}": {"id": f"docker/compose#{i}", "repo": "docker/compose", "number": i,
                             "title": "Parser bug", "status": "new", "context_complete": True}
-               for i in range(1, 7)}
+               for i in range(1, 8)}
     if include_staged:
         from scout_v2.state_store import business_now
         now = business_now()
         for i in (4, 5, 6):
-            entries[f"a/b#{i}"].update(
+            entries[f"docker/compose#{i}"].update(
                 status="staged", staged_at=(now - dt.timedelta(days=2)).isoformat(),
                 eligible_at=dt.datetime.combine(now.date() - dt.timedelta(days=1),
                                                 dt.time(4), tzinfo=now.tzinfo).isoformat())
@@ -221,19 +222,61 @@ def test_failed_repairs_still_stop_at_five_starts(tmp_path, monkeypatch, include
         returncode=0, stdout="a" * 40, stderr=""))
     monkeypatch.setattr(p, "_build_router", lambda *a: SimpleNamespace(
         route=lambda job: SimpleNamespace(backend="github_actions")))
+    from scout_v2.state_store import business_now
     submitted = []
-    def unavailable(*args):
-        submitted.append(args[1].repo)
-        raise RuntimeError("backend unavailable")
-    monkeypatch.setattr(p, "_submit_job", unavailable)
+
+    def submit(_root, job, _eng):
+        submitted.append(job)
+        return "github_actions", str(len(submitted)), {}
+
+    def gh_read(args):
+        path = args[0]
+        if "/workflows/" in path:
+            return {"state": "active"}
+        job = submitted[-1]
+        if "/runs/" in path:
+            return {"display_title": f"repair {job.job_id}", "status": "completed"}
+        if len(submitted) == 1:
+            return []
+        return [{"html_url": f"https://github.com/docker/compose/pull/{len(submitted)}",
+                 "body": job.publish["body"], "user": {"login": "xixi-box"},
+                 "created_at": business_now().isoformat()}]
+
+    monkeypatch.setattr(p, "gh_read", gh_read)
+    monkeypatch.setattr(p, "_submit_job", submit)
+    monkeypatch.setattr(p, "_collect", lambda *args: {})
+    monkeypatch.setattr("scout_v2.notify.feishu_send", lambda *a, **kw: None)
+    monkeypatch.setattr("scout_v2.workers.cla.sign", lambda *a: {})
     for entry in entries.values():
         p.candidate_pipeline(tmp_path, entry)
     led = ClaimLedger(tmp_path / "state/scout_v2.sqlite3")
-    assert led.count_today("Asia/Shanghai") == 5
+    assert led.count_today("Asia/Shanghai") == 6
+    assert led.published_today("Asia/Shanghai") == 5
     led.close()
-    assert len(submitted) == 5
+    assert len(submitted) == 6
     q = json.loads((tmp_path / "queue/candidates.json").read_text())
-    assert q["a/b#6"]["status"] == "staged"
+    assert q["docker/compose#7"]["status"] == "staged"
+
+
+def test_publication_reconciled_on_github_creation_day(tmp_path, monkeypatch):
+    from scout_v2 import state_store
+    ledger = ClaimLedger(tmp_path / "scout.sqlite3")
+    tz = "Asia/Shanghai"
+    monkeypatch.setattr(state_store, "business_now",
+                        lambda _: dt.datetime.fromisoformat("2026-11-08T00:05:00+08:00"))
+    assert ledger.reserve_publication(tz, 5, "test", "docker/compose", "xixi-box:fix", "xixi-box/oss-scout")
+    assert not ledger.reserve_publication(tz, 5, "other", "docker/compose", "xixi-box:other", "xixi-box/oss-scout")
+    ledger.set_publication_run("test", "1")
+    responses = iter([
+        {"status": "completed", "display_title": "repair test"},
+        [{"body": "<!-- oss-scout-job:test -->", "created_at": "2026-11-07T16:01:00Z",
+          "user": {"login": "xixi-box"}, "html_url": "https://github.com/docker/compose/pull/1"}],
+    ])
+    monkeypatch.setattr(p, "gh_read", lambda args: next(responses))
+    assert p._reconcile_publication(ledger, tz)
+    assert ledger.pending_publication() is None
+    assert ledger.published_today(tz) == 1
+    ledger.close()
 
 
 def test_http_ingest_durably_accepts_entire_batch(tmp_path, monkeypatch):

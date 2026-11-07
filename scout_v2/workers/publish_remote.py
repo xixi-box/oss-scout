@@ -134,18 +134,20 @@ def publish(repo_dir: Path, patch_file: Path, publish_cfg: dict) -> dict:
     issue_no = int(publish_cfg.get("issue_number") or 0)
     if issue_no > 0:
         listing = _run(["gh", "pr", "list", "--repo", upstream, "--author", owner,
-                        "--state", "open", "--json", "number,body,url"])
-        if listing.returncode == 0:
-            try:
-                open_prs = json.loads(listing.stdout or "[]")
-            except json.JSONDecodeError:
-                open_prs = []
-            for p in open_prs:
-                if re.search(rf"#{issue_no}\b", str(p.get("body") or "")):
-                    return {"ok": True, "pr": str(p.get("url") or ""),
-                            "branch": branch,
-                            "note": f"existing PR #{p.get('number')} for issue "
-                                    f"#{issue_no}; skipped duplicate publish"}
+                        "--state", "open", "--limit", "100", "--json", "number,body,url"])
+        if listing.returncode != 0:
+            return {"ok": False, "error": "issue-level PR lookup failed"}
+        try:
+            open_prs = json.loads(listing.stdout or "[]")
+        except json.JSONDecodeError:
+            return {"ok": False, "error": "issue-level PR lookup returned invalid JSON"}
+        if len(open_prs) >= 100:
+            return {"ok": False, "error": "issue-level PR lookup incomplete"}
+        for p in open_prs:
+            if re.search(rf"(?im)^\s*(?:fix(?:es|ed)?|clos(?:e|es|ed)|resolv(?:e|es|ed))\s+#{issue_no}\b",
+                         str(p.get("body") or "")):
+                return {"ok": True, "pr": str(p.get("url") or ""), "branch": branch,
+                        "note": f"existing PR #{p.get('number')} for issue #{issue_no}"}
 
     # 1) 在验证用的仓库里建分支并应用补丁
     co = _run(["git", "checkout", "-q", "-B", branch], cwd=repo_dir)
@@ -185,20 +187,8 @@ def publish(repo_dir: Path, patch_file: Path, publish_cfg: dict) -> dict:
     head = f"{push_repo.split('/')[0]}:{branch}"
     pu = _run(["git", "push", "-q", push_url, f"HEAD:refs/heads/{branch}"], cwd=repo_dir)
     if pu.returncode != 0:
-        # 分支名是确定式的（fix/<issueN>-<slug>）：上一轮 repair 失败留在 fork 上的
-        # 旧分支会让这次 push 撞 non-fast-forward。旧分支只有还挂着一个 open PR 时
-        # 不能动（那时根本不该重走 publish）；否则删掉残留分支重推一次。
-        open_pr = _run(["gh", "pr", "list", "--repo", upstream, "--head", head,
-                        "--state", "open", "--json", "url", "--jq", ".[0].url"])
-        if open_pr.returncode == 0 and not (open_pr.stdout or "").strip():
-            _run(["gh", "api", "-X", "DELETE",
-                  f"repos/{push_repo}/git/refs/heads/{branch}"])
-            pu = _run(["git", "push", "-q", push_url,
-                       f"HEAD:refs/heads/{branch}"], cwd=repo_dir)
-        if pu.returncode != 0:
-            # stderr 可能含 token 的 URL，回传前脱敏
-            msg = (pu.stderr or "").replace(token, "***") if token else (pu.stderr or "")
-            return {"ok": False, "error": f"push failed: {msg[-250:]}"}
+        msg = (pu.stderr or "").replace(token, "***") if token else (pu.stderr or "")
+        return {"ok": False, "error": f"push failed: {msg[-250:]}"}
 
     # 3) 向原仓库开 PR（gh 读 GH_TOKEN；runner 的 GITHUB_TOKEN 对上游有 issue 写权）
     pr = _run(["gh", "pr", "create", "--repo", upstream, "--head", head,
@@ -213,7 +203,7 @@ def publish(repo_dir: Path, patch_file: Path, publish_cfg: dict) -> dict:
             if url:
                 return {"ok": True, "pr": url, "branch": branch, "note": "already existed"}
         return {"ok": False, "error": f"pr create failed: {err[-250:]}"}
-    return {"ok": True, "pr": (pr.stdout or "").strip(), "branch": branch}
+    return {"ok": True, "pr": (pr.stdout or "").strip(), "branch": branch, "created": True}
 
 
 def publish_from_env(job_dict: dict, repo_dir: Path, out_dir: Path) -> dict | None:
@@ -221,6 +211,10 @@ def publish_from_env(job_dict: dict, repo_dir: Path, out_dir: Path) -> dict | No
     cfg = dict(job_dict.get("publish") or {})
     if not cfg:
         return None
+    from ..roster import monitored_repo, repo_key
+    upstream = cfg.get("upstream") or ""
+    if not monitored_repo(upstream) or repo_key(upstream) != repo_key(job_dict.get("repo") or ""):
+        return {"ok": False, "error": "repository outside monitored roster or target mismatch"}
     cfg["body"] = _rewrite_body(cfg, out_dir)
     patch = out_dir / "change.patch"
     result = publish(repo_dir, patch, cfg)

@@ -10,7 +10,7 @@
 - 架构里本来就有 Modal/Actions 两个后端，旧实现绕过了它们（平行实现）。
 
 硬边界（不逾越）：
-- 每日最多开工 5 条（ClaimLedger 持久计数，失败不退）；闸门池绝不直接 PR；
+- 北京时间每天最多成功开 5 个新 PR；闸门池绝不直接 PR；
 - 复检任一竞争信号 → aborted_competed；
 - 证据链不完整（base 未复现 / 补丁未通过 / 质量闸失败）→ 不开 PR；
 - 后端不可用且预算不足 → 暂停，不降级到本地执行。
@@ -31,11 +31,12 @@ from pathlib import Path
 from ..adapters.actions_backend import ActionsBackend
 from ..adapters.modal_backend import ModalSandboxBackend, parse_envelope
 from ..budget import BudgetGuard, ModalCliBilling
-from ..git_host import recheck_candidate
+from ..git_host import gh_read, recheck_candidate
 from ..job_router import JobRouter, RouterConfig
 from ..repo_policy import PolicyEngine
 from ..schemas import Job, Result
-from ..state_store import ClaimLedger, Worklog, queue_transaction, business_now, atomic_json_write
+from ..roster import monitored_repo
+from ..state_store import ClaimLedger, Worklog, queue_transaction, business_day, business_now, atomic_json_write
 from .quality_gate import verify_result
 
 # 推送目标：对第三方仓库我们没有写权限，分支一律推自己的 fork，再向原仓库发 PR。
@@ -82,7 +83,7 @@ def mark_candidate(root: Path, key: str, status: str,
 
 
 def _emergency_release(root: Path, candidate_id: str = "", tz_name: str = "Asia/Shanghai") -> None:
-    """A crashed attempt stays spent; never silently rerun a remote write."""
+    """Never silently rerun an interrupted remote write."""
     if candidate_id:
         mark_candidate(root, candidate_id, "escalated",
                        extra={"abort_reason": "controller interrupted; inspect remote job before retry"})
@@ -134,6 +135,38 @@ def _build_router(root: Path, job: Job, engine: PolicyEngine) -> JobRouter:
 
 def _actions_workflow_name(root: Path) -> str:
     return "oss-scout-repair.yml"
+
+
+def _reconcile_publication(ledger: ClaimLedger, tz_name: str) -> dict | None:
+    """Resolve the previous writer before another job can publish."""
+    pending = ledger.pending_publication()
+    if pending is None:
+        return {}
+    job_id, repo, head, runner_repo, remote_id, expected_url = pending
+    if not remote_id:
+        runs = gh_read([f"repos/{runner_repo}/actions/workflows/oss-scout-repair.yml/runs?event=workflow_dispatch&per_page=30"])
+        remote_id = next((str(r["id"]) for r in (runs or {}).get("workflow_runs", [])
+                          if r.get("display_title") == f"repair {job_id}"), "")
+        if not remote_id:
+            return None
+        ledger.set_publication_run(job_id, remote_id)
+    run = gh_read([f"repos/{runner_repo}/actions/runs/{remote_id}"])
+    if not run or run.get("display_title") != f"repair {job_id}" or run.get("status") != "completed":
+        return None
+    prs = gh_read([f"repos/{repo}/pulls", "-X", "GET", "-f", "state=all", "-f", f"head={head}"])
+    if not isinstance(prs, list):
+        return None
+    pr = next((p for p in prs if (p.get("user") or {}).get("login") == FORK_OWNER
+               and (p.get("html_url") == expected_url
+                    or f"<!-- oss-scout-job:{job_id} -->" in (p.get("body") or ""))), None)
+    if pr is None:
+        if expected_url:
+            return None
+        ledger.finish_publication(job_id)
+        return {}
+    created = dt.datetime.fromisoformat(pr["created_at"].replace("Z", "+00:00"))
+    ledger.finish_publication(job_id, day=business_day(created, tz_name), url=pr["html_url"])
+    return pr
 
 
 def _actions_runner_repo(root: Path) -> str:
@@ -274,14 +307,14 @@ def _todays_claim_count(root: Path, key: str) -> int:
 def _abort_release_impl(msg: str, *, candidate_id: str, ledger, eng,
                    summary: dict, log_fn, root: Path, key: str,
                    give_back: bool = True) -> dict:
-    """Keep a consumed start in the ledger, including failed attempts."""
+    """Record failed attempts without charging the publication budget."""
     if ledger is not None:
         ledger.close()
         with queue_transaction(root) as q:
             if key in q and q[key].get("status") == "running":
                 q[key].update(status="aborted_pipeline", abort_reason=msg[:300])
     summary["abort"] = msg
-    log_fn(root, "abort", key, msg + "; daily start retained")
+    log_fn(root, "abort", key, msg)
     return summary
 
 
@@ -337,16 +370,29 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6) -> dict:
     lane = eng.repo_lane(repo)
     wl = Worklog(root / "state" / "worklog.jsonl")
 
-    if lane in ("unknown", "observe"):
+    if not monitored_repo(repo) or lane in ("unknown", "observe"):
         summary["abort"] = f"lane={lane} no action"
         # 必须写终态，否则状态留在 new/queued，drain 每轮都会重新取到它。
         # 2026-10-30 实测：修复循环改成 60 秒后，旧名单遗留的
         # anomalyco/opencode、deepset-ai/haystack 候选每分钟被重试一次，
         # 每次都 lane=unknown 空转。
         mark_candidate(root, key,
-                       "out_of_scope" if lane == "unknown" else "observe_only",
+                       "observe_only" if lane == "observe" else "out_of_scope",
                        extra={"abort_reason": summary["abort"]})
         return summary
+    budget = ClaimLedger(root / "state/scout_v2.sqlite3")
+    try:
+        if _reconcile_publication(budget, eng.tz_name) is None:
+            return {**summary, "abort": "previous publication awaiting reconciliation"}
+        if budget.published_today(eng.tz_name) >= eng.max_claims_per_day:
+            _stage_candidates(root, [key])
+            return {**summary, "abort": "daily PR limit reached"}
+    finally:
+        budget.close()
+    runner_repo = _actions_runner_repo(root)
+    workflow = gh_read([f"repos/{runner_repo}/actions/workflows/{_actions_workflow_name(root)}"])
+    if not workflow or workflow.get("state") != "active":
+        return {**summary, "abort": "repair workflow unavailable; candidate retained"}
     summary["steps"].append(f"lane={lane}")
 
     # ---- 实时复检（Playbook §0.2）----
@@ -511,7 +557,7 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6) -> dict:
         if current is not None and not _order_candidates([(key, current)]):
             ledger.close()
             return {**summary, "abort": "candidate not eligible yet"}
-        ok, reason = ledger.try_claim(eng.tz_name, key, max_per_day=eng.max_claims_per_day)
+        ok, reason = ledger.try_claim(eng.tz_name, key)
         if not ok:
             if current is not None and "daily limit" in reason:
                 _defer_entry(current, root)
@@ -523,7 +569,7 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6) -> dict:
                            started_at=business_now(eng.tz_name).isoformat())
     wl.append({"ts": business_now(eng.tz_name).isoformat(timespec="seconds"), "action": "claim",
                "target": key, "source": "auto-pipeline"})
-    summary["steps"].append("daily start consumed")
+    summary["steps"].append("repair attempt recorded")
 
     # ---- base SHA ----
     head = None
@@ -571,16 +617,32 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6) -> dict:
     except Exception as e:  # noqa: BLE001
         return _abort_release(f"routing failed: {str(e)[:160]}",
                              give_back=True)   # 路由层异常
-    if decision.backend == "github_actions":
-        job.publish = _build_publish_cfg(repo, number, base_sha, entry)
+    if decision.backend != "github_actions":
+        return _abort_release("no GitHub Actions repair backend")
+    job.publish = _build_publish_cfg(repo, number, base_sha, entry)
+    job.publish["branch"] += f"-{job.job_id.rsplit('-', 1)[-1][:8]}"
+    job.publish["body"] += f"\n\n<!-- oss-scout-job:{job.job_id} -->"
+    head = f"{FORK_OWNER}:{job.publish['branch']}"
+    if not ledger.reserve_publication(eng.tz_name, eng.max_claims_per_day,
+                                      job.job_id, repo, head, runner_repo):
+        return _abort_release("publication slot unavailable")
     try:
         backend, remote_id, extra = _submit_job(root, job, eng)
     except Exception as e:  # noqa: BLE001
+        if re.search(r"workflow_dispatch failed:.*(?:HTTP (?:403|404|422)|disabled workflow)", str(e), re.I):
+            ledger.finish_publication(job.job_id)
         return _abort_release(f"backend unavailable: {str(e)[:200]}",
                              give_back=True)   # 后端故障
     summary["steps"].append(f"backend={backend} ({extra.get('note', '')})")
 
+    ledger.set_publication_run(job.job_id, remote_id)
     collected = _collect(root, backend, remote_id, extra)
+    runner_pr = _runner_published(collected)
+    if runner_pr and runner_pr.get("created") and runner_pr.get("pr"):
+        ledger.expect_publication(job.job_id, runner_pr["pr"])
+    receipt = _reconcile_publication(ledger, eng.tz_name)
+    if receipt is None:
+        return _abort_release("publication outcome unconfirmed; awaiting reconciliation")
     res = Result.from_dict(collected["result"]) if isinstance(collected.get("result"), dict) \
         else Result(job_id=job.job_id, backend=backend, outcome="failed",
                     base_sha=base_sha, unverified_items=["no result from backend"])
@@ -591,7 +653,7 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6) -> dict:
     # ---- 质量闸 ----
     report = verify_result(res, job, artifact_dir=root)
     if not (res.outcome == "succeeded" and res.reproduced_on_base
-            and res.fixed_on_patch and report.ok and patch_file):
+            and res.fixed_on_patch and report.ok and patch_file) and not receipt:
         _r = _abort_release(
             f"evidence chain incomplete: {res.outcome} repro={res.reproduced_on_base} "
             f"fixed={res.fixed_on_patch} gate={report.errors or 'PASS'} "
@@ -613,8 +675,10 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6) -> dict:
     # ---- 发布：优先用 runner 侧已完成的推送 ----
     # Actions 后端在 payload 带 publish 配置时会自己 push+PR，并把结果放进信封。
     # 这样 VPS 完全不碰 GitHub 写接口，也就没有出网单点。Modal 后端仍由控制器发布。
-    runner_pr = _runner_published(collected)
-    if runner_pr is not None:
+    if receipt:
+        pr_url = receipt["html_url"]
+        summary["steps"].append("published on runner")
+    elif runner_pr is not None:
         if runner_pr.get("ok"):
             pr_url = runner_pr.get("pr") or ""
             summary["steps"].append("published on runner")
@@ -622,11 +686,7 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6) -> dict:
             summary["abort"] = f"runner publish failed: {runner_pr.get('error', '')[:180]}"
             return _abort_release(summary["abort"], give_back=True)
     else:
-        # ---- 控制器侧发布（Modal 后端 / runner 未配置 publish）----
-        pr_url = _publish_pr(root, entry, base_sha, patch_file, summary)
-        if pr_url is None:
-            return _abort_release(summary.get("abort", "publish failed"),
-                                  give_back=True)
+        return _abort_release("runner did not publish a PR")
     if not pr_url:
         return _abort_release("publish reported success but no PR url",
                               give_back=True)
@@ -634,7 +694,8 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6) -> dict:
     log(root, "pr_open", key, f"{pr_url} (auto pipeline, backend={backend})")
     mark_candidate(root, key, "pr_open", extra={"pr_url": pr_url})
     from ..notify import feishu_send
-    feishu_send(f"🚀 新 PR 开出：{key}", f"{pr_title} {pr_url}")
+    if receipt:
+        feishu_send(f"🚀 新 PR 开出：{key}", f"{job.publish['title']} {pr_url}")
 
     # PR 开出来之后立刻把能自动签的 CLA 签掉。phoenix 这类仓库的 CLA bot 认
     # 一条固定口令的 issue_comment，发出去就生效；剩下要网页 OAuth 的，preflight
@@ -900,7 +961,6 @@ STAGED_STATUS = "staged"          # 今天额度用完了，留到明天再处�
 # （2026-11-03 实测 deer-flow#7846 一天被 claim 7 次）。
 MAX_ATTEMPTS_PER_CANDIDATE = 3
 # 内部 fixture 仓库：自动 drain 永远跳过，演练走手动单条入口
-INTERNAL_REPOS = {"xixi-box/oss-scout-v2-test"}
 STAGE_TTL_DAYS = 3                # 暂存超过这个天数就丢，避免拿陈旧的 issue 去修
 
 
@@ -999,7 +1059,7 @@ def drain_ai_graded(root: Path, limit: int = 3, dry_run: bool = True,
     for key, e in q.items():
         if e.get("status") not in ACTIVE:
             continue
-        if e.get("repo") in INTERNAL_REPOS:
+        if not monitored_repo(e.get("repo", "")):
             continue
         if e.get("blockers"):
             continue
@@ -1034,7 +1094,7 @@ def drain_ai_graded(root: Path, limit: int = 3, dry_run: bool = True,
             out.append(candidate_pipeline(root, e))
         except Exception as ex:  # noqa: BLE001
             log(root, "crash", key,
-                f"unhandled: {type(ex).__name__}: {str(ex)[:200]}; start retained")
+                f"unhandled: {type(ex).__name__}: {str(ex)[:200]}")
             _emergency_release(root, key)
             out.append({"id": key, "crash": f"{type(ex).__name__}: {str(ex)[:150]}"})
     return out

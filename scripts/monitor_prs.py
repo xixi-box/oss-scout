@@ -29,6 +29,10 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+DATA_ROOT = Path(os.environ.get("OSSCOUT_DASHBOARD_ROOT", str(ROOT)))
+
+from scout_v2.roster import monitored_repo
+from scout_v2.state_store import atomic_json_write, queue_transaction
 
 # 分类信号。顺序有意义：先判"被关"，再判"要改"，最后才是普通讨论。
 PATTERNS = [
@@ -259,7 +263,8 @@ def my_open_prs(limit: int = 50) -> list[dict]:
                "--limit", str(limit),
                "--json", "repository,number,title,url,updatedAt"])
     try:
-        return json.loads(raw) if raw else []
+        return [pr for pr in json.loads(raw or "[]")
+                if monitored_repo(pr["repository"]["nameWithOwner"])]
     except json.JSONDecodeError:
         return []
 
@@ -398,12 +403,12 @@ EXTERNAL_LOG_PATTERNS = re.compile(
     "awaiting maintainer assignment|not assigned to the linked issue", re.I)
 
 # 去 key：每个 (repo, pr, head_sha) 只派一次——修完 head 会变，新 sha 才允许再试。
-ATTEMPTS_FILE = ROOT / "state" / "pr_fix_attempted.json"
+ATTEMPTS_FILE = DATA_ROOT / "state" / "pr_fix_attempted.json"
 
 
 def pr_head(repo: str, number: int) -> dict:
     raw = _gh(["pr", "view", str(number), "-R", repo, "--json",
-               "headRefName,headRefOid,headRepositoryOwner,isCrossRepository"])
+               "headRefName,headRefOid,headRepository,headRepositoryOwner,isCrossRepository,state,author"])
     try:
         return json.loads(raw) if raw else {}
     except json.JSONDecodeError:
@@ -485,7 +490,20 @@ def _attempts() -> dict:
         return {}
 
 
-def dispatch_pr_fix(repo: str, number: int, *, dry_run: bool = False,
+def dispatch_pr_fix(repo: str, number: int, **kwargs) -> dict:
+    if not monitored_repo(repo):
+        return {"dispatched": False, "reason": "repository outside monitored roster"}
+    import sqlite3
+    ATTEMPTS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    db = sqlite3.connect(ATTEMPTS_FILE.with_suffix(".sqlite3"))
+    try:
+        db.execute("BEGIN IMMEDIATE")
+        return _dispatch_pr_fix(repo, number, **kwargs)
+    finally:
+        db.close()
+
+
+def _dispatch_pr_fix(repo: str, number: int, *, dry_run: bool = False,
                     kind: str = "ci", review_comment: str = "",
                     review_author: str = "", force: bool = False) -> dict:
     """对挂红的 PR（或需按 review 改的 PR）派一轮 opencode 修复。
@@ -502,8 +520,9 @@ def dispatch_pr_fix(repo: str, number: int, *, dry_run: bool = False,
     head = pr_head(repo, number)
     if not head:
         return {"dispatched": False, "reason": "pr head unavailable"}
-    if not head.get("isCrossRepository") or \
-            (head.get("headRepositoryOwner") or {}).get("login") != "xixi-box":
+    if (head.get("state") != "OPEN" or (head.get("author") or {}).get("login") != "xixi-box"
+            or not head.get("isCrossRepository") or
+            (head.get("headRepositoryOwner") or {}).get("login") != "xixi-box"):
         return {"dispatched": False, "reason": "head not on our fork"}
 
     head_sha = head.get("headRefOid", "")
@@ -512,28 +531,21 @@ def dispatch_pr_fix(repo: str, number: int, *, dry_run: bool = False,
         # 2026-11-05 实录：yhmo 三条意见同时在场，"取最新一条"让 fix
         # 指令变成了机器人的 CI 通报，两条真要求被挤丢了。
         merged = _thread(repo, number)
-        ext = [c for c in merged
-               if str(c.get("author") or "") not in MY_LOGINS]
-        if ext:
-            review_comment = chr(10).join(
-                f"[{c['created_at'][:16]} {c['author']}] {c['body'][:600]}"
-                for c in ext[-8:])
+        ext = [c for c in merged if c.get("author") == review_author
+               and c.get("association") in ("OWNER", "MEMBER", "COLLABORATOR")
+               and c.get("body", "").strip() == review_comment.strip()[:COMMENT_TEXT_LIMIT]]
+        if not ext:
+            return {"dispatched": False, "reason": "review author or comment not verified"}
+        review_comment = ext[-1]["body"]
         # review 类去重不能用 head_sha：同一条意见在推 commit 之前会被反复看到
         digest = hashlib.sha1(
-            f"{repo}#{number}:{review_comment}".encode()).hexdigest()[:12]
+            f"{repo}#{number}:{ext[-1]['source']}:{ext[-1]['comment_id']}:{review_comment}".encode()).hexdigest()[:12]
         key = f"{repo}#{number}@review:{digest}"
     else:
         key = f"{repo}#{number}@{head_sha[:12]}"
     attempts = _attempts()
     if key in attempts and not force:
-        # 失败解锁：派发出去的工作流可能跑挂（验证拒推/网络/文件非法），
-        # 挂了的修复永远不重试就会永久卡死（promptfoo#12079 实录：两条
-        # P1 卡了一天）。超过 3 小时的旧派发视为已失败，允许重派——
-        # 正常一轮 opencode 修复 + 推送远用不了 3 小时。
-        age_h = _attempt_age_hours(attempts[key])
-        if age_h is None or age_h < 3:
-            return {"dispatched": False, "reason": f"already attempted: {key}"}
-        attempts.pop(key, None)
+        return {"dispatched": False, "reason": f"already attempted: {key}"}
 
     if kind == "ci":
         failing = failing_details(repo, number)
@@ -562,7 +574,10 @@ def dispatch_pr_fix(repo: str, number: int, *, dry_run: bool = False,
         if len(parts) == 2:
             comments.append({"author": parts[0], "body": parts[1][:600]})
 
-    payload = {"fork_repo": f"xixi-box/{repo.split('/')[1]}",
+    fork_name = (head.get("headRepository") or {}).get("name")
+    if not fork_name:
+        return {"dispatched": False, "reason": "fork name unavailable"}
+    payload = {"fork_repo": f"xixi-box/{fork_name}",
                "branch": head.get("headRefName", ""),
                "upstream_repo": repo, "pr_number": number,
                "head_sha": head_sha, "kind": kind,
@@ -572,6 +587,9 @@ def dispatch_pr_fix(repo: str, number: int, *, dry_run: bool = False,
     import base64 as _b64
     fix_b64 = _b64.b64encode(json.dumps(payload, ensure_ascii=False).encode()).decode()
     job_id = f"prfix-{repo.replace('/', '-')}-{number}-{key.rsplit('@', 1)[-1][:12]}"
+    attempts[key] = {"ts": time.strftime("%Y-%m-%dT%H:%M:%S"), "kind": kind,
+                     "dispatched": False, "reason": "dispatch pending confirmation"}
+    _save_attempts(attempts)
     # _gh 失败返回 ""，但 workflow run 成功时 stdout 也是空——用 run_gh 拿 rc
     rc = run_gh(["workflow", "run", "oss-scout-pr-fix.yml", "-R", "xixi-box/oss-scout",
                  "-f", f"fix_b64={fix_b64}", "-f", f"job_id={job_id}"], timeout=60)
@@ -587,28 +605,13 @@ def dispatch_pr_fix(repo: str, number: int, *, dry_run: bool = False,
             "branch": payload["branch"]}
 
 
-def _attempt_age_hours(entry: dict) -> float | None:
-    ts = str((entry or {}).get("ts") or "")
-    try:
-        import datetime as dt
-        t = dt.datetime.fromisoformat(ts)
-        return (dt.datetime.now() - t).total_seconds() / 3600
-    except ValueError:
-        return None
-
-
 def _save_attempts(data: dict) -> None:
-    ATTEMPTS_FILE.parent.mkdir(parents=True, exist_ok=True)
-    # 只留最近 200 条，防无限膨胀
-    if len(data) > 200:
-        data = dict(sorted(data.items(), key=lambda kv: kv[1].get("ts", ""))[-200:])
-    ATTEMPTS_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=1),
-                             encoding="utf-8")
+    atomic_json_write(ATTEMPTS_FILE, data)
 
 
 # ---- L3：回复草拟（只起草，绝不自动发）----
 
-REPLIES_FILE = ROOT / "state" / "pr_replies.json"
+REPLIES_FILE = DATA_ROOT / "state" / "pr_replies.json"
 
 
 def _thread(repo: str, number: int, limit: int = 10) -> list[dict]:
@@ -619,18 +622,18 @@ def _thread(repo: str, number: int, limit: int = 10) -> list[dict]:
     一条"必须改代码"的 review 被静默漏了两天。pulls/{n}/comments 才是
     行内评论的家。两个端点是不同的集合，不会重复。
     """
-    jq = r'.[] | "\(.created_at)|\(.user.login)|\(.id)|\(.body)"'
     out = []
     for source, endpoint in (
             ("issue", f"repos/{repo}/issues/{number}/comments"),
             ("inline", f"repos/{repo}/pulls/{number}/comments")):
-        raw = _gh(["api", f"{endpoint}?per_page=100", "--jq", jq])
-        for line in (raw or "").splitlines():
-            parts = line.split("|", 3)
-            if len(parts) == 4:
-                out.append({"created_at": parts[0], "author": parts[1],
-                            "comment_id": int(parts[2]) if parts[2].isdigit() else None,
-                            "body": parts[3][:COMMENT_TEXT_LIMIT],
+        raw = _gh(["api", f"{endpoint}?per_page=100", "--paginate", "--slurp"])
+        for page in json.loads(raw or "[]"):
+            for comment in page:
+                out.append({"created_at": comment["created_at"],
+                            "author": (comment.get("user") or {}).get("login", ""),
+                            "association": comment.get("author_association"),
+                            "comment_id": comment["id"],
+                            "body": (comment.get("body") or "")[:COMMENT_TEXT_LIMIT],
                             "source": source})
     out.sort(key=lambda c: c["created_at"])
     return out[-limit:]
@@ -673,6 +676,8 @@ def draft_reply(repo: str, number: int, *, force: bool = False,
     context（可选）来自 classify() 的同一份 PR 数据，用于给飞书卡片补上
     issue 标题/根因/对方原话——免得为了发一张卡片再拉一遍 GitHub。
     """
+    if not monitored_repo(repo):
+        return {"drafted": False, "reason": "repository outside monitored roster"}
     try:
         replies = json.loads(REPLIES_FILE.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
@@ -722,6 +727,8 @@ def draft_reply(repo: str, number: int, *, force: bool = False,
         "say what will change (the fix itself is handled separately); plain text, "
         "no markdown headers.\n\n"
         f"Conversation on {repo}#{number}:\n{convo}\n\n"
+        f"Confirmed repair result: {json.dumps((context or {}).get('fix_result') or {})}\n"
+        "Describe a change as completed only when the confirmed repair result says it was pushed.\n"
         "Reply with ONLY the reply text.")
 
     client = GoClient(key=api_key, model=model, timeout=180)
@@ -729,7 +736,7 @@ def draft_reply(repo: str, number: int, *, force: bool = False,
     if not ok:
         return {"drafted": False, "reason": f"model error: {detail[:120]}"}
 
-    replies[key] = {"status": "draft",
+    entry = {"status": "draft",
                     "for_comment": latest.get("created_at"),
                     "to_author": latest.get("author"),
                     "draft": detail.strip()[:1200],
@@ -743,15 +750,17 @@ def draft_reply(repo: str, number: int, *, force: bool = False,
                     "source_kind": str(latest.get("source") or "issue"),
                     "source_comment_id": latest.get("comment_id"),
                     "drafted_at": time.strftime("%Y-%m-%dT%H:%M:%S")}
-    REPLIES_FILE.parent.mkdir(parents=True, exist_ok=True)
-    REPLIES_FILE.write_text(json.dumps(replies, ensure_ascii=False, indent=1),
-                            encoding="utf-8")
-    return {"drafted": True, "key": key, "entry": replies[key]}
+    with queue_transaction(REPLIES_FILE.parents[1], path=REPLIES_FILE) as current:
+        previous = current.get(key) or {}
+        if not force and previous.get("draft") and previous.get("for_comment") == entry["for_comment"]:
+            return {"drafted": False, "reason": "draft already current"}
+        current[key] = {**previous, **entry}
+    return {"drafted": True, "key": key, "entry": current[key]}
 
 
 def _record(info: dict) -> None:
     """把需要动手的 PR 追加到 state/pr_watch.jsonl（唯一审计+待办来源）。"""
-    p = ROOT / "state" / "pr_watch.jsonl"
+    p = DATA_ROOT / "state" / "pr_watch.jsonl"
     p.parent.mkdir(parents=True, exist_ok=True)
     rec = {"ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
            "repo": info["repo"], "number": info["number"],

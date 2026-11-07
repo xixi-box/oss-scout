@@ -35,7 +35,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
           set -euo pipefail
-          python scripts/monitor_prs.py | tee /tmp/pr_watch.txt
+          python -m scripts.monitor_prs | tee /tmp/pr_watch.txt
 
       - name: Summarize
         if: always()

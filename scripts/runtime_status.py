@@ -25,12 +25,19 @@ def inspect(root: Path) -> dict:
               "queue": dict(collections.Counter(e.get("status") for e in queue.values()))}
     for filename, key, query, args in [
         ("scout_v2.sqlite3", "starts_today", "SELECT COUNT(*) FROM claim_days WHERE day=?", (now.date().isoformat(),)),
+        ("scout_v2.sqlite3", "published_today", "SELECT COUNT(*) FROM publications WHERE day=?", (now.date().isoformat(),)),
+        ("scout_v2.sqlite3", "pending_publication", "SELECT COUNT(*) FROM publications WHERE day IS NULL", ()),
         ("issue_inbox.sqlite3", "pending_screening", "SELECT COUNT(*) FROM inbox WHERE done_version<version", ()),
     ]:
         db = root / "state" / filename
         if db.exists():
             with sqlite3.connect(f"file:{db.as_posix()}?mode=ro", uri=True) as conn:
-                result[key] = conn.execute(query, args).fetchone()[0]
+                try:
+                    result[key] = conn.execute(query, args).fetchone()[0]
+                except sqlite3.OperationalError as exc:
+                    if "no such table: publications" not in str(exc):
+                        raise
+                    result[key] = 0
         else:
             result[key] = 0
     latest = {}

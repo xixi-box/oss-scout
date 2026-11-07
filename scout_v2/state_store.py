@@ -37,7 +37,7 @@ def business_now(tz_name: str = "Asia/Shanghai") -> dt.datetime:
 
 
 @contextmanager
-def queue_transaction(root: Path):
+def queue_transaction(root: Path, *, path: Path | None = None):
     """Serialize queue read/modify/write across threads and processes.
 
     A separate SQLite lock avoids nesting the quota database's transactions.
@@ -49,7 +49,7 @@ def queue_transaction(root: Path):
                            isolation_level=None)
     try:
         conn.execute("BEGIN IMMEDIATE")
-        path = root / "queue/candidates.json"
+        path = path or root / "queue/candidates.json"
         queue = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
         original = json.dumps(queue, ensure_ascii=False, sort_keys=True)
         yield queue
@@ -299,6 +299,47 @@ class ClaimLedger:
 
     def close(self) -> None:
         self._conn.close()
+
+    def _publication_table(self) -> None:
+        self._conn.execute(
+            "CREATE TABLE IF NOT EXISTS publications (job_id TEXT PRIMARY KEY, "
+            "repo TEXT NOT NULL, head TEXT NOT NULL, runner_repo TEXT NOT NULL, "
+            "remote_id TEXT, expected_url TEXT, day TEXT, url TEXT UNIQUE)"
+        )
+
+    def published_today(self, tz_name: str) -> int:
+        self._publication_table()
+        day = business_now(tz_name).date().isoformat()
+        return self._conn.execute("SELECT COUNT(*) FROM publications WHERE day=?",
+                                  (day,)).fetchone()[0]
+
+    def pending_publication(self) -> tuple | None:
+        self._publication_table()
+        return self._conn.execute(
+            "SELECT job_id, repo, head, runner_repo, remote_id, expected_url "
+            "FROM publications WHERE day IS NULL"
+        ).fetchone()
+
+    def reserve_publication(self, tz_name: str, cap: int, job_id: str, repo: str,
+                            head: str, runner_repo: str) -> bool:
+        # The dispatcher holds its cross-process lock for the entire attempt.
+        if self.pending_publication() or self.published_today(tz_name) >= cap:
+            return False
+        self._conn.execute("INSERT INTO publications(job_id,repo,head,runner_repo) VALUES (?,?,?,?)",
+                           (job_id, repo, head, runner_repo))
+        return True
+
+    def set_publication_run(self, job_id: str, run_id: str) -> None:
+        self._conn.execute("UPDATE publications SET remote_id=? WHERE job_id=?", (run_id, job_id))
+
+    def expect_publication(self, job_id: str, url: str) -> None:
+        self._conn.execute("UPDATE publications SET expected_url=? WHERE job_id=?", (url, job_id))
+
+    def finish_publication(self, job_id: str, *, day: str = "", url: str = "") -> None:
+        if day and url:
+            self._conn.execute("UPDATE OR IGNORE publications SET day=?,url=? WHERE job_id=?",
+                               (day, url, job_id))
+        self._conn.execute("DELETE FROM publications WHERE job_id=? AND day IS NULL", (job_id,))
 
     def reconcile_legacy_starts(self, worklog: Path, tz_name: str) -> None:
         """One-time migration: failures refunded by the old code still count today."""

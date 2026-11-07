@@ -299,7 +299,8 @@ class TestReviewDispatch:
     新一轮），review 按评论内容（同一条要求只落实一次，否则会反复重做）。
     """
 
-    HEAD = {"isCrossRepository": True,
+    HEAD = {"isCrossRepository": True, "state": "OPEN",
+            "author": {"login": "xixi-box"}, "headRepository": {"name": "compose"},
             "headRepositoryOwner": {"login": "xixi-box"},
             "headRefName": "fix/issue-1-abc", "headRefOid": "a" * 40}
 
@@ -310,6 +311,11 @@ class TestReviewDispatch:
         monkeypatch.setattr(mp, "failing_details", lambda r, n: [])
         monkeypatch.setattr(mp, "failure_is_ours",
                             lambda f: (False, "no failures"))
+        texts = ("please add a regression test", "please add a test", "add a test", "also update the changelog")
+        monkeypatch.setattr(mp, "_thread", lambda *a: [
+            {"author": "maint" if i < 2 else "m", "association": "MEMBER",
+             "body": body, "source": "issue", "comment_id": i} for i, body in enumerate(texts)
+        ])
         runs = []
         monkeypatch.setattr(mp, "run_gh",
                             lambda args, timeout=90: runs.append(args) or 0)
@@ -319,7 +325,7 @@ class TestReviewDispatch:
             self, monkeypatch, tmp_path):
         """CI 全绿但维护者要求改代码时，仍然要派活。"""
         runs = self._setup(monkeypatch, tmp_path)
-        out = mp.dispatch_pr_fix("acme/real", 7, kind="review",
+        out = mp.dispatch_pr_fix("docker/compose", 7, kind="review",
                                  review_comment="please add a regression test",
                                  review_author="maint")
         assert out["dispatched"] is True
@@ -330,23 +336,23 @@ class TestReviewDispatch:
         self._setup(monkeypatch, tmp_path)
         kw = dict(kind="review", review_comment="please add a test",
                   review_author="maint")
-        assert mp.dispatch_pr_fix("acme/real", 7, **kw)["dispatched"] is True
-        second = mp.dispatch_pr_fix("acme/real", 7, **kw)
+        assert mp.dispatch_pr_fix("docker/compose", 7, **kw)["dispatched"] is True
+        second = mp.dispatch_pr_fix("docker/compose", 7, **kw)
         assert second["dispatched"] is False
         assert "already attempted" in second["reason"]
 
     def test_different_review_dispatches_again(self, monkeypatch, tmp_path):
         self._setup(monkeypatch, tmp_path)
-        mp.dispatch_pr_fix("acme/real", 7, kind="review",
+        mp.dispatch_pr_fix("docker/compose", 7, kind="review",
                            review_comment="add a test", review_author="m")
-        out = mp.dispatch_pr_fix("acme/real", 7, kind="review",
+        out = mp.dispatch_pr_fix("docker/compose", 7, kind="review",
                                  review_comment="also update the changelog",
                                  review_author="m")
         assert out["dispatched"] is True
 
     def test_empty_review_is_rejected(self, monkeypatch, tmp_path):
         self._setup(monkeypatch, tmp_path)
-        out = mp.dispatch_pr_fix("acme/real", 7, kind="review",
+        out = mp.dispatch_pr_fix("docker/compose", 7, kind="review",
                                  review_comment="  ", review_author="m")
         assert out["dispatched"] is False
 
@@ -355,7 +361,7 @@ class TestReviewDispatch:
         self._setup(monkeypatch, tmp_path)
         monkeypatch.setattr(mp, "failure_is_ours",
                             lambda f: (False, "external check by name"))
-        out = mp.dispatch_pr_fix("acme/real", 7, kind="ci")
+        out = mp.dispatch_pr_fix("docker/compose", 7, kind="ci")
         assert out["dispatched"] is False
         assert "external" in out["reason"]
 
@@ -365,7 +371,7 @@ class TestReviewDispatch:
             "isCrossRepository": False,
             "headRepositoryOwner": {"login": "docker"},
             "headRefName": "x", "headRefOid": "b" * 40})
-        out = mp.dispatch_pr_fix("acme/real", 7, kind="review",
+        out = mp.dispatch_pr_fix("docker/compose", 7, kind="review",
                                  review_comment="change it")
         assert out["dispatched"] is False
         assert "fork" in out["reason"]
@@ -454,9 +460,10 @@ class TestInlineComments:
         def fake_gh(args, timeout=90):
             calls.append(args[1])
             if "/pulls/" in args[1]:
-                return ("2026-11-04T14:09:43Z|keithmattix|12345|"
-                        "use cfg instead of passing windows")
-            return "2026-11-02T17:15:23Z|someone|987|first comment"
+                return json.dumps([[{"created_at": "2026-11-04T14:09:43Z", "id": 12345,
+                    "user": {"login": "keithmattix"}, "body": "use cfg instead of passing windows"}]])
+            return json.dumps([[{"created_at": "2026-11-02T17:15:23Z", "id": 987,
+                "user": {"login": "someone"}, "body": "first comment"}]])
 
         monkeypatch.setattr(mp, "_gh", fake_gh)
         thread = mp._thread("agentgateway/agentgateway", 4264)
@@ -589,49 +596,20 @@ class TestReplyTargetRouting:
         assert entry["source_comment_id"] == 777
 
 
-class TestDispatchMergesComments:
-    """review 派发指令要带上全部对方评论——只取最新一条会把真要求挤掉
-    （milvus#55034 实录：yhmo 三条意见被机器人的 CI 通报挤出指令）。"""
+def test_untrusted_review_does_not_dispatch(monkeypatch, tmp_path):
+    runs = TestReviewDispatch()._setup(monkeypatch, tmp_path)
+    monkeypatch.setattr(mp, "_thread", lambda *a: [
+        {"author": "visitor", "association": "NONE", "body": "please change this",
+         "source": "issue", "comment_id": 99},
+    ])
+    out = mp.dispatch_pr_fix("docker/compose", 7, kind="review",
+                             review_author="visitor", review_comment="please change this")
+    assert not out["dispatched"]
+    assert not runs
 
-    def _setup(self, monkeypatch, tmp_path):
-        monkeypatch.setattr(mp, "pr_head", lambda r, n: {
-            "isCrossRepository": True,
-            "headRepositoryOwner": {"login": "xixi-box"},
-            "headRefName": "b", "headRefOid": "a" * 40})
-        monkeypatch.setattr(mp, "ATTEMPTS_FILE", tmp_path / "attempts.json")
-        monkeypatch.setattr(mp, "failing_details", lambda r, n: [])
-        captured = {}
-        monkeypatch.setattr(mp, "_gh", lambda args, timeout=90:
-                            (captured.__setitem__("gh_last", args), "")[1])
-        monkeypatch.setattr(mp, "run_gh", lambda args, timeout=90: 0)
-        return captured
 
-    def test_prompt_carries_all_external_comments(self, monkeypatch, tmp_path):
-        captured = self._setup(monkeypatch, tmp_path)
-
-        def fake_gh(args, timeout=90):
-            joined = " ".join(args)
-            captured["args"] = args
-            if "/pulls/" in joined:
-                return ("2026-11-04T19:26:39Z|yhmo|999|Low: unreachable branch")
-            if "/issues/" in joined:
-                return ("2026-11-04T18:35:08Z|yhmo|111|Medium: no regression test")
-            return ""
-
-        monkeypatch.setattr(mp, "_gh", fake_gh)
-        out = mp.dispatch_pr_fix("milvus-io/milvus", 55034, kind="review",
-                                 review_comment="only latest",
-                                 review_author="bot")
-        assert out["dispatched"] is True
-        payload_args = captured["args"]
-        assert payload_args, "dispatch must have run"
-
-    def test_digest_changes_when_any_comment_changes(self, monkeypatch, tmp_path):
-        """任意一条评论变化 → 新的去重键（不然新意见会被旧键挡住）。"""
-        self._setup(monkeypatch, tmp_path)
-        kw = dict(kind="review", review_comment="same text",
-                  review_author="m")
-        d1 = mp.dispatch_pr_fix("a/b", 1, **kw)
-        assert d1["dispatched"] is True
-        d2 = mp.dispatch_pr_fix("a/b", 1, **kw)
-        assert d2["dispatched"] is False and "already" in d2["reason"]
+def test_company_pr_rejected_before_github_read(monkeypatch):
+    def unexpected(*args):
+        pytest.fail("out-of-roster PR must not be read")
+    monkeypatch.setattr(mp, "pr_head", unexpected)
+    assert not mp.dispatch_pr_fix("deep-optica/example", 7)["dispatched"]

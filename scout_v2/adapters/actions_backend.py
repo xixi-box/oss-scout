@@ -162,6 +162,12 @@ class ActionsBackend:
                 if rc2 == 0:
                     _found, data = self._load_result(dest)
                     if data is not None:
+                        publish = _found.with_name("publish.json")
+                        if publish.is_file():
+                            try:
+                                data["publish"] = json.loads(publish.read_text(encoding="utf-8"))
+                            except (OSError, json.JSONDecodeError):
+                                pass
                         return data
         # artifact 不可用（不存在 / 配额满 / 下载失败 / 无 result.json）→ 读日志信封
         return self._collect_from_log(remote_job_id)
@@ -247,6 +253,8 @@ class ActionsBackend:
                 candidates = []
                 for run in json.loads(out).get("workflow_runs", []):
                     if run.get("event") != "workflow_dispatch":
+                        continue
+                    if self.workflow == "oss-scout-repair.yml" and run.get("display_title") != f"repair {job_id}":
                         continue
                     if not_before is not None:
                         created = _parse_ts(run.get("created_at"))
