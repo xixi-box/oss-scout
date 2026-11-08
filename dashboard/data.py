@@ -744,9 +744,6 @@ _RE_OFFER = __import__("re").compile(
 # "the fix maybe is not trivial to ask AI to do it"、维护者在评论里派单
 # "you can fix this and I can try to review"。Worker 事件只有 body 没有
 # 评论列表，先把 body 里命中的句子喂给评分层。
-_REPO_RULES_CACHE: dict | None = None
-
-
 def repo_rules_text(repo: str) -> str:
     """该仓库的 PR 规矩摘要（configs/repo_rules.yaml），供细筛 prompt 注入。"""
     candidates = [Path(os.environ.get("OSSCOUT_DASHBOARD_ROOT", "/data")) / "configs/repo_rules.yaml",
@@ -809,8 +806,6 @@ def live_issue_blockers(check) -> list[str]:
     blockers = []
     if not check.issue_open:
         blockers.append("Issue 已关闭")
-    if not check.unassigned:
-        blockers.append("已有指派")
     if check.has_claim_signal:
         blockers.append("claim_signal")
     if check.has_cross_ref_pr or check.open_pr_hits:
@@ -864,8 +859,14 @@ def coarse_issue_blockers(eng, it: dict, *, lane: str, live_blockers=(), root=No
         or any(label.lower() == "help wanted" for label in labels)
     ):
         blockers.append("等待维护者确认")
-    if it.get("pull_request") or it.get("assignees") or it.get("state", "open") != "open":
+    if it.get("pull_request") or it.get("state", "open") != "open":
         blockers.append("not_open_unassigned_issue")
+    assignment = issue_assignment(eng, it)
+    if assignment["assigned_to_others"]:
+        blockers.append("已有指派给其他人")
+    elif (assignment["requires_assignment"] and not assignment["assignment_exempt"]
+          and not assignment["assigned_to_me"]):
+        blockers.append("仓库要求指派给 xixi-box")
     if excluded.intersection(l.lower() for l in labels):
         blockers.append("excluded_label")
     if it.get("state_reason") == "duplicate":
@@ -876,6 +877,13 @@ def coarse_issue_blockers(eng, it: dict, *, lane: str, live_blockers=(), root=No
         if cla.get("blocking"):
             blockers.append("需要签署 CLA · " + str(cla.get("detail") or ""))
     return list(dict.fromkeys(blockers))
+
+
+def issue_assignment(eng, it: dict) -> dict:
+    from scout_v2.git_host import assignment_facts
+
+    rule = eng.pr_assignment(it["repo"]) if hasattr(eng, "pr_assignment") else {}
+    return assignment_facts(it, rule)
 
 
 def record_issue_screen(eng, it: dict, action: str, result: str) -> None:
@@ -923,6 +931,7 @@ def fine_screen_issue(eng, it: dict, *, lane: str, linked_prs: list | None = Non
             "created_at": it.get("created_at"), "updated_at": it.get("updated_at"),
             "reporter": reporter, "reporter_association": it.get("reporter_association"),
             "assignees": [a.get("login") for a in it.get("assignees") or []],
+            **issue_assignment(eng, it),
             "reactions": it.get("reactions", 0), "lane": lane,
             "num_comments": int(it.get("comments") or 0),
             "comments": [{**c, "is_reporter": bool(reporter and c.get("author") == reporter)}
@@ -964,12 +973,12 @@ def ingest_cloudflare_issues(ds, items: list[dict], *, refresh: bool = False) ->
         with queue_transaction(ds.root) as q:
             seen = _read_json(seen_path, {})()
             prior = seen.get(key) or {}
-            if key in q or (prior.get("fingerprint") == fingerprint and prior.get("status") in ("blocked", "rejected")):
+            if key in q or (prior.get("fingerprint") == fingerprint and prior.get("status") in ("blocked", "rejected", "archived")):
                 continue
         lane = eng.repo_lane(repo)
         blockers, verdict = screen_issue(eng, it, lane=lane, live_blockers=live_blockers, timeline=timeline)
         now = business_now().isoformat(timespec="seconds")
-        rec = {"first_seen": prior.get("first_seen") or now, "fingerprint": fingerprint,
+        rec = {"first_seen": prior.get("first_seen") or now, "updated_at": now, "fingerprint": fingerprint,
                "status": "blocked" if blockers else "queued" if verdict.get("usable") is True else
                          "rejected" if verdict.get("usable") is False else "retry",
                "coarse_reason": ",".join(blockers), "fine_reason": str(verdict.get("reason") or "")[:300]}

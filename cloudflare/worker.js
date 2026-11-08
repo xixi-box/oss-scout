@@ -7,7 +7,7 @@ const EXCLUDED_LABELS = ["invalid", "wontfix", "duplicate", "question", "stale",
   "documentation"];
 
 function collectIssue(issues, repo, it, rejected) {
-  if (it.pull_request || (it.assignees && it.assignees.length)) {
+  if (it.pull_request || (it.assignees || []).some(a => a.login.toLowerCase() !== "xixi-box")) {
     rejected.push({ repo, number: it.number, reason: "not_open_unassigned_issue" });
     return;
   }
@@ -126,7 +126,7 @@ async function issueBatch(env, repos, marks, now, budget) {
         issues(first:100,after:${JSON.stringify(item.cursor)},states:[OPEN],
           filterBy:{since:${JSON.stringify(since)}},orderBy:{field:UPDATED_AT,direction:ASC}) {
           nodes { number title url body createdAt updatedAt author { login }
-            assignees(first:1) { nodes { login } } labels(first:100) { nodes { name } }
+            assignees(first:10) { nodes { login } } labels(first:100) { nodes { name } }
             comments { totalCount } reactions { totalCount } }
           pageInfo { hasNextPage endCursor }
         }

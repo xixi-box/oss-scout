@@ -408,3 +408,19 @@ def test_scan_outcomes_follow_candidate_and_publication_state(tmp_path):
     assert fields["a/b#8"]["最终结果"][0]["link"] == "https://github.com/a/b/pull/18"
     assert fields["a/b#6"]["粗筛结果"] == "人工签署"
     assert all(row["细筛结果"] == "OpenJev 0.99" for row in fields.values())
+
+
+def test_scan_update_time_includes_linked_pr_followup(tmp_path):
+    (tmp_path / "state").mkdir()
+    (tmp_path / "queue").mkdir()
+    key = "a/b#1"
+    (tmp_path / "state/seen.json").write_text(json.dumps({
+        key: {"first_seen": "2026-11-05T06:00:00+08:00", "status": "queued"}}))
+    (tmp_path / "queue/candidates.json").write_text("{}")
+    (tmp_path / "state/worklog.jsonl").write_text(json.dumps({
+        "action": "dashboard_pr_fix_result", "target": "a/b#20",
+        "ts": "2026-11-08T14:30:00+08:00", "result": "pushed=True"}) + "\n")
+    row, = mp.build_scan_rows(tmp_path, published={key: "https://github.com/a/b/pull/20"})
+    fields = fb.scan_row_to_fields(row)
+    assert fields["更新时间"] == fb._timestamp("2026-11-08T14:30:00+08:00")
+    assert fields["最终结果"][0]["text"] == "已开 PR · a/b#20"

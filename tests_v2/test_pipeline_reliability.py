@@ -83,7 +83,8 @@ def test_openjev_receives_actor_time_and_linked_pr_evidence(intake, monkeypatch)
 
 
 @pytest.mark.parametrize(("check_overrides", "reason"), [
-    ({"unassigned": False}, "已有指派"),
+    ({"screening_source": ({"state": "open", "assignees": [{"login": "someone"}]}, [], [])},
+     "已有指派给其他人"),
     ({"is_duplicate": True}, "confirmed_duplicate"),
     ({"open_pr_hits": ["docker/compose#3"]}, "已有修复 PR · docker/compose#3"),
 ])
@@ -215,6 +216,20 @@ def test_live_intake_blocks_claim_before_openjev(intake, monkeypatch):
     assert d.ingest_cloudflare_issues(ds, [issue], refresh=True) == (0, [])
     seen = json.loads((ds.root / "state/seen.json").read_text())
     assert seen["a/b#1"]["coarse_reason"] == "claim_signal"
+
+
+@pytest.mark.parametrize(("assignees", "labels", "expected"), [
+    ([], [], ["仓库要求指派给 xixi-box"]),
+    ([{"login": "Xixi-Box"}], [], []),
+    ([], ["PRS Welcome"], []),
+    ([{"login": "other"}], ["prs welcome"], ["已有指派给其他人"]),
+])
+def test_assignment_policy_is_a_mechanical_gate(assignees, labels, expected):
+    eng = SimpleNamespace(repos_cfg={"repositories": {"jlowin/fastmcp": {}}},
+                          pr_assignment=lambda _: {"requires_assignment": True,
+                                                   "assignment_exempt_labels": ["prs welcome"]})
+    issue = {"repo": "jlowin/fastmcp", "assignees": assignees, "labels": labels}
+    assert d.coarse_issue_blockers(eng, issue, lane="open") == expected
 
 
 def test_default_ledger_time_uses_business_timezone(tmp_path, monkeypatch):

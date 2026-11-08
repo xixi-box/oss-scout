@@ -45,6 +45,46 @@ GOOD_PATCH = """--- a/calc.py
 
 
 class TestRepairEvidenceChain:
+    def test_inline_rust_regression_does_not_apply_fix_on_base(self, tmp_path, monkeypatch):
+        from scout_v2.workers import repair
+
+        repo, _ = make_repo(tmp_path)
+        path = "aml.rs"
+        source = "fn value() -> i32 { 0 }\n"
+        tests = "#[cfg(test)]\nmod tests {\n}\n"
+        (repo / path).write_text(source + tests, encoding="utf-8")
+        repair._git(["add", path], repo)
+        repair._git(["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "rust"], repo)
+        sha = repair._git(["rev-parse", "HEAD"], repo).stdout.strip()
+        new_tests = tests.replace("\n}", "\n    #[test] fn regression() { assert_eq!(super::value(), 1); }\n}")
+        observed = []
+
+        class Client:
+            def run(self, model, prompt):
+                (self.workdir / path).write_text(source.replace("{ 0 }", "{ 1 }") + new_tests, encoding="utf-8")
+                (self.workdir / repair.RESULT_FILE).write_text(json.dumps({
+                    "test_file": path, "test_cmd": "cargo test regression"}), encoding="utf-8")
+                return True, ""
+
+        def producer(j, work, ctx):
+            client = Client()
+            client.workdir = work
+            return repair.opencode_patch_producer(j, work, ctx, client=client, model="test")
+
+        def verify(cmd, work, env):
+            contents = (work / path).read_text(encoding="utf-8")
+            assert new_tests in contents
+            observed.append(contents)
+            return (1 if "{ 0 }" in contents else 0), "", ""
+
+        monkeypatch.setattr(repair, "_run_cmd", verify)
+        out = tmp_path / "out"
+        result = run_repair(job(sha), repo, out, patch_producer=producer)
+        assert result.outcome == "succeeded"
+        assert ["{ 0 }" in contents for contents in observed] == [True, False]
+        assert "fn regression" not in (out / "change.patch").read_text()
+        assert len((out / "verification-steps.jsonl").read_text().splitlines()) == 2
+
     def test_full_chain_reproduced_and_fixed(self, tmp_path):
         r, sha = make_repo(tmp_path)
         producer = lambda job, work, ctx: (GOOD_PATCH, ["fake producer note"])

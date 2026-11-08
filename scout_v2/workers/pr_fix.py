@@ -209,9 +209,13 @@ def _verify(repo_dir: Path, changed: list[str],
     logs = repo_dir.parent / "prfix-test.log"
     if not changed:
         return True, "no-change"
+    changed_paths = [entry[3:].rsplit(" -> ", 1)[-1].strip() for entry in changed]
+    js_only = ((repo_dir / "package.json").is_file()
+               and any(path.endswith((".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs")) for path in changed_paths)
+               and not any(path.endswith((".go", ".py")) for path in changed_paths))
 
     if payload.get("upstream_repo", "").lower() == "nodejs/node":
-        paths = [entry[3:].rsplit(" -> ", 1)[-1].strip() for entry in changed]
+        paths = changed_paths
         if all(path.startswith("doc/") or path.endswith(".md") for path in paths):
             rc, output = _run(["git", "diff", "--check", "HEAD"], repo_dir)
             if rc:
@@ -258,7 +262,7 @@ def _verify(repo_dir: Path, changed: list[str],
         return True, f"CPython regrtest: {', '.join(sorted(tests)) or 'full suite'}"
 
     # Go：跑改动文件所在的包。docker/compose 这类仓库只有这样才验得到。
-    if (repo_dir / "go.mod").exists():
+    if (repo_dir / "go.mod").exists() and not js_only:
         # 统一成 posix 分隔符：go 的 import path 不认反斜杠，Windows 上
         # 直接拼 Path.parent 会得到 ./pkg\watch/，go test 会报找不到包。
         pkgs = sorted({Path(l[3:].strip()).parent.as_posix() for l in changed
@@ -283,8 +287,8 @@ def _verify(repo_dir: Path, changed: list[str],
         return rc == 0, f"go test {targets} rc={rc}"
 
     # Python：优先跑失败清单里的节点，否则跑改动文件对应的测试模块
-    if (repo_dir / "pyproject.toml").exists() or (repo_dir / "setup.cfg").exists() \
-            or (repo_dir / "pytest.ini").exists():
+    has_python = any((repo_dir / name).exists() for name in ("pyproject.toml", "setup.cfg", "pytest.ini"))
+    if has_python and not js_only:
         nodes = [f.get("name", "") for f in payload.get("failing") or []
                  if "::" in f.get("name", "")]
         changed_py = [l[3:].strip() for l in changed

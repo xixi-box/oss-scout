@@ -92,6 +92,18 @@ def gh_read(args: list[str], max_retries: int = 2) -> Any | None:
     return None
 
 
+def assignment_facts(issue: dict, rule: dict, author: str = "xixi-box") -> dict:
+    assignees = {str(item.get("login") or "").lower() for item in issue.get("assignees") or []}
+    labels = {str(label.get("name") if isinstance(label, dict) else label).lower()
+              for label in issue.get("labels") or []}
+    exempt = {str(label).lower() for label in rule.get("assignment_exempt_labels") or []}
+    author = author.lower()
+    return {"requires_assignment": bool(rule.get("requires_assignment")),
+            "assigned_to_me": author in assignees,
+            "assigned_to_others": bool(assignees - {author}),
+            "assignment_exempt": bool(labels & exempt)}
+
+
 def gh_pages(path: str, size: int) -> list | None:
     """A failed later page is incomplete evidence, never an empty comment section."""
     result = []

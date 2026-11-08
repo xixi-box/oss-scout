@@ -106,6 +106,19 @@ def publish(repo_dir: Path, patch_file: Path, publish_cfg: dict) -> dict:
     if not (push_repo and upstream and branch and title):
         return {"ok": False, "error": "publish config incomplete "
                                       "(need push_repo/upstream/branch/title)"}
+    assignment_rule = publish_cfg.get("assignment_rule") or {}
+    if assignment_rule.get("requires_assignment"):
+        from ..git_host import assignment_facts, gh_read
+        issue = gh_read([f"repos/{upstream}/issues/{publish_cfg['issue_number']}"])
+        if not isinstance(issue, dict) or not isinstance(issue.get("assignees"), list):
+            return {"ok": False, "error": "issue assignment unavailable before publication"}
+        facts = assignment_facts(issue, assignment_rule, push_repo.split("/", 1)[0])
+        reason = ("Issue 已关闭" if issue.get("state") != "open"
+                  else "已有指派给其他人" if facts["assigned_to_others"]
+                  else "仓库要求指派给 xixi-box"
+                  if not (facts["assigned_to_me"] or facts["assignment_exempt"]) else "")
+        if reason:
+            return {"ok": False, "error": reason, "coarse_reason": reason}
     if not patch_file.is_file() or not patch_file.read_text(encoding="utf-8").strip():
         return {"ok": False, "error": "no patch to publish"}
     filtered = filter_patch_junk(patch_file.read_text(encoding="utf-8"))

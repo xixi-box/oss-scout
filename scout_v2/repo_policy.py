@@ -186,6 +186,9 @@ class PolicyEngine:
                                               "help wanted", "accepted"]},
                "repositories": {}}
         path = Path(self.root) / "configs" / "pr_gates.yaml"
+        packaged = Path(__file__).resolve().parents[1] / "configs.seed/pr_gates.yaml"
+        if packaged.is_file():
+            path = packaged
         if path.exists():
             try:
                 loaded = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
@@ -195,6 +198,10 @@ class PolicyEngine:
                 pass
         self._pr_gates_cache = cfg
         return cfg
+
+    def pr_assignment(self, repo: str) -> dict:
+        return next((rule for name, rule in self._pr_gates()["repositories"].items()
+                     if name.lower() == repo.lower()), {})
 
     def pr_invited(self, repo: str, labels: set[str] | None) -> bool:
         """该仓库是否允许我们直接开 PR。

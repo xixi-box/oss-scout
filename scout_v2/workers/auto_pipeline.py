@@ -205,6 +205,10 @@ def _reconcile_publication(ledger: ClaimLedger, tz_name: str, *, root: Path | No
             else:
                 status, reason = "escalated", "工作流已结束，未发布 PR，修复结果无法确认"
             extra = {"repair_outcome": outcome or "unknown", "abort_reason": reason[:300]}
+            if publication.get("coarse_reason"):
+                status = "coarse_blocked"
+                extra.update(coarse_reason=publication["coarse_reason"],
+                             abort_reason=publication["coarse_reason"])
         # Save the candidate first. If the controller stops here, the pending
         # publication still exists and the same result can safely be reconciled.
         with queue_transaction(root) as queue:
@@ -698,6 +702,9 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen
     if decision.backend != "github_actions":
         return _abort_release("no GitHub Actions repair backend")
     job.publish = _build_publish_cfg(repo, number, base_sha, entry)
+    assignment_rule = eng.pr_assignment(repo) if hasattr(eng, "pr_assignment") else {}
+    if assignment_rule.get("requires_assignment"):
+        job.publish["assignment_rule"] = assignment_rule
     job.publish["branch"] += f"-{job.job_id.rsplit('-', 1)[-1][:8]}"
     job.publish["body"] += f"\n\n<!-- oss-scout-job:{job.job_id} -->"
     head = f"{FORK_OWNER}:{job.publish['branch']}"
@@ -1051,6 +1058,7 @@ def _defer_entry(entry: dict, root: Path) -> None:
         due_time = due_time.replace(tzinfo=now.tzinfo)
     if due_time is None or due_time <= now:
         entry["quota_deferred_day"] = now.date().isoformat()
+        entry["updated_at"] = now.isoformat(timespec="seconds")
         entry["eligible_at"] = dt.datetime.combine(now.date() + dt.timedelta(days=1),
                                                   dt.time(hour, minute), tzinfo=now.tzinfo).isoformat()
 

@@ -32,6 +32,7 @@ PR_FIELDS = [*LINK_FIELDS, {"field_name": "标题", "type": 1},
              {"field_name": "发现时间", "type": 5, "property": DATE_FORMAT},
              {"field_name": "创建时间", "type": 5, "property": DATE_FORMAT}]
 SCAN_FIELDS = [*LINK_FIELDS, {"field_name": "发现时间", "type": 5, "property": DATE_FORMAT},
+               {"field_name": "更新时间", "type": 5, "property": DATE_FORMAT},
                *({"field_name": name, "type": 1} for name in ("最终结果", "粗筛结果", "细筛结果"))]
 CAND_FIELDS = [*LINK_FIELDS, {"field_name": "标题", "type": 1},
                {"field_name": "处理状态", "type": 1},
@@ -140,14 +141,15 @@ def scan_row_to_fields(row: dict) -> dict:
         label = {"closed": "PR 已关闭", "merged": "PR 已合并"}.get(row.get("pr_state"), "已开 PR")
         result = [{"type": "url", "text": f"{label} · {pr[1]}#{pr[2]}", "link": pr_url}]
     return {"键": link_key(row["key"], "issues"), "发现时间": _timestamp(row.get("first_seen")),
+            "更新时间": _timestamp(row.get("last_activity")),
             "最终结果": result, "粗筛结果": coarse or None, "细筛结果": fine or None}
 
 
 def cand_row_to_fields(row: dict) -> dict:
     return {"键": link_key(row["key"], "issues"), "标题": row.get("title") or None,
             "处理状态": row.get("queue_state") or None,
-            "入队时间": (_timestamp(row.get("discovered_at"))
-                         or _timestamp(row.get("staged_at")))}
+            "入队时间": (_timestamp(row.get("staged_at"))
+                         or _timestamp(row.get("discovered_at")))}
 
 
 def ensure_columns(app_token: str, table_id: str, fields: list) -> None:

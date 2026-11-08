@@ -40,7 +40,7 @@ repositories:
   django/django:                     {requires_invite: false}
   sqlalchemy/sqlalchemy:             {requires_invite: false}
   pdm-project/pdm:                   {requires_invite: false}
-  jlowin/fastmcp:                    {requires_invite: false}
+  jlowin/fastmcp:                    {requires_invite: false, requires_assignment: true, assignment_exempt_labels: ["prs welcome"]}
   run-llama/llama_index:             {requires_invite: false}
   geekan/MetaGPT:                    {requires_invite: false}
   microsoft/autogen:                 {requires_invite: false}

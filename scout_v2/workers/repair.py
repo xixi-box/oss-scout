@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import json
+import re
 import os
 import subprocess
 import time
@@ -60,7 +61,8 @@ You have a shell. Use it: install what you need, run the test runner this projec
 actually uses. You may modify test files (you are adding a regression test) but do
 NOT reformat unrelated code and do NOT touch CI config.
 
-When finished, write a file named OSSCOUT_RESULT.json in the repository root:
+As soon as you identify the regression command, write OSSCOUT_RESULT.json in the
+repository root and update it as you go:
 
 {{"test_cmd": "<the exact single command that runs your regression test, run from the repo root>",
  "test_file": "<repo-relative path of the regression test you added>",
@@ -68,6 +70,8 @@ When finished, write a file named OSSCOUT_RESULT.json in the repository root:
 
 Write it as real JSON - no code fences, no comments. This file is how your work is
 picked up; if it is missing or unparseable the run is discarded.
+For Rust inline tests, keep test edits inside the existing trailing #[cfg(test)]
+module so the verifier can apply the test without applying the production fix.
 """
 
 # Windows 教训（P5 演练实测）：多行 prompt 经 argv 传给 opencode.CMD（批处理 shim）
@@ -105,6 +109,22 @@ def _run_cmd(cmd: list[str], cwd: Path, env: dict) -> tuple[int, str, str]:
             return last
         time.sleep(8)
     return last
+
+
+def _verify_command(cmd, work, env, out_dir, stage, *, rebuild=False):
+    commands = [["make", "-j", "2"], cmd] if rebuild else [cmd]
+    with (out_dir / "verification-steps.jsonl").open("a", encoding="utf-8") as log_file:
+        for index, command in enumerate(commands):
+            started = time.time()
+            rc, stdout, stderr = _run_cmd(command, work, env)
+            log_file.write(json.dumps({
+                "stage": stage, "command": command, "started_at_epoch": started,
+                "elapsed_seconds": round(time.time() - started, 2), "returncode": rc,
+            }, ensure_ascii=False) + "\n")
+            log_file.flush()
+            if rebuild and index == 0 and rc:
+                return rc, stdout, f"verification rebuild failed\n{stderr}"
+    return rc, stdout, stderr
 
 
 def enforce_domain_b(work_dir: Path) -> str:
@@ -387,16 +407,31 @@ def opencode_patch_producer(job: Job, work_dir: Path, context: str,
     excludes = [p for p in ("opencode.json", TASK_FILE, RESULT_FILE,
                             ".oss-scout-result.json") if p in changed]
 
-    # 分清"回归测试"和"修复"：
-    # - agent 报的 OSSCOUT_TEST_FILE 一定是测试
-    # - 其余路径里，明显新增的测试文件也归到测试（避免测试混进 PR）
     test_file = markers.get("test_file", "")
     test_files: dict[str, str] = {}
+    mixed_tests: dict[str, tuple[str, str]] = {}
     for path in changed:
         is_test = (path == test_file) or _looks_like_test(path)
         if not is_test:
             continue
         full = work_dir / path
+        if path == test_file and path.endswith(".rs") and not _looks_like_test(path) and full.is_file():
+            old = _git(["show", f"{baseline}:{path}"], work_dir, check=False)
+            current = full.read_text(encoding="utf-8")
+            baseline_parts = _rust_inline_tests(old.stdout) if old.returncode == 0 else None
+            current_parts = _rust_inline_tests(current)
+            if not baseline_parts or not current_parts or baseline_parts[1] == current_parts[1]:
+                raise RuntimeError(f"cannot separate inline regression test from Rust source: {path}")
+            base_source, base_tests = baseline_parts
+            new_source, new_tests = current_parts
+            original = full.read_bytes()
+            try:
+                full.write_bytes((new_source + base_tests).encode("utf-8"))
+                _git(["add", "--", path], work_dir)
+            finally:
+                full.write_bytes(original)
+            mixed_tests[path] = (base_source + new_tests, current)
+            continue
         if full.is_file():
             try:
                 test_files[path] = full.read_text(encoding="utf-8", errors="replace")
@@ -421,15 +456,31 @@ def opencode_patch_producer(job: Job, work_dir: Path, context: str,
         "patch": patch,
         "test_cmd": _normalise_test_target(_split_cmd(cmd_str)) if cmd_str else [],
         "test_files": test_files,
+        "mixed_tests": mixed_tests,
         "root_cause": markers.get("root_cause", "")[:300],
         "notes": notes,
         "baseline": baseline,
         # 保留 agent 的收尾输出与它改动过的文件清单：失败时这是唯一能判断
         # "它到底理解到哪一步"的线索
         "agent_output": (detail or "")[:4000],
+        "agent_failure": (detail or "")[:400] if not ok else "",
         "changed_files": changed,
         "markers_found": bool(markers),
     }
+
+
+def _rust_inline_tests(text: str) -> tuple[str, str] | None:
+    """Split a conventional trailing, top-level cfg(test) module."""
+    matches = list(re.finditer(r"(?m)^#\[cfg\(test\)\][ \t]*\nmod tests[ \t]*\{[^\n]*\n", text))
+    if len(matches) != 1:
+        return None
+    start = matches[0].start()
+    # Reject code following the first top-level closing brace. The split only
+    # supports the conventional trailing module, with indented nested blocks.
+    if not re.fullmatch(r"[\s\S]*?\n\}[ \t]*\s*", text[start:]) or re.search(
+            r"(?m)^\}[ \t]*\n\s*\S", text[start:]):
+        return None
+    return text[:start], text[start:]
 
 
 def _looks_like_test(path: str) -> bool:
@@ -448,6 +499,7 @@ def _looks_like_test(path: str) -> bool:
 # 测试框架"根本没跑起来"的特征串。命中任何一个都说明退出码反映的是环境缺失，
 # 而不是被测代码的行为——此时既不能声称复现，也不能声称修好。
 _BROKEN_ENV_MARKERS = (
+    "verification rebuild failed",
     "no module named pytest",
     "no module named 'pytest'",
     "no module named pytest'",
@@ -504,34 +556,9 @@ def _write_base_diagnostics(out_dir: Path, job: Job, cmd: list[str], rc: int,
         pass
 
 
-def _snapshot_worktree(work: Path) -> str:
-    """把 agent 的改动做成一个 patch 存着，供验证后恢复。
-
-    只记 tracked 文件的改动；agent 装的依赖（ignored 文件）不会被 reset 影响，
-    因为下面用的是 `git checkout -- .`（不动 ignored/untracked）。
-    """
-    _git(["add", "-A"], work, check=False)
-    return _git(["diff", "--cached", "HEAD"], work, check=False).stdout
-
-
 def _restore_sources_to_base(work: Path, base_sha: str) -> None:
-    """只把 tracked 源码退回 base，保留 agent 装的依赖。
-
-    不能用 `git reset --hard` + `git clean -fdx`：那会把 .venv / node_modules
-    一起删掉，导致随后同一命令因为自己的环境被清空而失败（2026-10-29 实测）。
-    `checkout <sha> -- .` 只改 tracked 文件的内容。
-    """
-    _git(["checkout", "--quiet", "--force", base_sha, "--", "."], work, check=False)
-
-
-def _restore_worktree(work: Path, snapshot: str) -> None:
-    """把 agent 的改动恢复回来（验证完 base 状态之后）。"""
-    if not snapshot.strip():
-        return
-    _git(["reset", "--quiet"], work, check=False)
-    subprocess.run(["git", "apply", "--whitespace=nowarn", "-"], cwd=str(work),
-                   input=snapshot, capture_output=True, text=True,
-                   encoding="utf-8", errors="replace", timeout=120)
+    """Restore the index and sources, including removal of newly staged files."""
+    _git(["restore", f"--source={base_sha}", "--staged", "--worktree", "--", "."], work)
 
 
 def _seed_test_files(repo_dir: Path,
@@ -703,6 +730,7 @@ def run_repair(job: Job, repo_dir: Path, out_dir: Path, *,
     patch = ""
     ai_cmd: list[str] = []
     test_files: dict[str, str] = dict(extra_test_files or {})
+    mixed_tests: dict[str, tuple[str, str]] = {}
     root_cause = ""
     agent_out = ""
     with tempfile.TemporaryDirectory() as td:
@@ -732,6 +760,7 @@ def run_repair(job: Job, repo_dir: Path, out_dir: Path, *,
             patch = produced.get("patch") or ""
             ai_cmd = list(produced.get("test_cmd") or [])
             test_files.update(produced.get("test_files") or {})
+            mixed_tests = produced.get("mixed_tests") or {}
             root_cause = produced.get("root_cause") or ""
             unverified.extend(produced.get("notes") or [])
             # agent 的收尾输出单独落盘：失败时据此判断它理解到哪一步，
@@ -758,8 +787,11 @@ def run_repair(job: Job, repo_dir: Path, out_dir: Path, *,
                     "agent produced no changes and no test command - it likely ran out "
                     f"of time or never located the code; agent said: {(agent_out or '')[:300]}")
             else:
+                agent_failure = produced.get("agent_failure") if isinstance(produced, dict) else ""
                 raise_no_cmd = ("agent changed files but did not report a test command, "
                                 "so the change cannot be verified")
+                if agent_failure:
+                    raise_no_cmd = f"{agent_failure[:210]} · {raise_no_cmd}"
             (out_dir / "worker.log").write_text(raise_no_cmd, encoding="utf-8")
             return Result(job_id=job.job_id, backend=backend_name, outcome="failed",
                           base_sha=job.base_sha,
@@ -783,7 +815,7 @@ def run_repair(job: Job, repo_dir: Path, out_dir: Path, *,
         # 只对真实 agent 产物生效：自定义 producer 是测试/运维注入，它自己负责
         # 证据语义（很多用例故意只给补丁不给测试文件）。
         if patch_producer is None:
-            bad = _implausible_verification(cmd, raw_patch, test_files)
+            bad = _implausible_verification(cmd, raw_patch, test_files | mixed_tests)
             if bad:
                 (out_dir / "worker.log").write_text(
                     f"verification rejected: {bad}\n\ncmd: {cmd}\n"
@@ -796,21 +828,24 @@ def run_repair(job: Job, repo_dir: Path, out_dir: Path, *,
         # 交付的补丁必须只含源码：把测试文件的整段 diff 剔掉（双重保险——
         # producer 已经按路径排除过一次，这里防自定义 producer 或未来改动漏掉）
         patch = _strip_test_files_from_patch(patch, list(test_files.keys()))
+        rebuild = (job.repo.lower() == "python/cpython" and cmd[0] == "./python"
+                   and bool(re.search(r"(?m)^diff --git a/.+\.[ch] b/.+\.[ch]$", patch)))
 
         # ---- 阶段 2：独立验证（在 agent 自己的环境里，回到 base 代码）----
         # 2026-10-29 教训：在 repo_dir 上验证是错的。agent 把依赖装在 work/
         # （.venv、~/.local/bin/uv、node_modules），repo_dir 里什么都没有，
         # 于是同一份代码在"能跑的环境"外被验证，必然 127。
         # 现在：在 work 里把源码退回 base、只保留 agent 装的依赖，再跑同一条命令。
-        work_snapshot = _snapshot_worktree(work)
         _restore_sources_to_base(work, job.base_sha)
-        seeded = _seed_test_files(work, test_files)
+        baseline_tests = test_files | {path: versions[0] for path, versions in mixed_tests.items()}
+        seeded = _seed_test_files(work, baseline_tests)
         try:
-            base_rc, base_out, base_err = _run_cmd(cmd, work, env)
+            base_rc, base_out, base_err = _verify_command(cmd, work, env, out_dir, "base", rebuild=rebuild)
         finally:
             _unseed_test_files(work, seeded)
-            _restore_worktree(work, work_snapshot)
         broken = _test_env_broken(base_out, base_err)
+        if base_rc == 124:
+            broken = "verification timed out"
         reproduced = base_rc not in (0, 127, 9009) and broken is None
 
         if base_rc == 0:
@@ -820,7 +855,7 @@ def run_repair(job: Job, repo_dir: Path, out_dir: Path, *,
             # 即使在这里中止也要落盘诊断：否则"测试在 base 上没失败"这句话
             # 无法区分"agent 的测试没抓住 bug"和"我们把它的测试文件搞丢了"。
             _write_base_diagnostics(out_dir, job, cmd, base_rc, base_out, base_err,
-                                    test_files, raw_patch)
+                                    baseline_tests, raw_patch)
             return Result(job_id=job.job_id, backend=backend_name, outcome="blocked",
                           base_sha=job.base_sha, reproduced_on_base=False,
                           logs_path=f"artifacts/{job.job_id}/worker.log",
@@ -831,15 +866,13 @@ def run_repair(job: Job, repo_dir: Path, out_dir: Path, *,
                 f"--- stdout ---\n{base_out[-2000:]}\n--- stderr ---\n{base_err[-2000:]}",
                 encoding="utf-8")
             _write_base_diagnostics(out_dir, job, cmd, base_rc, base_out, base_err,
-                                    test_files, raw_patch)
+                                    baseline_tests, raw_patch)
             return Result(job_id=job.job_id, backend=backend_name, outcome="failed",
                           base_sha=job.base_sha, reproduced_on_base=False,
                           logs_path=f"artifacts/{job.job_id}/worker.log",
                           unverified_items=[f"test environment unusable on base: {broken}"])
 
         # ---- 阶段 3：补丁后必须通过 ----
-        # work 里已经是 agent 的改动（阶段 2 结束时已恢复），但只保留 tracked
-        # 源码；测试文件单独写回，保证"验证用的测试"和"交付的补丁"分离。
         _restore_sources_to_base(work, job.base_sha)
         ap = subprocess.run(["git", "apply", "--whitespace=nowarn", "-"], cwd=work,
                             input=patch, capture_output=True, text=True,
@@ -852,11 +885,8 @@ def run_repair(job: Job, repo_dir: Path, out_dir: Path, *,
                           logs_path=f"artifacts/{job.job_id}/worker.log",
                           unverified_items=["patch failed to apply on base"])
         # 补丁落下之后再写回归测试：补丁只含源码，测试不在里面
-        for rel_path, content in test_files.items():
-            tf = work / rel_path
-            tf.parent.mkdir(parents=True, exist_ok=True)
-            tf.write_text(content, encoding="utf-8")
-        fixed_rc, out, err = _run_cmd(cmd, work, env)
+        _seed_test_files(work, test_files | {path: versions[1] for path, versions in mixed_tests.items()})
+        fixed_rc, out, err = _verify_command(cmd, work, env, out_dir, "patched", rebuild=rebuild)
         fixed = fixed_rc == 0
         if root_cause:
             unverified.append(f"agent root cause: {root_cause[:200]}")
@@ -868,7 +898,7 @@ def run_repair(job: Job, repo_dir: Path, out_dir: Path, *,
             # base 输出必须留存：否则"复现证据"无法审计，假阳性也无从发现
             "base_stdout_tail": base_out[-3000:], "base_stderr_tail": base_err[-3000:],
             "patched_stdout_tail": out[-3000:], "patched_stderr_tail": err[-3000:],
-            "regression_test_files": sorted(test_files),
+            "regression_test_files": sorted(baseline_tests),
         }, ensure_ascii=False, indent=1), encoding="utf-8")
         (out_dir / "worker.log").write_text(
             f"=== base (rc={base_rc}) ===\n{base_out[-2000:]}\n{base_err[-2000:]}\n"

@@ -1090,24 +1090,39 @@ def build_scan_rows(root, running_keys=(), published=None, pr_states=None) -> li
     except (OSError, json.JSONDecodeError):
         pass
 
+    from scout_v2.feishu_bitable import _timestamp
+
     # Earlier competition aborts did not save the reason on the candidate.
     historical = {key for key, entry in queue.items()
                   if (entry or {}).get("status") == "aborted_competed"
                   and not (entry or {}).get("abort_reason")}
     historical_reasons = {}
-    if historical:
-        try:
-            with (root / "state" / "worklog.jsonl").open(encoding="utf-8") as worklog:
-                for line in worklog:
-                    try:
-                        event = json.loads(line)
-                    except json.JSONDecodeError:
-                        continue
-                    key, reason = event.get("target"), str(event.get("result") or "")
-                    if key in historical and event.get("action") == "pipeline_abort" and reason.startswith("competed:"):
-                        historical_reasons[key] = reason
-        except OSError:
-            pass
+    activity = {}
+    actions = (
+        "pipeline_coarse_screen", "pipeline_prestart_coarse_screen", "pipeline_fine_screen",
+        "pipeline_abort", "pipeline_pr_open", "pipeline_reconciled", "pipeline_publication_status",
+        "dashboard_pr_approval_ready", "dashboard_pr_approval_delivery_error",
+        "dashboard_pr_followup_no_approval", "dashboard_pr_fix_result", "dashboard_pr_reply_sent",
+        "dashboard_pr_reply_failed",
+    )
+    try:
+        with (root / "state" / "worklog.jsonl").open(encoding="utf-8") as worklog:
+            for line in worklog:
+                if not any(action in line for action in actions):
+                    continue
+                try:
+                    event = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                key, reason = str(event.get("target") or ""), str(event.get("result") or "")
+                action = event.get("action")
+                if key in historical and action == "pipeline_abort" and reason.startswith("competed:"):
+                    historical_reasons[key] = reason
+                stamp = event.get("ts")
+                if action in actions and (_timestamp(stamp) or 0) > (_timestamp(activity.get(key.lower())) or 0):
+                    activity[key.lower()] = stamp
+    except OSError:
+        pass
 
     rows = []
     for key, v in seen.items():
@@ -1120,6 +1135,12 @@ def build_scan_rows(root, running_keys=(), published=None, pr_states=None) -> li
         pr_url = (published or {}).get(key.lower()) or (
             candidate.get("pr_url") if candidate_status in _QUEUE_GREEN else None
         )
+        pr_key = re.fullmatch(r"https://github\.com/([^/]+/[^/]+)/pull/(\d+)", pr_url or "")
+        last_activity = max((v.get("first_seen"), v.get("updated_at"), candidate.get("updated_at"),
+                             candidate.get("started_at"), candidate.get("staged_at"), activity.get(key.lower()),
+                             activity.get((pr_url or "").lower()),
+                             activity.get(f"{pr_key[1]}#{pr_key[2]}".lower()) if pr_key else None),
+                            key=lambda stamp: _timestamp(stamp) or 0)
         result = candidate_activity_state(key, candidate_status, running_keys)
         reason = candidate.get("abort_reason")
         coarse = candidate.get("coarse_reason")
@@ -1141,6 +1162,8 @@ def build_scan_rows(root, running_keys=(), published=None, pr_states=None) -> li
             elif candidate_status in _SCAN_OTHER_OUTCOMES:
                 label = _SCAN_OTHER_OUTCOMES[candidate_status]
                 result = f"{label} · {reason}" if reason else label
+            elif v.get("status") == "archived":
+                result = "已移出候选队列"
         rows.append({
             "key": key,
             "status": str(v.get("status") or ""),
@@ -1149,10 +1172,12 @@ def build_scan_rows(root, running_keys=(), published=None, pr_states=None) -> li
                                  or (v.get("why") if str(v.get("status"))
                                      in ("blocked", "unknown_repo", "too_fresh")
                                      else "") or ""),
-            "fine_reason": str(candidate.get("fine_reason") or v.get("fine_reason")
+            "fine_reason": "未执行" if candidate_status == "coarse_blocked" else str(
+                candidate.get("fine_reason") or v.get("fine_reason")
                                or (v.get("why") if str(v.get("status")) == "rejected"
                                    else "") or ""),
             "first_seen": str(v.get("first_seen") or ""),
+            "last_activity": last_activity,
             "queue_state": queue_state,
             "final_result": result,
             "pr_url": pr_url,
