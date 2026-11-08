@@ -29,11 +29,11 @@ def test_console_uses_started_runs_and_verified_publications(tmp_path):
         return snapshot(DataSource(tmp_path, gh_runner=gh))
 
     assert activity()["working"] == []
-    assert candidate_activity(DataSource(tmp_path, gh_runner=gh)) == (set(), {})
+    assert candidate_activity(DataSource(tmp_path, gh_runner=gh)) == (set(), {}, {})
     now = business_now()
     for run in (issue_run, fix_run):
         run.update(status="in_progress", run_started_at=now.isoformat())
-    assert candidate_activity(DataSource(tmp_path, gh_runner=gh)) == ({"docker/compose#12"}, {})
+    assert candidate_activity(DataSource(tmp_path, gh_runner=gh)) == ({"docker/compose#12"}, {}, {})
     working = activity()["working"]
     assert [(r["kind"], r["number"]) for r in working] == [("created", 12), ("repair", 24)]
     assert working[0]["workflow"].endswith("/actions/runs/123")
@@ -49,7 +49,7 @@ def test_console_uses_started_runs_and_verified_publications(tmp_path):
              result="pushed=False test=failed", ts=now.isoformat()),
     ]
     (state / "worklog.jsonl").write_text("\n".join(map(json.dumps, events)), encoding="utf-8")
-    assert candidate_activity(DataSource(tmp_path, gh_runner=gh)) == (set(), {"docker/compose#12": url})
+    assert candidate_activity(DataSource(tmp_path, gh_runner=gh)) == (set(), {"docker/compose#12": url}, {})
     finished = activity()
     assert finished["working"] == []
     assert [r["number"] for r in finished["today"]] == [13]

@@ -92,11 +92,3 @@ class TestDuplicateDetection:
         r = git_host.recheck_candidate("acme/real", 7)
         assert r.issue_open is True
         assert r.is_duplicate is True
-
-
-class TestPipelineStopsOnDuplicate:
-    def test_source_has_duplicate_gate(self):
-        src = (Path(__file__).resolve().parents[1] / "scout_v2" / "workers"
-               / "auto_pipeline.py").read_text(encoding="utf-8")
-        assert "if recheck.is_duplicate:" in src
-        assert '"aborted_duplicate"' in src

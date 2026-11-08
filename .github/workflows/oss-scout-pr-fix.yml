@@ -264,6 +264,7 @@ jobs:
               "preview": preview,
               "review_id": job.get("review_id"),
               "test_result": result.get("test_result") or result.get("skipped") or "workflow failed",
+              "verification_failed": result.get("verification_failed") is True,
               "changed_files": result.get("changed_files") or [],
               "reply": (result.get("reply") or "") if sha or not result.get("fixed") else "",
               "responses": responses,

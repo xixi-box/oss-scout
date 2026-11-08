@@ -153,8 +153,8 @@ def _sync_bitables(root: Path, *, ds=None, activity_only=False, activity_cache=N
                 if tracks_activity:
                     if activity is None:
                         activity = candidate_activity(ds if ds is not None else D.DataSource(root))
-                    running, published = activity
-                    rows = build(root, running, published) if name == "scan" else build(root, running)
+                    running, published, pr_states = activity
+                    rows = build(root, running, published, pr_states) if name == "scan" else build(root, running)
                     if activity_only and activity_cache is not None and rows == activity_cache.get(name):
                         continue
                 else:
@@ -364,25 +364,25 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
                 _bitable_wake.set()
                 _dispatch(rescreen=rescreen)
 
-    def _publications_left() -> int:
+    def _publications_left() -> int | None:
         """Number of new PRs that may still be published today."""
         try:
             from scout_v2.repo_policy import PolicyEngine
-            from scout_v2.state_store import ClaimLedger
+            from scout_v2.state_store import ClaimLedger, business_now
             eng, err = PolicyEngine.load(root)
             if err:
-                return 0
+                return None
             cap = int(getattr(eng, "max_claims_per_day", 0) or 0)
             if cap <= 0:
                 return 10 ** 6
             led = ClaimLedger(root / "state" / "scout_v2.sqlite3")
             try:
-                used = led.published_today(eng.tz_name)
+                used = led.quota_used(business_now(eng.tz_name).date().isoformat())
             finally:
                 led.close()
             return max(0, cap - used)
-        except Exception:  # noqa: BLE001 — 额度算不出来就当作没额度，宁可不做
-            return 0
+        except Exception:  # noqa: BLE001 — 额度未知时不派发，也不推迟候选
+            return None
 
     def _handle_pr_event(root: Path, ev: dict) -> dict:
         from scripts.monitor_prs import dispatch_pr_fix
@@ -418,6 +418,8 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
             with _inflight_lock:
                 room = _MAX_CONCURRENT - len(_inflight)
             left = _publications_left()
+            if left is None:
+                return started
             if left <= 0:
                 from scout_v2.workers.auto_pipeline import _stage_candidates
                 queued = json.loads((root / "queue/candidates.json").read_text(encoding="utf-8"))
@@ -489,6 +491,20 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
                     _t.sleep(120)
 
         _thr.Thread(target=_loop, daemon=True).start()
+
+    def _publication_status_loop():
+        from scout_v2.workers.auto_pipeline import refresh_publication_status
+
+        def _loop():
+            while True:
+                try:
+                    if refresh_publication_status(root):
+                        _bitable_wake.set()
+                except Exception as exc:  # noqa: BLE001
+                    _audit(root, "publication_status_error", "-", str(exc)[:200])
+                time.sleep(30)
+
+        _thr.Thread(target=_loop, daemon=True, name="publication-status").start()
 
     def _intake_loop():
         """Recoverable background AI screening; request handlers only store input."""
@@ -682,6 +698,7 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
         _cf_poll_loop()
         _intake_loop()
         _auto_repair_loop()
+        _publication_status_loop()
         _pr_watch_loop()
         _bitable_loop()
     app.state.ds = ds

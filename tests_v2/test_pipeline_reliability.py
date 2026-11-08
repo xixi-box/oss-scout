@@ -82,18 +82,29 @@ def test_openjev_receives_actor_time_and_linked_pr_evidence(intake, monkeypatch)
     assert evidence["repo_rules"] == "test rules"
 
 
-def test_competed_candidate_exits_without_uninitialized_ledger(tmp_path, monkeypatch):
+@pytest.mark.parametrize(("check_overrides", "reason"), [
+    ({"unassigned": False}, "已有指派"),
+    ({"is_duplicate": True}, "confirmed_duplicate"),
+    ({"open_pr_hits": ["docker/compose#3"]}, "已有修复 PR · docker/compose#3"),
+])
+def test_prestart_coarse_blocker_stops_before_claim(tmp_path, monkeypatch, check_overrides, reason):
     (tmp_path / "queue").mkdir()
     (tmp_path / "state").mkdir()
-    (tmp_path / "queue/candidates.json").write_text("{}")
+    entry = {"id": "docker/compose#1", "repo": "docker/compose", "number": 1, "status": "new"}
+    queue = tmp_path / "queue/candidates.json"
+    queue.write_text(json.dumps({entry["id"]: entry}))
     monkeypatch.setattr(p.PolicyEngine, "load", lambda _: (
-        SimpleNamespace(repo_lane=lambda _: "open", tz_name="Asia/Shanghai", max_claims_per_day=5), None))
+            SimpleNamespace(repo_lane=lambda _: "open", tz_name="Asia/Shanghai", max_claims_per_day=5,
+                            repos_cfg={"repositories": {entry["repo"]: {}}}), None))
     monkeypatch.setattr(p, "gh_read", lambda args: {"state": "active"})
-    monkeypatch.setattr(p, "recheck_candidate", lambda *a, **kw: SimpleNamespace(
-        complete=True, issue_open=True, unassigned=False, has_claim_signal=False,
-        has_cross_ref_pr=False, open_pr_hits=[]))
-    out = p.candidate_pipeline(tmp_path, {"id": "docker/compose#1", "repo": "docker/compose", "number": 1})
-    assert "competed" in out["abort"]
+    check = dict(complete=True, issue_open=True, unassigned=True, has_claim_signal=False,
+                 is_duplicate=False, has_cross_ref_pr=False, open_pr_hits=[])
+    monkeypatch.setattr(p, "recheck_candidate", lambda *a, **kw: SimpleNamespace(**(check | check_overrides)))
+    out = p.candidate_pipeline(tmp_path, entry)
+    assert reason in out["abort"]
+    saved = json.loads(queue.read_text(encoding="utf-8"))[entry["id"]]
+    assert saved["status"] == "coarse_blocked"
+    assert saved["coarse_reason"] == reason
 
 
 def test_abort_keeps_consumed_daily_slot(tmp_path):
@@ -193,7 +204,8 @@ def test_refresh_fetches_every_comment(monkeypatch):
 def test_live_intake_blocks_claim_before_openjev(intake, monkeypatch):
     ds, issue = intake
     monkeypatch.setattr("scout_v2.git_host.recheck_candidate", lambda *a, **kw: SimpleNamespace(
-        complete=True, has_claim_signal=True, has_cross_ref_pr=False, open_pr_hits=[],
+        complete=True, issue_open=True, unassigned=True, has_claim_signal=True,
+        has_cross_ref_pr=False, open_pr_hits=[],
         is_duplicate=False, screening_source=({"title": issue["title"], "state": "open"}, [], [])))
 
     def unexpected_score(*args, **kwargs):
@@ -400,6 +412,77 @@ def test_controller_restart_recovers_candidate_and_feishu_status(tmp_path, monke
     assert ledger.published_today(tz) == int(published)
     ledger.close()
     assert not p.recover_pending_publication(tmp_path)
+
+
+def test_same_day_pr_closure_refills_one_slot_without_rewriting_queue(tmp_path, monkeypatch):
+    from scout_v2 import state_store
+    from scout_v2.feishu_bitable import scan_row_to_fields
+    from scripts.monitor_prs import build_scan_rows
+
+    now = dt.datetime.fromisoformat("2026-11-08T07:00:00+08:00")
+    day = now.date().isoformat()
+    tz = "Asia/Shanghai"
+    monkeypatch.setattr(p, "business_now", lambda *args: now)
+    monkeypatch.setattr(state_store, "business_now", lambda *args: now)
+    ledger = ClaimLedger(tmp_path / "state/scout_v2.sqlite3")
+    repo = "docker/compose"
+    closed = f"https://github.com/{repo}/pull/101"
+    merged = f"https://github.com/{repo}/pull/102"
+    old = f"https://github.com/{repo}/pull/100"
+    for job, url, created_day in [("old", old, "2026-11-07"), ("one", closed, day), ("two", merged, day)]:
+        assert ledger.reserve_publication(tz, 2, job, repo, "head", "xixi-box/oss-scout")
+        ledger.finish_publication(job, day=created_day, url=url)
+    assert not ledger.reserve_publication(tz, 2, "full", repo, "head", "xixi-box/oss-scout")
+
+    queue = {}
+    for number in (1, 2):
+        key = f"{repo}#{number}"
+        entry = {"id": key, "repo": repo, "number": number, "status": "new",
+                 "discovered_at": f"{day}T06:0{number}:00+08:00", "ai_verdict": {"usable": True}}
+        p._defer_entry(entry, tmp_path)
+        queue[key] = entry
+    (tmp_path / "queue").mkdir()
+    path = tmp_path / "queue/candidates.json"
+    path.write_text(json.dumps(queue))
+    assert p.drain_ai_graded(tmp_path, limit=1) == []
+
+    replies = {
+        f"repos/{repo}/pulls/101": {"html_url": closed, "state": "closed", "merged": False,
+                                   "closed_at": "2026-11-07T22:59:00Z"},
+        f"repos/{repo}/pulls/102": {"html_url": merged, "state": "closed", "merged": True},
+    }
+    checked = []
+
+    def gh_read(args, **kwargs):
+        checked.append(args[0])
+        return replies[args[0]]
+
+    monkeypatch.setattr(p, "gh_read", gh_read)
+    assert p.refresh_publication_status(tmp_path)
+    assert checked == list(replies)
+    assert not p.refresh_publication_status(tmp_path)
+    assert ledger.published_today(tz) == 2
+    assert ledger.quota_used(day) == 1
+    assert [row["id"] for row in p.drain_ai_graded(tmp_path, limit=1)] == [f"{repo}#1"]
+    assert json.loads(path.read_text()) == queue
+    assert p._order_candidates(list(queue.items()), refill_day="2026-11-07") == []
+    (tmp_path / "state/seen.json").write_text(json.dumps({f"{repo}#1": {}}))
+    row, = build_scan_rows(tmp_path, published={f"{repo}#1": closed}, pr_states={closed: "closed"})
+    assert scan_row_to_fields(row)["最终结果"] == [
+        {"type": "url", "text": f"PR 已关闭 · {repo}#101", "link": closed}]
+
+    assert ledger.reserve_publication(tz, 2, "refill", repo, "head", "xixi-box/oss-scout")
+    replacement = f"https://github.com/{repo}/pull/103"
+    ledger.finish_publication("refill", day=day, url=replacement)
+    assert ledger.published_today(tz) == 3
+    assert not ledger.reserve_publication(tz, 2, "still-full", repo, "head", "xixi-box/oss-scout")
+    replies[f"repos/{repo}/pulls/101"].update(state="open", closed_at=None)
+    replies[f"repos/{repo}/pulls/103"] = None
+    assert p.refresh_publication_status(tmp_path)
+    assert ledger.quota_used(day) == 3
+    assert not ledger.has_publication_release(day)
+    assert ledger.quota_used("2026-11-09") == 0
+    ledger.close()
 
 
 def test_http_ingest_durably_accepts_entire_batch(tmp_path, monkeypatch):

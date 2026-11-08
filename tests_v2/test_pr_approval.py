@@ -4,6 +4,27 @@ import subprocess
 from scout_v2 import pr_approval
 
 
+def test_verification_failure_card_can_keep_an_independent_reply(tmp_path):
+    from scout_v2.feishu_app import build_pr_approval_card
+
+    payload = {"job_id": "prfix-" + "a" * 32, "repo": "docker/compose", "number": 42,
+               "fork_repo": "xixi-box/compose", "branch": "topic", "head_sha": "b" * 40,
+               "verification_failed": True, "test_result": "go test failed", "run_id": "123"}
+    failure = pr_approval.stage(tmp_path, payload)
+    card = build_pr_approval_card(failure)
+    assert card["header"]["template"] == "red"
+    assert all(element["tag"] != "form" for element in card["elements"])
+    assert any("go test failed" in element.get("text", {}).get("content", "")
+               for element in card["elements"])
+    assert not pr_approval._paths(tmp_path, payload["job_id"])[1].exists()
+
+    payload.update(job_id="prfix-" + "c" * 32, reply="Could you share the reproducer?")
+    reply = pr_approval.stage(tmp_path, payload)
+    form = build_pr_approval_card(reply, draft=payload["reply"])["elements"][-1]
+    assert form["elements"][-1]["text"]["content"] == "确认回复"
+    assert "Could you share" not in pr_approval._paths(tmp_path, payload["job_id"])[0].read_text()
+
+
 def test_approval_deletes_package_before_reply_and_never_saves_draft(tmp_path, monkeypatch):
     def git(where, *args):
         return subprocess.check_output(

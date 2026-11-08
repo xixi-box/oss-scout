@@ -131,30 +131,6 @@ class TestAttemptFuseWorklogCount:
         assert mp._todays_claim_count(tmp_path, "a/b#1") == 0
 
 
-class TestCompeteReleasesQuota:
-    """被别人抢走的候选必须退坑。
-
-    2026-11-05 实录：claim_days 记了 5 个坑但当天只开出 3 个 PR——两个被
-    competed/duplicate 的失败尝试白吃名额，导致"今天还有名额却不动"。
-    被抢不是我们浪费机会，abort 必须归还。
-    """
-
-    def test_competed_path_releases(self):
-        import inspect
-        src = inspect.getsource(mp)
-        i = src.index('"aborted_competed"')
-        tail = src[i:i + 600]
-        assert "_abort_release" in tail, tail
-        assert "give_back=True" in tail
-
-    def test_duplicate_path_releases(self):
-        import inspect
-        src = inspect.getsource(mp)
-        i = src.index('"aborted_duplicate"')
-        tail = src[i:i + 400]
-        assert "_abort_release" in tail
-
-
 class TestStagedFlush:
     """凌晨批量激活 staged：细筛结果复用，不再重跑 AI。
 

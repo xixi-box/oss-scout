@@ -97,7 +97,10 @@ def stage(root: Path, result: dict) -> dict:
         raise ValueError("missing or oversized approval bundle")
     reply = str(result.get("reply") or "").strip()[:1000]
     targets = review_targets(result.get("responses") or [])
-    if not commit and not reply and not any(target["has_draft"] for target in targets):
+    verification_failed = result.get("verification_failed") is True
+    if verification_failed and commit:
+        raise ValueError("unverified patch cannot be staged for push")
+    if not verification_failed and not commit and not reply and not any(target["has_draft"] for target in targets):
         return {}
     trigger = result.get("trigger") or {}
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -109,6 +112,7 @@ def stage(root: Path, result: dict) -> dict:
                 os.replace(tmp, bundle_path)
             record.update({k: result.get(k) for k in (
                 "job_id", "run_id", "title", "summary", "test_result", "changed_files", "review_id")})
+            record["verification_failed"] = verification_failed
             record.update(repo=repo, number=number, fork_repo=fork, branch=branch,
                           head_sha=base, commit_sha=commit, has_reply=bool(reply),
                           expires_at=time.time() + RETENTION_SECONDS,

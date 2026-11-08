@@ -75,6 +75,7 @@ def candidate_activity(ds):
     running, _ = _running_new_prs(ds, pending)
     active = {f"{item['repo'].lower()}#{item['number']}" for item in running}
     published = {}
+    pr_states = {}
     conn = ds._open_ro()
     if conn is not None:
         try:
@@ -84,12 +85,16 @@ def candidate_activity(ds):
                 issue = re.fullmatch(r"[^:]+:fix/issue-(\d+)-[0-9a-f]+-[0-9a-f]+", head)
                 if issue:
                     published[f"{repo.lower()}#{issue[1]}"] = url
+            if conn.execute("SELECT 1 FROM sqlite_master WHERE name='publication_status'").fetchone():
+                pr_states = dict(conn.execute(
+                    "SELECT url,state FROM publication_status WHERE state IN ('closed','merged')"
+                ))
         except sqlite3.OperationalError as exc:
             if "no such table: publications" not in str(exc):
                 raise
         finally:
             conn.close()
-    return active, published
+    return active, published, pr_states
 
 
 def snapshot(ds):

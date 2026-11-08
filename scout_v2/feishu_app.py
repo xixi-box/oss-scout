@@ -251,11 +251,19 @@ def build_pr_approval_card(record: dict, *, draft: str = "", drafts: dict | None
     status = record.get("reply_status")
     targets = record.get("targets") or []
     drafts = drafts or {}
+    failed = record.get("verification_failed") is True
+    if failed and not (draft or any(drafts.values())):
+        complete = True
+    run_id = str(record.get("run_id") or "")
+    if failed and run_id.isdecimal():
+        elements.append({"tag": "div", "text": {"tag": "lark_md", "content":
+                         f"[Actions 运行记录](https://github.com/xixi-box/oss-scout/actions/runs/{run_id})"}})
     for value in (
         record.get("title"),
         f"{record['source_author']}：{record.get('source_comment') or ''}"
         if record.get("source_author") and not targets else "",
         record.get("summary"),
+        f"验证失败 · {record['test_result']}" if failed and record.get("test_result") else "",
         (f"{'已推送' if record.get('pushed') else '已提交，待推送'} {sha[:12]}\n"
          + "\n".join(record.get("changed_files") or [])) if sha else "",
         (f"回复发送失败\n草稿：{draft}" if draft else "回复发送失败") if status == "failed" and not targets else "",
@@ -270,7 +278,7 @@ def build_pr_approval_card(record: dict, *, draft: str = "", drafts: dict | None
         target_id = target["id"]
         target_draft = drafts.get(target_id, "")
         target_url = str(target.get("url") or "")
-        label = {"change": "代码修改", "answer": "答复", "skip": "无需处理",
+        label = {"change": "修改未通过验证" if failed else "代码修改", "answer": "答复", "skip": "无需处理",
                  "unavailable": "未生成处理结果"}.get(target["action"], "")
         heading = f"**{i + 1}. {label} · {html.escape(str(target.get('author') or ''))}**"
         if target_url.startswith(link + "#") and re.fullmatch(r"[a-zA-Z0-9_-]+", target_url.split("#", 1)[1]):
@@ -327,9 +335,9 @@ def build_pr_approval_card(record: dict, *, draft: str = "", drafts: dict | None
         button["action_type"] = "form_submit"
         elements.append({"tag": "form", "name": "approval", "elements": form + [button]})
     return {"config": {"wide_screen_mode": True, "update_multi": True},
-            "header": {"template": "red" if status == "failed" else "green" if complete else "orange",
+            "header": {"template": "red" if failed or status == "failed" else "green" if complete else "orange",
                        "title": {"tag": "plain_text", "content":
-                                 f"{'PR 跟进结果' if complete else 'PR 跟进待确认'}：{repo}#{number}"}},
+                                 f"{'PR 跟进验证失败' if failed else 'PR 跟进结果' if complete else 'PR 跟进待确认'}：{repo}#{number}"}},
             "elements": elements}
 
 

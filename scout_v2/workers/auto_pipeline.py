@@ -10,8 +10,9 @@
 - 架构里本来就有 Modal/Actions 两个后端，旧实现绕过了它们（平行实现）。
 
 硬边界（不逾越）：
-- 北京时间每天最多成功开 5 个新 PR；闸门池绝不直接 PR；
-- 复检任一竞争信号 → aborted_competed；
+- 北京时间当天创建的 PR 最多占用 5 个名额，当天关闭且未合并可补位；
+- 闸门池绝不直接开 PR；
+- 机械粗筛命中拦截条件 → coarse_blocked；
 - 证据链不完整（base 未复现 / 补丁未通过 / 质量闸失败）→ 不开 PR；
 - 后端不可用且预算不足 → 暂停，不降级到本地执行。
 """
@@ -254,6 +255,40 @@ def recover_pending_publication(root: Path, tz_name: str = "Asia/Shanghai") -> b
         conn.close()
 
 
+def refresh_publication_status(root: Path, tz_name: str = "Asia/Shanghai") -> bool:
+    """Check GitHub for changes to today's confirmed publications."""
+    day = business_now(tz_name).date().isoformat()
+    ledger = ClaimLedger(root / "state/scout_v2.sqlite3")
+    changed = False
+    try:
+        for repo, url in ledger.publications_to_check(day):
+            number = url.rsplit("/", 1)[-1]
+            if not number.isascii() or not number.isdecimal() or not monitored_repo(repo):
+                continue
+            pr = gh_read([f"repos/{repo}/pulls/{number}"], max_retries=0)
+            if not isinstance(pr, dict) or str(pr.get("html_url") or "").lower() != url.lower():
+                continue
+            closed_day = None
+            if pr.get("merged") is True:
+                state = "merged"
+            elif pr.get("merged") is False and pr.get("state") == "closed" and pr.get("closed_at"):
+                try:
+                    closed_day = business_day(dt.datetime.fromisoformat(pr["closed_at"]), tz_name)
+                except (ValueError, TypeError):
+                    continue
+                state = "closed"
+            elif pr.get("merged") is False and pr.get("state") == "open":
+                state = "open"
+            else:
+                continue
+            if ledger.record_publication_status(url, state, closed_day):
+                changed = True
+                log(root, "publication_status", url, f"{state}; closed_day={closed_day or '-'}")
+    finally:
+        ledger.close()
+    return changed
+
+
 def _actions_runner_repo(root: Path) -> str:
     """执行 repair 的仓库（我们自己的）：configs/v2.yaml 覆盖，默认 xixi-box/oss-scout。"""
     import yaml
@@ -442,7 +477,7 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen
         if latest is not None:
             immediate = immediate and latest == entry
             entry = dict(latest)
-            if entry.get("status") not in ("new", "recheck_failed", "staged") or not _eligible(entry):
+            if entry.get("status") not in ("new", "recheck_failed", "staged"):
                 return {**summary, "abort": "candidate not currently eligible"}
 
     rescreen = rescreen or bool(entry.get("staged_at") or entry.get("rescreen_pending")) or entry.get("status") == "staged"
@@ -468,14 +503,17 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen
         # anomalyco/opencode、deepset-ai/haystack 候选每分钟被重试一次，
         # 每次都 lane=unknown 空转。
         mark_candidate(root, key,
-                       "observe_only" if lane == "observe" else "out_of_scope",
-                       extra={"abort_reason": summary["abort"]})
+                       "coarse_blocked", extra={"coarse_reason": "仓库不在自动修复范围"})
         return summary
     budget = ClaimLedger(root / "state/scout_v2.sqlite3")
     try:
         if _reconcile_publication(budget, eng.tz_name, root=root) is None:
             return {**summary, "abort": "previous publication awaiting reconciliation"}
-        if budget.published_today(eng.tz_name) >= eng.max_claims_per_day:
+        day = business_now(eng.tz_name).date().isoformat()
+        refill_day = day if budget.has_publication_release(day) else ""
+        if latest is not None and not _eligible(entry, refill_day=refill_day):
+            return {**summary, "abort": "candidate not currently eligible"}
+        if budget.quota_used(day) >= eng.max_claims_per_day:
             _stage_candidates(root, [key])
             return {**summary, "abort": "daily PR limit reached"}
     finally:
@@ -490,7 +528,8 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen
     reuse_screen = immediate and latest is not None and entry.get("status") == "new" and not rescreen
     recheck = None
     fresh = None
-    from dashboard.data import coarse_issue_blockers, fine_screen_issue, issue_screening_snapshot
+    from dashboard.data import (coarse_issue_blockers, fine_screen_issue,
+                                issue_screening_snapshot, live_issue_blockers)
 
     if reuse_screen:
         summary["steps"].append("reused live intake screening")
@@ -515,93 +554,26 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen
             return summary
         if getattr(recheck, "similar_prs", []):
             log(root, "similar_pr", key, "；".join(recheck.similar_prs))
-        if not recheck.issue_open or not recheck.unassigned or recheck.has_claim_signal \
-                or recheck.has_cross_ref_pr or recheck.open_pr_hits:
-            summary["abort"] = (f"competed: open={recheck.issue_open} "
-                                f"unassigned={recheck.unassigned} "
-                                f"claim={recheck.has_claim_signal} "
-                                f"xref={recheck.has_cross_ref_pr} hits={recheck.open_pr_hits[:1]}")
-            log(root, "abort", key, summary["abort"])
-            # 被抢不是我们浪费了机会，必须退坑——否则一个被别人抢走的候选
-            # 会白吃掉当天的 1/5 名额（2026-11-05 实录：claim_days 记了 5 个坑，
-            # 实际只开出 3 个 PR，2 个被 competed 的失败尝试吃掉）。
-            # 防循环靠"同候选今天不再认领"（try_claim 的 already-claimed）
-            # 与 aborted_competed 终态，不靠扣名额。
-            refs = recheck.open_pr_hits or getattr(recheck, "linked_pr_urls", [])
-            reasons = []
-            if not recheck.issue_open:
-                reasons.append("Issue 已关闭")
-            if not recheck.unassigned:
-                reasons.append("已有指派")
-            if recheck.has_claim_signal:
-                reasons.append("已有认领、派单或限制自动修复的信号")
-            if recheck.has_cross_ref_pr or refs:
-                reasons.append("已有修复 PR" + (f" · {refs[0]}" if refs else ""))
-            mark_candidate(root, key, "aborted_closed" if not recheck.issue_open else "aborted_competed",
-                           extra={"abort_reason": "；".join(reasons)})
-            return _abort_release(summary["abort"], give_back=True)
-
-        # 被判重复的 issue 不碰：真正的战场在主 issue 上，修这条等于开第二个平行 PR。
-        # 2026-11-03 实录 qdrant#11360 → 判为 #10465 的 duplicate，而 #10465 已有
-        # #10470 在推进；我们几小时后被 cloud bot 关掉，白烧一轮修复。
-        # 这条独立于"是否 open"：GitHub 上可以先标 duplicate 再关闭，中间有窗口期。
-        if recheck.is_duplicate:
-            target = (f"#{recheck.duplicate_of}" if recheck.duplicate_of
-                      else "an earlier issue")
-            summary["abort"] = f"issue is a duplicate of {target}"
-            log(root, "abort", key, summary["abort"])
-            mark_candidate(root, key, "aborted_duplicate",
-                           extra={"abort_reason": summary["abort"],
-                                  "duplicate_of": recheck.duplicate_of})
-            # 重复 issue 提前识别 = 省下一次真实消耗，不是浪费机会 → 退坑
-            return _abort_release(summary["abort"], give_back=True)
-
-        # 这里原本有一道 pr_invited() 检查（查仓库要不要 invite label 才许开 PR）。
-        # 2026-10-30 删除：门禁已经在**挑选仓库**这一步完成了 —— 会关闭未受邀 PR 的
-        # 仓库根本不进 configs/repositories.yaml，也就不会被发现。留着它是对 39 个
-        # 仓库恒真的空检查（实测空 labels 下 39/40 直接返回 True），而且是带状态的
-        # 运行时判断：它曾在 labels 取不到时两头出错（该拒的放行、该放的拒掉）。
-        # 约束归位到加仓库时：pr_gates.yaml 里 requires_invite: true 的仓库不该入池。
-
-        # The live snapshot passes the same mechanical issue rules as intake.
         source = getattr(recheck, "screening_source", None)
         if source:
             issue, comments, timeline = source
             fresh = issue_screening_snapshot(entry, issue, comments, timeline)
-            blockers = coarse_issue_blockers(eng, fresh, lane=lane)
-            action = "coarse_screen" if rescreen else "prestart_coarse_screen"
-            log(root, action, key, ",".join(blockers) if blockers else "通过机械条件")
-            if blockers:
-                reason = ", ".join(blockers)
-                mark_candidate(root, key, "aborted_stale", extra={"blockers": blockers, "abort_reason": reason})
-                return _abort_release("pre-start coarse screening blocked: " + reason)
-
-        summary["steps"].append("recheck ok")
-
-    # ---- 车道闸：gated 只做评论对齐，restricted 只做维护者确认过的 ----
-    # 2026-10-31 实录：这里原本只拦了 gated，restricted（litellm）直接往下走
-    # 正常开 PR —— PolicyEngine.authorize() 里那条规则写得清清楚楚，但
-    # candidate_pipeline 从来没调用过 authorize，规则等于没有生效。
-    # 现在两道都拦，并且写终态，避免每轮重新取到又空转。
-    if lane == "gated":
-        summary["abort"] = "gated lane: comment-alignment flow only (no auto PR)"
-        log(root, "abort", key, summary["abort"])
-        mark_candidate(root, key, "gated_alignment_only",
-                       extra={"abort_reason": summary["abort"]})
-        return summary
-    if lane == "restricted":
-        # 受限档只接受维护者已确认的候选：discover 打上 maintainer_confirm，
-        # 或 issue 带 help wanted / 维护者在本 issue 里明确同意。
-        confirmed = bool(entry.get("maintainer_confirm")
-                         or (entry.get("signals") or {}).get("maintainer_confirm"))
-        if not confirmed:
-            summary["abort"] = ("restricted lane: needs maintainer confirmation "
-                                "(maintainer_confirm / help wanted)")
-            log(root, "abort", key, summary["abort"])
-            mark_candidate(root, key, "needs_maintainer_confirm",
-                           extra={"abort_reason": summary["abort"]})
+        try:
+            blockers = coarse_issue_blockers(
+                eng, fresh or entry, lane=lane, live_blockers=live_issue_blockers(recheck), root=root)
+        except Exception as ex:
+            summary["abort"] = f"coarse screening unavailable: {ex}"
+            mark_candidate(root, key, str(entry.get("status") or "new"), extra={
+                "screen_retry_at": (business_now() + dt.timedelta(minutes=5)).isoformat(),
+                "abort_reason": summary["abort"], "rescreen_pending": rescreen})
             return summary
-        summary["steps"].append("restricted lane: maintainer-confirmed")
+        reason = ", ".join(blockers)
+        log(root, "coarse_screen", key, reason or "通过机械条件")
+        if blockers:
+            mark_candidate(root, key, "coarse_blocked",
+                           extra={"blockers": blockers, "coarse_reason": reason, "abort_reason": reason})
+            return _abort_release("coarse screening blocked: " + reason)
+        summary["steps"].append("recheck ok")
 
     # Fresh automatic dispatch reuses the inbox verdict. Delayed or manual
     # dispatch evaluates the current evidence again before claiming work.
@@ -640,32 +612,18 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen
         return summary
 
     # Recheck and CLA failures have not started a repair and spend no quota.
-    from .cla import preflight
-    try:
-        pre = preflight(root, repo)
-    except Exception as ex:
-        summary["abort"] = f"CLA preflight unavailable: {ex}"
-        mark_candidate(root, key, str(entry.get("status") or "new"), extra={
-            "screen_retry_at": (business_now() + dt.timedelta(minutes=5)).isoformat(),
-            "abort_reason": summary["abort"], "rescreen_pending": rescreen})
-        return summary
-    if pre.get("blocking"):
-        mark_candidate(root, key, "needs_cla", extra={"abort_reason": str(pre.get("detail")),
-                                                     "cla_sign_url": pre.get("url", "")})
-        summary["abort"] = "CLA required"
-        return summary
     if rescreen:
         verdict = (fine_screen_issue(eng, fresh, lane=lane) if fresh is not None else
                    {"usable": None, "reason": "current screening evidence unavailable"})
         if verdict.get("usable") is not True:
             retry = verdict.get("usable") is None
-            status = (entry.get("status") or "new") if retry else "aborted_stale"
+            status = (entry.get("status") or "new") if retry else "fine_blocked"
             reason = str(verdict.get("reason") or "no eligibility verdict")
-            mark_candidate(root, key, status, extra={"abort_reason": reason, "rescreen_pending": retry,
+            mark_candidate(root, key, status, extra={"abort_reason": reason, "fine_reason": reason, "rescreen_pending": retry,
                 "screen_retry_at": (business_now() + dt.timedelta(minutes=5)).isoformat() if retry else None})
             return _abort_release(f"queue fine screening {'unavailable' if retry else 'rejected'}: {reason}")
         entry = {**fresh, "ai_verdict": verdict, "screened_at": business_now().isoformat(),
-                 "rescreen_pending": False}
+                 "rescreen_pending": False, "fine_reason": verdict.get("reason", "")}
         mark_candidate(root, key, str(entry.get("status") or "new"),
                        extra={k: v for k, v in entry.items() if k != "updated_at"})
         summary["steps"].append("queue coarse and fine screening passed")
@@ -676,7 +634,7 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen
         if current is not None and current.get("status") not in ("new", "recheck_failed", "staged"):
             ledger.close()
             return {**summary, "abort": "candidate already running or terminal"}
-        if current is not None and not _order_candidates([(key, current)]):
+        if current is not None and not _order_candidates([(key, current)], refill_day=refill_day):
             ledger.close()
             return {**summary, "abort": "candidate not eligible yet"}
         ok, reason = ledger.try_claim(eng.tz_name, key)
@@ -1092,6 +1050,7 @@ def _defer_entry(entry: dict, root: Path) -> None:
     if due_time is not None and due_time.tzinfo is None:
         due_time = due_time.replace(tzinfo=now.tzinfo)
     if due_time is None or due_time <= now:
+        entry["quota_deferred_day"] = now.date().isoformat()
         entry["eligible_at"] = dt.datetime.combine(now.date() + dt.timedelta(days=1),
                                                   dt.time(hour, minute), tzinfo=now.tzinfo).isoformat()
 
@@ -1119,7 +1078,7 @@ def _stage_age_days(entry: dict) -> float:
         return 0.0
 
 
-def _eligible(entry: dict) -> bool:
+def _eligible(entry: dict, *, refill_day: str = "") -> bool:
     import datetime as dt
     now = business_now()
     stamps = [entry.get("screen_retry_at"), entry.get("eligible_at")]
@@ -1132,12 +1091,21 @@ def _eligible(entry: dict) -> bool:
             stamps[1] = dt.datetime.combine(then.date() + dt.timedelta(days=1), dt.time(4), tzinfo=now.tzinfo).isoformat()
         except (ValueError, TypeError):
             return False
-    for ts in filter(None, stamps):
+    for index, ts in enumerate(stamps):
+        if not ts:
+            continue
         try:
             due = dt.datetime.fromisoformat(ts.replace("Z", "+00:00"))
             if due.tzinfo is None:
                 due = due.replace(tzinfo=now.tzinfo)
-            if due > now:
+            # Older queue entries only have the original staged time and the next
+            # due date. A next-day due date was assigned by that day's quota deferral.
+            deferred = entry.get("quota_deferred_day")
+            if not deferred and entry.get("staged_at") and entry.get("eligible_at"):
+                deferred = (due.astimezone(now.tzinfo).date() - dt.timedelta(days=1)).isoformat()
+            refill = (index == 1 and entry.get("status") == "staged"
+                      and refill_day == now.date().isoformat() == deferred)
+            if due > now and not refill:
                 return False
         except (ValueError, TypeError):
             return False
@@ -1145,7 +1113,7 @@ def _eligible(entry: dict) -> bool:
 
 
 def _order_candidates(entries: list[tuple[str, dict]],
-                      expired_out: list[str] | None = None,
+                      expired_out: list[str] | None = None, *, refill_day: str = "",
                       ) -> list[tuple[str, dict]]:
     """暂存优先，且同组内先到先出。
 
@@ -1164,7 +1132,7 @@ def _order_candidates(entries: list[tuple[str, dict]],
                 if expired_out is not None:
                     expired_out.append(key)
                 continue
-            if not _eligible(e):
+            if not _eligible(e, refill_day=refill_day):
                 continue
             staged.append((key, e))
         elif _eligible(e):
@@ -1213,7 +1181,17 @@ def drain_ai_graded(root: Path, limit: int = 3, dry_run: bool = True,
         eligible.append((key, e))
 
     expired: list[str] = []
-    ordered = _order_candidates(eligible, expired_out=expired)
+    refill_day = ""
+    db = root / "state/scout_v2.sqlite3"
+    if db.exists():
+        ledger = ClaimLedger(db)
+        try:
+            day = business_now().date().isoformat()
+            if ledger.has_publication_release(day):
+                refill_day = day
+        finally:
+            ledger.close()
+    ordered = _order_candidates(eligible, expired_out=expired, refill_day=refill_day)
     if expired and not dry_run:
         for key in expired:
             mark_candidate(root, key, "stage_expired")

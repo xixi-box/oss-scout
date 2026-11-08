@@ -15,7 +15,31 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from scout_v2.workers import pr_fix  # noqa: E402
 
 
+def test_sha_only_review_skips_agent(tmp_path, monkeypatch, capsys):
+    fix = tmp_path / "fix.json"
+    context = tmp_path / "context.json"
+    fix.write_text(json.dumps({"kind": "followup", "review_id": 1}))
+    context.write_text(json.dumps({"targets": {"review:1": {"body": "a" * 40}}}))
+    monkeypatch.setattr(sys, "argv", ["pr_fix", "--fix", str(fix), "--context", str(context),
+                                      "--repo-dir", str(tmp_path)])
+    monkeypatch.setattr(pr_fix, "OpenCodeClient",
+                        lambda **kwargs: (_ for _ in ()).throw(AssertionError("agent called")))
+    assert pr_fix.main() == 0
+    assert "commit SHA only" in capsys.readouterr().out
+
+
 class TestVerify:
+    def test_node_runtime_uses_node_test_runner_even_with_python_config(self, tmp_path, monkeypatch):
+        (tmp_path / "pyproject.toml").touch()
+        commands = []
+        monkeypatch.setattr(pr_fix, "_run",
+                            lambda cmd, cwd, timeout=1500: (commands.append(cmd), (0, ""))[1])
+        ok, detail = pr_fix._verify(tmp_path, [" M lib/fs.js", " M test/parallel/test-fs.js"],
+                                    {"upstream_repo": "nodejs/node"})
+        assert ok and "tools/test.py" in detail
+        assert [cmd[0] for cmd in commands] == ["./configure", "make", "python3"]
+        assert commands[-1][1:] == ["tools/test.py", "test/parallel/test-fs.js"]
+
     def test_no_changes_is_trusted(self, tmp_path):
         ok, desc = pr_fix._verify(tmp_path, [], {})
         assert ok is True

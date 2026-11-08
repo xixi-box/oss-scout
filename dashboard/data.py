@@ -802,15 +802,23 @@ def refresh_issue(item: dict, *, root: Path | None = None) -> tuple[dict, list[s
     if root is not None and getattr(check, "similar_prs", []):
         from scout_v2.workers.auto_pipeline import log
         log(root, "similar_pr", f"{item['repo']}#{item['number']}", "；".join(check.similar_prs))
+    return issue_screening_snapshot(item, issue, comments, timeline), live_issue_blockers(check), timeline
+
+
+def live_issue_blockers(check) -> list[str]:
     blockers = []
+    if not check.issue_open:
+        blockers.append("Issue 已关闭")
+    if not check.unassigned:
+        blockers.append("已有指派")
     if check.has_claim_signal:
         blockers.append("claim_signal")
     if check.has_cross_ref_pr or check.open_pr_hits:
-        refs = check.open_pr_hits or check.linked_pr_urls
+        refs = check.open_pr_hits or getattr(check, "linked_pr_urls", [])
         blockers.append("已有修复 PR" + (f" · {refs[0]}" if refs else ""))
     if check.is_duplicate:
         blockers.append("confirmed_duplicate")
-    return issue_screening_snapshot(item, issue, comments, timeline), blockers, timeline
+    return blockers
 
 
 def issue_screening_snapshot(item: dict, issue: dict, comments: list, timeline=()) -> dict:
@@ -840,22 +848,34 @@ def issue_screening_snapshot(item: dict, issue: dict, comments: list, timeline=(
                                 "body": c.get("body") or ""} for c in comments]}
 
 
-def coarse_issue_blockers(eng, it: dict, *, lane: str) -> list[str]:
+def coarse_issue_blockers(eng, it: dict, *, lane: str, live_blockers=(), root=None) -> list[str]:
     """Shared mechanical issue rules for intake and the pre-start check."""
     repo = str(it["repo"])
     excluded = {"invalid", "wontfix", "duplicate", "question", "stale", "documentation",
                 "awaiting more info", "awaiting-more-info", "needs more info", "needs-repro"}
     labels = [str(l) for l in it.get("labels") or []]
-    blockers = []
-    if repo not in (eng.repos_cfg.get("repositories") or {}) or lane in ("unknown", "observe"):
+    blockers = list(live_blockers)
+    if repo not in (getattr(eng, "repos_cfg", {}).get("repositories") or {}) or lane in ("unknown", "observe"):
         blockers.append("repo_not_actionable")
+    elif lane == "gated":
+        blockers.append("仓库要求先沟通")
+    elif lane == "restricted" and not (
+        it.get("maintainer_confirm") or (it.get("signals") or {}).get("maintainer_confirm")
+        or any(label.lower() == "help wanted" for label in labels)
+    ):
+        blockers.append("等待维护者确认")
     if it.get("pull_request") or it.get("assignees") or it.get("state", "open") != "open":
         blockers.append("not_open_unassigned_issue")
     if excluded.intersection(l.lower() for l in labels):
         blockers.append("excluded_label")
     if it.get("state_reason") == "duplicate":
         blockers.append("confirmed_duplicate")
-    return blockers
+    if root is not None and not blockers:
+        from scout_v2.workers.cla import preflight
+        cla = preflight(root, repo)
+        if cla.get("blocking"):
+            blockers.append("需要签署 CLA · " + str(cla.get("detail") or ""))
+    return list(dict.fromkeys(blockers))
 
 
 def record_issue_screen(eng, it: dict, action: str, result: str) -> None:
@@ -869,7 +889,8 @@ def screen_issue(eng, it: dict, *, lane: str, live_blockers=(),
     """Apply the mechanical gate before asking OpenJev."""
     from scout_v2.git_host import gh_pages, linked_fix_prs
 
-    blockers = list(dict.fromkeys([*coarse_issue_blockers(eng, it, lane=lane), *live_blockers]))
+    blockers = coarse_issue_blockers(eng, it, lane=lane, live_blockers=live_blockers,
+                                     root=getattr(eng, "root", None))
     if blockers:
         record_issue_screen(eng, it, "coarse_screen", ",".join(blockers))
         return blockers, {"usable": None, "reason": "not screened"}

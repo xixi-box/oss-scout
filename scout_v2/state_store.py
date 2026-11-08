@@ -307,11 +307,44 @@ class ClaimLedger:
             "remote_id TEXT, expected_url TEXT, day TEXT, url TEXT UNIQUE)"
         )
 
+        self._conn.execute(
+            "CREATE TABLE IF NOT EXISTS publication_status (url TEXT PRIMARY KEY, "
+            "state TEXT NOT NULL, closed_day TEXT)")
+
     def published_today(self, tz_name: str) -> int:
         self._publication_table()
         day = business_now(tz_name).date().isoformat()
         return self._conn.execute("SELECT COUNT(*) FROM publications WHERE day=?",
                                   (day,)).fetchone()[0]
+
+    def quota_used(self, day: str) -> int:
+        self._publication_table()
+        return self._conn.execute(
+            "SELECT COUNT(*) FROM publications p WHERE p.day=? AND NOT EXISTS ("
+            "SELECT 1 FROM publication_status s WHERE s.url=p.url AND s.state='closed' "
+            "AND s.closed_day=p.day)", (day,)).fetchone()[0]
+
+    def has_publication_release(self, day: str) -> bool:
+        self._publication_table()
+        return self._conn.execute(
+            "SELECT 1 FROM publications p JOIN publication_status s USING(url) "
+            "WHERE p.day=? AND s.state='closed' AND s.closed_day=p.day LIMIT 1",
+            (day,)).fetchone() is not None
+
+    def publications_to_check(self, day: str) -> list[tuple[str, str]]:
+        self._publication_table()
+        return self._conn.execute(
+            "SELECT p.repo,p.url FROM publications p LEFT JOIN publication_status s USING(url) "
+            "WHERE p.day=? AND p.url IS NOT NULL AND COALESCE(s.state,'open')!='merged'",
+            (day,)).fetchall()
+
+    def record_publication_status(self, url: str, state: str, closed_day: str | None) -> bool:
+        return bool(self._conn.execute(
+            "INSERT INTO publication_status(url,state,closed_day) VALUES (?,?,?) "
+            "ON CONFLICT(url) DO UPDATE SET state=excluded.state,closed_day=excluded.closed_day "
+            "WHERE publication_status.state!=excluded.state "
+            "OR publication_status.closed_day IS NOT excluded.closed_day",
+            (url, state, closed_day)).rowcount)
 
     def pending_publication(self) -> tuple | None:
         self._publication_table()
@@ -322,12 +355,20 @@ class ClaimLedger:
 
     def reserve_publication(self, tz_name: str, cap: int, job_id: str, repo: str,
                             head: str, runner_repo: str) -> bool:
-        # The dispatcher holds its cross-process lock for the entire attempt.
-        if self.pending_publication() or self.published_today(tz_name) >= cap:
-            return False
-        self._conn.execute("INSERT INTO publications(job_id,repo,head,runner_repo) VALUES (?,?,?,?)",
-                           (job_id, repo, head, runner_repo))
-        return True
+        # Serialize the final check with the status poller as well as dispatchers.
+        self._conn.execute("BEGIN IMMEDIATE")
+        try:
+            allowed = (not self.pending_publication()
+                       and self.quota_used(business_now(tz_name).date().isoformat()) < cap)
+            if allowed:
+                self._conn.execute(
+                    "INSERT INTO publications(job_id,repo,head,runner_repo) VALUES (?,?,?,?)",
+                    (job_id, repo, head, runner_repo))
+            self._conn.execute("COMMIT")
+            return allowed
+        except BaseException:
+            self._conn.execute("ROLLBACK")
+            raise
 
     def set_publication_run(self, job_id: str, run_id: str) -> None:
         self._conn.execute("UPDATE publications SET remote_id=? WHERE job_id=?", (run_id, job_id))

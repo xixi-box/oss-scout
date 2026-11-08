@@ -62,6 +62,23 @@ class TestBuildRows:
         monkeypatch.setattr(mp, "all_my_prs", lambda limit=100: [])
         assert mp.build_pr_rows(tmp_path) == []
 
+    def test_pr_discovery_time_uses_first_seen_of_linked_issue(self, tmp_path, monkeypatch):
+        from scout_v2.state_store import ClaimLedger
+
+        ledger = ClaimLedger(tmp_path / "state/scout_v2.sqlite3")
+        row = _row()
+        assert ledger.reserve_publication("Asia/Shanghai", 5, "job", row["repo"],
+                                          "xixi-box:fix/issue-11-abcdef0-ab123456", "xixi-box/oss-scout")
+        ledger.finish_publication("job", day="2026-11-02", url=row["url"])
+        ledger.close()
+        (tmp_path / "state/seen.json").write_text(json.dumps({
+            "Docker/Compose#11": {"first_seen": "2026-11-01T05:50:07Z"}
+        }))
+        monkeypatch.setattr(mp, "all_my_prs", lambda: [row])
+        record, = mp.build_pr_rows(tmp_path)
+        assert record["discovered_at"] == "2026-11-01T05:50:07Z"
+        assert fb.row_to_fields(record)["发现时间"] == fb.row_to_fields(record)["创建时间"] - 86400000
+
     def test_state_files_missing_is_fine(self, tmp_path, monkeypatch):
         monkeypatch.setattr(mp, "all_my_prs", lambda limit=100: [_row()])
         rows = mp.build_pr_rows(tmp_path)
@@ -93,7 +110,7 @@ class TestRowToFields:
         assert fb.row_to_fields(_row()) == {"键": [{
             "type": "url", "text": "docker/compose#14450",
             "link": "https://github.com/docker/compose/pull/14450",
-        }], "标题": "fix: thing", "PR 状态": "merged", "创建时间": 1793598607000}
+        }], "标题": "fix: thing", "PR 状态": "merged", "发现时间": None, "创建时间": 1793598607000}
         assert fb.repo_row_to_fields({"repo": "a/b"})["键"][0]["link"] == "https://github.com/a/b"
         assert fb.cand_row_to_fields({"key": "a/b#9"})["键"][0]["link"] == "https://github.com/a/b/issues/9"
 
@@ -355,10 +372,11 @@ def test_scan_preserves_screen_results_and_shows_later_abort(tmp_path):
     }) + "\n", encoding="utf-8")
 
     rows = [fb.scan_row_to_fields(row) for row in mp.build_scan_rows(tmp_path)]
-    assert rows[0]["最终结果"] == "开工流程拦截 · 已有修复 PR · a/b#3"
-    assert rows[1]["最终结果"].startswith("旧版开工检查拦截")
+    assert rows[0]["最终结果"] == "粗筛淘汰 · 已有修复 PR · a/b#3"
+    assert rows[1]["最终结果"].startswith("粗筛淘汰")
     assert "a/b#4" in rows[1]["最终结果"]
-    assert all(row["粗筛结果"] == "通过" and row["细筛结果"] == "OpenJev 0.99" for row in rows)
+    assert rows[0]["粗筛结果"] == "已有修复 PR · a/b#3"
+    assert all(row["细筛结果"] == "OpenJev 0.99" for row in rows)
 
 
 
@@ -384,8 +402,9 @@ def test_scan_outcomes_follow_candidate_and_publication_state(tmp_path):
     fields = {row["key"]: fb.scan_row_to_fields(row) for row in rows}
     assert [fields[f"a/b#{i}"]["最终结果"] for i in (1, 2, 3, 4, 5, 6, 9)] == [
         "待执行", "暂存", "执行中", "待执行", "修复失败 · 缺少复现证据",
-        "开工拦截 · 需要签署 CLA · 人工签署", None,
+        "粗筛淘汰 · 人工签署", None,
     ]
     assert fields["a/b#7"]["最终结果"][0]["link"] == "https://github.com/a/b/pull/17"
     assert fields["a/b#8"]["最终结果"][0]["link"] == "https://github.com/a/b/pull/18"
-    assert all(row["粗筛结果"] == "通过" and row["细筛结果"] == "OpenJev 0.99" for row in fields.values())
+    assert fields["a/b#6"]["粗筛结果"] == "人工签署"
+    assert all(row["细筛结果"] == "OpenJev 0.99" for row in fields.values())

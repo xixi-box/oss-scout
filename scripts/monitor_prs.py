@@ -24,6 +24,7 @@ import hashlib
 import json
 import os
 import re
+import sqlite3
 import subprocess
 import time
 from pathlib import Path
@@ -923,6 +924,31 @@ def build_pr_rows(root) -> list[dict]:
     if not rows:
         return []
 
+    seen = {}
+    queue = {}
+    for name, target in (("state/seen.json", seen), ("queue/candidates.json", queue)):
+        try:
+            target.update(json.loads((root / name).read_text(encoding="utf-8")))
+        except (OSError, ValueError):
+            pass
+    issue_by_pr = {str(entry["pr_url"]).lower(): key for key, entry in queue.items()
+                   if entry.get("pr_url")}
+    db = root / "state/scout_v2.sqlite3"
+    if db.is_file():
+        conn = sqlite3.connect(db.resolve().as_uri() + "?mode=ro", uri=True)
+        try:
+            for repo, head, url in conn.execute("SELECT repo,head,url FROM publications WHERE day IS NOT NULL"):
+                issue = re.fullmatch(r"[^:]+:fix/issue-(\d+)-[0-9a-f]+(?:-[0-9a-f]+)?", head)
+                if issue and url:
+                    issue_by_pr.setdefault(url.lower(), f"{repo}#{issue[1]}")
+        except sqlite3.OperationalError as exc:
+            if "no such table: publications" not in str(exc):
+                raise
+        finally:
+            conn.close()
+    discovered = {key.lower(): entry.get("discovered_at") for key, entry in queue.items()}
+    discovered.update({key.lower(): entry["first_seen"] for key, entry in seen.items() if entry.get("first_seen")})
+
     # pr_watch.jsonl：每个 PR 最近一次动作
     watch: dict = {}
     try:
@@ -959,6 +985,8 @@ def build_pr_rows(root) -> list[dict]:
         pass
 
     for row in rows:
+        pr_url = row.get("url") or f"https://github.com/{row['repo']}/pull/{row['number']}"
+        row["discovered_at"] = discovered.get(issue_by_pr.get(pr_url.lower(), "").lower())
         key = (row["repo"], str(row["number"]))
         rec = watch.get(key) or {}
         row["action"] = str(rec.get("action") or "unknown")
@@ -1039,7 +1067,7 @@ def build_repo_rows(root) -> list[dict]:
     return rows
 
 
-def build_scan_rows(root, running_keys=(), published=None) -> list[dict]:
+def build_scan_rows(root, running_keys=(), published=None, pr_states=None) -> list[dict]:
     """「扫描发现」表的行：seen.json 全量镜像。
 
     这是发现层的总账——Worker 扫到的每个 issue 都在，含被规则否决和
@@ -1094,9 +1122,18 @@ def build_scan_rows(root, running_keys=(), published=None) -> list[dict]:
         )
         result = candidate_activity_state(key, candidate_status, running_keys)
         reason = candidate.get("abort_reason")
+        coarse = candidate.get("coarse_reason")
+        if not coarse and candidate_status in {
+                "aborted_competed", "aborted_closed", "aborted_duplicate", "needs_cla",
+                "needs_maintainer_confirm", "gated_alignment_only", "observe_only", "out_of_scope"}:
+            coarse = reason or historical_reasons.get(key) or _SCAN_OTHER_OUTCOMES.get(candidate_status) or candidate_status
+        if candidate_status == "aborted_stale" and candidate.get("blockers"):
+            coarse = reason or ", ".join(candidate["blockers"])
         if not result and not pr_url:
-            if key in historical_reasons:
-                result = f"旧版开工检查拦截 · {historical_reasons[key]}"
+            if coarse:
+                result = f"粗筛淘汰 · {coarse}"
+            elif candidate_status in {"fine_blocked", "aborted_stale"}:
+                result = f"细筛淘汰 · {reason or candidate_status}"
             elif candidate_status in {"aborted_no_evidence", "aborted_pipeline"}:
                 result = f"修复失败 · {reason or candidate_status}"
             elif candidate_status.startswith("aborted_"):
@@ -1108,17 +1145,18 @@ def build_scan_rows(root, running_keys=(), published=None) -> list[dict]:
             "key": key,
             "status": str(v.get("status") or ""),
             # 兼容旧记录：早期只写一个 why，按状态归到对应列
-            "coarse_reason": str(v.get("coarse_reason")
+            "coarse_reason": str(coarse or v.get("coarse_reason")
                                  or (v.get("why") if str(v.get("status"))
                                      in ("blocked", "unknown_repo", "too_fresh")
                                      else "") or ""),
-            "fine_reason": str(v.get("fine_reason")
+            "fine_reason": str(candidate.get("fine_reason") or v.get("fine_reason")
                                or (v.get("why") if str(v.get("status")) == "rejected"
                                    else "") or ""),
             "first_seen": str(v.get("first_seen") or ""),
             "queue_state": queue_state,
             "final_result": result,
             "pr_url": pr_url,
+            "pr_state": (pr_states or {}).get(pr_url),
         })
     rows.sort(key=lambda r: r["first_seen"], reverse=True)
     return rows
@@ -1131,7 +1169,7 @@ _QUEUE_YELLOW = {"new", "staged", "needs_maintainer_confirm", "needs_cla",
 _QUEUE_GREEN = {"pr_open", "merged", "completed"}
 _QUEUE_RED = {"aborted_stale", "stage_expired", "escalated", "aborted_competed",
               "aborted_duplicate", "aborted_closed", "aborted_no_evidence",
-              "aborted_blocked_design", "aborted_pipeline"}
+              "aborted_blocked_design", "aborted_pipeline", "coarse_blocked", "fine_blocked"}
 QUEUE_EXPIRE_DAYS = 3
 
 

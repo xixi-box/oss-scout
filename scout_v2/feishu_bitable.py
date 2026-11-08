@@ -29,6 +29,7 @@ def _status_field(name: str, colors: dict[str, int]) -> dict:
 
 PR_FIELDS = [*LINK_FIELDS, {"field_name": "标题", "type": 1},
              _status_field("PR 状态", {"open": 34, "merged": 40, "closed": 43}),
+             {"field_name": "发现时间", "type": 5, "property": DATE_FORMAT},
              {"field_name": "创建时间", "type": 5, "property": DATE_FORMAT}]
 SCAN_FIELDS = [*LINK_FIELDS, {"field_name": "发现时间", "type": 5, "property": DATE_FORMAT},
                *({"field_name": name, "type": 1} for name in ("最终结果", "粗筛结果", "细筛结果"))]
@@ -111,6 +112,7 @@ def _timestamp(value) -> int | None:
 def row_to_fields(row: dict) -> dict:
     return {"键": link_key(f"{row['repo']}#{row['number']}", "pull"),
             "标题": row.get("title") or None, "PR 状态": row.get("state") or None,
+            "发现时间": _timestamp(row.get("discovered_at")),
             "创建时间": _timestamp(row.get("created_at"))}
 
 
@@ -127,7 +129,7 @@ def scan_row_to_fields(row: dict) -> dict:
         result = {"queued": None, "rejected": "细筛淘汰", "retry": "待重试"}[status]
         if status == "rejected" and fine:
             result = f"{result} · {fine}"
-        coarse = "通过"
+        coarse = coarse or "通过"
         fine = fine or {"queued": "通过", "rejected": "未通过", "retry": "待重试"}[status]
     else:
         result = status or None
@@ -135,7 +137,8 @@ def scan_row_to_fields(row: dict) -> dict:
     pr_url = str(row.get("pr_url") or "")
     pr = re.fullmatch(r"https://github\.com/([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)/pull/([0-9]+)", pr_url)
     if pr:
-        result = [{"type": "url", "text": f"已开 PR · {pr[1]}#{pr[2]}", "link": pr_url}]
+        label = {"closed": "PR 已关闭", "merged": "PR 已合并"}.get(row.get("pr_state"), "已开 PR")
+        result = [{"type": "url", "text": f"{label} · {pr[1]}#{pr[2]}", "link": pr_url}]
     return {"键": link_key(row["key"], "issues"), "发现时间": _timestamp(row.get("first_seen")),
             "最终结果": result, "粗筛结果": coarse or None, "细筛结果": fine or None}
 
