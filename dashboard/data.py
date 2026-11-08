@@ -943,7 +943,8 @@ def fine_screen_issue(eng, it: dict, *, lane: str, linked_prs: list | None = Non
             "repo_rules": repo_rules_text(repo)})
     except Exception as ex:
         verdict = {"usable": None, "reason": f"scorer error: {ex}"[:200]}
-    outcome = {True: "通过", False: "拒绝", None: "待重试"}[verdict.get("usable")]
+    outcome = ("已跳过" if verdict.get("skipped") else
+               {True: "通过", False: "拒绝", None: "待重试"}[verdict.get("usable")])
     record_issue_screen(eng, it, "fine_screen", f"{outcome} · {verdict.get('reason', '')}")
     return verdict
 
@@ -973,13 +974,15 @@ def ingest_cloudflare_issues(ds, items: list[dict], *, refresh: bool = False) ->
         with queue_transaction(ds.root) as q:
             seen = _read_json(seen_path, {})()
             prior = seen.get(key) or {}
-            if key in q or (prior.get("fingerprint") == fingerprint and prior.get("status") in ("blocked", "rejected", "archived")):
+            if key in q or (prior.get("fingerprint") == fingerprint and prior.get("status") in
+                            ("blocked", "rejected", "archived", "screen_skipped")):
                 continue
         lane = eng.repo_lane(repo)
         blockers, verdict = screen_issue(eng, it, lane=lane, live_blockers=live_blockers, timeline=timeline)
         now = business_now().isoformat(timespec="seconds")
         rec = {"first_seen": prior.get("first_seen") or now, "updated_at": now, "fingerprint": fingerprint,
-               "status": "blocked" if blockers else "queued" if verdict.get("usable") is True else
+               "status": "blocked" if blockers else "screen_skipped" if verdict.get("skipped") else
+                         "queued" if verdict.get("usable") is True else
                          "rejected" if verdict.get("usable") is False else "retry",
                "coarse_reason": ",".join(blockers), "fine_reason": str(verdict.get("reason") or "")[:300]}
         if not blockers:

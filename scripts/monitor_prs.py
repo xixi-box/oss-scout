@@ -1150,7 +1150,7 @@ def build_scan_rows(root, running_keys=(), published=None, pr_states=None) -> li
             coarse = reason or historical_reasons.get(key) or _SCAN_OTHER_OUTCOMES.get(candidate_status) or candidate_status
         if candidate_status == "aborted_stale" and candidate.get("blockers"):
             coarse = reason or ", ".join(candidate["blockers"])
-        if not result and not pr_url:
+        if not result and not pr_url and candidate_status != "screen_skipped":
             if coarse:
                 result = f"粗筛淘汰 · {coarse}"
             elif candidate_status in {"fine_blocked", "aborted_stale"}:
@@ -1166,7 +1166,7 @@ def build_scan_rows(root, running_keys=(), published=None, pr_states=None) -> li
                 result = "已移出候选队列"
         rows.append({
             "key": key,
-            "status": str(v.get("status") or ""),
+            "status": "screen_skipped" if candidate_status == "screen_skipped" else str(v.get("status") or ""),
             # 兼容旧记录：早期只写一个 why，按状态归到对应列
             "coarse_reason": str(coarse or v.get("coarse_reason")
                                  or (v.get("why") if str(v.get("status"))
@@ -1194,7 +1194,7 @@ _QUEUE_YELLOW = {"new", "staged", "needs_maintainer_confirm", "needs_cla",
 _QUEUE_GREEN = {"pr_open", "merged", "completed"}
 _QUEUE_RED = {"aborted_stale", "stage_expired", "escalated", "aborted_competed",
               "aborted_duplicate", "aborted_closed", "aborted_no_evidence",
-              "aborted_blocked_design", "aborted_pipeline", "coarse_blocked", "fine_blocked"}
+              "aborted_blocked_design", "aborted_pipeline", "coarse_blocked", "fine_blocked", "screen_skipped"}
 QUEUE_EXPIRE_DAYS = 3
 
 

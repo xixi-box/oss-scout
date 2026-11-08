@@ -126,6 +126,8 @@ def scan_row_to_fields(row: dict) -> dict:
     coarse, fine = row.get("coarse_reason"), row.get("fine_reason")
     if status in {"blocked", "unknown_repo", "too_fresh"}:
         result, coarse, fine = f"粗筛淘汰 · {coarse}" if coarse else "粗筛淘汰", coarse or "未通过", "未执行"
+    elif status == "screen_skipped":
+        result, coarse, fine = f"已跳过 · {fine}", "通过", "未执行"
     elif status in {"queued", "rejected", "retry"}:
         result = {"queued": None, "rejected": "细筛淘汰", "retry": "待重试"}[status]
         if status == "rejected" and fine:

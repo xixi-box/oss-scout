@@ -619,6 +619,12 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen
     if rescreen:
         verdict = (fine_screen_issue(eng, fresh, lane=lane) if fresh is not None else
                    {"usable": None, "reason": "current screening evidence unavailable"})
+        if verdict.get("skipped"):
+            reason = verdict["reason"]
+            mark_candidate(root, key, "screen_skipped", extra={
+                "abort_reason": reason, "fine_reason": reason,
+                "rescreen_pending": False, "screen_retry_at": None})
+            return _abort_release(f"queue fine screening skipped: {reason}")
         if verdict.get("usable") is not True:
             retry = verdict.get("usable") is None
             status = (entry.get("status") or "new") if retry else "fine_blocked"

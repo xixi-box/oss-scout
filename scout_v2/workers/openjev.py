@@ -8,6 +8,10 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 
+_CODIV_MAX_REQUEST_BYTES = 8 * 1024 * 1024
+_INPUT_TOO_LARGE = "细筛输入超限"
+
+
 class OpenJevClient:
     def __init__(self, root: Path | None = None):
         from scout_v2.console_models import read_models
@@ -42,8 +46,12 @@ class OpenJevClient:
                              "false": "Do not start now"},
             }},
         }
+        body = json.dumps(payload).encode()
+        skipped = {**verdict, "skipped": True, "reason": _INPUT_TOO_LARGE}
+        if base.hostname == "api.codiv.ai" and len(body) > _CODIV_MAX_REQUEST_BYTES:
+            return skipped
         request = urllib.request.Request(
-            f"{self.base}/v1/systemone", data=json.dumps(payload).encode(),
+            f"{self.base}/v1/systemone", data=body,
             headers={"Authorization": f"Bearer {self.key}", "Content-Type": "application/json"},
         )
         try:
@@ -53,6 +61,16 @@ class OpenJevClient:
             if type(probability) not in (int, float) or not 0 <= probability <= 1:
                 raise ValueError("invalid eligibility probability")
         except urllib.error.HTTPError as exc:
+            with exc:
+                if exc.code == 413:
+                    return skipped
+                if exc.code == 400:
+                    try:
+                        detail = exc.read(4096).lower()
+                    except OSError:
+                        detail = b""
+                    if b"maximum context length" in detail and b"input_tokens" in detail:
+                        return skipped
             return {**verdict, "reason": f"OpenJev HTTP {exc.code}"}
         except (OSError, ValueError, TypeError, KeyError):
             return {**verdict, "reason": "OpenJev response unavailable or invalid"}

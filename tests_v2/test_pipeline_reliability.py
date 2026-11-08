@@ -43,6 +43,45 @@ def test_ai_failure_is_retryable(intake):
         assert d.ingest_cloudflare_issues(ds, [issue])[0] == 1
 
 
+@pytest.mark.parametrize(("http_status", "detail", "expected"), [
+    (None, "", "screen_skipped"),
+    (400, "This model's maximum context length is 65536 tokens. (parameter=input_tokens)", "screen_skipped"),
+    (413, "", "screen_skipped"),
+    (400, "Unknown model", "retry"),
+    (429, "Too many requests", "retry"),
+])
+def test_openjev_input_limit_is_terminal(intake, monkeypatch, http_status, detail, expected):
+    import io
+    from urllib.error import HTTPError
+    from scout_v2.feishu_bitable import scan_row_to_fields
+    from scripts.monitor_prs import build_scan_rows
+
+    ds, issue = intake
+    monkeypatch.setattr("scout_v2.console_models.read_models", lambda _: {
+        "codiv_key": "test-key", "codiv_base": "https://api.codiv.ai", "codiv_model": "openjev-latest",
+    })
+    if http_status is None:
+        monkeypatch.setattr("scout_v2.workers.openjev._CODIV_MAX_REQUEST_BYTES", 100)
+
+    def failed_request(req, **kwargs):
+        response = io.BytesIO(json.dumps({"detail": detail}).encode())
+        raise HTTPError(req.full_url, http_status, "test error", {}, response)
+
+    with patch("scout_v2.workers.openjev.urllib.request.urlopen", side_effect=failed_request) as request:
+        for _ in range(2):
+            assert d.ingest_cloudflare_issues(ds, [issue])[0] == 0
+        assert request.call_count == (0 if http_status is None else 1 if expected == "screen_skipped" else 2)
+    row, = build_scan_rows(ds.root)
+    assert row["status"] == expected
+    fields = scan_row_to_fields(row)
+    assert fields["粗筛结果"] == "通过"
+    if expected == "screen_skipped":
+        assert fields["最终结果"] == "已跳过 · 细筛输入超限"
+        assert fields["细筛结果"] == "未执行"
+    else:
+        assert fields["最终结果"] == "待重试"
+
+
 def test_mechanical_rejection_does_not_call_ai(intake):
     ds, issue = intake
     issue["labels"] = ["duplicate"]
@@ -106,6 +145,40 @@ def test_prestart_coarse_blocker_stops_before_claim(tmp_path, monkeypatch, check
     saved = json.loads(queue.read_text(encoding="utf-8"))[entry["id"]]
     assert saved["status"] == "coarse_blocked"
     assert saved["coarse_reason"] == reason
+
+
+def test_queue_rescreen_input_limit_is_terminal(tmp_path, monkeypatch):
+    from scout_v2.feishu_bitable import scan_row_to_fields
+    from scripts.monitor_prs import build_candidate_rows, build_scan_rows
+
+    (tmp_path / "queue").mkdir()
+    (tmp_path / "state").mkdir()
+    repo, key = "docker/compose", "docker/compose#1"
+    entry = {"id": key, "repo": repo, "number": 1, "status": "new", "ai_verdict": {"usable": True}}
+    queue = tmp_path / "queue/candidates.json"
+    queue.write_text(json.dumps({key: entry}), encoding="utf-8")
+    (tmp_path / "state/seen.json").write_text(json.dumps({
+        key: {"status": "queued", "fine_reason": "OpenJev eligibility probability 0.999"},
+    }), encoding="utf-8")
+    monkeypatch.setattr(p.PolicyEngine, "load", lambda _: (
+        SimpleNamespace(repo_lane=lambda _: "open", tz_name="Asia/Shanghai",
+                        max_claims_per_day=5, repos_cfg={"repositories": {repo: {}}}), None))
+    monkeypatch.setattr(p, "gh_read", lambda args: {"state": "active"})
+    monkeypatch.setattr(p, "recheck_candidate", lambda *a, **kw: SimpleNamespace(
+        complete=True, issue_open=True, unassigned=True, has_claim_signal=False, is_duplicate=False,
+        has_cross_ref_pr=False, open_pr_hits=[], screening_source=({"state": "open"}, [], [])))
+    monkeypatch.setattr(d, "fine_screen_issue", lambda *a, **kw: {
+        "usable": None, "skipped": True, "reason": "细筛输入超限",
+    })
+    assert "skipped" in p.candidate_pipeline(tmp_path, entry, rescreen=True)["abort"]
+    saved = json.loads(queue.read_text(encoding="utf-8"))[key]
+    assert saved["status"] == "screen_skipped"
+    assert saved["screen_retry_at"] is None
+    assert not build_candidate_rows(tmp_path)
+    scan, = build_scan_rows(tmp_path)
+    fields = scan_row_to_fields(scan)
+    assert fields["最终结果"] == "已跳过 · 细筛输入超限"
+    assert fields["细筛结果"] == "未执行"
 
 
 def test_abort_keeps_consumed_daily_slot(tmp_path):
