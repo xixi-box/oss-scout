@@ -32,7 +32,7 @@ def _load_scorer():
     if not cfg.get("api_key"):
         return None
     return GoClient(key=cfg["api_key"], model=cfg.get("model", "deepseek-v4.1-flash"),
-                    timeout=180)
+                    timeout=180, base_url=cfg.get("base_url"))
 
 
 def _prompt(finding: dict, repo: str) -> str:

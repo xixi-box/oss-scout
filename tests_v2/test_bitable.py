@@ -429,6 +429,7 @@ def test_feishu_model_settings_migrates_and_applies_two_provider_rows(tmp_path, 
     from threading import Lock
     from scout_v2 import feishu_models as fm
     from scout_v2.console_models import public_models, read_models, repair_model_selector, write_models
+    from scout_v2.workers.issue_scorer import GoClient, load_scorer_config
     from scout_v2.workers.openjev import OpenJevClient
 
     write_models(tmp_path, {"repair_model": "opencode-go/repair", "reply_model": "reply",
@@ -473,18 +474,44 @@ def test_feishu_model_settings_migrates_and_applies_two_provider_rows(tmp_path, 
     assert codiv["模型名"] == "openjev-0.1"
     assert codiv["API 密钥"] == "old-codiv-test"
     assert opencode["API 密钥"] == "old-opencode-test"
+    assert opencode["Base URL"] == "https://opencode.ai/zen/go/v1"
     assert "old-codiv-test" not in str(public_models(tmp_path))
     assert "old-opencode-test" not in str(public_models(tmp_path))
     count = len(requests)
     fm.sync_model_settings(tmp_path, lock)
     assert len(requests) == count
+    existing_values = read_models(tmp_path)
+    existing_values["_feishu_row_values"].pop("opencode_base")
+    write_models(tmp_path, existing_values)
+    del opencode["Base URL"]
+    fm.sync_model_settings(tmp_path, lock)
+    assert opencode["Base URL"] == "https://opencode.ai/zen/go/v1"
+    assert opencode["应用状态"] == "已同步"
 
-    opencode.update({"API 密钥": "new-opencode-test", "思考强度": "high"})
+    direct_base = "https://opencode.ai/inference/go/openai/v1"
+    opencode.update({"API 密钥": "new-opencode-test", "思考强度": "high",
+                     "Base URL": [{"type": "url", "text": "OpenCode Go", "link": direct_base + "/"}]})
     codiv.update({"API 密钥": "new-codiv-test", "思考预算 (tokens)": "512",
                   "Base URL": "https://example.test"})
     fm.sync_model_settings(tmp_path, lock)
     assert rotated == ["new-opencode-test"]
     assert repair_model_selector(tmp_path) == "opencode-go/repair#high"
+    cfg = load_scorer_config(tmp_path)
+    assert cfg["base_url"] == opencode["Base URL"] == direct_base
+    def direct_request(request, **kwargs):
+        if request.full_url == direct_base + "/models":
+            return io.BytesIO(b'{"data":[{"id":"reply"}]}')
+        assert request.full_url == direct_base + "/chat/completions"
+        return io.BytesIO(b'{"choices":[{"message":{"content":"ok"}}]}')
+
+    monkeypatch.setattr("scout_v2.workers.issue_scorer.urllib.request.urlopen", direct_request)
+    client = GoClient(key=cfg["api_key"], model=cfg["model"], base_url=cfg["base_url"])
+    assert client.list_models() == ["reply"]
+    assert client.chat("test") == (True, "ok")
+    opencode["Base URL"] = "https://opencode.ai.example.test/v1"
+    fm.sync_model_settings(tmp_path, lock)
+    assert load_scorer_config(tmp_path)["base_url"] == direct_base
+    assert opencode["应用状态"].startswith("Base URL：")
     assert codiv["应用状态"].startswith("Base URL：")
     assert OpenJevClient(tmp_path).base == "https://api.codiv.ai"
     assert OpenJevClient(tmp_path).key == "new-codiv-test"

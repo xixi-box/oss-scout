@@ -109,7 +109,7 @@ def opencode_analyze(repo: str, sha: str, finding: dict, workdir: Path) -> dict:
     if not cfg.get("api_key"):
         return {"ok": False, "analysis": "no OPENCODE_API_KEY configured"}
     client = GoClient(key=cfg["api_key"], model=cfg.get("model", "deepseek-v4.1-flash"),
-                      timeout=180)
+                      timeout=180, base_url=cfg.get("base_url"))
     ok, detail = client.chat(prompt)
     return {"ok": ok, "analysis": detail[:1200] if ok else detail[:300]}
 

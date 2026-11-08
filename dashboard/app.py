@@ -1180,7 +1180,7 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
         cfg = load_scorer_config(root)
         if not cfg.get("api_key"):
             return JSONResponse({"models": [], "logged_in": False})
-        c = GoClient(key=cfg["api_key"], model=cfg.get("model", "deepseek-v4.1-flash"))
+        c = GoClient(key=cfg["api_key"], model=cfg.get("model", "deepseek-v4.1-flash"), base_url=cfg.get("base_url"))
         models = c.list_models()
         return JSONResponse({"models": models,
                              "logged_in": bool(models),
@@ -1205,9 +1205,11 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
         cfg = load_scorer_config(root)
         if not cfg.get("api_key"):
             return False
+        base_url = cfg.get("base_url")
         def _probe():
-            return GoClient(key=cfg["api_key"], model=cfg.get("model", "deepseek-v4.1-flash")).list_models()
-        return bool(D.DataSource._cached(ds, "go_login", 300.0, _probe))
+            return GoClient(key=cfg["api_key"], model=cfg.get("model", "deepseek-v4.1-flash"),
+                            base_url=base_url).list_models()
+        return bool(D.DataSource._cached(ds, f"go_login:{base_url}", 300.0, _probe))
 
     def _go_models_cached(rt: Path) -> list:
         cacher = app.state.ds
@@ -1215,10 +1217,11 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
         cfg = load_scorer_config(rt)
         if not cfg.get("api_key"):
             return []
+        base_url = cfg.get("base_url")
         def _fetch():
             return GoClient(key=cfg["api_key"],
-                            model=cfg.get("model", "deepseek-v4.1-flash")).list_models()
-        return D.DataSource._cached(cacher, "go_models", 600.0, _fetch) or []
+                            model=cfg.get("model", "deepseek-v4.1-flash"), base_url=base_url).list_models()
+        return D.DataSource._cached(cacher, f"go_models:{base_url}", 600.0, _fetch) or []
 
     @app.post("/api/cloudflare/config")
     def api_cloudflare_config(request: Request, api_token: str = Form(""),

@@ -206,8 +206,9 @@ def classify_comment(body: str, *, repo: str = "", number: int = 0,
     if not key:
         return {"ok": False, "action": "wait", "reason": "no model key"}
     try:
+        from scout_v2.console_models import opencode_base_url
         from scout_v2.workers.issue_scorer import GoClient
-        client = GoClient(key=key, model=model, timeout=60)
+        client = GoClient(key=key, model=model, timeout=60, base_url=opencode_base_url(DATA_ROOT))
         ok, detail = client.chat(CLASSIFY_PROMPT.format(
             repo=repo or "?", number=number, title=title or "?",
             author=author or "?", body=text), max_tokens=120)
@@ -780,6 +781,7 @@ def draft_reply(repo: str, number: int, *, force: bool = False,
     api_key, model = _model()
     if not api_key:
         return {"drafted": False, "reason": "no model key"}
+    from scout_v2.console_models import opencode_base_url
     from scout_v2.workers.issue_scorer import GoClient
 
     convo = "\n".join(f"[{c['author']}] {c['body'][:COMMENT_TEXT_LIMIT]}"
@@ -797,7 +799,7 @@ def draft_reply(repo: str, number: int, *, force: bool = False,
         "Describe a change as completed only when the confirmed repair result says it was pushed.\n"
         "Reply with ONLY the reply text.")
 
-    client = GoClient(key=api_key, model=model, timeout=180)
+    client = GoClient(key=api_key, model=model, timeout=180, base_url=opencode_base_url(DATA_ROOT))
     ok, detail = client.chat(prompt)
     if not ok:
         return {"drafted": False, "reason": f"model error: {detail[:120]}"}

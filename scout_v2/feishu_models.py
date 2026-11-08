@@ -9,7 +9,7 @@ from .console_models import effective_models, model_setting_error, read_models, 
 TABLE = "模型配置"
 PROVIDERS = {
     "OpenCode": {"模型名": "repair_model", "回复模型": "reply_model", "API 密钥": "opencode_key",
-                 "思考强度": "opencode_variant"},
+                 "Base URL": "opencode_base", "思考强度": "opencode_variant"},
     "Codiv": {"模型名": "codiv_model", "API 密钥": "codiv_key", "Base URL": "codiv_base",
               "思考预算 (tokens)": "codiv_think"},
 }
@@ -18,12 +18,13 @@ FIELDS = [{"field_name": name, "type": 1} for name in (
 _LEGACY = {"repair_model": "OpenCode 修复模型", "reply_model": "OpenCode 回复模型",
            "codiv_base": "Codiv Base URL", "codiv_model": "Codiv 细筛模型"}
 _OLD_COLUMNS = {"当前生效", "修改为", "安全设置"}
+_BASE_URL_KEYS = {"codiv_base", "opencode_base"}
 
 
 def _field_value(value, key):
-    if isinstance(value, list) and len(value) == 1 and key == "codiv_base":
+    if isinstance(value, list) and len(value) == 1 and key in _BASE_URL_KEYS:
         value = value[0]
-    if isinstance(value, dict) and key == "codiv_base":
+    if isinstance(value, dict) and key in _BASE_URL_KEYS:
         value = value.get("link")
     value = value.strip() if isinstance(value, str) else ""
     return "" if key == "opencode_variant" and value in {"默认", "default"} else value
@@ -71,14 +72,16 @@ def sync_model_settings(root: Path, model_lock) -> str:
                 current = effective[key]
                 if existing:
                     entered = _field_value(remote.get(column), key)
+                    if key == "opencode_base" and not entered and key not in last:
+                        entered = current
                 else:
                     old = records.get(_LEGACY.get(key), {}).get("fields", {})
                     entered = _field_value(old.get("修改为"), key)
-                    if not entered or _digest(entered.rstrip("/") if key == "codiv_base" else entered) == (
+                    if not entered or _digest(entered.rstrip("/") if key in _BASE_URL_KEYS else entered) == (
                             prior.get("_feishu_model_edits") or {}).get(key):
                         entered = current
                 if entered != current and (not existing or _digest(entered) != last.get(key)):
-                    if key == "codiv_base":
+                    if key in _BASE_URL_KEYS:
                         entered = entered.rstrip("/")
                     elif key == "codiv_think" and not entered:
                         entered = "0"

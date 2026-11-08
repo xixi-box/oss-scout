@@ -17,7 +17,8 @@ import uuid
 import tenacity
 from pathlib import Path
 
-BASE = "https://opencode.ai/zen/go/v1"
+from scout_v2.console_models import DEFAULT_OPENCODE_BASE, model_setting_error, opencode_base_url
+
 DEFAULT_MODEL = "deepseek-v4.1-flash"
 
 SCORE_PROMPT = """You are triaging a GitHub issue for an autonomous contribution agent.
@@ -67,9 +68,12 @@ REASON: one line
 
 
 class GoClient:
-    def __init__(self, key: str, model: str = DEFAULT_MODEL, timeout: int = 60):
+    def __init__(self, key: str, model: str = DEFAULT_MODEL, timeout: int = 60, *, base_url: str | None = None):
         self.key = key
-        # API 端点是 /zen/go/v1，model 字段必须是裸模型名。
+        self.base_url = (base_url or DEFAULT_OPENCODE_BASE).rstrip("/")
+        if error := model_setting_error("opencode_base", self.base_url):
+            raise ValueError(error)
+        # OpenCode Go HTTP API 的 model 字段必须是裸模型名。
         # "opencode-go/xxx" 这种 provider 前缀是 OpenCode CLI 的写法，
         # 直调会 400 "Model is unavailable"（2026-10-28 实测）。
         self.model = model.split("/", 1)[1] if "/" in model else model
@@ -91,10 +95,8 @@ class GoClient:
         reraise=True,
     )
     def _chat_once(self, body: bytes) -> dict:
-        if not BASE.startswith("https://"):
-            raise ValueError("blocked non-https base url")
         try:
-            req = urllib.request.Request(f"{BASE}/chat/completions", data=body,
+            req = urllib.request.Request(f"{self.base_url}/chat/completions", data=body,
                                          headers=self._headers())
             with urllib.request.urlopen(req, timeout=self.timeout) as r:
                 return json.loads(r.read().decode())
@@ -124,10 +126,8 @@ class GoClient:
     def list_models(self) -> list[str]:
         """Go 套餐可用模型 ID 列表，每次实时从 OpenCode 拉取（绝不写死）。
         失败返回空列表——界面显示"拉取失败"，不用本地兜底表。"""
-        if not BASE.startswith("https://"):
-            return []
         try:
-            req = urllib.request.Request(f"{BASE}/models", headers=self._headers())
+            req = urllib.request.Request(f"{self.base_url}/models", headers=self._headers())
             with urllib.request.urlopen(req, timeout=self.timeout) as r:
                 data = json.loads(r.read().decode())
             return sorted(m["id"] for m in data.get("data", []) if m.get("id"))
@@ -263,6 +263,7 @@ def load_scorer_config(root: Path) -> dict:
         cfg["model"] = overrides["reply_model"]
     if overrides.get("opencode_key"):
         cfg["api_key"] = overrides["opencode_key"]
+    cfg["base_url"] = opencode_base_url(root)
     return cfg
 
 

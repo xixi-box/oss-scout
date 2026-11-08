@@ -10,6 +10,7 @@ from urllib.parse import urlsplit
 import yaml
 
 
+DEFAULT_OPENCODE_BASE = "https://opencode.ai/zen/go/v1"
 MODEL_PATTERNS = {"repair_model": r"opencode-go/[\w.-]+", "reply_model": r"(?:opencode-go/)?[\w.-]+",
                   "codiv_model": r"[\w./-]+"}
 
@@ -25,16 +26,19 @@ def model_setting_error(key: str, value: str) -> str:
         return "" if re.fullmatch(r"[0-9]{1,4}", value) and int(value) <= 4096 else "思考预算须为 0–4096 的整数。"
     if value.lower().startswith(("sk-", "oc_")):
         return "请将 API 密钥填入对应的密钥列。"
-    if key == "codiv_base":
+    if key in {"codiv_base", "opencode_base"}:
+        domain = "codiv.ai" if key == "codiv_base" else "opencode.ai"
+        provider = "Codiv" if key == "codiv_base" else "OpenCode"
         try:
             base = urlsplit(value)
             if (base.scheme == "https" and base.hostname
-                    and (base.hostname == "codiv.ai" or base.hostname.endswith(".codiv.ai"))
+                    and (base.hostname == domain or base.hostname.endswith("." + domain))
+                    and (key == "codiv_base" or base.port in (None, 443))
                     and not (base.username or base.password or base.query or base.fragment)):
                 return ""
         except ValueError:
             pass
-        return "Codiv Base URL 需要使用官方 codiv.ai HTTPS 地址。"
+        return f"{provider} Base URL 需要使用官方 {domain} HTTPS 地址。"
     return "" if re.fullmatch(MODEL_PATTERNS[key], value) else "模型名称格式有误。"
 
 
@@ -49,6 +53,7 @@ def effective_models(root: Path) -> dict:
     return {
         "repair_model": values.get("repair_model") or resolve_model(),
         "reply_model": reply["model"], "opencode_key": reply.get("api_key") or "",
+        "opencode_base": reply["base_url"],
         "opencode_variant": values.get("opencode_variant") or "",
         "codiv_base": codiv.base, "codiv_model": codiv.model, "codiv_key": codiv.key,
         "codiv_think": str(codiv.think),
@@ -60,6 +65,10 @@ def public_models(root: Path) -> dict:
     for provider in ("opencode", "codiv"):
         values[f"{provider}_configured"] = bool(values.pop(f"{provider}_key"))
     return values
+
+
+def opencode_base_url(root: Path) -> str:
+    return (read_models(root).get("opencode_base") or DEFAULT_OPENCODE_BASE).rstrip("/")
 
 
 def repair_model_selector(root: Path) -> str:

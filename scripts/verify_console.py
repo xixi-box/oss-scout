@@ -52,12 +52,15 @@ def main():
             except Exception:
                 raise RuntimeError("Unable to read Feishu model settings") from None
             expected = fm.PROVIDERS.keys()
-            if expected == records.keys() and all(records[key]["fields"].get("模型名") for key in expected):
+            if (expected == records.keys() and all(records[key]["fields"].get("模型名") for key in expected)
+                    and records["OpenCode"]["fields"].get("Base URL")):
                 break
         time.sleep(5)
     else:
         raise AssertionError("Feishu model settings table is not ready")
     models = effective_models(root)
+    base = fm._field_value(records["OpenCode"]["fields"].get("Base URL"), "opencode_base")
+    assert base == models["opencode_base"], "OpenCode Base URL has not synchronized"
     keys_present = {}
     for provider, key in (("OpenCode", "opencode_key"), ("Codiv", "codiv_key")):
         actual = records[provider]["fields"].get("API 密钥") or ""
@@ -65,7 +68,7 @@ def main():
             raise AssertionError(f"{provider} credential has not synchronized")
         keys_present[provider] = bool(actual)
     print(json.dumps({"feishu_model_table_id": table_id, "model_settings_rows": len(expected),
-                      "credentials_present": keys_present}))
+                      "credentials_present": keys_present, "opencode_base_synced": True}))
     print(json.dumps({"console": "verified", "running": len(data["working"]),
                       "queue": len(data["queue"]), "published_today": len(data["today"]),
                       "active_candidates": len(active),
