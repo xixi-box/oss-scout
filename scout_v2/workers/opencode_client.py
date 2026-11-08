@@ -100,7 +100,10 @@ class OpenCodeClient:
         （240s 零输出，rc=124），而默认文本模式 180s 内正常返回并直接改文件。
         因此默认走文本模式；json 事件流只在显式要求时使用（本地调试）。
         """
+        model, _, variant = model.partition("#")
         cmd = [self.binary, "run", "-m", model]
+        if variant:
+            cmd.extend(["--variant", variant])
         # --auto：必须加，否则 agent 一碰到需要确认的动作就无声退出。
         # 2026-10-30 实测 build agent 的权限表里有
         #   {"permission":"external_directory","action":"ask","pattern":"*"}

@@ -122,8 +122,9 @@ class TestOpenCodeClient:
                 "stdout": json.dumps({"type": "text", "part": {"text": "OK"}}),
                 "stderr": "", "returncode": 0})()
         monkeypatch.setattr(oc.subprocess, "run", fake_run)
-        ok, _ = OpenCodeClient(workdir=tmp_path).run("m", "line1\nline2")
+        ok, _ = OpenCodeClient(workdir=tmp_path).run("m#high", "line1\nline2")
         assert ok
+        assert seen["cmd"][2:6] == ["-m", "m", "--variant", "high"]
         assert "--dir" in seen["cmd"] and str(tmp_path) in seen["cmd"]
         assert seen["cmd"][-1] == "line1\nline2"
         assert "OPENCODE" not in seen["env"]

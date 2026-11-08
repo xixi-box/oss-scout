@@ -20,6 +20,7 @@ class OpenJevClient:
         self.key = (values.get("codiv_key") or os.environ.get("TYPESAFE_API_KEY", "")).strip()
         self.base = (values.get("codiv_base") or os.environ.get("TYPESAFE_BASE_URL", "https://api.codiv.ai")).strip().rstrip("/")
         self.model = (values.get("codiv_model") or os.environ.get("TYPESAFE_MODEL", "openjev-latest")).strip()
+        self.think = int(values.get("codiv_think") or 0)
 
     def score_issue(self, state: dict) -> dict:
         verdict = {"usable": None, "model": self.model, "provider": "codiv"}
@@ -46,6 +47,8 @@ class OpenJevClient:
                              "false": "Do not start now"},
             }},
         }
+        if self.think:
+            payload["think"] = self.think
         body = json.dumps(payload).encode()
         skipped = {**verdict, "skipped": True, "reason": _INPUT_TOO_LARGE}
         if base.hostname == "api.codiv.ai" and len(body) > _CODIV_MAX_REQUEST_BYTES:

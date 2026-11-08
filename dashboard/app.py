@@ -657,7 +657,7 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
         def _loop():
             while True:
                 try:
-                    sync_model_settings(root, model_lock, DASHBOARD_URL + "/console-demo#models")
+                    sync_model_settings(root, model_lock)
                 except Exception as exc:
                     _audit(root, "bitable_model_settings_error", "models", type(exc).__name__)
                 time.sleep(30)
@@ -923,9 +923,7 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
 
     @app.post("/api/console/models")
     def console_save_models(body: dict):
-        import subprocess
-        from scout_v2.console_models import model_setting_error, read_models, write_models
-        from scout_v2.workers.auto_pipeline import _actions_runner_repo
+        from scout_v2.console_models import model_setting_error, read_models, rotate_opencode_key, write_models
 
         fields = ("repair_model", "reply_model", "codiv_base", "codiv_model", "opencode_key", "codiv_key")
         if any(not isinstance(body.get(key, ""), str) or len(body.get(key, "")) > 512 for key in fields):
@@ -938,18 +936,12 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
         with model_lock:
             prior = read_models(root)
             if values["opencode_key"]:
-                runner_repos = {_actions_runner_repo(root), "xixi-box/oss-scout"}
-                if len(runner_repos) != 1:
-                    return JSONResponse({"detail": "两个 Actions 仓库需要分别更新 OpenCode 密钥。"}, status_code=409)
                 try:
-                    changed = subprocess.run(
-                        ["gh", "secret", "set", "OPENCODE_API_KEY", "-R", runner_repos.pop()],
-                        input=values["opencode_key"], text=True, capture_output=True, timeout=25)
-                    if changed.returncode:
-                        raise RuntimeError("secret update failed")
-                except (OSError, subprocess.TimeoutExpired, RuntimeError):
-                    return JSONResponse({"detail": "无法更新 GitHub Actions 的 OpenCode 密钥，请检查服务器权限。"},
-                                        status_code=502)
+                    rotate_opencode_key(root, values["opencode_key"])
+                except ValueError as exc:
+                    return JSONResponse({"detail": str(exc)}, status_code=409)
+                except RuntimeError as exc:
+                    return JSONResponse({"detail": str(exc)}, status_code=502)
             write_models(root, {**prior, **{k: v for k, v in values.items() if v}})
         _audit(root, "console_models", "providers", "settings updated")
         return {"ok": True}

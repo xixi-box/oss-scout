@@ -692,9 +692,8 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen
     # 模型名由控制器解析后随 job 下发：worker 镜像里没有 configs/，
     # 无法自己读 model_policy.yaml。
     try:
-        from .repair import resolve_model
-        from scout_v2.console_models import read_models
-        job.model = read_models(root).get("repair_model") or resolve_model()
+        from scout_v2.console_models import repair_model_selector
+        job.model = repair_model_selector(root)
     except Exception as e:  # noqa: BLE001
         return _abort_release(f"no model resolved: {str(e)[:160]}",
                              give_back=True)   # 配置/凭证问题

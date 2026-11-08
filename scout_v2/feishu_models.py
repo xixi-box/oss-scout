@@ -1,96 +1,133 @@
-"""Editable model settings in the existing Feishu Base. Never export credentials."""
+"""Bidirectional model settings in the existing Feishu Base."""
 
 from hashlib import sha256
 from pathlib import Path
 
 from . import feishu_app, feishu_bitable as fb
-from .console_models import model_setting_error, public_models, read_models, write_models
-
+from .console_models import effective_models, model_setting_error, read_models, rotate_opencode_key, write_models
 
 TABLE = "模型配置"
-SETTINGS = {
-    "OpenCode 修复模型": "repair_model",
-    "OpenCode 回复模型": "reply_model",
-    "Codiv Base URL": "codiv_base",
-    "Codiv 细筛模型": "codiv_model",
+PROVIDERS = {
+    "OpenCode": {"模型名": "repair_model", "回复模型": "reply_model", "API 密钥": "opencode_key",
+                 "思考强度": "opencode_variant"},
+    "Codiv": {"模型名": "codiv_model", "API 密钥": "codiv_key", "Base URL": "codiv_base",
+              "思考预算 (tokens)": "codiv_think"},
 }
-CREDENTIALS = {"OpenCode API 密钥": "opencode_configured", "Codiv API 密钥": "codiv_configured"}
-FIELDS = [{"field_name": name, "type": 1} for name in ("键", "当前生效", "修改为", "应用状态")] + [
-    {"field_name": "安全设置", "type": 15},
-]
+FIELDS = [{"field_name": name, "type": 1} for name in (
+    "键", "模型名", "回复模型", "API 密钥", "Base URL", "思考强度", "思考预算 (tokens)", "应用状态")]
+_LEGACY = {"repair_model": "OpenCode 修复模型", "reply_model": "OpenCode 回复模型",
+           "codiv_base": "Codiv Base URL", "codiv_model": "Codiv 细筛模型"}
+_OLD_COLUMNS = {"当前生效", "修改为", "安全设置"}
 
 
-def sync_model_settings(root: Path, model_lock, settings_url: str) -> str:
+def _field_value(value, key):
+    if isinstance(value, list) and len(value) == 1 and key == "codiv_base":
+        value = value[0]
+    if isinstance(value, dict) and key == "codiv_base":
+        value = value.get("link")
+    value = value.strip() if isinstance(value, str) else ""
+    return "" if key == "opencode_variant" and value in {"默认", "default"} else value
+
+
+def _digest(value):
+    return sha256(value.encode()).hexdigest()
+
+
+def _table_request(table_url, method, path, payload=None):
+    response = feishu_app._request(method, f"{table_url}/{path}", payload, token=feishu_app.tenant_token())
+    if response.get("code") != 0:
+        raise RuntimeError(f"Feishu model settings {method} {path}: {response.get('code')}")
+    return response.get("data") or {}
+
+
+def sync_model_settings(root: Path, model_lock) -> str:
     if not fb.configured(root):
         return ""
     app_token = fb._binding_app_token(root)
     binding = fb.load_binding(root)
-    table_id = binding.get("model_table_id") if binding.get("app_token") == app_token else None
+    same_base = binding.get("app_token") == app_token
+    table_id = binding.get("model_table_id") if same_base else None
+    migrating = not (same_base and table_id and binding.get("model_table_layout") == 2)
     if not table_id:
         table_id = fb.find_or_create_table(app_token, TABLE, FIELDS)
         fb.save_binding(root, {"app_token": app_token, "model_table_id": table_id})
+    elif migrating:
+        fb.ensure_columns(app_token, table_id, FIELDS)
+    table_url = f"https://open.feishu.cn/open-apis/bitable/v1/apps/{app_token}/tables/{table_id}"
     records = fb.load_records(app_token, table_id)
 
     with model_lock:
         prior = read_models(root)
         values = dict(prior)
-        # Remember the last applied Feishu edit so an unchanged cell cannot
-        # overwrite a newer edit made in the authenticated console.
-        applied = dict(prior.get("_feishu_model_edits") or {})
-        statuses = {}
-        for label, key in SETTINGS.items():
-            entered = (records.get(label, {}).get("fields") or {}).get("修改为")
-            if key == "codiv_base":
-                if isinstance(entered, list) and len(entered) == 1:
-                    entered = entered[0]
-                if isinstance(entered, dict):
-                    entered = entered.get("link")
-            value = entered.strip() if isinstance(entered, str) else ""
-            if not value:
-                applied.pop(key, None)
-                statuses[label] = "填写「修改为」以更新"
-                continue
-            if len(value) > 512 or value.lower().startswith(("sk-", "oc_")):
-                statuses[label] = "格式有误，请填写模型或地址"
-                continue
-            error = model_setting_error(key, value)
-            if error:
-                statuses[label] = error
-                continue
-            if key == "codiv_base":
-                value = value.rstrip("/")
-            fingerprint = sha256(value.encode()).hexdigest()
-            if applied.get(key) != fingerprint:
-                values[key] = value
-                applied[key] = fingerprint
-            statuses[label] = "已应用" if values.get(key) == value else "已从安全设置更新"
-        if applied or "_feishu_model_edits" in prior:
-            values["_feishu_model_edits"] = applied
+        effective = effective_models(root)
+        last = dict(prior.get("_feishu_row_values") or {})
+        next_last = dict(last)
+        creates, updates = [], []
+        for label, columns in PROVIDERS.items():
+            existing = records.get(label)
+            remote = existing["fields"] if existing else {}
+            desired, errors = {}, []
+            for column, key in columns.items():
+                current = effective[key]
+                if existing:
+                    entered = _field_value(remote.get(column), key)
+                else:
+                    old = records.get(_LEGACY.get(key), {}).get("fields", {})
+                    entered = _field_value(old.get("修改为"), key)
+                    if not entered or _digest(entered.rstrip("/") if key == "codiv_base" else entered) == (
+                            prior.get("_feishu_model_edits") or {}).get(key):
+                        entered = current
+                if entered != current and (not existing or _digest(entered) != last.get(key)):
+                    if key == "codiv_base":
+                        entered = entered.rstrip("/")
+                    elif key == "codiv_think" and not entered:
+                        entered = "0"
+                    error = model_setting_error(key, entered)
+                    if not error and key == "codiv_think" and int(entered) and not str(
+                            values.get("codiv_model") or effective["codiv_model"]).startswith(("openjev-", "jev-")):
+                        error = "思考预算适用于 OpenJev 模型。"
+                    if not error and key == "codiv_model" and not entered.startswith(("openjev-", "jev-")) and int(
+                            values.get("codiv_think", effective["codiv_think"])):
+                        error = "切换到其他模型前，请将思考预算设为 0。"
+                    if not error and entered != current and key == "opencode_key":
+                        try:
+                            rotate_opencode_key(root, entered)
+                        except (RuntimeError, ValueError) as exc:
+                            error = str(exc)
+                    if error:
+                        errors.append(f"{column}：{error}")
+                        if existing:
+                            continue
+                    else:
+                        current = str(int(entered)) if key == "codiv_think" else entered
+                        if current != effective[key]:
+                            values[key] = current
+                desired[column] = current or ("默认" if key == "opencode_variant" else None)
+                next_last[key] = _digest(current)
+            desired["应用状态"] = "；".join(errors) if errors else "已同步"
+            if existing:
+                changed = {key: value for key, value in desired.items() if remote.get(key) != value}
+                if changed:
+                    updates.append({"record_id": existing["record_id"], "fields": changed})
+            else:
+                creates.append({"fields": {"键": label, **desired}})
+
         if values != prior:
             write_models(root, values)
-        effective = public_models(root)
+        for action, batch in (("batch_create", creates), ("batch_update", updates)):
+            if batch:
+                _table_request(table_url, "POST", f"records/{action}", {"records": batch})
+        if next_last != last:
+            write_models(root, {**values, "_feishu_row_values": next_last})
 
-    fields = {label: {"当前生效": effective[key], "应用状态": statuses[label]}
-              for label, key in SETTINGS.items()}
-    fields.update({label: {
-        "当前生效": "已配置" if effective[key] else "未配置",
-        "应用状态": "请在安全设置页更新密钥",
-        "安全设置": {"text": "打开安全设置", "link": settings_url},
-    } for label, key in CREDENTIALS.items()})
-    creates, updates = [], []
-    for label, desired in fields.items():
-        existing = records.get(label)
-        if not existing:
-            creates.append({"fields": {"键": label, **desired}})
-        elif any(existing["fields"].get(name) != value for name, value in desired.items()):
-            updates.append({"record_id": existing["record_id"], "fields": desired})
-    # Update only the columns owned by the service, preserving any concurrent cell edit.
-    for action, batch in (("batch_create", creates), ("batch_update", updates)):
-        if batch:
-            response = feishu_app._request(
-                "POST", f"https://open.feishu.cn/open-apis/bitable/v1/apps/{app_token}"
-                        f"/tables/{table_id}/records/{action}",
-                {"records": batch}, token=feishu_app.tenant_token())
-            if response.get("code") != 0:
-                raise RuntimeError(f"Feishu model settings {action}: {response.get('code')}")
+    if migrating:
+        old_names = {*_LEGACY.values(), "OpenCode API 密钥", "Codiv API 密钥"}
+        stale = [records[name]["record_id"] for name in old_names if name in records]
+        if stale:
+            _table_request(table_url, "POST", "records/batch_delete", {"records": stale})
+        fields = _table_request(table_url, "GET", "fields?page_size=100")
+        for field in fields.get("items", []):
+            if field["field_name"] in _OLD_COLUMNS:
+                _table_request(table_url, "DELETE", f"fields/{field['field_id']}")
+        fb.save_binding(root, {"app_token": app_token, "model_table_id": table_id, "model_table_layout": 2})
     return f"https://my.feishu.cn/base/{app_token}?table={table_id}"
