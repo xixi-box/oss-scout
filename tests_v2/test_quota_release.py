@@ -95,15 +95,18 @@ class TestAbortDoesNotResetBudget:
 
 
 class TestLaneGate:
-    """restricted 车道的规则写在 PolicyEngine 里，但 pipeline 必须真的调用到。"""
+    def test_restricted_requires_confirmation(self):
+        from types import SimpleNamespace
+        from dashboard.data import coarse_issue_blockers
 
-    def test_restricted_requires_confirmation_in_source(self):
-        src = (Path(__file__).resolve().parents[1] / "scout_v2" / "workers"
-               / "auto_pipeline.py").read_text(encoding="utf-8")
-        assert 'lane == "restricted"' in src
-        assert "needs_maintainer_confirm" in src
+        policy = SimpleNamespace(repos_cfg={"repositories": {"a/b": {}}})
+        issue = {"repo": "a/b", "state": "open"}
+        assert coarse_issue_blockers(policy, issue, lane="restricted") == ["等待维护者确认"]
+        assert coarse_issue_blockers(policy, {**issue, "labels": ["help wanted"]}, lane="restricted") == []
 
     def test_gated_is_still_blocked(self):
-        src = (Path(__file__).resolve().parents[1] / "scout_v2" / "workers"
-               / "auto_pipeline.py").read_text(encoding="utf-8")
-        assert 'lane == "gated"' in src
+        from types import SimpleNamespace
+        from dashboard.data import coarse_issue_blockers
+
+        policy = SimpleNamespace(repos_cfg={"repositories": {"a/b": {}}})
+        assert coarse_issue_blockers(policy, {"repo": "a/b"}, lane="gated") == ["仓库要求先沟通"]
