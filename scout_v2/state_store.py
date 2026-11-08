@@ -8,6 +8,7 @@ from __future__ import annotations
 import datetime as dt
 import json
 import os
+import re
 import sqlite3
 import tempfile
 from pathlib import Path
@@ -16,6 +17,31 @@ from contextlib import contextmanager
 
 JOB_STATES = ("queued", "leased", "running", "collecting",
               "succeeded", "failed", "inconclusive", "blocked")
+CANDIDATE_LIMIT = 10
+WAITING_CANDIDATE_STATES = frozenset({"new", "staged", "recheck_failed"})
+
+
+def active_repair_keys(root: Path, queue: dict) -> set[str]:
+    active = {key.lower() for key, entry in queue.items() if entry.get("status") == "running"}
+    db = root / "state/scout_v2.sqlite3"
+    if not db.exists():
+        return active
+    # An Actions run can outlive a controller restart and be marked escalated.
+    conn = sqlite3.connect(db.resolve().as_uri() + "?mode=ro", uri=True)
+    try:
+        if conn.execute("SELECT 1 FROM sqlite_master WHERE name='publications'").fetchone():
+            for repo, head in conn.execute("SELECT repo,head FROM publications WHERE day IS NULL"):
+                issue = re.fullmatch(r"[^:]+:fix/issue-(\d+)-[0-9a-f]+(?:-[0-9a-f]+)?", head)
+                if issue:
+                    active.add(f"{repo.lower()}#{issue[1]}")
+    finally:
+        conn.close()
+    return active
+
+
+def candidate_queue_full(root: Path, queue: dict) -> bool:
+    waiting = {key.lower() for key, entry in queue.items() if entry.get("status") in WAITING_CANDIDATE_STATES}
+    return len(waiting | active_repair_keys(root, queue)) >= CANDIDATE_LIMIT
 
 
 def business_day(ts: dt.datetime, tz_name: str) -> str:

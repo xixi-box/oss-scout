@@ -7,7 +7,9 @@ import urllib.request
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+os.environ["OSSCOUT_DISABLE_AUTO_REPAIR"] = "1"
 from dashboard.app import SESSION_COOKIE, _make_session
+from scout_v2.state_store import CANDIDATE_LIMIT, WAITING_CANDIDATE_STATES, active_repair_keys
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -35,8 +37,14 @@ def main():
         assert "?table=tbl" in exc.headers["Location"]
     else:
         raise AssertionError("PR table redirect is missing")
+    candidates = json.loads((root / "queue/candidates.json").read_text(encoding="utf-8"))
+    waiting = {key.lower() for key, entry in candidates.items() if entry.get("status") in WAITING_CANDIDATE_STATES}
+    active = waiting | active_repair_keys(root, candidates)
+    assert len(active) <= CANDIDATE_LIMIT, f"Candidate pool exceeds {CANDIDATE_LIMIT}: {len(active)}"
     print(json.dumps({"console": "verified", "running": len(data["working"]),
                       "queue": len(data["queue"]), "published_today": len(data["today"]),
+                      "active_candidates": len(active),
+                      "pruned_candidates": sum(e.get("status") == "queue_pruned" for e in candidates.values()),
                       "repair_records": len(data["repairs"]), "schedule": data["schedule"],
                       "workflows_available": data["working_available"],
                       "pr_table_redirect": True}))

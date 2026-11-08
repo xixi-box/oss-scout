@@ -949,10 +949,36 @@ def fine_screen_issue(eng, it: dict, *, lane: str, linked_prs: list | None = Non
     return verdict
 
 
+def prune_candidate_backlog(root: Path) -> list[str]:
+    """Keep the newest waiting entries that fit beside any ongoing repairs."""
+    from scout_v2.state_store import (CANDIDATE_LIMIT, WAITING_CANDIDATE_STATES,
+                                      active_repair_keys, business_now, queue_transaction)
+
+    now = business_now()
+
+    def entered_at(entry):
+        stamp = entry.get("staged_at") or entry.get("discovered_at")
+        try:
+            parsed = dt.datetime.fromisoformat(stamp)
+            return (parsed if parsed.tzinfo else parsed.replace(tzinfo=now.tzinfo)).timestamp()
+        except (TypeError, ValueError):
+            return float("-inf")
+
+    with queue_transaction(root) as queue:
+        protected = active_repair_keys(root, queue)
+        waiting = [key for key, entry in queue.items()
+                   if entry.get("status") in WAITING_CANDIDATE_STATES and key.lower() not in protected]
+        waiting.sort(key=lambda key: (entered_at(queue[key]), key), reverse=True)
+        removed = waiting[max(0, CANDIDATE_LIMIT - len(protected)):]
+        for key in removed:
+            queue[key].update(status="queue_pruned", updated_at=now.isoformat(timespec="seconds"))
+    return removed
+
+
 def ingest_cloudflare_issues(ds, items: list[dict], *, refresh: bool = False) -> tuple[int, list[str]]:
     """Mechanical exclusions, then AI; short atomic writes never enclose network IO."""
     import hashlib
-    from scout_v2.state_store import atomic_json_write, queue_transaction, business_now
+    from scout_v2.state_store import atomic_json_write, business_now, candidate_queue_full, queue_transaction
     from scout_v2.repo_policy import PolicyEngine
     eng, err = PolicyEngine.load(ds.root)
     if err or eng is None:
@@ -977,8 +1003,13 @@ def ingest_cloudflare_issues(ds, items: list[dict], *, refresh: bool = False) ->
             if key in q or (prior.get("fingerprint") == fingerprint and prior.get("status") in
                             ("blocked", "rejected", "archived", "screen_skipped")):
                 continue
+            full = candidate_queue_full(ds.root, q)
         lane = eng.repo_lane(repo)
-        blockers, verdict = screen_issue(eng, it, lane=lane, live_blockers=live_blockers, timeline=timeline)
+        if full:
+            blockers, verdict = ["候选列表已满"], {}
+            record_issue_screen(eng, it, "coarse_screen", blockers[0])
+        else:
+            blockers, verdict = screen_issue(eng, it, lane=lane, live_blockers=live_blockers, timeline=timeline)
         now = business_now().isoformat(timespec="seconds")
         rec = {"first_seen": prior.get("first_seen") or now, "updated_at": now, "fingerprint": fingerprint,
                "status": "blocked" if blockers else "screen_skipped" if verdict.get("skipped") else
@@ -989,13 +1020,18 @@ def ingest_cloudflare_issues(ds, items: list[dict], *, refresh: bool = False) ->
             rec["ai_verdict"] = verdict
         with queue_transaction(ds.root) as q:
             seen = _read_json(seen_path, {})()
-            if not blockers and verdict.get("usable") is True and key not in q:
-                q[key] = {**it, "id": key, "repo": repo, "number": number, "lane": lane,
-                          "blockers": [], "ai_verdict": verdict,
-                          "discovered_at": now, "status": "new", "lease": None,
-                          "source": "cloudflare-worker", "screened_at": now,
-                          "url": it.get("url") or f"https://github.com/{repo}/issues/{number}"}
-                added.append(key)
+            if key in q:
+                continue
+            if not blockers and verdict.get("usable") is True:
+                if candidate_queue_full(ds.root, q):
+                    rec.update(status="blocked", coarse_reason="候选列表已满")
+                else:
+                    q[key] = {**it, "id": key, "repo": repo, "number": number, "lane": lane,
+                              "blockers": [], "ai_verdict": verdict,
+                              "discovered_at": now, "status": "new", "lease": None,
+                              "source": "cloudflare-worker", "screened_at": now,
+                              "url": it.get("url") or f"https://github.com/{repo}/issues/{number}"}
+                    added.append(key)
             seen[key] = rec
             atomic_json_write(seen_path, seen)
     return len(added), added

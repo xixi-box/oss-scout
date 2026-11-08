@@ -33,6 +33,77 @@ def test_short_precise_report_reaches_ai(intake):
         assert d.ingest_cloudflare_issues(ds, [issue])[0] == 1
 
 
+def test_candidate_capacity_blocks_before_openjev(intake):
+    from scout_v2.feishu_bitable import scan_row_to_fields
+    from scripts.monitor_prs import build_scan_rows
+
+    ds, issue = intake
+    queue = ds.root / "queue/candidates.json"
+    entries = {f"a/b#{n}": {"status": "staged"} for n in range(2, 11)}
+    entries["a/b#11"] = {"status": "running"}
+    entries["a/b#12"] = {"status": "pr_open"}
+    queue.write_text(json.dumps(entries), encoding="utf-8")
+    with patch("scout_v2.workers.openjev.OpenJevClient") as cls:
+        assert d.ingest_cloudflare_issues(ds, [issue]) == (0, [])
+        cls.assert_not_called()
+        row, = build_scan_rows(ds.root)
+        fields = scan_row_to_fields(row)
+        assert fields["最终结果"] == "粗筛淘汰 · 候选列表已满"
+        assert fields["细筛结果"] == "未执行"
+        entries["a/b#11"]["status"] = "pr_open"
+        queue.write_text(json.dumps(entries), encoding="utf-8")
+        cls.return_value.score_issue.return_value = {"usable": True, "reason": "repro"}
+        later = dict(issue, number=13)
+        assert d.ingest_cloudflare_issues(ds, [later]) == (1, ["a/b#13"])
+
+
+def test_candidate_capacity_is_rechecked_before_inserting(intake):
+    from scout_v2.state_store import queue_transaction
+
+    ds, issue = intake
+    with queue_transaction(ds.root) as queue:
+        queue.update({f"a/b#{n}": {"status": "staged"} for n in range(2, 11)})
+
+    def score(_):
+        with queue_transaction(ds.root) as queue:
+            queue["a/b#11"] = {"status": "new"}
+        return {"usable": True}
+
+    with patch("scout_v2.workers.openjev.OpenJevClient") as cls:
+        cls.return_value.score_issue.side_effect = score
+        assert d.ingest_cloudflare_issues(ds, [issue]) == (0, [])
+    with queue_transaction(ds.root) as queue:
+        assert len(queue) == 10
+        assert "a/b#1" not in queue
+
+
+def test_prune_keeps_latest_and_protects_unreconciled_repair(intake):
+    from scout_v2.state_store import candidate_queue_full
+
+    ds, _ = intake
+    entries = {f"a/b#{n}": {"status": "staged", "staged_at": f"2026-11-{n:02d}T12:00:00+08:00"}
+               for n in range(1, 13)}
+    entries["a/b#2"].pop("staged_at")
+    entries["a/b#2"]["discovered_at"] = "2026-11-13T12:00:00"
+    entries["a/b#13"] = {"status": "escalated"}
+    entries["a/b#14"] = {"status": "pr_open"}
+    queue = ds.root / "queue/candidates.json"
+    queue.write_text(json.dumps(entries), encoding="utf-8")
+    ledger = ClaimLedger(ds.root / "state/scout_v2.sqlite3")
+    try:
+        assert ledger.reserve_publication("Asia/Shanghai", 5, "job-id", "a/b", "fork:fix/issue-13-ab-cd", "x/y")
+        assert set(d.prune_candidate_backlog(ds.root)) == {"a/b#1", "a/b#3", "a/b#4"}
+        updated = json.loads(queue.read_text(encoding="utf-8"))
+        assert updated["a/b#2"]["status"] == "staged"
+        assert updated["a/b#1"]["status"] == "queue_pruned"
+        assert updated["a/b#13"]["status"] == "escalated"
+        assert updated["a/b#14"]["status"] == "pr_open"
+        assert candidate_queue_full(ds.root, updated)
+        assert d.prune_candidate_backlog(ds.root) == []
+    finally:
+        ledger.close()
+
+
 def test_ai_failure_is_retryable(intake):
     ds, issue = intake
     issue["body_excerpt"] *= 20

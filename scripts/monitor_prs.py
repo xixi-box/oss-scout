@@ -1162,6 +1162,8 @@ def build_scan_rows(root, running_keys=(), published=None, pr_states=None) -> li
             elif candidate_status in _SCAN_OTHER_OUTCOMES:
                 label = _SCAN_OTHER_OUTCOMES[candidate_status]
                 result = f"{label} · {reason}" if reason else label
+            elif candidate_status == "queue_pruned":
+                result = "已移出候选队列 · 超出 10 条上限"
             elif v.get("status") == "archived":
                 result = "已移出候选队列"
         rows.append({
@@ -1194,7 +1196,8 @@ _QUEUE_YELLOW = {"new", "staged", "needs_maintainer_confirm", "needs_cla",
 _QUEUE_GREEN = {"pr_open", "merged", "completed"}
 _QUEUE_RED = {"aborted_stale", "stage_expired", "escalated", "aborted_competed",
               "aborted_duplicate", "aborted_closed", "aborted_no_evidence",
-              "aborted_blocked_design", "aborted_pipeline", "coarse_blocked", "fine_blocked", "screen_skipped"}
+              "aborted_blocked_design", "aborted_pipeline", "coarse_blocked", "fine_blocked",
+              "screen_skipped", "queue_pruned"}
 QUEUE_EXPIRE_DAYS = 3
 
 

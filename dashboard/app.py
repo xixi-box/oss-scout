@@ -695,6 +695,8 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
 
     if os.environ.get("OSSCOUT_DISABLE_AUTO_REPAIR") != "1":
         _reap_orphan_claim()
+        for key in D.prune_candidate_backlog(root):
+            _audit(root, "candidate_pruned", key, "超出候选列表上限")
         _cf_poll_loop()
         _intake_loop()
         _auto_repair_loop()
