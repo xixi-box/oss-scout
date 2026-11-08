@@ -424,3 +424,58 @@ def test_scan_update_time_includes_linked_pr_followup(tmp_path):
     fields = fb.scan_row_to_fields(row)
     assert fields["更新时间"] == fb._timestamp("2026-11-08T14:30:00+08:00")
     assert fields["最终结果"][0]["text"] == "已开 PR · a/b#20"
+def test_feishu_model_settings_applies_edits_without_exporting_keys(tmp_path, monkeypatch):
+    from threading import Lock
+    from scout_v2 import feishu_models as fm
+    from scout_v2.console_models import read_models, write_models
+    from scout_v2.workers.openjev import OpenJevClient
+
+    write_models(tmp_path, {"repair_model": "opencode-go/repair", "reply_model": "reply",
+                           "codiv_model": "openjev-latest", "codiv_base": "https://api.codiv.ai",
+                           "codiv_key": "secret-codiv", "opencode_key": "secret-opencode"})
+    records, binding, requests = {}, {}, []
+    monkeypatch.setattr(fm.fb, "configured", lambda _: True)
+    monkeypatch.setattr(fm.fb, "_binding_app_token", lambda _: "baseExample")
+    monkeypatch.setattr(fm.fb, "load_binding", lambda _: binding)
+    monkeypatch.setattr(fm.fb, "save_binding", lambda _, values: binding.update(values))
+    monkeypatch.setattr(fm.fb, "find_or_create_table", lambda *args: "tblExample")
+    monkeypatch.setattr(fm.fb, "load_records", lambda *args: records)
+    monkeypatch.setattr(fm.feishu_app, "tenant_token", lambda: "token")
+
+    def request(method, url, payload, *, token):
+        requests.append(payload)
+        for row in payload["records"]:
+            if url.endswith("batch_create"):
+                key = row["fields"]["键"]
+                records[key] = {"record_id": key, "fields": row["fields"]}
+            else:
+                assert "修改为" not in row["fields"]
+                records[row["record_id"]]["fields"].update(row["fields"])
+        return {"code": 0}
+
+    monkeypatch.setattr(fm.feishu_app, "_request", request)
+    lock = Lock()
+    secure_url = "https://example.test/console-demo#models"
+    assert fm.sync_model_settings(tmp_path, lock, secure_url).endswith("?table=tblExample")
+    assert len(records) == 6
+    assert records["Codiv API 密钥"]["fields"]["当前生效"] == "已配置"
+    assert records["Codiv API 密钥"]["fields"]["安全设置"]["link"] == secure_url
+    assert "secret-" not in str(requests)
+    fm.sync_model_settings(tmp_path, lock, secure_url)
+    assert len(requests) == 1
+
+    model = records["Codiv 细筛模型"]["fields"]
+    base = records["Codiv Base URL"]["fields"]
+    model["修改为"] = "openjev-0.1"
+    base["修改为"] = "https://example.test"
+    fm.sync_model_settings(tmp_path, lock, secure_url)
+    assert OpenJevClient(tmp_path).model == model["当前生效"] == "openjev-0.1"
+    assert model["应用状态"] == "已应用"
+    assert base["当前生效"] == "https://api.codiv.ai"
+    assert "codiv.ai" in base["应用状态"]
+
+    write_models(tmp_path, {**read_models(tmp_path), "codiv_model": "openjev-latest"})
+    fm.sync_model_settings(tmp_path, lock, secure_url)
+    assert model["当前生效"] == "openjev-latest"
+    assert model["应用状态"] == "已从安全设置更新"
+    assert read_models(tmp_path)["codiv_key"] == "secret-codiv"

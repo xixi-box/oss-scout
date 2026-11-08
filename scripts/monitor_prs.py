@@ -116,7 +116,7 @@ def _model() -> tuple[str, str]:
     """(api_key, model) 用于评论分类。缺失时返回空串让调用方走规则兜底。"""
     try:
         from scout_v2.workers.issue_scorer import load_scorer_config
-        cfg = load_scorer_config(ROOT)
+        cfg = load_scorer_config(DATA_ROOT)
         return str(cfg.get("api_key") or ""), str(cfg.get("model")
                                                       or "deepseek-v4.1-flash")
     except Exception:  # noqa: BLE001

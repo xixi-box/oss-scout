@@ -337,6 +337,7 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
     _inflight_lock = _thr.Lock()
     _bitable_wake = _thr.Event()
     _intake_handoff: set[str] = set()
+    model_lock = _thr.Lock()
     # 真正的修复跑在 GitHub Actions runner 上（VPS 只负责派发、提交
     # workflow_dispatch，不 clone 也不编译），所以这里的上限跟 VPS 算力无关，
     # 只用来防止一次性把几百条一起甩给 Actions 打爆自动化的并发配额。
@@ -650,6 +651,19 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
                 _bitable_wake.wait(30)
         _thr.Thread(target=_loop, daemon=True, name="bitable-sync").start()
 
+    def _model_settings_loop():
+        from scout_v2.feishu_models import sync_model_settings
+
+        def _loop():
+            while True:
+                try:
+                    sync_model_settings(root, model_lock, DASHBOARD_URL + "/console-demo#models")
+                except Exception as exc:
+                    _audit(root, "bitable_model_settings_error", "models", type(exc).__name__)
+                time.sleep(30)
+
+        _thr.Thread(target=_loop, daemon=True, name="bitable-model-settings").start()
+
     def _cf_poll_loop():
         """从 CF KV 拉取 Worker 发现的**兜底**通道（主通道是 Worker 直接 POST）。
 
@@ -703,6 +717,7 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
         _publication_status_loop()
         _pr_watch_loop()
         _bitable_loop()
+        _model_settings_loop()
     app.state.ds = ds
     app.state.root = root
     secret = _secret(root)
@@ -900,45 +915,26 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
         _audit(root, "console_schedule", "queue", value)
         return {"time": value}
 
-    model_lock = _thr.Lock()
-
     @app.get("/api/console/models")
     def console_models():
-        from scout_v2.console_models import read_models
-        from scout_v2.workers.issue_scorer import load_scorer_config
-        from scout_v2.workers.openjev import OpenJevClient
-        from scout_v2.workers.repair import resolve_model
+        from scout_v2.console_models import public_models
 
-        values = read_models(root)
-        reply = load_scorer_config(root)
-        codiv = OpenJevClient(root)
-        return JSONResponse({
-            "repair_model": values.get("repair_model") or resolve_model(),
-            "reply_model": reply["model"], "opencode_configured": bool(reply.get("api_key")),
-            "codiv_base": codiv.base, "codiv_model": codiv.model, "codiv_configured": bool(codiv.key),
-        }, headers={"Cache-Control": "no-store"})
+        return JSONResponse(public_models(root), headers={"Cache-Control": "no-store"})
 
     @app.post("/api/console/models")
     def console_save_models(body: dict):
-        import re
         import subprocess
-        from urllib.parse import urlsplit
-        from scout_v2.console_models import read_models, write_models
+        from scout_v2.console_models import model_setting_error, read_models, write_models
         from scout_v2.workers.auto_pipeline import _actions_runner_repo
 
         fields = ("repair_model", "reply_model", "codiv_base", "codiv_model", "opencode_key", "codiv_key")
         if any(not isinstance(body.get(key, ""), str) or len(body.get(key, "")) > 512 for key in fields):
             return JSONResponse({"detail": "模型或密钥字段格式有误。"}, status_code=400)
         values = {key: body.get(key, "").strip() for key in fields}
-        base = urlsplit(values["codiv_base"])
-        if (base.scheme != "https" or not base.hostname or
-                not (base.hostname == "codiv.ai" or base.hostname.endswith(".codiv.ai")) or
-                base.username or base.password or base.query or base.fragment):
-            return JSONResponse({"detail": "Codiv Base URL 需要使用官方 codiv.ai HTTPS 地址。"}, status_code=400)
-        patterns = {"repair_model": r"opencode-go/[\w.-]+", "reply_model": r"[\w.-]+",
-                    "codiv_model": r"[\w./-]+"}
-        if any(not re.fullmatch(pattern, values[key]) for key, pattern in patterns.items()):
-            return JSONResponse({"detail": "模型名称格式有误。"}, status_code=400)
+        for key in ("codiv_base", "repair_model", "reply_model", "codiv_model"):
+            error = model_setting_error(key, values[key])
+            if error:
+                return JSONResponse({"detail": error}, status_code=400)
         with model_lock:
             prior = read_models(root)
             if values["opencode_key"]:

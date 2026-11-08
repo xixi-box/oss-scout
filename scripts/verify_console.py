@@ -3,12 +3,14 @@
 import json
 import os
 import sys
+import time
 import urllib.request
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 os.environ["OSSCOUT_DISABLE_AUTO_REPAIR"] = "1"
 from dashboard.app import SESSION_COOKIE, _make_session
+from scout_v2 import feishu_bitable as fb, feishu_models as fm
 from scout_v2.state_store import CANDIDATE_LIMIT, WAITING_CANDIDATE_STATES, active_repair_keys
 
 
@@ -41,6 +43,18 @@ def main():
     waiting = {key.lower() for key, entry in candidates.items() if entry.get("status") in WAITING_CANDIDATE_STATES}
     active = waiting | active_repair_keys(root, candidates)
     assert len(active) <= CANDIDATE_LIMIT, f"Candidate pool exceeds {CANDIDATE_LIMIT}: {len(active)}"
+    for _ in range(8):
+        table_id = fb.load_binding(root).get("model_table_id")
+        if table_id:
+            records = fb.load_records(fb._binding_app_token(root), table_id)
+            expected = fm.SETTINGS.keys() | fm.CREDENTIALS.keys()
+            if expected <= records.keys() and all(records[key]["fields"].get("当前生效") for key in expected):
+                assert all(records[key]["fields"].get("安全设置") for key in fm.CREDENTIALS)
+                break
+        time.sleep(5)
+    else:
+        raise AssertionError("Feishu model settings table is not ready")
+    print(json.dumps({"feishu_model_table_id": table_id, "model_settings_rows": len(expected)}))
     print(json.dumps({"console": "verified", "running": len(data["working"]),
                       "queue": len(data["queue"]), "published_today": len(data["today"]),
                       "active_candidates": len(active),
