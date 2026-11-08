@@ -2,13 +2,19 @@
 
 ## 日常
 
-- **测试**：`python -m pytest tests_v2 -q`（当前 89 项，全绿基线）。
+- **测试**：`python -m pytest -q tests_v2 tests_dashboard`。
 - **观察调度计划**（不启动进程）：
   `python -c "import yaml;from scout_v2.scheduler import scheduled_plan;print(scheduled_plan(yaml.safe_load(open('configs/v2.yaml',encoding='utf-8'))))"`
 - **写状态文件**：一律走 `scout_v2.state_store.atomic_json_write`，不要手写 `json.dump`。
 - **认领动作**：先 `PolicyEngine.authorize("claim", repo)`；通过后
   `ClaimLedger.try_claim(tz, candidate_id)` + `Worklog.append({"ts":…, "action":"claim", …})`。
 - **403 写失败**：`BlockerRegistry.register(f"{repo}:{action}", err)`，本轮不再重试（自动生效）。
+
+## 飞书与控制器
+
+- 飞书多维表格查看扫描发现、候选和 PR 记录，编辑「模型配置」。PR 跟进通过飞书审批卡确认。
+- 控制器根路径跳转到飞书 PR 记录，部署探针使用 `GET /healthz`。
+- 运维接口通过 `POST /login` 提交包含 `password` 的 JSON，使用返回的会话 cookie 访问，例如 `POST /api/pipeline/run` 手动派发或 `POST /api/pr/bitable/sync` 手动同步。
 
 ## 启停 / 回滚
 

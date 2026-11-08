@@ -2,7 +2,7 @@
 name: v2-tests
 on:
   push:
-    paths: ["scout_v2/**", "tests_v2/**", "configs/**"]
+    paths: ["scout_v2/**", "dashboard/**", "tests_v2/**", "tests_dashboard/**", "configs/**"]
   workflow_dispatch:
 
 permissions:
@@ -20,4 +20,4 @@ jobs:
       # pyyaml+pytest 会让收集阶段直接 ImportError（整套跑不了）。httpx 是
       # TestClient 的依赖。
       - run: pip install -r requirements.txt httpx
-      - run: python -m pytest tests_v2 -q
+      - run: python -m pytest tests_v2 tests_dashboard -q

@@ -9,6 +9,6 @@ jobs:
       - name: Container health
         run: |
           docker ps --filter name=oss-scout --format 'table {{.Names}}\t{{.Status}}'
-          curl --fail --silent --show-error --max-time 10 http://127.0.0.1:18787/login > /dev/null
+          curl --fail --silent --show-error --max-time 10 http://127.0.0.1:18787/healthz > /dev/null
       - name: Read-only runtime and Worker status
         run: docker exec oss-scout python /app/scripts/runtime_status.py --worker

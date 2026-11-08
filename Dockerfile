@@ -41,7 +41,7 @@ ENV OSSCOUT_DASHBOARD_ROOT=/data
 VOLUME ["/data"]
 
 HEALTHCHECK --interval=60s --timeout=10s --retries=3 \
-    CMD curl -sf http://127.0.0.1:8787/login || exit 1
+    CMD curl -sf http://127.0.0.1:8787/healthz || exit 1
 
 EXPOSE 8787
 CMD ["python", "-m", "uvicorn", "dashboard.app:app", "--host", "0.0.0.0", "--port", "8787"]

@@ -115,7 +115,6 @@ jobs:
       FEISHU_PR_APPROVER_OPEN_ID: ${{ secrets.FEISHU_PR_APPROVER_OPEN_ID }}
       # PR 台账所在的多维表格（用户自建并分享给应用的 base）
       FEISHU_BITABLE_APP_TOKEN: ${{ secrets.FEISHU_BITABLE_APP_TOKEN }}
-      DASHBOARD_PUBLIC_URL: ${{ secrets.DASHBOARD_PUBLIC_URL }}
     steps:
       # 不 checkout：阿里云到 GitHub 的 git 协议不通（TLS/大包被拦，实测 130s 超时）。
       # 部署只需 ACR 镜像 + 服务定义，全部内联在此（不依赖仓库文件）。
@@ -170,13 +169,12 @@ jobs:
                 - FEISHU_CHAT_ID=\${FEISHU_CHAT_ID}
                 - FEISHU_PR_APPROVER_OPEN_ID=\${FEISHU_PR_APPROVER_OPEN_ID}
                 - FEISHU_BITABLE_APP_TOKEN=\${FEISHU_BITABLE_APP_TOKEN}
-                - DASHBOARD_PUBLIC_URL=\${DASHBOARD_PUBLIC_URL}
                 # git/外网经宿主 sing-box（docker0 网桥入站）；国内直连域走 NO_PROXY
                 - HTTPS_PROXY=http://172.17.0.1:7890
                 - HTTP_PROXY=http://172.17.0.1:7890
                 - NO_PROXY=localhost,127.0.0.1,aliyuncs.com,.aliyuncs.com,crpi-.cn-shanghai.personal.cr.aliyuncs.com
               healthcheck:
-                test: ["CMD", "curl", "-sf", "http://127.0.0.1:8787/login"]
+                test: ["CMD", "curl", "-sf", "http://127.0.0.1:8787/healthz"]
                 interval: 60s
                 timeout: 10s
                 retries: 3
@@ -200,7 +198,6 @@ jobs:
             echo "FEISHU_CHAT_ID=$FEISHU_CHAT_ID"
             echo "FEISHU_PR_APPROVER_OPEN_ID=$FEISHU_PR_APPROVER_OPEN_ID"
             echo "FEISHU_BITABLE_APP_TOKEN=$FEISHU_BITABLE_APP_TOKEN"
-            echo "DASHBOARD_PUBLIC_URL=$DASHBOARD_PUBLIC_URL"
           } > "$DEPLOY_DIR/.env"
           chmod 600 "$DEPLOY_DIR/.env"
           echo "compose written to $DEPLOY_DIR/compose.yaml"
@@ -229,9 +226,9 @@ jobs:
         run: |
           set -euo pipefail
           for attempt in $(seq 1 60); do
-            if curl -fsS --max-time 5 http://127.0.0.1:18787/login > /dev/null; then break; fi
+            if curl -fsS --max-time 5 http://127.0.0.1:18787/healthz > /dev/null; then break; fi
             sleep 2
           done
-          curl -fsS --max-time 5 http://127.0.0.1:18787/login > /dev/null
+          curl -fsS --max-time 5 http://127.0.0.1:18787/healthz > /dev/null
           docker exec oss-scout python /app/scripts/runtime_status.py --screening
-          docker exec oss-scout python /app/scripts/verify_console.py
+          docker exec oss-scout python /app/scripts/verify_service.py

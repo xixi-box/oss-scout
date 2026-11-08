@@ -2,7 +2,7 @@
 
 L1 = CI 挂红自动派修复（外因过滤 + head_sha 去重）
 L2 = 机器人类的机械修复项随单带上（changeset 之类，作为 pr-fix 的上下文）
-L3 = AI 草拟回复只落盘，发送必须有显式的 /api/pr/reply/send
+L3 = 草拟回复由人工在飞书卡片确认发送
 """
 from __future__ import annotations
 

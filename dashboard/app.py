@@ -1,11 +1,4 @@
-"""oss-scout v2 Web Dashboard（登录 + 只读监控 + 受审计的配置写入）。
-
-启动：python -m dashboard.app  → http://127.0.0.1:8787
-安全：登录会话（HMAC 签名 cookie）；全 Jinja2 自动转义；写端点全部过认证、
-校验并逐条写 worklog 审计；日志查看有路径校验；token 打码。
-密码来源：环境变量 DASHBOARD_PASSWORD 优先，否则自动生成
-state/dashboard_password.txt（gitignore，首启时展示一次）。
-"""
+"""Controller API for Worker ingestion, repair dispatch and Feishu integration."""
 from __future__ import annotations
 
 from scout_v2.roster import monitored_repo as modifiable_repo
@@ -21,34 +14,15 @@ import time
 from pathlib import Path
 
 import yaml
-from fastapi import FastAPI, Form, Query, Request
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
-from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse, RedirectResponse
 
 from . import data as D
 
-# 看板公网入口（飞书卡片按钮跳转用），与 scout_v2.notify 保持同一来源
-NOTIFY_DASHBOARD_URL = (os.environ.get("DASHBOARD_PUBLIC_URL")
-                        or "https://oss.wangshun.work").rstrip("/")
-
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-
-BASE_DIR = Path(__file__).resolve().parent
-templates_dir = BASE_DIR / "templates"
-static_dir = BASE_DIR / "static"
 
 SESSION_COOKIE = "os_session"
 SESSION_TTL = 7 * 24 * 3600
-
-VALID_LANES = ("open", "gated", "restricted", "observe")
-VALID_MODES = ("scan", "reproduce", "repair", "review", "ci")
-VALID_BACKENDS = ("modal", "actions", "")
-# "" 作为 fallback 是合法值：2026-10-31 分工独占后，fallback 一律为空（互不兜底）
-# bug_hunter_light / bug_hunter_deep_modal 已删（2026-10-31）：设置进 yaml 也
-# 没有任何代码读它们，是能写不能用的死开关。bug hunter 的开关就是
-# configs/v2.yaml 的 budget.modal.enabled。
-VALID_FEATURES = ("actions_backend", "opencode_models")
 
 
 def _secret(root: Path) -> bytes:
@@ -69,7 +43,6 @@ def _dashboard_password(root: Path) -> str:
     if not p.exists():
         pw = secrets.token_urlsafe(12)
         p.write_text(pw + "\n", encoding="utf-8")
-        print(f"[dashboard] 首次生成登录密码 → {p}\n[dashboard] password: {pw}")
     return p.read_text(encoding="utf-8").strip()
 
 
@@ -100,7 +73,7 @@ def _audit(root: Path, action: str, target: str, result: str) -> None:
     import datetime as dt
     rec = {"ts": dt.datetime.now().isoformat(timespec="seconds"),
            "action": f"dashboard_{action}", "target": target, "result": result,
-           "source": "web-ui"}
+           "source": "controller"}
     with (root / "state" / "worklog.jsonl").open("a", encoding="utf-8") as f:
         f.write(json.dumps(rec, ensure_ascii=False) + "\n")
 
@@ -174,142 +147,11 @@ def _sync_bitables(root: Path, *, ds=None, activity_only=False, activity_cache=N
     return results
 
 
-def _notify_draft(root: Path, r: dict, draft: dict) -> None:
-    """把"AI 草稿待人审"推给飞书，人可在卡片里改完一键发。
-
-    卡片的状态取自 state/pr_replies.json 的 fix_state：
-      无 / "none"  纯回复，按钮只发评论
-      "pending"    改动在流水线里跑，按钮会等结果
-      "ready"      改动已提交到暂存分支，按钮发评论 + 推送
-
-    优先走自建应用卡片（含可编辑输入框 + form_submit 按钮，回调
-    /feishu/callback 直接发 GitHub）；应用未配置时回退到 webhook 卡片，
-    按钮只能跳看板——自定义机器人没有应用身份，收不到按钮点击。
-    通知失败绝不影响主流程。
-    """
-    repo, number = str(r.get("repo") or ""), int(r.get("number") or 0)
-    key = f"{repo}#{number}"
-    entry = draft.get("entry") or {}
-    text = str(entry.get("draft") or draft.get("draft") or "")
-    if not text:
-        return
-
-    fix_state = "none"
-    try:
-        stored = json.loads((root / "state" / "pr_replies.json")
-                            .read_text(encoding="utf-8")).get(key) or {}
-        fix_state = str(stored.get("fix_state") or "none")
-    except (OSError, json.JSONDecodeError):
-        pass
-
-    pr_url = str(r.get("pr_url") or entry.get("pr_url")
-                 or f"https://github.com/{repo}/pull/{number}")
-    try:
-        from scout_v2 import feishu_app
-
-        if feishu_app.app_configured():
-            chat = feishu_app.find_group_chat_id()
-            if chat:
-                card = feishu_app.build_reply_card(
-                    repo=repo, number=number,
-                    issue_title=str(r.get("pr_title") or f"{repo}#{number}"),
-                    source_author=str(r.get("latest_author") or "unknown"),
-                    source_comment=str(r.get("latest_body")
-                                       or entry.get("source_comment") or ""),
-                    root_cause=str(entry.get("root_cause") or ""),
-                    draft=text,
-                    fix_state=fix_state,
-                    pr_url=pr_url,
-                    source_kind=str(entry.get("source_kind") or "issue"),
-                    comment_id=entry.get("source_comment_id"))
-                ok, err = feishu_app.send_card_to_chat(chat, card)
-                _audit(root, "feishu_card", key,
-                       f"fix_state={fix_state} "
-                       + ("sent" if ok else f"failed: {err[:150]}"))
-                if ok:
-                    return
-        from scout_v2.notify import feishu_send_card
-
-        state = {"ready": "✅ 已修改并提交（待你确认后推送）",
-                 "pending": "⏳ 代码修改进行中",
-                 }.get(fix_state, "💬 回复草稿待人审")
-        feishu_send_card(
-            f"{state}：{key}",
-            f"**来自** {r.get('latest_author') or '?'}："
-            f"{str(r.get('latest_excerpt'))[:150]}\n"
-            "**AI 草稿**：\n" + text[:600] +
-            "\n\n→ 应用未接入，点按钮去看板编辑发送",
-            button_text="打开 PR 管理页",
-            button_url=f"{NOTIFY_DASHBOARD_URL}/prs",
-            template="orange")
-    except Exception as e:  # noqa: BLE001 — 通知永远不影响主流程
-        try:
-            _audit(root, "feishu_card_error", key, str(e)[:200])
-        except Exception:  # noqa: BLE001
-            pass
-
-
-def _set_lane(root: Path, repo: str, lane: str) -> None:
-    """写 configs/lane_overrides.yaml（叠加层，repo_policy.PolicyEngine 读取时合并）。"""
-    p = root / "configs" / "lane_overrides.yaml"
-    data = {}
-    if p.exists():
-        data = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
-    data.setdefault("repositories", {})
-    data["repositories"].setdefault(repo, {})
-    data["repositories"][repo]["lane"] = lane
-    data.setdefault("_meta", {})["updated_at"] = time.strftime("%Y-%m-%dT%H:%M:%S")
-    _atomic_write_text(p, yaml.safe_dump(data, allow_unicode=True, sort_keys=True))
-
-
-def _replace_toplevel_block(text: str, key: str, new_block: str) -> str:
-    """替换 YAML 顶层键的整块内容（到下一个顶层键或 EOF），其余文本原样保留。"""
-    import re
-    pattern = re.compile(rf"(?ms)^{re.escape(key)}:[ \t]*\n(?:[ \t]+.*\n?)*")
-    if not pattern.search(text):
-        # 块不存在 → 追加到末尾
-        return text.rstrip("\n") + "\n\n" + new_block
-    return pattern.sub(new_block.replace("\\", "\\\\"), text, count=1)
-
-
-def _set_routing(root: Path, mode: str, primary: str, fallback: str) -> None:
-    """更新 configs/v2.yaml 的 routing 块：解析→改值→整块重渲染（流式），注释会丢
-    routing 块内的行注（可接受：语义由本函数与测试保证），其余注释原样保留。
-
-    fallback="" 渲染成带引号的 `""`：裸 `fallback: ` 会被 safe_load 读回 None。
-    路由层把 falsy fallback 都视为"无兜底"，None 碰巧行为一致，但写进去的类型
-    读回来变了属于静默变形，显式引号防患。
-    """
-    p = root / "configs" / "v2.yaml"
-    data = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
-    routing = data.get("routing") or {}
-    routing[mode] = {"primary": primary, "fallback": fallback}
-    lines = ["routing:"]
-    for m in ("scan", "reproduce", "repair", "review", "ci"):
-        e = routing.get(m) or {"primary": "modal", "fallback": "actions"}
-        fb = e.get("fallback") or '""'
-        lines.append(f"  {m}:      {{primary: {e['primary']},   fallback: {fb}}}")
-    _atomic_write_text(p, _replace_toplevel_block(
-        p.read_text(encoding="utf-8"), "routing", "\n".join(lines) + "\n"))
-
-
-def _set_feature(root: Path, key: str, value: bool) -> None:
-    p = root / "configs" / "v2.yaml"
-    data = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
-    features = data.get("features") or {}
-    features[key] = value
-    lines = ["features:"]
-    for k in VALID_FEATURES:
-        lines.append(f"  {k}: {str(features.get(k, False)).lower()}")
-    _atomic_write_text(p, _replace_toplevel_block(
-        p.read_text(encoding="utf-8"), "features", "\n".join(lines) + "\n"))
-
-
-def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
+def create_app(root: Path | None = None, gh_runner=None,
                auth_enabled: bool = True, password: str | None = None) -> FastAPI:
     root = Path(root) if root else Path(
         os.environ.get("OSSCOUT_DASHBOARD_ROOT", PROJECT_ROOT))
-    app = FastAPI(title="oss-scout Dashboard", docs_url=None, redoc_url=None)
+    app = FastAPI(title="oss-scout Controller", openapi_url=None)
 
 
     def _load_candidate(root_path: Path, key: str) -> dict | None:
@@ -324,10 +166,6 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
         except Exception:  # noqa: BLE001
             pass
         return None
-
-    # 看板公网入口（飞书通知按钮跳转用）
-    DASHBOARD_URL = (os.environ.get("DASHBOARD_PUBLIC_URL")
-                     or "https://oss.wangshun.work").rstrip("/")
 
     # ---- 修复派发器（ingest 与轮询共用）----
     # pipeline 是长任务（几十分钟），不能让 HTTP 请求或轮询等它：
@@ -400,9 +238,8 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
             _audit(root, "pr_event_error", key, str(exc)[:200])
             return {}
 
-    def _dispatch(keys: list[str] | None = None, limit: int = 8, *, rescreen: bool = False,
-                  just_screened: str | None = None) -> list[str]:
-        """派发候选去修复。keys 为空时从队列按 AI 判定挑。
+    def _dispatch(*, rescreen: bool = False, just_screened: str | None = None) -> list[str]:
+        """派发候选去修复。
 
         返回本次新派发的 key 列表。不阻塞：线程启动即返回。
 
@@ -482,7 +319,7 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
                     # 名额未满就当场修，满了 drain 内部自动标 staged 留到
                     # 次日凌晨批量取。这条循环独立于 PR 监控（后者每 15min
                     # 且要扫 30+ 个 PR 的所有端点，会把候选消费挤到几小时一次）。
-                    _dispatch(keys=None)
+                    _dispatch()
                     _t.sleep(interval)
                 except Exception as e:  # noqa: BLE001 — 永不因单次异常停摆
                     try:
@@ -677,19 +514,14 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
         def _loop():
             while True:
                 try:
-                    out = D.cloudflare_pull(ds)
-                    if "error" not in out:
-                        (root / "state" / "cloudflare_last_pull.json").write_text(
-                            json.dumps({"at": _t.strftime("%Y-%m-%dT%H:%M:%S"),
-                                        "out": out}, ensure_ascii=False),
-                            encoding="utf-8")
+                    D.cloudflare_pull(ds)
                 except Exception:  # noqa: BLE001
                     pass
                 # 默认 300s = 288 次 list/天，占 list 配额不到三成
                 _t.sleep(D.cf_pull_seconds(ds))
         _th.Thread(target=_loop, daemon=True).start()
 
-    ds = D.DataSource(root, gh_runner=gh_runner, modal_runner=modal_runner)
+    ds = D.DataSource(root, gh_runner=gh_runner)
 
     def _reap_orphan_claim():
         from scout_v2.state_store import queue_transaction, ClaimLedger
@@ -722,166 +554,48 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
     app.state.root = root
     secret = _secret(root)
     passwd = password or _dashboard_password(root)
-    app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
-
-    tpl = Jinja2Templates(directory=str(templates_dir))
-    tpl.env.filters["mask"] = D.mask
-    app.state.templates = tpl
-
-    def render(request: Request, name: str, ctx: dict, status_code: int = 200):
-        ctx.setdefault("request", request)
-        return tpl.TemplateResponse(request, name, ctx, status_code=status_code)
-
-    # ---------------- 认证 ----------------
-    # /api/ingest/ 与 /api/pr/reply/fix-result 都用 X-Ingest-Token 自校验
-    # （分别是 Worker→看板、pr-fix workflow→看板 的机对机通道），不走会话
-    # 认证。fix-result 不加进来的后果：workflow 回调 401，修复状态永远
-    # 回不到看板和飞书（2026-11-04 实录）。
-    PUBLIC_PATHS = ("/login", "/static", "/favicon.ico", "/api/ingest/",
-                    "/api/pr/reply/fix-result", "/feishu/callback")
 
     @app.middleware("http")
     async def auth_middleware(request: Request, call_next):
         path = request.url.path
-        if not auth_enabled or any(path.startswith(p) for p in PUBLIC_PATHS):
+        admin_route = path.startswith("/api/") or path == "/logout"
+        machine_route = path.startswith("/api/ingest/") or path == "/api/pr/reply/fix-result"
+        if not auth_enabled or not admin_route or machine_route:
             return await call_next(request)
         token = request.cookies.get(SESSION_COOKIE, "")
         if _check_session(secret, token):
             return await call_next(request)
-        if path.startswith("/api/"):
-            return JSONResponse({"detail": "unauthenticated"}, status_code=401)
-        url = f"/login?next={path}"
-        return RedirectResponse(url, status_code=303)
+        return JSONResponse({"detail": "unauthenticated"}, status_code=401)
 
-    @app.get("/login", response_class=HTMLResponse, name="login_page")
-    def login_page(request: Request, next: str = "/"):
-        return render(request, "login.html", {"next": next, "error": ""})
+    @app.get("/healthz")
+    def health():
+        return {"ok": True}
 
     @app.post("/login")
-    def login(request: Request, next: str = Form("/"), password: str = Form("")):
-        if not hmac.compare_digest(password, passwd):
+    def login(body: dict):
+        supplied = body.get("password")
+        if not isinstance(supplied, str) or not hmac.compare_digest(supplied.encode(), passwd.encode()):
             time.sleep(1.0)  # 简单防爆破
-            return render(request, "login.html",
-                          {"next": next, "error": "密码错误"}, status_code=401)
-        resp = RedirectResponse(next or "/", status_code=303)
+            return JSONResponse({"detail": "密码错误"}, status_code=401)
+        resp = JSONResponse({"ok": True})
         resp.set_cookie(SESSION_COOKIE, _make_session(secret),
                         max_age=SESSION_TTL, httponly=True, samesite="lax")
-        _audit(root, "login", "web-ui", "login ok")
+        _audit(root, "login", "admin-api", "login ok")
         return resp
 
     @app.post("/logout")
     def logout():
-        resp = RedirectResponse("/login", status_code=303)
+        resp = JSONResponse({"ok": True})
         resp.delete_cookie(SESSION_COOKIE)
         return resp
 
-    # ---------------- 受审计的写端点（登录后可用） ----------------
-    @app.post("/api/policies/lane")
-    def api_set_lane(request: Request, repo: str = Form(...), lane: str = Form(...)):
-        if lane not in VALID_LANES:
-            return JSONResponse({"detail": f"lane must be one of {VALID_LANES}"},
-                                status_code=400)
-        try:
-            _set_lane(root, repo, lane)
-        except Exception as e:  # noqa: BLE001
-            return JSONResponse({"detail": str(e)[:200]}, status_code=500)
-        result = f"lane={lane} written to lane_overrides (PolicyEngine merges on next load)"
-        _audit(root, "set_lane", repo, result)
-        return RedirectResponse("/policies", status_code=303)
-
-    @app.post("/api/routing")
-    def api_set_routing(request: Request, mode: str = Form(...),
-                        primary: str = Form(...),
-                        fallback: str = Form("")):
-        # fallback 默认 ""：分工独占后空串是常态（FastAPI 对 Form("") 的空表单
-        # 值也正常收，这里显式给默认只是兼容老的看板表单不传该字段的情况）。
-        if mode not in VALID_MODES:
-            return JSONResponse({"detail": f"mode must be one of {VALID_MODES}"},
-                                status_code=400)
-        if primary not in VALID_BACKENDS or fallback not in VALID_BACKENDS:
-            return JSONResponse({"detail": f"backends must be {VALID_BACKENDS}"},
-                                status_code=400)
-        try:
-            _set_routing(root, mode, primary, fallback)
-        except Exception as e:  # noqa: BLE001
-            return JSONResponse({"detail": str(e)[:200]}, status_code=500)
-        result = f"{mode}: primary={primary} fallback={fallback}"
-        _audit(root, "set_routing", mode, result)
-        return RedirectResponse("/quota", status_code=303)
-
-    @app.post("/api/features")
-    def api_set_feature(request: Request, key: str = Form(...), value: str = Form(...)):
-        if key not in VALID_FEATURES:
-            return JSONResponse({"detail": f"key must be one of {VALID_FEATURES}"},
-                                status_code=400)
-        val = value.lower() in ("true", "1", "on")
-        try:
-            _set_feature(root, key, val)
-        except Exception as e:  # noqa: BLE001
-            return JSONResponse({"detail": str(e)[:200]}, status_code=500)
-        result = f"{key}={val}"
-        _audit(root, "set_feature", key, result)
-        return RedirectResponse("/quota", status_code=303)
-
-    @app.post("/api/opencode/check")
-    def api_opencode_check():
-        """点击"检测登录态"：跑一次最小真实模型调用（约 $0.002 订阅额度）。"""
-        from scout_v2.workers.opencode_client import OpenCodeClient
-        from scout_v2.workers.repair import resolve_model
-        try:
-            model = resolve_model()
-        except Exception as e:  # noqa: BLE001
-            return JSONResponse({"ok": False, "detail": f"model resolve: {e}"})
-        try:
-            client = OpenCodeClient(timeout_seconds=120)
-            ok, detail = client.run(model, "Reply with the single word OK and nothing else.")
-        except Exception as e:  # noqa: BLE001
-            ok, detail = False, str(e)[:200]
-        _audit(root, "opencode_check", model, ("ok" if ok else "fail: " + detail[:120]))
-        (root / "state" / "dashboard_opencode_state.json").write_text(
-            json.dumps({"ok": ok, "model": model,
-                        "checked_at": time.strftime("%Y-%m-%dT%H:%M:%S")},
-                       ensure_ascii=False), encoding="utf-8")
-        return JSONResponse({"ok": ok, "model": model, "detail": detail[:200]})
-
-    @app.post("/api/opencode/logout")
-    def api_opencode_logout():
-        """登录态正常时显示：退出 OpenCode CLI 登录（opencode providers logout）。"""
-        import subprocess as sp
-        p = sp.run(["opencode", "providers", "logout"], capture_output=True,
-                   text=True, encoding="utf-8", errors="replace", timeout=60)
-        ok = p.returncode == 0
-        detail = (p.stdout or p.stderr or "").strip()[:200]
-        _audit(root, "opencode_logout", "opencode-go", ("ok" if ok else "fail: " + detail))
-        (root / "state" / "dashboard_opencode_state.json").write_text(
-            json.dumps({"ok": False, "model": "",
-                        "checked_at": time.strftime("%Y-%m-%dT%H:%M:%S")},
-                       ensure_ascii=False), encoding="utf-8")
-        return JSONResponse({"ok": ok, "detail": detail})
-
-    # ---------------- 1. 总览 ----------------
-    @app.get("/", response_class=HTMLResponse)
-    def overview(request: Request):
-        o = ds.overview()
-        return render(request, "overview.html",
-                      {"o": o, "recent": o["recent_worklog"], "active": "/"})
-
-    @app.get("/console-demo", include_in_schema=False)
-    @app.get("/console")
-    def console_demo():
-        return FileResponse(templates_dir / "oss-scout-console-demo.html", media_type="text/html")
-
-    @app.get("/api/console-demo/activity")
-    def console_demo_activity():
-        from .console_activity import snapshot
-        return JSONResponse(snapshot(ds), headers={"Cache-Control": "no-store"})
-
+    @app.get("/")
     @app.get("/console/pr-table")
     def console_pr_table():
         from scout_v2.feishu_bitable import pr_table_url
         url = pr_table_url(root)
         if not url:
-            return HTMLResponse("现有 PR 记录表还没有绑定。", status_code=503)
+            return JSONResponse({"detail": "现有 PR 记录表还没有绑定。"}, status_code=503)
         return RedirectResponse(url, status_code=303)
 
     @app.post("/api/console/schedule")
@@ -946,234 +660,6 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
         _audit(root, "console_models", "providers", "settings updated")
         return {"ok": True}
 
-    @app.get("/fragment/overview-cards", response_class=HTMLResponse)
-    def overview_cards(request: Request):
-        """HTMX 每 20s 轮询的关键卡片片段。"""
-        return render(request, "_overview_cards.html", {"o": ds.overview()})
-
-    @app.get("/fragment/overview-worklog", response_class=HTMLResponse)
-    def overview_worklog(request: Request):
-        o = ds.overview()
-        return render(request, "_worklog_recent.html",
-                      {"recent": o["recent_worklog"]})
-
-    # ---------------- 2. 候选池 ----------------
-    @app.get("/candidates", response_class=HTMLResponse)
-    def candidates(request: Request, q: str = "", lane: str = "", class_: str = Query("", alias="class"),
-                   status: str = "", repo: str = ""):
-        items = ds.filter_candidates(ds.candidates(), q=q, lane=lane, cls=class_,
-                                     status=status, repo=repo)
-        return render(request, "candidates.html", {
-            "items": items, "total": len(ds.candidates()),
-            "q": q, "lane": lane, "class_": class_, "status": status, "repo": repo,
-            "statuses": sorted({str(c.get("status", "")) for c in ds.candidates().values()}),
-            "repos": sorted({c.get("repo", "") for c in ds.candidates().values()}),
-            "bug_jobs": D.bug_lane_jobs(ds),
-            "quote_key": ds.quote_key, "active": "/candidates",
-        })
-
-    @app.get("/candidates/{key:path}/detail", response_class=HTMLResponse)
-    def candidate_detail(request: Request, key: str):
-        c = ds.candidate(key)
-        if c is None:
-            return HTMLResponse("<td colspan='9' class='muted'>候选不存在</td>", status_code=404)
-        return render(request, "_candidate_detail.html", {"c": c, "key": key})
-
-    # ---------------- 3. 任务中心 ----------------
-    @app.get("/jobs", response_class=HTMLResponse)
-    def jobs(request: Request):
-        return render(request, "jobs.html", {
-            "jobs": ds.jobs(), "active": "/jobs",
-        })
-
-    @app.get("/jobs/{job_id}", response_class=HTMLResponse)
-    def job_detail(request: Request, job_id: str):
-        j = ds.job(job_id)
-        if j is None:
-            return render(request, "job_detail.html", {"job": None, "artifact": None,
-                                                       "active": "/jobs"}, status_code=404)
-        artifact = None
-        payload = j.get("payload") or {}
-        art_dir = str(payload.get("artifact_dir") or payload.get("artifacts_dir") or "")
-        if art_dir and (ds.root / "artifacts" / art_dir).is_dir():
-            art = next((a for a in ds.artifacts() if a["name"] == art_dir), None)
-            artifact = art
-        return render(request, "job_detail.html", {"job": j, "artifact": artifact,
-                                                   "active": "/jobs"})
-
-    # ---------------- 4. PR 管理 ----------------
-    @app.get("/prs", response_class=HTMLResponse)
-    def prs(request: Request):
-        import datetime as dt
-        repos = ds.own_repos()
-        repo_prs: list[dict] = []
-        any_unknown = not repos
-        now = dt.datetime.now(dt.timezone.utc)
-        for repo in repos:
-            pr_list = ds.pr_list(repo)
-            if pr_list is None:
-                any_unknown = True
-                repo_prs.append({"repo": repo, "prs": None})
-                continue
-            for pr in pr_list:
-                created_raw = pr.get("createdAt")
-                deadline_left = None
-                if created_raw:
-                    try:
-                        created = dt.datetime.fromisoformat(
-                            str(created_raw).replace("Z", "+00:00"))
-                        deadline = created + dt.timedelta(hours=48)
-                        delta = deadline - now
-                        deadline_left = delta.total_seconds() / 3600.0
-                    except ValueError:
-                        deadline_left = None
-                comments = pr.get("comments") or []
-                rollup = pr.get("statusCheckRollup") or []
-                conclusions = []
-                for item in rollup:
-                    if isinstance(item, dict):
-                        conclusions.append((item.get("conclusion")
-                                            or item.get("status") or "").upper())
-                if not rollup:
-                    ci = "—"
-                elif all(c in ("SUCCESS", "NEUTRAL", "SKIPPED") for c in conclusions):
-                    ci = "通过"
-                elif any(c in ("FAILURE", "CANCELLED", "TIMED_OUT") for c in conclusions):
-                    ci = "失败"
-                else:
-                    ci = "进行中"
-                pr["_repo"] = repo
-                pr["_deadline_left_h"] = deadline_left
-                pr["_has_review"] = bool(pr.get("reviews") or comments)
-                pr["_ci"] = ci
-            repo_prs.append({"repo": repo, "prs": pr_list})
-        external = ds.my_external_prs(limit=50)
-        if external is None:
-            any_unknown = True
-        my_login = ds.me_login()
-
-        # AI 起草的回复队列：只有 status=draft 的才展示（sent/dismissed 不再打扰）。
-        # 起草是自动的，**发送永远是人审后点击**——对外文字零自动化。
-        pending_replies: list[dict] = []
-        rp = root / "state" / "pr_replies.json"
-        try:
-            replies = json.loads(rp.read_text(encoding="utf-8"))
-            for key, r in replies.items():
-                if r.get("status") != "draft":
-                    continue
-                repo_part, _, num_part = key.rpartition("#")
-                pending_replies.append({**r, "key": key, "repo": repo_part,
-                                        "number": num_part})
-        except (OSError, json.JSONDecodeError):
-            pass
-
-        return render(request, "prs.html", {
-            "repo_prs": repo_prs, "any_unknown": any_unknown,
-            "external_prs": external, "my_login": my_login,
-            "merge_history": ds.merge_history(), "active": "/prs",
-            "pending_replies": pending_replies,
-            "settings": D.dashboard_settings(ds),
-        })
-
-    @app.get("/prs/{repo_slug}/{number}/detail", response_class=HTMLResponse)
-    def pr_detail_fragment(request: Request, repo_slug: str, number: int):
-        """PR 详情片段：完整描述、全部评论、review 意见、改动文件。"""
-        repo = repo_slug.replace("__", "/")
-        detail = ds.pr_detail(repo, number)
-        if detail is None:
-            return HTMLResponse("<p class='muted'>PR 详情获取失败（gh 查询失败或 PR 不存在）</p>",
-                                status_code=404)
-        # 48h 响应期限
-        deadline_h = None
-        created = detail.get("createdAt")
-        if created:
-            try:
-                import datetime as _dt
-                c = _dt.datetime.fromisoformat(str(created).replace("Z", "+00:00"))
-                deadline_h = (c + _dt.timedelta(hours=48)
-                              - _dt.datetime.now(_dt.timezone.utc)).total_seconds() / 3600
-            except ValueError:
-                pass
-        return render(request, "_pr_detail.html", {
-            "pr": detail, "repo": repo, "deadline_h": deadline_h})
-
-    # ---------------- 5. 策略页 ----------------
-    @app.get("/policies", response_class=HTMLResponse)
-    def policies(request: Request):
-        return render(request, "policies.html",
-                      build_policies_ctx(ds) | {"active": "/policies"})
-
-    # ---------------- 6. 额度页 ----------------
-    @app.get("/quota", response_class=HTMLResponse)
-    def quota(request: Request):
-        modal = ds.modal_usage()
-        actions = None
-        repos = ds.own_repos()
-        if repos:
-            actions = ds.actions_runs(repos[0])
-        v2 = {}
-        vp = root / "configs" / "v2.yaml"
-        if vp.exists():
-            v2 = yaml.safe_load(vp.read_text(encoding="utf-8")) or {}
-        return render(request, "quota.html", {
-            "modal": modal,
-            "measured_cost": ds.measured_cost_total(),
-            "actions": actions,
-            "actions_repo": repos[0] if repos else None,
-            "opencode": ds.opencode_stats(),
-            "routing": (v2.get("routing") or {}),
-            "features": (v2.get("features") or {}),
-            "oc_logged_in": _go_login_state(),
-            "go_models": _go_models_cached(root),
-            "scorer_cfg": (yaml.safe_load((root / "configs" / "scorer.yaml").read_text(
-                encoding="utf-8")) or {}) if (root / "configs" / "scorer.yaml").exists()
-                else {"model": "deepseek-v4.1-flash"},
-            "cf": D.cloudflare_cfg(ds),
-            "last_pull": D.cloudflare_last_pull(ds),
-            "settings": D.dashboard_settings(ds),
-            "active": "/quota",
-        })
-
-    # ---------------- 7. 日志页 ----------------
-    @app.get("/logs", response_class=HTMLResponse)
-    def logs(request: Request, page: int = 1, action: str = "", error: str = ""):
-        records = list(reversed(ds.worklog()))
-        if action:
-            records = [r for r in records if action.lower() in str(r.get("action", "")).lower()]
-        if error == "1":
-            def _is_err(r):
-                blob = (str(r.get("result", "")) + " " + str(r.get("detail", ""))).lower()
-                return any(k in blob for k in ("fail", "error", "403", "blocker"))
-            records = [r for r in records if _is_err(r)]
-        per_page = 50
-        total = len(records)
-        pages = max(1, (total + per_page - 1) // per_page)
-        page = max(1, min(page, pages))
-        chunk = records[(page - 1) * per_page: page * per_page]
-        return render(request, "logs.html", {
-            "records": chunk, "page": page, "pages": pages, "total": total,
-            "action": action, "error": error,
-            "runs_files": ds.runs_files(), "active": "/logs",
-        })
-
-    @app.get("/logs/view", response_class=HTMLResponse)
-    def logs_view(request: Request, name: str = ""):
-        try:
-            text = ds.runs_read(name)
-        except (ValueError, OSError):
-            return HTMLResponse("<p class='muted'>非法文件名或文件不存在</p>", status_code=400)
-        return render(request, "log_view.html", {"name": name, "text": D.mask(text),
-                                                 "active": "/logs"})
-
-    # ---------------- artifact 文件查看 ----------------
-    @app.get("/artifacts/{name}/{filename}", response_class=HTMLResponse)
-    def artifact_view(request: Request, name: str, filename: str):
-        hit = ds.artifact_file(name, filename)
-        if hit is None:
-            return HTMLResponse("<p class='muted'>文件不存在或路径非法</p>", status_code=404)
-        return render(request, "log_view.html", {"name": f"artifacts/{name}/{hit[0]}",
-                                                 "text": D.mask(hit[1]), "active": "/logs"})
-
     @app.get("/api/opencode/models")
     def api_opencode_models():
         from scout_v2.workers.issue_scorer import GoClient, load_scorer_config
@@ -1186,59 +672,6 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
                              "logged_in": bool(models),
                              "current": cfg.get("model", "deepseek-v4.1-flash")})
 
-    @app.post("/api/opencode/model")
-    def api_opencode_model(request: Request, model: str = Form(...)):
-        from scout_v2.workers.issue_scorer import DEFAULT_MODEL
-        if not model or "/" in model or model not in _go_models_cached(root):
-            return JSONResponse({"detail": "unknown model"}, status_code=400)
-        p = root / "configs" / "scorer.yaml"
-        cfg = {}
-        if p.exists():
-            cfg = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
-        cfg["model"] = model or DEFAULT_MODEL
-        _atomic_write_text(p, yaml.safe_dump(cfg, allow_unicode=True, sort_keys=True))
-        _audit(root, "set_scorer_model", model, "scorer.yaml updated")
-        return RedirectResponse("/quota", status_code=303)
-
-    def _go_login_state() -> bool:
-        from scout_v2.workers.issue_scorer import GoClient, load_scorer_config
-        cfg = load_scorer_config(root)
-        if not cfg.get("api_key"):
-            return False
-        base_url = cfg.get("base_url")
-        def _probe():
-            return GoClient(key=cfg["api_key"], model=cfg.get("model", "deepseek-v4.1-flash"),
-                            base_url=base_url).list_models()
-        return bool(D.DataSource._cached(ds, f"go_login:{base_url}", 300.0, _probe))
-
-    def _go_models_cached(rt: Path) -> list:
-        cacher = app.state.ds
-        from scout_v2.workers.issue_scorer import GoClient, load_scorer_config
-        cfg = load_scorer_config(rt)
-        if not cfg.get("api_key"):
-            return []
-        base_url = cfg.get("base_url")
-        def _fetch():
-            return GoClient(key=cfg["api_key"],
-                            model=cfg.get("model", "deepseek-v4.1-flash"), base_url=base_url).list_models()
-        return D.DataSource._cached(cacher, f"go_models:{base_url}", 600.0, _fetch) or []
-
-    @app.post("/api/cloudflare/config")
-    def api_cloudflare_config(request: Request, api_token: str = Form(""),
-                              account_id: str = Form(""),
-                              kv_namespace_id: str = Form(""),
-                              repos: str = Form("")):
-        cfg = {"api_token": api_token.strip(),
-               "account_id": account_id.strip(),
-               "kv_namespace_id": kv_namespace_id.strip(),
-               "repos": [r.strip() for r in repos.replace(",", "\n").split() if r.strip()],
-               "updated_at": time.strftime("%Y-%m-%dT%H:%M:%S")}
-        _atomic_write_text(root / "configs" / "cloudflare.yaml",
-                           yaml.safe_dump(cfg, allow_unicode=True, sort_keys=True))
-        _audit(root, "cloudflare_config", "configs/cloudflare.yaml",
-               f"repos={len(cfg['repos'])} token_set={bool(cfg['api_token'])}")
-        return RedirectResponse("/quota", status_code=303)
-
     @app.get("/api/pipeline/preview")
     def api_pipeline_preview():
         from scout_v2.workers.auto_pipeline import drain_ai_graded
@@ -1247,16 +680,6 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
     @app.post("/api/pipeline/run")
     def api_pipeline_run(request: Request):
         return JSONResponse({"dispatched": _dispatch(rescreen=True)})
-
-    @app.get("/api/pr/replies")
-    def api_pr_replies():
-        """看板拉草稿列表。status: draft=待人审, sent=已发出, dismissed=放弃。"""
-        p = root / "state" / "pr_replies.json"
-        try:
-            data = json.loads(p.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            data = {}
-        return JSONResponse({"replies": data})
 
     def _post_pr_comment(repo: str, number: int, body: str,
                          kind: str = "issue",
@@ -1404,36 +827,6 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
         """手动触发一次多维表格全量同步。"""
         return JSONResponse(_sync_bitables(root, ds=ds))
 
-    @app.post("/api/pr/reply/send")
-    def api_pr_reply_send(request: Request, repo: str = Form(""),
-                          number: int = Form(0), body: str = Form("")):
-        """发送一条已确认的回复。人是最后一道审——端点只接受看板上改过的文本。"""
-        repo = repo.strip()[:120]
-        body = body.strip()[:2000]
-        if not repo or not number or not body:
-            return JSONResponse({"detail": "repo/number/body required"}, status_code=400)
-        # 行内/行外由落库的来源决定（草稿生成时记录），表单不传就从 state 读
-        try:
-            stored = json.loads((root / "state" / "pr_replies.json")
-                                .read_text(encoding="utf-8")).get(
-                f"{repo}#{number}") or {}
-        except (OSError, json.JSONDecodeError):
-            stored = {}
-        kind = str(stored.get("source_kind") or "issue")
-        cid = stored.get("source_comment_id")
-        ok, detail = _post_pr_comment(repo, number, body,
-                                      kind=kind, comment_id=cid)
-        if not ok:
-            _audit(root, "pr_reply_send_failed", f"{repo}#{number}", detail)
-            return JSONResponse({"detail": detail or "gh failed"}, status_code=502)
-        _mark_reply(f"{repo}#{number}", "sent", sent_body=body,
-                    sent_at=time.strftime("%Y-%m-%dT%H:%M:%S"),
-                    sent_kind=kind if kind == "inline" else "issue",
-                    sent_comment_id=str(cid) if cid else None)
-        _audit(root, "pr_reply_sent", f"{repo}#{number}",
-               f"kind={kind} " + body[:160])
-        return JSONResponse({"ok": True})
-
     # ---------------- 飞书卡片回调（卡片里一键发送） ----------------
 
     @app.post("/feishu/callback")
@@ -1444,7 +837,6 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
         表单提交（form_submit）解析编辑后的 reply_text，以本账号发到 GitHub，
         并把草稿标记为 sent。verification token 用于校验请求确实来自飞书。
         """
-        import sys as _sys
         try:
             body = json.loads((await request.body()) or b"{}")
         except Exception:  # noqa: BLE001
@@ -1605,26 +997,6 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
             "toast": {"type": "success", "content": "已发送 ✓"},
             "card": {"type": "raw", "data": sent_card},
         })
-
-    @app.post("/api/pr/reply/dismiss")
-    def api_pr_reply_dismiss(request: Request, repo: str = Form(...),
-                             number: int = Form(...)):
-        """放弃草稿（人工决定不回或自己回了）。"""
-        _mark_reply_key = f"{repo}#{number}"
-        rp = root / "state" / "pr_replies.json"
-        try:
-            replies = json.loads(rp.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            replies = {}
-        key = f"{repo}#{number}"
-        if key in replies:
-            replies[key]["status"] = "dismissed"
-            tmp = rp.with_suffix(".json.tmp")
-            tmp.write_text(json.dumps(replies, ensure_ascii=False, indent=1),
-                           encoding="utf-8")
-            os.replace(tmp, rp)
-        _audit(root, "pr_reply_dismissed", key, "")
-        return JSONResponse({"ok": True})
 
     # ---------------- Cloudflare Worker 直推入口（KV 免费额度不够时的主通道） ----------------
     @app.post("/api/ingest/issues")
@@ -1794,141 +1166,13 @@ def create_app(root: Path | None = None, gh_runner=None, modal_runner=None,
                              list(seen.values())[-3:]))
         return JSONResponse({"received": len(raw), "new": fresh})
 
-    @app.post("/api/dashboard/settings")
-    def api_dashboard_settings(request: Request,
-                               cf_pull_seconds: int = Form(300),
-                               pr_refresh_seconds: int = Form(120),
-                               gh_cache_ttl: int = Form(300)):
-        cfg = {**D.dashboard_settings(ds), "cf_pull_seconds": max(300, min(3600, cf_pull_seconds)),
-               "pr_refresh_seconds": max(30, min(3600, pr_refresh_seconds)),
-               "gh_cache_ttl": max(30, min(3600, gh_cache_ttl)),
-               "updated_at": time.strftime("%Y-%m-%dT%H:%M:%S")}
-        _atomic_write_text(root / "configs" / "dashboard.yaml",
-                           yaml.safe_dump(cfg, allow_unicode=True, sort_keys=True))
-        _audit(root, "dashboard_settings", "configs/dashboard.yaml",
-               f"pull={cfg['cf_pull_seconds']}s pr={cfg['pr_refresh_seconds']}s ttl={cfg['gh_cache_ttl']}s")
-        return RedirectResponse("/quota", status_code=303)
-
-    @app.post("/api/health/refresh")
-    def api_health_refresh():
-        """重跑 health_check.py（读仓库生态 + CONTRIBUTING 政策闸），后台线程执行。"""
-        import threading as _th
-
-        def _run():
-            import subprocess as _sp
-            try:
-                log_dir = root / "state" / "runs"
-                log_dir.mkdir(parents=True, exist_ok=True)
-                out = log_dir / f"health_{time.strftime('%Y%m%d_%H%M')}_manual.log"
-                with out.open("w", encoding="utf-8") as fh:
-                    _sp.run([sys.executable, "health_check.py"], cwd=str(root),
-                            stdout=fh, stderr=_sp.STDOUT, timeout=1800,
-                            env={**__import__("os").environ,
-                                 "OSSCOUT_HEALTH_ROOT": str(root)})
-                _audit(root, "health_refresh", "health_check.py",
-                       f"done -> {out.name}")
-            except Exception as e:  # noqa: BLE001
-                _audit(root, "health_refresh", "health_check.py", f"fail: {str(e)[:150]}")
-
-        _th.Thread(target=_run, daemon=True).start()
-        _audit(root, "health_refresh_requested", "health_check.py", "background started")
-        return RedirectResponse("/quota", status_code=303)
-
     @app.post("/api/cloudflare/pull")
     def api_cloudflare_pull():
         out = D.cloudflare_pull(ds)
-        (root / "state" / "cloudflare_last_pull.json").write_text(
-            json.dumps({"at": time.strftime("%Y-%m-%dT%H:%M:%S"), "out": out},
-                       ensure_ascii=False), encoding="utf-8")
         _audit(root, "cloudflare_pull", "kv", json.dumps(out, ensure_ascii=False)[:150])
         return JSONResponse(out)
 
-    # ---------------- 未注册路径兜底 ----------------
-    @app.get("/{rest:path}")
-    def get_fallback(rest: str):
-        return JSONResponse({"detail": "not found"}, status_code=404)
-
-    @app.post("/{rest:path}")
-    @app.put("/{rest:path}")
-    @app.delete("/{rest:path}")
-    def no_writes(rest: str):
-        return JSONResponse({"detail": "unknown write endpoint"}, status_code=501)
-
     return app
-
-
-# ---------------- 策略页构建 ----------------
-
-LANE_RULES = {
-    "open": {
-        "allow": ["直接认领（每业务日至多 1 个）", "最小修复 + 回归测试后直接开 PR"],
-        "deny": ["永不 force-push / 合并上游 / 跳过 CI", "龄 <2h 的新鲜 issue 战略放弃"],
-    },
-    "gated": {
-        "allow": ["发分析评论对齐方案（无求指派字眼）", "等 maintainer 指派后再实现"],
-        "deny": ["禁止直接开 PR", "禁止 'please assign me' 类评论", "禁止 force-push / 合并上游"],
-    },
-    "restricted": {
-        "allow": ["只消费 maintainer_confirm 或 help wanted 的候选"],
-        "deny": ["其余候选一律不认领", "PR 必须带测试（CONTRIBUTING checklist）"],
-    },
-    "observe": {
-        "allow": ["仅发现与监控"],
-        "deny": ["任何 GitHub 写动作"],
-    },
-}
-
-
-def build_policies_ctx(ds: D.DataSource) -> dict:
-    repo_yaml = ds.repositories_yaml().get("repositories") or {}
-    cfg = ds.config_json()
-    health, health_expired = ds.health()
-    health_repos = (health or {}).get("repos") or {}
-
-    pool_of: dict[str, str] = {}
-    extra: dict[str, dict] = {}
-    for pool_key, lane in (("open_pool", "open"), ("gated_pool", "gated"),
-                           ("restricted_pool", "restricted"), ("observe_only", "observe")):
-        for item in cfg.get(pool_key) or []:
-            if isinstance(item, str):
-                pool_of[item] = lane
-            else:
-                pool_of[item.get("repo", "")] = lane
-                extra[item.get("repo", "")] = item
-
-    rows = []
-    all_repos = sorted(set(repo_yaml) | set(pool_of))
-    for repo in all_repos:
-        y = repo_yaml.get(repo) or {}
-        lane = y.get("lane", "")
-        pool_lane = pool_of.get(repo)
-        conflict = bool(pool_lane and lane and pool_lane != lane)
-        missing = (not lane) or (not pool_lane)
-        rules = LANE_RULES.get(lane or pool_lane or "", {
-            "allow": [], "deny": ["lane 未知 → hold_for_review（fail-closed）"]})
-        h = health_repos.get(repo)
-        if h is None:
-            health_note, health_warn = "health 无记录", True
-        else:
-            flags = ", ".join((h.get("policy") or {}).get("flags") or []) or "none"
-            advisory = h.get("lane_advisory", "?")
-            health_note = f"flags: {flags} · advisory: {advisory}"
-            health_warn = bool(advisory != lane)
-        if health_expired:
-            health_note += f" · health 过期（{ds.health_date()}），待重跑"
-        rows.append({
-            "repo": repo, "lane": lane or pool_lane or "?",
-            "yaml_lane": lane, "pool_lane": pool_lane,
-            "pr_rules": y.get("pr_rules") or extra.get(repo, {}).get("pr_rules") or [],
-            "notes": extra.get(repo, {}).get("notes", ""),
-            "gate": extra.get(repo, {}).get("gate", ""),
-            "only": y.get("only") or extra.get(repo, {}).get("only", ""),
-            "allow": rules["allow"], "deny": rules["deny"],
-            "conflict": conflict, "missing": missing,
-            "health_note": health_note, "health_warn": health_warn,
-            "internal": bool(y.get("internal_test_repo")),
-        })
-    return {"rows": rows, "health_expired": health_expired, "health_date": ds.health_date()}
 
 
 app = create_app()

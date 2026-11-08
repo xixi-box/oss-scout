@@ -23,11 +23,6 @@ from pathlib import Path
 _LAST_SENT = 0.0
 _COOLDOWN_S = 5.0
 
-# 看板公网入口（飞书卡片按钮跳转用）。可用环境变量覆盖。
-DASHBOARD_URL = (os.environ.get("DASHBOARD_PUBLIC_URL")
-                 or "https://oss.wangshun.work").rstrip("/")
-
-
 def _webhook_url() -> str:
     url = (os.environ.get("FEISHU_WEBHOOK_URL") or "").strip()
     if url:

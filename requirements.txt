@@ -1,8 +1,6 @@
 fastapi
 uvicorn
-jinja2
 pyyaml
-python-multipart
 tenacity
 pytest
 modal
