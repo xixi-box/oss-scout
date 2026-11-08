@@ -40,6 +40,11 @@ def sync_model_settings(root: Path, model_lock, settings_url: str) -> str:
         statuses = {}
         for label, key in SETTINGS.items():
             entered = (records.get(label, {}).get("fields") or {}).get("修改为")
+            if key == "codiv_base":
+                if isinstance(entered, list) and len(entered) == 1:
+                    entered = entered[0]
+                if isinstance(entered, dict):
+                    entered = entered.get("link")
             value = entered.strip() if isinstance(entered, str) else ""
             if not value:
                 applied.pop(key, None)

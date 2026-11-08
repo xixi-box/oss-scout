@@ -473,6 +473,9 @@ def test_feishu_model_settings_applies_edits_without_exporting_keys(tmp_path, mo
     assert model["应用状态"] == "已应用"
     assert base["当前生效"] == "https://api.codiv.ai"
     assert "codiv.ai" in base["应用状态"]
+    base["修改为"] = [{"type": "url", "text": "Codiv API", "link": "https://api.codiv.ai/"}]
+    fm.sync_model_settings(tmp_path, lock, secure_url)
+    assert base["应用状态"] == "已应用"
 
     write_models(tmp_path, {**read_models(tmp_path), "codiv_model": "openjev-latest"})
     fm.sync_model_settings(tmp_path, lock, secure_url)
