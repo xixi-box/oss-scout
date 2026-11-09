@@ -122,10 +122,14 @@ def repo_row_to_fields(row: dict) -> dict:
 
 
 def scan_row_to_fields(row: dict) -> dict:
+    from .state_store import STAGED_FULL_REASON
+
     status = row.get("status") or ""
     coarse, fine = row.get("coarse_reason"), row.get("fine_reason")
     if status in {"blocked", "unknown_repo", "too_fresh"}:
-        result, coarse, fine = f"粗筛淘汰 · {coarse}" if coarse else "粗筛淘汰", coarse or "未通过", fine or "未执行"
+        result = f"粗筛淘汰 · {coarse}" if coarse else "粗筛淘汰"
+        fine = (fine or "未执行") if coarse == STAGED_FULL_REASON else "未执行"
+        coarse = coarse or "未通过"
     elif status == "screen_skipped":
         result, coarse, fine = f"已跳过 · {fine}", "通过", "未执行"
     elif status in {"queued", "rejected", "retry"}:
