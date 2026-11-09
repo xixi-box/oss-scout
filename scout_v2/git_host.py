@@ -70,6 +70,17 @@ def _explicit_issue_ref(text: str, number: int, repo: str = "", *, local_ref: bo
     ) is not None
 
 
+ISSUE_CLAIM_MESSAGE = (
+    "I'm working on a fix and a regression test for this issue with OpenCode.\n\n"
+    "<!-- oss-scout-issue-claim -->"
+)
+
+
+def own_issue_claim(comment: dict, author: str = "xixi-box") -> bool:
+    return (str((comment.get("user") or {}).get("login") or "").lower() == author.lower()
+            and str(comment.get("body") or "").strip() == ISSUE_CLAIM_MESSAGE)
+
+
 def gh_read(args: list[str], max_retries: int = 2) -> Any | None:
     """只读 gh api 调用。尊重 Retry-After 语义的退避；失败返回 None。"""
     cmd = ["gh", "api"] + args
@@ -216,7 +227,7 @@ def recheck_candidate(repo: str, number: int, *, my_login: str = "xixi-box",
     if not _is_bot_login(str(((issue.get("user") or {}).get("login")) or "")):
         signals.append((body_text, str(issue.get("author_association") or "")))
     for c in comments:
-        if _is_bot_login(str(((c.get("user") or {}).get("login")) or "")):
+        if own_issue_claim(c, my_login) or _is_bot_login(str(((c.get("user") or {}).get("login")) or "")):
             continue
         signals.append((str(c.get("body") or ""),
                         str(c.get("author_association") or "")))

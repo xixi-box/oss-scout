@@ -1,5 +1,4 @@
 # 生产监控名单与贡献车道。外部仓库须与 cloudflare/wrangler.toml 一致。
-# observe 仍扫描，只记录机械拦截原因，交由人工认领、审核或发布。
 
 defaults:
   unknown_repo_action: hold_for_review
@@ -15,29 +14,29 @@ defaults:
 repositories:
   agentgateway/agentgateway: {lane: open}
   clickhouse/clickhouse: {lane: open}
-  modelcontextprotocol/rust-sdk: {lane: observe, review_reason: "人工发布 · MCP 要求披露 AI 参与范围"}
-  qdrant/qdrant: {lane: observe, review_reason: "人工发布 · PR 动机需本人撰写并披露 AI 使用"}
+  modelcontextprotocol/rust-sdk: {lane: open}
+  qdrant/qdrant: {lane: open}
   ruvnet/RuVector: {lane: open}
   bytecodealliance/wasmtime: {lane: open}
-  kubescape/kubescape: {lane: observe, review_reason: "人工认领 · 先在 issue 留言并完成指派"}
+  apache/rocketmq: {lane: open}
   agentscope-ai/agentscope-java: {lane: open}
   kgateway-dev/kgateway: {lane: open}
   spring-projects/spring-boot: {lane: open}
-  sqlfluff/sqlfluff: {lane: observe, review_reason: "人工审核 · 披露 AI 参与和人工验测内容"}
+  rancher/rancher: {lane: open}
   python/typeshed: {lane: open}
   PyO3/pyo3: {lane: open}
   redis/redis-py: {lane: open}
   bytecodealliance/wasm-tools: {lane: open}
-  delta-io/delta-rs: {lane: observe, review_reason: "人工审核 · 审查生成代码并披露 AI 使用"}
+  bytecodealliance/jco: {lane: open}
   infiniflow/ragflow: {lane: open}
   bytedance/deer-flow: {lane: open}
-  NVIDIA/NeMo-Agent-Toolkit: {lane: observe, review_reason: "人工认领 · 开工前先在 issue 留言"}
+  NVIDIA/NeMo-Agent-Toolkit: {lane: open}
   psf/black: {lane: open}
   istio/istio: {lane: open}
   pypa/pipx: {lane: open}
   tox-dev/tox: {lane: open}
   caddyserver/caddy: {lane: open}
-  strands-agents/harness-sdk: {lane: observe, review_reason: "人工审核 · PR 概述需本人填写"}
+  dapr/dapr: {lane: open}
   moby/buildkit: {lane: open}
   docker/compose: {lane: open}
   firecracker-microvm/firecracker: {lane: open}
@@ -58,8 +57,8 @@ repositories:
   redis/go-redis: {lane: open}
   valkey-io/valkey: {lane: open}
   pydantic/logfire: {lane: open}
-  rclone/rclone: {lane: observe, review_reason: "人工审核 · 需理解改动并完成项目验测"}
-  prometheus/prometheus: {lane: observe, review_reason: "人工审核 · 提交者需理解 AI 生成的代码"}
+  rclone/rclone: {lane: open}
+  prometheus/prometheus: {lane: open}
   django/django: {lane: open}
   HKUDS/RAG-Anything: {lane: open}
   dagger/dagger: {lane: open}

@@ -33,11 +33,15 @@ def verify_feishu_repos(root: Path) -> dict:
 
 
 def inspect(root: Path) -> dict:
+    from scout_v2.repo_policy import PolicyEngine
+
     config = yaml.safe_load((root / "configs/repositories.yaml").read_text(encoding="utf-8"))
     repos = {k: v for k, v in config["repositories"].items() if not v.get("internal")}
+    policy, _ = PolicyEngine.load(root)
     queue = json.loads((root / "queue/candidates.json").read_text(encoding="utf-8"))
     now = business_now()
     result = {"business_time": now.isoformat(), "repositories": len(repos),
+              "automatic_repositories": sum(policy.repo_lane(repo) == "open" for repo in repos),
               "daily_cap": config["defaults"]["max_new_claims_per_business_day"],
               "queue": dict(collections.Counter(e.get("status") for e in queue.values()))}
     for filename, key, query, args in [
@@ -104,6 +108,7 @@ def main() -> int:
     assert result["repositories"] == 50, "repository count changed"
     assert result["daily_cap"] == 5, "daily cap drift"
     if args.screening:
+        assert result["automatic_repositories"] == 50, "repository is not in the automatic lane"
         assert result["screening_probe"]["usable"] is not None, "OpenJev screening probe failed"
     return 0
 

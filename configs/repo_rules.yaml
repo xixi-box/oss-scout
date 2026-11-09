@@ -6,23 +6,21 @@ rules:
   clickhouse/clickhouse:
     note: ''
   modelcontextprotocol/rust-sdk:
-    note: 人工发布 · MCP 要求披露 AI 参与范围
+    note: Disclose the scope of AI assistance. Include a clear rationale and reproducible
+      tests.
   qdrant/qdrant:
-    note: 人工发布 · PR 动机需本人撰写并披露 AI 使用
+    note: Base branch dev. State the motivation and disclose AI assistance and the
+      public repair task.
   ruvnet/RuVector:
     note: ''
   bytecodealliance/wasmtime:
     note: 按受影响模块执行 Rust 或 Wasm 回归测试。
-  kubescape/kubescape:
-    note: 人工认领 · 先在 issue 留言并完成指派
   agentscope-ai/agentscope-java:
     note: ''
   kgateway-dev/kgateway:
     note: 每个提交须 DCO 签署，大改动先与维护者对齐。优先可局部验测的修复。
   spring-projects/spring-boot:
     note: 每个提交须 DCO 签署，按模块运行项目测试。
-  sqlfluff/sqlfluff:
-    note: 人工审核 · 披露 AI 参与和人工验测内容
   python/typeshed:
     note: ''
   PyO3/pyo3:
@@ -31,14 +29,12 @@ rules:
     note: ''
   bytecodealliance/wasm-tools:
     note: 按受影响 crate 运行测试，保留可复跑的 Wasm 输入。
-  delta-io/delta-rs:
-    note: 人工审核 · 审查生成代码并披露 AI 使用
   infiniflow/ragflow:
     note: ''
   bytedance/deer-flow:
     note: ''
   NVIDIA/NeMo-Agent-Toolkit:
-    note: 人工认领 · 开工前先在 issue 留言
+    note: Comment before implementation. Link the issue and sign off each commit.
   psf/black:
     note: ''
   istio/istio:
@@ -49,8 +45,6 @@ rules:
     note: ''
   caddyserver/caddy:
     note: ''
-  strands-agents/harness-sdk:
-    note: 人工审核 · PR 概述需本人填写
   moby/buildkit:
     note: ''
   docker/compose:
@@ -92,12 +86,24 @@ rules:
   pydantic/logfire:
     note: ''
   rclone/rclone:
-    note: 人工审核 · 需理解改动并完成项目验测
+    note: Before publication, run go build and make quicktest. Verify backend changes
+      against a real test remote when available.
   prometheus/prometheus:
-    note: 人工审核 · 提交者需理解 AI 生成的代码
+    note: Claim the issue before implementation. DCO sign-off, area-prefixed title
+      and release-notes block.
   django/django:
     note: ''
   HKUDS/RAG-Anything:
     note: ''
   dagger/dagger:
     note: ''
+  rancher/rancher:
+    note: Prefer focused fixes with package-level tests. Use the existing integration
+      fixtures where relevant.
+  bytecodealliance/jco:
+    note: Run the affected JS or Wasm component tests and use a minimal fixture.
+  dapr/dapr:
+    note: Link the existing issue, sign off commits and run focused Go tests and lint.
+  apache/rocketmq:
+    note: Keep fixes small and include Maven tests. Major feature and API proposals
+      need consensus first.

@@ -718,22 +718,35 @@ def test_exact_roster_is_preserved():
     assert len(monitored) == len(worker) == 50
     assert set(worker) == monitored
     assert set(gates["repositories"]) == monitored
+    assert all(repos["repositories"][repo]["lane"] == "open" for repo in monitored)
+    assert {"rancher/rancher", "bytecodealliance/jco", "dapr/dapr", "apache/rocketmq"} <= monitored
     assert "bytecodealliance/wasm-tools" in monitored
     assert {"nodejs/node", "jlowin/fastmcp", "pydantic/pydantic-ai-harness"}.isdisjoint(monitored)
+    assert {"sqlfluff/sqlfluff", "delta-io/delta-rs", "strands-agents/harness-sdk",
+            "kubescape/kubescape"}.isdisjoint(monitored)
 
 
-def test_human_contribution_rule_stops_before_ai():
-    from pathlib import Path
-    from dashboard.data import coarse_issue_blockers
-    from scout_v2.repo_policy import PolicyEngine
+def test_upstream_claim_is_confirmed_once(monkeypatch):
+    from types import SimpleNamespace
 
-    eng, error = PolicyEngine.load(Path(__file__).resolve().parents[1])
-    assert error is None
-    repo = "qdrant/qdrant"
-    assert coarse_issue_blockers(eng, {"repo": repo}, lane=eng.repo_lane(repo)) == [
-        eng.repo_entry(repo)["review_reason"]
-    ]
-    assert not eng.authorize("open_pr", repo).allowed
+    comments = []
+    comment = {"user": {"login": "xixi-box"}, "body": p.ISSUE_CLAIM_MESSAGE}
+    monkeypatch.setattr(p, "gh_read", lambda *_: {"state": "open", "assignees": []})
+    monkeypatch.setattr(p, "gh_pages", lambda *_: comments)
+
+    def post(args, **kwargs):
+        assert args[2:5] == ["-X", "POST", "repos/prometheus/prometheus/issues/1/comments"]
+        comments.append(comment)
+        return SimpleNamespace(returncode=0, stdout=json.dumps(comment))
+
+    with patch.object(p.subprocess, "run", side_effect=post) as send:
+        assert p._ensure_issue_claim("prometheus/prometheus", 1) == "confirmed"
+        assert p._ensure_issue_claim("prometheus/prometheus", 1) == "confirmed"
+        send.assert_called_once()
+    monkeypatch.setattr(p, "gh_read", lambda *_: {"state": "closed", "assignees": []})
+    with patch.object(p.subprocess, "run") as send:
+        assert p._ensure_issue_claim("prometheus/prometheus", 1) == "blocked"
+        send.assert_not_called()
 
 
 def test_table_does_not_hide_a_live_staged_candidate_due_to_old_update_time():

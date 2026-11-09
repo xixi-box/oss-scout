@@ -334,6 +334,7 @@ def screen_issue(eng, it: dict, *, lane: str, live_blockers=(),
 
 def fine_screen_issue(eng, it: dict, *, lane: str, linked_prs: list | None = None) -> dict:
     """Evaluate a snapshot that has already passed the mechanical gate."""
+    from scout_v2.git_host import own_issue_claim
     from scout_v2.workers.openjev import OpenJevClient
 
     repo, number = str(it["repo"]), int(it["number"])
@@ -353,7 +354,9 @@ def fine_screen_issue(eng, it: dict, *, lane: str, linked_prs: list | None = Non
             "reactions": it.get("reactions", 0), "lane": lane,
             "num_comments": int(it.get("comments") or 0),
             "comments": [{**c, "is_reporter": bool(reporter and c.get("author") == reporter)}
-                         for c in it.get("issue_comments") or []],
+                         for c in it.get("issue_comments") or []
+                         if not own_issue_claim({"user": {"login": c.get("author") or ""},
+                                                 "body": c.get("body") or ""})],
             "linked_pull_requests": linked_prs or [],
             "claim_evidence_in_body": claim_sents,
             "reporter_offered_fix": bool(_RE_OFFER.search(body)),

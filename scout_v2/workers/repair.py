@@ -888,6 +888,16 @@ def run_repair(job: Job, repo_dir: Path, out_dir: Path, *,
         _seed_test_files(work, test_files | {path: versions[1] for path, versions in mixed_tests.items()})
         fixed_rc, out, err = _verify_command(cmd, work, env, out_dir, "patched", rebuild=rebuild)
         fixed = fixed_rc == 0
+        additional_checks = {}
+        if fixed and job.repo.lower() == "rclone/rclone":
+            for command in (["go", "build"], ["make", "quicktest"]):
+                name = " ".join(command)
+                rc, _, _ = _verify_command(command, work, env, out_dir, "rclone-" + "-".join(command))
+                additional_checks[name] = rc
+                if rc != 0:
+                    unverified.append(f"required rclone check failed: {name}")
+                    fixed = False
+                    break
         if root_cause:
             unverified.append(f"agent root cause: {root_cause[:200]}")
         # 交付补丁只含源码改动；回归测试单独记录（PR 里不带我们的验证用例）
@@ -899,6 +909,7 @@ def run_repair(job: Job, repo_dir: Path, out_dir: Path, *,
             "base_stdout_tail": base_out[-3000:], "base_stderr_tail": base_err[-3000:],
             "patched_stdout_tail": out[-3000:], "patched_stderr_tail": err[-3000:],
             "regression_test_files": sorted(baseline_tests),
+            "additional_checks": additional_checks,
         }, ensure_ascii=False, indent=1), encoding="utf-8")
         (out_dir / "worker.log").write_text(
             f"=== base (rc={base_rc}) ===\n{base_out[-2000:]}\n{base_err[-2000:]}\n"

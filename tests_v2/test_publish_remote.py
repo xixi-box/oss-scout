@@ -61,7 +61,7 @@ class TestPublishFlow:
         monkeypatch.setenv("GITHUB_TOKEN", "ghp_X")
         out = pr.publish(repo, patch, {
             "push_repo": "me/fork", "upstream": "up/stream",
-            "branch": "fix/1-abc1234", "title": "fix: thing", "body": "b"})
+            "branch": "fix/1-abc1234", "title": "fix: thing", "body": "b", "base_branch": "dev"})
         assert out["ok"] is True
         assert out["pr"] == "https://github.com/up/stream/pull/7"
         push = next(c for c in calls if "push" in c)
@@ -71,6 +71,18 @@ class TestPublishFlow:
         gh = next(c for c in calls if c[:3] == ["gh", "pr", "create"])
         assert gh[gh.index("--repo") + 1] == "up/stream"
         assert gh[gh.index("--head") + 1] == "me:fix/1-abc1234"
+        assert gh[gh.index("--base") + 1] == "dev"
+
+    def test_rclone_required_checks_block_push(self, tmp_path, monkeypatch):
+        (tmp_path / "test-report.json").write_text(
+            json.dumps({"additional_checks": {"go build": 0, "make quicktest": 1}}), encoding="utf-8")
+        def fail_publish(*args):
+            raise AssertionError("unexpected publish")
+
+        monkeypatch.setattr(pr, "publish", fail_publish)
+        out = pr.publish_from_env({"repo": "rclone/rclone", "publish": {"upstream": "rclone/rclone"}},
+                                  tmp_path, tmp_path)
+        assert out == {"ok": False, "error": "rclone required build and quicktest evidence missing or failed"}
 
     def test_push_failure_redacts_token(self, tmp_path, monkeypatch):
         repo = tmp_path / "repo"

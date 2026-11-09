@@ -32,7 +32,8 @@ from pathlib import Path
 from ..adapters.actions_backend import ActionsBackend
 from ..adapters.modal_backend import ModalSandboxBackend, parse_envelope
 from ..budget import BudgetGuard, ModalCliBilling
-from ..git_host import gh_read, recheck_candidate
+from ..git_host import (ISSUE_CLAIM_MESSAGE, RE_CLAIM, assignment_facts, gh_pages, gh_read,
+                        own_issue_claim, recheck_candidate)
 from ..job_router import JobRouter, RouterConfig
 from ..repo_policy import PolicyEngine
 from ..schemas import Job, Result
@@ -428,6 +429,35 @@ def _todays_claim_count(root: Path, key: str) -> int:
     return n
 
 
+def _ensure_issue_claim(repo: str, number: int) -> str:
+    """Recognize an earlier claim before writing, including after a lost response."""
+    issue_path = f"repos/{repo}/issues/{number}"
+    issue = gh_read([issue_path])
+    if not isinstance(issue, dict) or not isinstance(issue.get("assignees"), list):
+        return "unavailable"
+    if issue.get("state") != "open" or issue.get("pull_request") or assignment_facts(issue, {})["assigned_to_others"]:
+        return "blocked"
+    path = f"{issue_path}/comments"
+    comments = gh_pages(path, 100)
+    if comments is None:
+        return "unavailable"
+    own = [own_issue_claim(comment, FORK_OWNER) for comment in comments]
+    if any(not mine and RE_CLAIM.search(str(comment.get("body") or ""))
+           for comment, mine in zip(comments, own)):
+        return "blocked"
+    if any(own):
+        return "confirmed"
+    try:
+        result = subprocess.run(
+            ["gh", "api", "-X", "POST", path, "-f", f"body={ISSUE_CLAIM_MESSAGE}"],
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30)
+        if result.returncode:
+            return "rejected" if re.search(r"HTTP (?:401|403|404|422)\b", result.stderr) else "unavailable"
+        return "confirmed" if own_issue_claim(json.loads(result.stdout), FORK_OWNER) else "rejected"
+    except (OSError, subprocess.TimeoutExpired, ValueError):
+        return "unavailable"
+
+
 def _abort_release_impl(msg: str, *, candidate_id: str, ledger, eng,
                    summary: dict, log_fn, root: Path, key: str,
                    give_back: bool = True) -> dict:
@@ -498,6 +528,7 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen
         summary["abort"] = f"policy fail-closed: {err}"
         return summary
     lane = eng.repo_lane(repo)
+    assignment_rule = eng.pr_assignment(repo) if hasattr(eng, "pr_assignment") else {}
     wl = Worklog(root / "state" / "worklog.jsonl")
 
     if not monitored_repo(repo) or lane in ("unknown", "observe"):
@@ -637,6 +668,21 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen
         mark_candidate(root, key, str(entry.get("status") or "new"),
                        extra={k: v for k, v in entry.items() if k != "updated_at"})
         summary["steps"].append("queue coarse and fine screening passed")
+    if assignment_rule.get("claim_comment"):
+        claim = _ensure_issue_claim(repo, number)
+        if claim != "confirmed":
+            reason = "仓库要求先认领 · " + {
+                "blocked": "Issue 已关闭、已被指派或已有认领",
+                "rejected": "GitHub 拒绝认领留言",
+                "unavailable": "暂无法确认认领留言",
+            }[claim]
+            status = str(entry.get("status") or "new") if claim == "unavailable" else "coarse_blocked"
+            mark_candidate(root, key, status,
+                           extra={"coarse_reason": reason, "abort_reason": reason,
+                                  "screen_retry_at": (business_now() + dt.timedelta(minutes=5)).isoformat()})
+            return _abort_release(reason)
+        log(root, "issue_claim_confirmed", key, "required upstream claim comment exists")
+        summary["steps"].append("upstream claim confirmed")
     ledger = ClaimLedger(root / "state/scout_v2.sqlite3")
     # The queue lock protects state across days; the ledger serializes the cap.
     with queue_transaction(root) as q:
@@ -667,7 +713,7 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen
     head = None
     for attempt in range(3):
         head = subprocess.run(
-            ["gh", "api", f"repos/{repo}/commits/HEAD", "--jq", ".sha"],
+            ["gh", "api", f"repos/{repo}/commits/{assignment_rule.get('base_branch', 'HEAD')}", "--jq", ".sha"],
             capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120)
         if head.returncode == 0:
             break
@@ -707,7 +753,8 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen
     if decision.backend != "github_actions":
         return _abort_release("no GitHub Actions repair backend")
     job.publish = _build_publish_cfg(repo, number, base_sha, entry)
-    assignment_rule = eng.pr_assignment(repo) if hasattr(eng, "pr_assignment") else {}
+    if assignment_rule.get("base_branch"):
+        job.publish["base_branch"] = assignment_rule["base_branch"]
     if assignment_rule.get("requires_assignment"):
         job.publish["assignment_rule"] = assignment_rule
     if assignment_rule.get("commit_issue_reference"):

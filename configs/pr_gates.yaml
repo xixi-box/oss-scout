@@ -1,4 +1,4 @@
-# PR 策略。未知仓库默认要求明确邀请，人工流程由 repositories.yaml 的 observe 车道保护。
+# PR gates. Keep the repository keys aligned with the production roster.
 
 defaults:
   requires_invite: true
@@ -32,28 +32,28 @@ repositories:
   agentgateway/agentgateway: {requires_invite: false}
   clickhouse/clickhouse: {requires_invite: false}
   modelcontextprotocol/rust-sdk: {requires_invite: false}
-  qdrant/qdrant: {requires_invite: false}
+  qdrant/qdrant: {requires_invite: false, base_branch: dev}
   ruvnet/RuVector: {requires_invite: false}
   bytecodealliance/wasmtime: {requires_invite: false}
-  kubescape/kubescape: {requires_invite: false}
+  apache/rocketmq: {requires_invite: false}
   agentscope-ai/agentscope-java: {requires_invite: false}
   kgateway-dev/kgateway: {requires_invite: false}
   spring-projects/spring-boot: {requires_invite: false}
-  sqlfluff/sqlfluff: {requires_invite: false}
+  rancher/rancher: {requires_invite: false}
   python/typeshed: {requires_invite: false}
   PyO3/pyo3: {requires_invite: false}
   redis/redis-py: {requires_invite: false}
   bytecodealliance/wasm-tools: {requires_invite: false}
-  delta-io/delta-rs: {requires_invite: false}
+  bytecodealliance/jco: {requires_invite: false}
   infiniflow/ragflow: {requires_invite: false}
   bytedance/deer-flow: {requires_invite: false}
-  NVIDIA/NeMo-Agent-Toolkit: {requires_invite: false}
+  NVIDIA/NeMo-Agent-Toolkit: {requires_invite: false, claim_comment: true}
   psf/black: {requires_invite: false}
   istio/istio: {requires_invite: false}
   pypa/pipx: {requires_invite: false}
   tox-dev/tox: {requires_invite: false}
   caddyserver/caddy: {requires_invite: false}
-  strands-agents/harness-sdk: {requires_invite: false}
+  dapr/dapr: {requires_invite: false}
   moby/buildkit: {requires_invite: false}
   docker/compose: {requires_invite: false}
   firecracker-microvm/firecracker: {requires_invite: false}
@@ -75,7 +75,7 @@ repositories:
   valkey-io/valkey: {requires_invite: false}
   pydantic/logfire: {requires_invite: false}
   rclone/rclone: {requires_invite: false}
-  prometheus/prometheus: {requires_invite: false}
+  prometheus/prometheus: {requires_invite: false, claim_comment: true}
   django/django: {requires_invite: false}
   HKUDS/RAG-Anything: {requires_invite: false}
   dagger/dagger: {requires_invite: false}

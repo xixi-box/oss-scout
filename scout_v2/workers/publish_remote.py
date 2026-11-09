@@ -101,6 +101,7 @@ def publish(repo_dir: Path, patch_file: Path, publish_cfg: dict) -> dict:
     push_repo = (publish_cfg.get("push_repo") or "").strip()
     upstream = (publish_cfg.get("upstream") or "").strip()
     branch = (publish_cfg.get("branch") or "").strip()
+    base_branch = (publish_cfg.get("base_branch") or "").strip()
     title = (publish_cfg.get("title") or "").strip()
     body = (publish_cfg.get("body") or "").strip()
     if not (push_repo and upstream and branch and title):
@@ -127,6 +128,12 @@ def publish(repo_dir: Path, patch_file: Path, publish_cfg: dict) -> dict:
                                       "build-artifact junk)"}
     if filtered != patch_file.read_text(encoding="utf-8"):
         patch_file.write_text(filtered, encoding="utf-8")
+    if upstream.lower() == "prometheus/prometheus":
+        area_match = re.search(r"(?m)^diff --git a/\S+ b/([\w.-]+)/", filtered)
+        area = area_match[1] if area_match else "prometheus"
+        description = title.removeprefix("fix: ").strip().replace("`", "'")
+        title = f"{area}: {description}"
+        body += f"\n\n```release-notes\n[BUGFIX] {area}: {description}\n```"
 
     token = (os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN") or "").strip()
 
@@ -190,6 +197,8 @@ def publish(repo_dir: Path, patch_file: Path, publish_cfg: dict) -> dict:
     commit_message = [title[:72]]
     if publish_cfg.get("commit_issue_reference") and issue_no > 0:
         commit_message.append(f"Fixes: #{issue_no}")
+    if upstream.lower() == "apache/rocketmq":
+        commit_message.append("Generated-by: OpenCode")
     commit_message.append(sign_off)
     ci = _run(["git", *identity, "commit", "-qm", "\n\n".join(commit_message)], cwd=repo_dir)
     if ci.returncode != 0:
@@ -207,8 +216,11 @@ def publish(repo_dir: Path, patch_file: Path, publish_cfg: dict) -> dict:
         return {"ok": False, "error": f"push failed: {msg[-250:]}"}
 
     # 3) 向原仓库开 PR（gh 读 GH_TOKEN；runner 的 GITHUB_TOKEN 对上游有 issue 写权）
-    pr = _run(["gh", "pr", "create", "--repo", upstream, "--head", head,
-               "--title", title, "--body", body])
+    create_args = ["gh", "pr", "create", "--repo", upstream, "--head", head,
+                   "--title", title, "--body", body]
+    if base_branch:
+        create_args.extend(["--base", base_branch])
+    pr = _run(create_args)
     if pr.returncode != 0:
         err = (pr.stderr or "").strip()
         # PR 已存在不是失败：幂等重跑时常见
@@ -231,6 +243,14 @@ def publish_from_env(job_dict: dict, repo_dir: Path, out_dir: Path) -> dict | No
     upstream = cfg.get("upstream") or ""
     if not monitored_repo(upstream) or repo_key(upstream) != repo_key(job_dict.get("repo") or ""):
         return {"ok": False, "error": "repository outside monitored roster or target mismatch"}
+    if repo_key(upstream) == "rclone/rclone":
+        try:
+            checks = json.loads((out_dir / "test-report.json").read_text(encoding="utf-8")).get("additional_checks", {})
+        except (OSError, ValueError):
+            checks = {}
+        if checks != {"go build": 0, "make quicktest": 0}:
+            return {"ok": False, "error": "rclone required build and quicktest evidence missing or failed"}
+        cfg["body"] = str(cfg.get("body") or "") + "\n\nAdditional checks passed: `go build`, `make quicktest`."
     cfg["body"] = _rewrite_body(cfg, out_dir)
     patch = out_dir / "change.patch"
     result = publish(repo_dir, patch, cfg)
@@ -276,4 +296,12 @@ def _rewrite_body(cfg: dict, out_dir: Path) -> str:
                 if not ln.startswith("Fixes #") and not ln.startswith("Root cause:")]
         kept = [ln for ln in kept if ln.strip()]
         lines.extend(kept)
+    upstream = str(cfg.get("upstream") or "").lower()
+    if upstream in {"qdrant/qdrant", "modelcontextprotocol/rust-sdk", "prometheus/prometheus",
+                    "nvidia/nemo-agent-toolkit", "rclone/rclone", "apache/rocketmq"}:
+        lines.extend(["", "AI assistance: OpenCode generated the fix and tests. "
+                      "oss-scout verified the regression and opened this PR automatically."])
+    if upstream == "qdrant/qdrant" and issue_number:
+        lines.extend(["", f"Repair task: reproduce the bug in #{issue_number}, implement a focused fix, "
+                      "and verify that the regression test fails on dev and passes with the patch."])
     return "\n".join(lines).strip() or body
