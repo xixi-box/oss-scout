@@ -58,7 +58,7 @@ def main():
         keys_present[provider] = bool(actual)
     print(json.dumps({"feishu_model_table_id": table_id, "model_settings_rows": len(expected),
                       "credentials_present": keys_present, "opencode_base_synced": True}))
-    print(json.dumps({"controller": "verified", "active_candidates": len(active),
+    print(json.dumps({"controller": "verified", "staged_candidates": staged,
                       "pr_table_redirect": True}))
 
 
