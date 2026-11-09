@@ -38,6 +38,20 @@ function gqlPage(nodes = [], cursor = null) {
   pageInfo: { hasNextPage: Boolean(cursor), endCursor: cursor } } };
 }
 
+test('new repositories do not inherit a stale shared watermark', async t => {
+  t.after(() => mock.restoreAll());
+  const env = setup({ since: OLD, watermarks: JSON.stringify({ 'a/b': OLD }) });
+  env.REPOS = 'a/b,c/d';
+  mock.method(globalThis, 'fetch', async (_url, options) => {
+    const query = JSON.parse(options.body).query;
+    assert.match(query, /2026-11-06T02:59:00.000Z/);
+    assert.match(query, /2026-11-06T03:44:00.000Z/);
+    return response({ data: { r0: gqlPage(), r1: gqlPage() } });
+  });
+  await worker.pollOnce(env);
+  assert.equal(JSON.parse(env.stored.get('diag')).ok_repos, 2);
+});
+
 test('changed issues follow pagination before advancing the repository watermark', async t => {
   t.after(() => mock.restoreAll());
   const env = setup({ watermarks: JSON.stringify({ 'a/b': OLD }) });

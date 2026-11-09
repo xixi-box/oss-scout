@@ -90,6 +90,8 @@ class PolicyEngine:
 
     def repo_lane(self, repo: str) -> str:
         entry = (self.repos_cfg.get("repositories") or {}).get(repo)
+        if entry and entry.get("review_reason"):
+            return "observe"
         if entry and entry.get("lane"):
             return entry["lane"]
         return "unknown"

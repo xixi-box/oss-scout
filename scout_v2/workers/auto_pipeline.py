@@ -506,8 +506,8 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen
         # 2026-10-30 实测：修复循环改成 60 秒后，旧名单遗留的
         # anomalyco/opencode、deepset-ai/haystack 候选每分钟被重试一次，
         # 每次都 lane=unknown 空转。
-        mark_candidate(root, key,
-                       "coarse_blocked", extra={"coarse_reason": "仓库不在自动修复范围"})
+        reason = eng.repo_entry(repo).get("review_reason") or "仓库不在自动修复范围"
+        mark_candidate(root, key, "coarse_blocked", extra={"coarse_reason": reason})
         return summary
     budget = ClaimLedger(root / "state/scout_v2.sqlite3")
     try:
@@ -710,6 +710,8 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen
     assignment_rule = eng.pr_assignment(repo) if hasattr(eng, "pr_assignment") else {}
     if assignment_rule.get("requires_assignment"):
         job.publish["assignment_rule"] = assignment_rule
+    if assignment_rule.get("commit_issue_reference"):
+        job.publish["commit_issue_reference"] = True
     job.publish["branch"] += f"-{job.job_id.rsplit('-', 1)[-1][:8]}"
     job.publish["body"] += f"\n\n<!-- oss-scout-job:{job.job_id} -->"
     head = f"{FORK_OWNER}:{job.publish['branch']}"

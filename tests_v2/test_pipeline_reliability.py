@@ -714,8 +714,26 @@ def test_exact_roster_is_preserved():
     repos = yaml.safe_load((root / "configs/repositories.yaml").read_text(encoding="utf-8"))
     monitored = {k for k, v in repos["repositories"].items() if not v.get("internal")}
     worker = re.search(r'REPOS = "([^"]+)"', (root / "cloudflare/wrangler.toml").read_text(encoding="utf-8"))[1].split(",")
-    assert len(monitored) == 50
+    gates = yaml.safe_load((root / "configs/pr_gates.yaml").read_text(encoding="utf-8"))
+    assert len(monitored) == len(worker) == 50
     assert set(worker) == monitored
+    assert set(gates["repositories"]) == monitored
+    assert "bytecodealliance/wasm-tools" in monitored
+    assert {"nodejs/node", "jlowin/fastmcp", "pydantic/pydantic-ai-harness"}.isdisjoint(monitored)
+
+
+def test_human_contribution_rule_stops_before_ai():
+    from pathlib import Path
+    from dashboard.data import coarse_issue_blockers
+    from scout_v2.repo_policy import PolicyEngine
+
+    eng, error = PolicyEngine.load(Path(__file__).resolve().parents[1])
+    assert error is None
+    repo = "qdrant/qdrant"
+    assert coarse_issue_blockers(eng, {"repo": repo}, lane=eng.repo_lane(repo)) == [
+        eng.repo_entry(repo)["review_reason"]
+    ]
+    assert not eng.authorize("open_pr", repo).allowed
 
 
 def test_table_does_not_hide_a_live_staged_candidate_due_to_old_update_time():

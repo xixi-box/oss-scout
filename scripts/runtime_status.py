@@ -15,6 +15,23 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from scout_v2.state_store import business_now
 
 
+def verify_feishu_repos(root: Path) -> dict:
+    from scout_v2 import feishu_bitable as fb
+    from scripts.monitor_prs import build_repo_rows
+
+    table_id = fb.load_binding(root).get("repo_table_id")
+    if not table_id or not fb.configured(root):
+        raise SystemExit("Feishu repository table binding is not ready")
+    expected = {row["repo"].lower() for row in build_repo_rows(root)}
+    labels = [fb._key_label((row.get("fields") or {}).get("键")).lower()
+              for row in fb.record_pages(fb._binding_app_token(root), table_id)]
+    actual = set(labels)
+    if len(expected) != 50 or len(labels) != 50 or actual != expected:
+        raise SystemExit(f"Feishu repo mismatch: {len(labels)} rows, "
+                         f"missing={sorted(expected - actual)}, extra={sorted(actual - expected)}")
+    return {"rows": len(labels), "exact_match": True}
+
+
 def inspect(root: Path) -> dict:
     config = yaml.safe_load((root / "configs/repositories.yaml").read_text(encoding="utf-8"))
     repos = {k: v for k, v in config["repositories"].items() if not v.get("internal")}
@@ -60,8 +77,11 @@ def main() -> int:
     parser.add_argument("--root", type=Path, default=Path(os.environ.get("OSSCOUT_DASHBOARD_ROOT", "/data")))
     parser.add_argument("--worker", action="store_true")
     parser.add_argument("--screening", action="store_true")
+    parser.add_argument("--feishu-repos", action="store_true")
     args = parser.parse_args()
     result = inspect(args.root)
+    if args.feishu_repos:
+        result["feishu_repos"] = verify_feishu_repos(args.root)
     if args.screening:
         from scout_v2.workers.openjev import OpenJevClient
         sample = {"title": "Synthetic parser crash with empty input",

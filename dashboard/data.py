@@ -266,8 +266,10 @@ def coarse_issue_blockers(eng, it: dict, *, lane: str, live_blockers=(), root=No
                 "awaiting more info", "awaiting-more-info", "needs more info", "needs-repro"}
     labels = [str(l) for l in it.get("labels") or []]
     blockers = list(live_blockers)
-    if repo not in (getattr(eng, "repos_cfg", {}).get("repositories") or {}) or lane in ("unknown", "observe"):
+    if repo not in (getattr(eng, "repos_cfg", {}).get("repositories") or {}) or lane == "unknown":
         blockers.append("repo_not_actionable")
+    elif lane == "observe":
+        blockers.append(eng.repo_entry(repo).get("review_reason") or "repo_not_actionable")
     elif lane == "gated":
         blockers.append("仓库要求先沟通")
     elif lane == "restricted" and not (

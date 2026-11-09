@@ -47,12 +47,34 @@ jobs:
           # 锁 3.x：功能足够部署 Worker，且兼容 node 20。
           npx --yes wrangler@3 deploy $FLAGS
 
-      - name: Verify live repo count
+      - name: Verify live roster and schedule
         if: inputs.dry_run != true
         shell: bash
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: 8b5f2575c2c2f0dd4d6e4eaa3d4e7530
         run: |
           set -euo pipefail
-          cd cloudflare
-          npx --yes wrangler@3 deployments list 2>&1 | head -8 || true
+          python3 - <<'PY'
+          import json
+          import os
+          import tomllib
+          from urllib.request import Request, urlopen
+
+          with open("cloudflare/wrangler.toml", "rb") as source:
+              cfg = tomllib.load(source)
+          base = (f"https://api.cloudflare.com/client/v4/accounts/{os.environ['CLOUDFLARE_ACCOUNT_ID']}"
+                  f"/workers/scripts/{cfg['name']}")
+          headers = {"Authorization": f"Bearer {os.environ['CLOUDFLARE_API_TOKEN']}"}
+
+          def read(path):
+              with urlopen(Request(base + path, headers=headers), timeout=20) as response:
+                  return json.load(response)["result"]
+
+          bindings = read("/settings")["bindings"]
+          repos = next(b["text"] for b in bindings if b["name"] == "REPOS").split(",")
+          assert len(set(repos)) == 50 and repos == cfg["vars"]["REPOS"].split(","), "live roster mismatch"
+          schedules = [item["cron"] for item in read("/schedules")["schedules"]]
+          assert schedules == ["* * * * *"], "live schedule mismatch"
+          print("Live Worker: exact 50-repository roster, every minute")
+          PY

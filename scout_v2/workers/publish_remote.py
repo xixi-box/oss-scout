@@ -187,8 +187,11 @@ def publish(repo_dir: Path, patch_file: Path, publish_cfg: dict) -> dict:
                     or "96341168+xixi-box@users.noreply.github.com").strip()
     sign_off = f"Signed-off-by: {author_name} <{author_email}>"
     identity = ["-c", f"user.name={author_name}", "-c", f"user.email={author_email}"]
-    ci = _run(["git", *identity, "commit", "-qm",
-               f"{title[:72]}\n\n{sign_off}"], cwd=repo_dir)
+    commit_message = [title[:72]]
+    if publish_cfg.get("commit_issue_reference") and issue_no > 0:
+        commit_message.append(f"Fixes: #{issue_no}")
+    commit_message.append(sign_off)
+    ci = _run(["git", *identity, "commit", "-qm", "\n\n".join(commit_message)], cwd=repo_dir)
     if ci.returncode != 0:
         return {"ok": False, "error": f"commit failed: {ci.stderr[-200:]}"}
 

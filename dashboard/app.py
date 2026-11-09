@@ -524,7 +524,9 @@ def create_app(root: Path | None = None, gh_runner=None,
     ds = D.DataSource(root, gh_runner=gh_runner)
 
     def _reap_orphan_claim():
-        from scout_v2.state_store import queue_transaction, ClaimLedger
+        from scout_v2.repo_policy import PolicyEngine
+        from scout_v2.state_store import business_now, queue_transaction, ClaimLedger
+        policy, _ = PolicyEngine.load(root)
         ledger = ClaimLedger(root / "state/scout_v2.sqlite3")
         try:
             ledger.reconcile_legacy_starts(root / "state/worklog.jsonl", "Asia/Shanghai")
@@ -538,6 +540,14 @@ def create_app(root: Path | None = None, gh_runner=None,
                         "new", "recheck_failed", "staged")):
                     entry.update(status="escalated", abort_reason="controller restarted; inspect remote run before retry")
                     _audit(root, "orphan_requires_review", key, "daily start retained")
+                elif entry.get("status") in ("new", "recheck_failed", "staged"):
+                    repo = entry.get("repo") or key.split("#", 1)[0]
+                    reason = policy.repo_entry(repo).get("review_reason")
+                    if reason or not modifiable_repo(repo):
+                        reason = reason or "仓库已移出监控名单"
+                        entry.update(status="coarse_blocked", coarse_reason=reason,
+                                     updated_at=business_now().isoformat(timespec="seconds"))
+                        _audit(root, "candidate_roster_block", key, reason)
 
     if os.environ.get("OSSCOUT_DISABLE_AUTO_REPAIR") != "1":
         _reap_orphan_claim()

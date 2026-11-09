@@ -113,6 +113,7 @@ def test_cleanup_scrubs_legacy_and_expires_record_and_package(tmp_path, monkeypa
 
 def test_one_review_push_then_only_selected_threads(tmp_path, monkeypatch):
     from scout_v2.feishu_app import build_pr_approval_card
+    monkeypatch.setattr(pr_approval, "monitored_repo", lambda repo: repo == "python/cpython")
     job_id = "prfix-" + "3" * 32
     head = "a" * 40
     responses = [

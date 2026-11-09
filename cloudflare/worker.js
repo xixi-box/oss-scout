@@ -182,10 +182,12 @@ async function pollIssues(env, now, budget) {
   const marks = await readMap(env, "watermarks");
   // Migration only: do not advance the old shared cursor again.
   const legacy = await env.SEEN.get("since");
+  const recent = new Date(now.getTime() - 15 * 60000).toISOString();
+  const initial = Date.parse(legacy) > Date.parse(recent) ? legacy : recent;
   let bootstrap = false;
   for (const repo of repos) {
     if (!marks[repo]) {
-      marks[repo] = legacy || new Date(now.getTime() - 15 * 60000).toISOString();
+      marks[repo] = initial;
       bootstrap = true;
     }
   }

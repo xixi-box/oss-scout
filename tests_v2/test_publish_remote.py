@@ -131,7 +131,7 @@ class TestDcoSignOff:
     DCO，代码里从没实现过。
     """
 
-    def _publish(self, tmp_path, monkeypatch):
+    def _publish(self, tmp_path, monkeypatch, **rules):
         repo = tmp_path / "repo"
         repo.mkdir()
         patch = tmp_path / "change.patch"
@@ -150,7 +150,7 @@ class TestDcoSignOff:
         monkeypatch.setattr(pr.subprocess, "run", fake)
         monkeypatch.setenv("GITHUB_TOKEN", "ghp_X")
         pr.publish(repo, patch, {"push_repo": "me/fork", "upstream": "up/stream",
-                                 "branch": "fix/1-a", "title": "fix: thing"})
+                                 "branch": "fix/1-a", "title": "fix: thing", **rules})
         return calls
 
     def test_commit_carries_signed_off_by(self, tmp_path, monkeypatch):
@@ -162,6 +162,11 @@ class TestDcoSignOff:
         assert msg.splitlines()[0] == "fix: thing"
         assert msg.splitlines()[1] == ""
         assert msg.splitlines()[2].startswith("Signed-off-by:")
+
+    def test_commit_carries_required_issue_reference(self, tmp_path, monkeypatch):
+        calls = self._publish(tmp_path, monkeypatch, issue_number=1, commit_issue_reference=True)
+        commit = next(c for c in calls if "commit" in c)
+        assert "\n\nFixes: #1\n\nSigned-off-by:" in commit[commit.index("-qm") + 1]
 
 
 class TestWorkflowGate:
