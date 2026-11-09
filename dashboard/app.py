@@ -203,26 +203,6 @@ def create_app(root: Path | None = None, gh_runner=None,
                 _bitable_wake.set()
                 _dispatch(rescreen=rescreen)
 
-    def _publications_left() -> int | None:
-        """Number of new PRs that may still be published today."""
-        try:
-            from scout_v2.repo_policy import PolicyEngine
-            from scout_v2.state_store import ClaimLedger, business_now
-            eng, err = PolicyEngine.load(root)
-            if err:
-                return None
-            cap = int(getattr(eng, "max_claims_per_day", 0) or 0)
-            if cap <= 0:
-                return 10 ** 6
-            led = ClaimLedger(root / "state" / "scout_v2.sqlite3")
-            try:
-                used = led.quota_used(business_now(eng.tz_name).date().isoformat())
-            finally:
-                led.close()
-            return max(0, cap - used)
-        except Exception:  # noqa: BLE001 — 额度未知时不派发，也不推迟候选
-            return None
-
     def _handle_pr_event(root: Path, ev: dict) -> dict:
         from scripts.monitor_prs import dispatch_pr_fix
         repo, number = str(ev["repo"]), int(ev["number"])
@@ -251,18 +231,22 @@ def create_app(root: Path | None = None, gh_runner=None,
         if os.environ.get("OSSCOUT_DISABLE_AUTO_REPAIR") == "1":
             return started
         try:
+            from scout_v2.repo_policy import PolicyEngine
+            from scout_v2.state_store import publication_quota_remaining
             from scout_v2.workers.auto_pipeline import expire_staged
             expire_staged(root)
             with _inflight_lock:
                 room = _MAX_CONCURRENT - len(_inflight)
-            left = _publications_left()
-            if left is None:
+            eng, err = PolicyEngine.load(root)
+            if err:
                 return started
+            left = publication_quota_remaining(root, eng.tz_name, eng.max_claims_per_day)
             if left <= 0:
                 from scout_v2.workers.auto_pipeline import _stage_candidates
                 queued = json.loads((root / "queue/candidates.json").read_text(encoding="utf-8"))
                 _stage_candidates(root, [k for k, e in queued.items()
-                                        if e.get("status") in ("new", "recheck_failed", "staged")])
+                                        if e.get("status") in ("new", "recheck_failed", "staged")],
+                                  tz_name=eng.tz_name, cap=eng.max_claims_per_day)
                 return started
             room = min(room, left)
             if room <= 0:

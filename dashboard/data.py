@@ -371,9 +371,8 @@ def fine_screen_issue(eng, it: dict, *, lane: str, linked_prs: list | None = Non
 
 
 def prune_candidate_backlog(root: Path) -> list[str]:
-    """Keep the newest waiting entries that fit beside any ongoing repairs."""
-    from scout_v2.state_store import (CANDIDATE_LIMIT, WAITING_CANDIDATE_STATES,
-                                      active_repair_keys, business_now, queue_transaction)
+    """Keep the newest staged entries if a legacy backlog is over capacity."""
+    from scout_v2.state_store import STAGED_CANDIDATE_LIMIT, business_now, queue_transaction
 
     now = business_now()
 
@@ -386,11 +385,10 @@ def prune_candidate_backlog(root: Path) -> list[str]:
             return float("-inf")
 
     with queue_transaction(root) as queue:
-        protected = active_repair_keys(root, queue)
         waiting = [key for key, entry in queue.items()
-                   if entry.get("status") in WAITING_CANDIDATE_STATES and key.lower() not in protected]
+                   if entry.get("status") == "staged"]
         waiting.sort(key=lambda key: (entered_at(queue[key]), key), reverse=True)
-        removed = waiting[max(0, CANDIDATE_LIMIT - len(protected)):]
+        removed = waiting[STAGED_CANDIDATE_LIMIT:]
         for key in removed:
             queue[key].update(status="queue_pruned", updated_at=now.isoformat(timespec="seconds"))
     return removed
@@ -399,8 +397,11 @@ def prune_candidate_backlog(root: Path) -> list[str]:
 def ingest_cloudflare_issues(ds, items: list[dict], *, refresh: bool = False) -> tuple[int, list[str]]:
     """Mechanical exclusions, then AI; short atomic writes never enclose network IO."""
     import hashlib
-    from scout_v2.state_store import atomic_json_write, business_now, candidate_queue_full, queue_transaction
+    from scout_v2.state_store import (STAGED_CANDIDATE_LIMIT, STAGED_FULL_REASON, atomic_json_write,
+                                      business_now, publication_quota_remaining, queue_transaction,
+                                      staged_candidate_count)
     from scout_v2.repo_policy import PolicyEngine
+    from scout_v2.workers.auto_pipeline import _defer_entry
     eng, err = PolicyEngine.load(ds.root)
     if err or eng is None:
         raise RuntimeError(f"policy unavailable: {err}")
@@ -424,10 +425,11 @@ def ingest_cloudflare_issues(ds, items: list[dict], *, refresh: bool = False) ->
             if key in q or (prior.get("fingerprint") == fingerprint and prior.get("status") in
                             ("blocked", "rejected", "archived", "screen_skipped")):
                 continue
-            full = candidate_queue_full(ds.root, q)
+            full = (staged_candidate_count(q) >= STAGED_CANDIDATE_LIMIT
+                    and publication_quota_remaining(ds.root, eng.tz_name, eng.max_claims_per_day) == 0)
         lane = eng.repo_lane(repo)
         if full:
-            blockers, verdict = ["候选列表已满"], {}
+            blockers, verdict = [STAGED_FULL_REASON], {}
             record_issue_screen(eng, it, "coarse_screen", blockers[0])
         else:
             blockers, verdict = screen_issue(eng, it, lane=lane, live_blockers=live_blockers, timeline=timeline)
@@ -444,14 +446,17 @@ def ingest_cloudflare_issues(ds, items: list[dict], *, refresh: bool = False) ->
             if key in q:
                 continue
             if not blockers and verdict.get("usable") is True:
-                if candidate_queue_full(ds.root, q):
-                    rec.update(status="blocked", coarse_reason="候选列表已满")
+                stage = publication_quota_remaining(ds.root, eng.tz_name, eng.max_claims_per_day) == 0
+                if stage and staged_candidate_count(q) >= STAGED_CANDIDATE_LIMIT:
+                    rec.update(status="blocked", coarse_reason=STAGED_FULL_REASON)
                 else:
                     q[key] = {**it, "id": key, "repo": repo, "number": number, "lane": lane,
                               "blockers": [], "ai_verdict": verdict,
                               "discovered_at": now, "status": "new", "lease": None,
                               "source": "cloudflare-worker", "screened_at": now,
                               "url": it.get("url") or f"https://github.com/{repo}/issues/{number}"}
+                    if stage:
+                        _defer_entry(q[key], ds.root)
                     added.append(key)
             seen[key] = rec
             atomic_json_write(seen_path, seen)

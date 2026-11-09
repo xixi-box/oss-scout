@@ -33,7 +33,7 @@ ROOT = Path(__file__).resolve().parents[1]
 DATA_ROOT = Path(os.environ.get("OSSCOUT_DASHBOARD_ROOT", str(ROOT)))
 
 from scout_v2.roster import monitored_repo
-from scout_v2.state_store import atomic_json_write, queue_transaction
+from scout_v2.state_store import STAGED_FULL_REASON, atomic_json_write, queue_transaction
 
 # 分类信号。顺序有意义：先判"被关"，再判"要改"，最后才是普通讨论。
 PATTERNS = [
@@ -1174,7 +1174,9 @@ def build_scan_rows(root, running_keys=(), published=None, pr_states=None) -> li
                                  or (v.get("why") if str(v.get("status"))
                                      in ("blocked", "unknown_repo", "too_fresh")
                                      else "") or ""),
-            "fine_reason": "未执行" if candidate_status == "coarse_blocked" else str(
+            "fine_reason": "未执行" if candidate_status == "coarse_blocked" and not (
+                coarse == STAGED_FULL_REASON and (v.get("fine_reason") or candidate.get("fine_reason"))
+            ) else str(
                 candidate.get("fine_reason") or v.get("fine_reason")
                                or (v.get("why") if str(v.get("status")) == "rejected"
                                    else "") or ""),

@@ -10,7 +10,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from scout_v2 import feishu_bitable as fb, feishu_models as fm
 from scout_v2.console_models import effective_models
-from scout_v2.state_store import CANDIDATE_LIMIT, WAITING_CANDIDATE_STATES, active_repair_keys
+from scout_v2.state_store import STAGED_CANDIDATE_LIMIT, staged_candidate_count
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -31,9 +31,8 @@ def main():
     else:
         raise AssertionError("PR table redirect is missing")
     candidates = json.loads((root / "queue/candidates.json").read_text(encoding="utf-8"))
-    waiting = {key.lower() for key, entry in candidates.items() if entry.get("status") in WAITING_CANDIDATE_STATES}
-    active = waiting | active_repair_keys(root, candidates)
-    assert len(active) <= CANDIDATE_LIMIT, f"Candidate pool exceeds {CANDIDATE_LIMIT}: {len(active)}"
+    staged = staged_candidate_count(candidates)
+    assert staged <= STAGED_CANDIDATE_LIMIT, f"Staged backlog exceeds {STAGED_CANDIDATE_LIMIT}: {staged}"
     for _ in range(8):
         table_id = fb.load_binding(root).get("model_table_id")
         if table_id:

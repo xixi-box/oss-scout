@@ -16,7 +16,8 @@ def intake(tmp_path, monkeypatch):
     (tmp_path / "queue").mkdir()
     (tmp_path / "state").mkdir()
     (tmp_path / "queue/candidates.json").write_text("{}")
-    eng = SimpleNamespace(repos_cfg={"repositories": {"a/b": {}}},
+    eng = SimpleNamespace(repos_cfg={"repositories": {"a/b": {}}}, tz_name="Asia/Shanghai",
+                          max_claims_per_day=5,
                           repo_lane=lambda _: "open")
     monkeypatch.setattr(p.PolicyEngine, "load", lambda _: (eng, None))
     monkeypatch.setattr(d, "repo_rules_text", lambda _: "test rules")
@@ -33,16 +34,31 @@ def test_short_precise_report_reaches_ai(intake):
         assert d.ingest_cloudflare_issues(ds, [issue])[0] == 1
 
 
-def test_candidate_capacity_blocks_before_openjev(intake):
+def _fill_publication_quota(root):
+    from scout_v2.state_store import business_now
+
+    tz = "Asia/Shanghai"
+    day = business_now(tz).date().isoformat()
+    ledger = ClaimLedger(root / "state/scout_v2.sqlite3")
+    try:
+        for number in range(1, 6):
+            job = f"published-{number}"
+            assert ledger.reserve_publication(tz, 5, job, "a/b", f"head-{number}", "x/y")
+            ledger.finish_publication(job, day=day, url=f"https://github.com/a/b/pull/{number}")
+    finally:
+        ledger.close()
+
+
+def test_candidate_capacity_blocks_before_openjev_only_when_quota_is_full(intake):
     from scout_v2.feishu_bitable import scan_row_to_fields
     from scripts.monitor_prs import build_scan_rows
 
     ds, issue = intake
     queue = ds.root / "queue/candidates.json"
-    entries = {f"a/b#{n}": {"status": "staged"} for n in range(2, 11)}
-    entries["a/b#11"] = {"status": "running"}
-    entries["a/b#12"] = {"status": "pr_open"}
+    entries = {f"a/b#{n}": {"status": "staged"} for n in range(2, 12)}
+    entries["a/b#12"] = {"status": "running"}
     queue.write_text(json.dumps(entries), encoding="utf-8")
+    _fill_publication_quota(ds.root)
     with patch("scout_v2.workers.openjev.OpenJevClient") as cls:
         assert d.ingest_cloudflare_issues(ds, [issue]) == (0, [])
         cls.assert_not_called()
@@ -55,19 +71,34 @@ def test_candidate_capacity_blocks_before_openjev(intake):
         cls.return_value.score_issue.return_value = {"usable": True, "reason": "repro"}
         later = dict(issue, number=13)
         assert d.ingest_cloudflare_issues(ds, [later]) == (1, ["a/b#13"])
+        assert json.loads(queue.read_text(encoding="utf-8"))["a/b#13"]["status"] == "staged"
+
+
+def test_full_staged_backlog_does_not_block_new_issue_with_quota(intake):
+    ds, issue = intake
+    queue = ds.root / "queue/candidates.json"
+    queue.write_text(json.dumps({f"a/b#{n}": {"status": "staged"} for n in range(2, 12)}))
+    with patch("scout_v2.workers.openjev.OpenJevClient") as cls:
+        cls.return_value.score_issue.return_value = {"usable": True, "reason": "repro"}
+        assert d.ingest_cloudflare_issues(ds, [issue]) == (1, ["a/b#1"])
+        cls.return_value.score_issue.assert_called_once()
+    assert json.loads(queue.read_text())["a/b#1"]["status"] == "new"
 
 
 def test_candidate_capacity_is_rechecked_before_inserting(intake):
+    from scout_v2.feishu_bitable import scan_row_to_fields
     from scout_v2.state_store import queue_transaction
+    from scripts.monitor_prs import build_scan_rows
 
     ds, issue = intake
+    _fill_publication_quota(ds.root)
     with queue_transaction(ds.root) as queue:
         queue.update({f"a/b#{n}": {"status": "staged"} for n in range(2, 11)})
 
     def score(_):
         with queue_transaction(ds.root) as queue:
-            queue["a/b#11"] = {"status": "new"}
-        return {"usable": True}
+            queue["a/b#11"] = {"status": "staged"}
+        return {"usable": True, "reason": "repro"}
 
     with patch("scout_v2.workers.openjev.OpenJevClient") as cls:
         cls.return_value.score_issue.side_effect = score
@@ -75,10 +106,30 @@ def test_candidate_capacity_is_rechecked_before_inserting(intake):
     with queue_transaction(ds.root) as queue:
         assert len(queue) == 10
         assert "a/b#1" not in queue
+    row, = build_scan_rows(ds.root)
+    fields = scan_row_to_fields(row)
+    assert fields["最终结果"] == "粗筛淘汰 · 候选列表已满"
+    assert fields["细筛结果"] == "repro"
+
+
+def test_pending_issues_fit_only_remaining_staged_slots(intake):
+    ds, _ = intake
+    path = ds.root / "queue/candidates.json"
+    entries = {f"a/b#{n}": {"status": "staged"} for n in range(3, 12)}
+    entries["a/b#1"] = {"status": "new", "discovered_at": "2026-11-10T08:00:00+08:00"}
+    entries["a/b#2"] = {"status": "new", "discovered_at": "2026-11-10T08:01:00+08:00"}
+    path.write_text(json.dumps(entries))
+    assert p._stage_candidates(ds.root, ["a/b#2", "a/b#1"], tz_name="Asia/Shanghai", cap=5) == 0
+    _fill_publication_quota(ds.root)
+    assert p._stage_candidates(ds.root, ["a/b#2", "a/b#1"], tz_name="Asia/Shanghai", cap=5) == 1
+    updated = json.loads(path.read_text(encoding="utf-8"))
+    assert updated["a/b#1"]["status"] == "staged"
+    assert updated["a/b#2"]["status"] == "coarse_blocked"
+    assert updated["a/b#2"]["coarse_reason"] == "候选列表已满"
 
 
 def test_prune_keeps_latest_and_protects_unreconciled_repair(intake):
-    from scout_v2.state_store import candidate_queue_full
+    from scout_v2.state_store import staged_candidate_count
 
     ds, _ = intake
     entries = {f"a/b#{n}": {"status": "staged", "staged_at": f"2026-11-{n:02d}T12:00:00+08:00"}
@@ -92,13 +143,13 @@ def test_prune_keeps_latest_and_protects_unreconciled_repair(intake):
     ledger = ClaimLedger(ds.root / "state/scout_v2.sqlite3")
     try:
         assert ledger.reserve_publication("Asia/Shanghai", 5, "job-id", "a/b", "fork:fix/issue-13-ab-cd", "x/y")
-        assert set(d.prune_candidate_backlog(ds.root)) == {"a/b#1", "a/b#3", "a/b#4"}
+        assert set(d.prune_candidate_backlog(ds.root)) == {"a/b#1", "a/b#3"}
         updated = json.loads(queue.read_text(encoding="utf-8"))
         assert updated["a/b#2"]["status"] == "staged"
         assert updated["a/b#1"]["status"] == "queue_pruned"
         assert updated["a/b#13"]["status"] == "escalated"
         assert updated["a/b#14"]["status"] == "pr_open"
-        assert candidate_queue_full(ds.root, updated)
+        assert staged_candidate_count(updated) == 10
         assert d.prune_candidate_backlog(ds.root) == []
     finally:
         ledger.close()
@@ -578,11 +629,13 @@ def test_same_day_pr_closure_refills_one_slot_without_rewriting_queue(tmp_path, 
     from scout_v2.feishu_bitable import scan_row_to_fields
     from scripts.monitor_prs import build_scan_rows
 
-    now = dt.datetime.fromisoformat("2026-11-08T07:00:00+08:00")
+    now = dt.datetime.fromisoformat("2026-11-08T03:00:00+08:00")
     day = now.date().isoformat()
     tz = "Asia/Shanghai"
     monkeypatch.setattr(p, "business_now", lambda *args: now)
     monkeypatch.setattr(state_store, "business_now", lambda *args: now)
+    monkeypatch.setattr(p.PolicyEngine, "load", lambda _: (
+        SimpleNamespace(tz_name=tz, max_claims_per_day=2), None))
     ledger = ClaimLedger(tmp_path / "state/scout_v2.sqlite3")
     repo = "docker/compose"
     closed = f"https://github.com/{repo}/pull/101"
@@ -597,9 +650,13 @@ def test_same_day_pr_closure_refills_one_slot_without_rewriting_queue(tmp_path, 
     for number in (1, 2):
         key = f"{repo}#{number}"
         entry = {"id": key, "repo": repo, "number": number, "status": "new",
-                 "discovered_at": f"{day}T06:0{number}:00+08:00", "ai_verdict": {"usable": True}}
+                 "discovered_at": f"{day}T01:0{number}:00+08:00", "ai_verdict": {"usable": True}}
         p._defer_entry(entry, tmp_path)
         queue[key] = entry
+    oldest = f"{repo}#3"
+    queue[oldest] = {**queue[f"{repo}#1"], "id": oldest, "number": 3,
+                     "staged_at": "2026-11-07T23:50:00+08:00",
+                     "eligible_at": "2026-11-08T04:00:00+08:00"}
     (tmp_path / "queue").mkdir()
     path = tmp_path / "queue/candidates.json"
     path.write_text(json.dumps(queue))
@@ -607,7 +664,7 @@ def test_same_day_pr_closure_refills_one_slot_without_rewriting_queue(tmp_path, 
 
     replies = {
         f"repos/{repo}/pulls/101": {"html_url": closed, "state": "closed", "merged": False,
-                                   "closed_at": "2026-11-07T22:59:00Z"},
+                                   "closed_at": "2026-11-07T18:59:00Z"},
         f"repos/{repo}/pulls/102": {"html_url": merged, "state": "closed", "merged": True},
     }
     checked = []
@@ -622,7 +679,8 @@ def test_same_day_pr_closure_refills_one_slot_without_rewriting_queue(tmp_path, 
     assert not p.refresh_publication_status(tmp_path)
     assert ledger.published_today(tz) == 2
     assert ledger.quota_used(day) == 1
-    assert [row["id"] for row in p.drain_ai_graded(tmp_path, limit=1)] == [f"{repo}#1"]
+    assert not ledger.has_publication_release(day, min_published=3)
+    assert [row["id"] for row in p.drain_ai_graded(tmp_path, limit=1)] == [oldest]
     assert json.loads(path.read_text()) == queue
     assert p._order_candidates(list(queue.items()), refill_day="2026-11-07") == []
     (tmp_path / "state/seen.json").write_text(json.dumps({f"{repo}#1": {}}))

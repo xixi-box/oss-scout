@@ -8,7 +8,6 @@ from __future__ import annotations
 import datetime as dt
 import json
 import os
-import re
 import sqlite3
 import tempfile
 from pathlib import Path
@@ -17,31 +16,22 @@ from contextlib import contextmanager
 
 JOB_STATES = ("queued", "leased", "running", "collecting",
               "succeeded", "failed", "inconclusive", "blocked")
-CANDIDATE_LIMIT = 10
-WAITING_CANDIDATE_STATES = frozenset({"new", "staged", "recheck_failed"})
+STAGED_CANDIDATE_LIMIT = 10
+STAGED_FULL_REASON = "候选列表已满"
 
 
-def active_repair_keys(root: Path, queue: dict) -> set[str]:
-    active = {key.lower() for key, entry in queue.items() if entry.get("status") == "running"}
-    db = root / "state/scout_v2.sqlite3"
-    if not db.exists():
-        return active
-    # An Actions run can outlive a controller restart and be marked escalated.
-    conn = sqlite3.connect(db.resolve().as_uri() + "?mode=ro", uri=True)
+def staged_candidate_count(queue: dict) -> int:
+    return sum(entry.get("status") == "staged" for entry in queue.values())
+
+
+def publication_quota_remaining(root: Path, tz_name: str, cap: int) -> int:
+    if cap <= 0:
+        return 10 ** 6
+    ledger = ClaimLedger(root / "state/scout_v2.sqlite3")
     try:
-        if conn.execute("SELECT 1 FROM sqlite_master WHERE name='publications'").fetchone():
-            for repo, head in conn.execute("SELECT repo,head FROM publications WHERE day IS NULL"):
-                issue = re.fullmatch(r"[^:]+:fix/issue-(\d+)-[0-9a-f]+(?:-[0-9a-f]+)?", head)
-                if issue:
-                    active.add(f"{repo.lower()}#{issue[1]}")
+        return max(0, cap - ledger.quota_used(business_now(tz_name).date().isoformat()))
     finally:
-        conn.close()
-    return active
-
-
-def candidate_queue_full(root: Path, queue: dict) -> bool:
-    waiting = {key.lower() for key, entry in queue.items() if entry.get("status") in WAITING_CANDIDATE_STATES}
-    return len(waiting | active_repair_keys(root, queue)) >= CANDIDATE_LIMIT
+        ledger.close()
 
 
 def business_day(ts: dt.datetime, tz_name: str) -> str:
@@ -350,12 +340,13 @@ class ClaimLedger:
             "SELECT 1 FROM publication_status s WHERE s.url=p.url AND s.state='closed' "
             "AND s.closed_day=p.day)", (day,)).fetchone()[0]
 
-    def has_publication_release(self, day: str) -> bool:
+    def has_publication_release(self, day: str, *, min_published: int = 1) -> bool:
         self._publication_table()
         return self._conn.execute(
             "SELECT 1 FROM publications p JOIN publication_status s USING(url) "
-            "WHERE p.day=? AND s.state='closed' AND s.closed_day=p.day LIMIT 1",
-            (day,)).fetchone() is not None
+            "WHERE p.day=? AND s.state='closed' AND s.closed_day=p.day "
+            "AND (SELECT COUNT(*) FROM publications WHERE day=p.day)>=? LIMIT 1",
+            (day, min_published)).fetchone() is not None
 
     def publications_to_check(self, day: str) -> list[tuple[str, str]]:
         self._publication_table()

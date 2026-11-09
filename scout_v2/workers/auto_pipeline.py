@@ -39,6 +39,8 @@ from ..repo_policy import PolicyEngine
 from ..schemas import Job, Result
 from ..roster import monitored_repo
 from ..state_store import ClaimLedger, Worklog, queue_transaction, business_day, business_now, atomic_json_write
+from ..state_store import (STAGED_CANDIDATE_LIMIT, STAGED_FULL_REASON, publication_quota_remaining,
+                           staged_candidate_count)
 from .quality_gate import verify_result
 
 # 推送目标：对第三方仓库我们没有写权限，分支一律推自己的 fork，再向原仓库发 PR。
@@ -545,11 +547,11 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen
         if _reconcile_publication(budget, eng.tz_name, root=root) is None:
             return {**summary, "abort": "previous publication awaiting reconciliation"}
         day = business_now(eng.tz_name).date().isoformat()
-        refill_day = day if budget.has_publication_release(day) else ""
+        refill_day = day if budget.has_publication_release(day, min_published=eng.max_claims_per_day) else ""
         if latest is not None and not _eligible(entry, refill_day=refill_day):
             return {**summary, "abort": "candidate not currently eligible"}
         if budget.quota_used(day) >= eng.max_claims_per_day:
-            _stage_candidates(root, [key])
+            _stage_candidates(root, [key], tz_name=eng.tz_name, cap=eng.max_claims_per_day)
             return {**summary, "abort": "daily PR limit reached"}
     finally:
         budget.close()
@@ -696,7 +698,7 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen
         ok, reason = ledger.try_claim(eng.tz_name, key)
         if not ok:
             if current is not None and "daily limit" in reason:
-                _defer_entry(current, root)
+                _stage_entry(current, root, q)
             elif current is not None and "already claimed" in reason:
                 current.update(status="escalated", abort_reason=reason)
             summary["abort"] = f"claim budget: {reason}"
@@ -1069,7 +1071,7 @@ def expire_staged(root: Path) -> int:
     return len(expired)
 
 
-def _stage_candidates(root: Path, keys: list[str]) -> int:
+def _stage_candidates(root: Path, keys: list[str], *, tz_name: str, cap: int) -> int:
     """把候选标成暂存，留到下一轮再处理。返回实际改动的条数。
 
     用于额度用完之后：ingest 一次扫到 10 条、今天只剩 1 个额度，剩下 9 条不该
@@ -1080,18 +1082,28 @@ def _stage_candidates(root: Path, keys: list[str]) -> int:
         return 0
     n = 0
     with queue_transaction(root) as q:
-        for key in keys:
+        if publication_quota_remaining(root, tz_name, cap):
+            return 0
+        for key in sorted(keys, key=lambda k: ((q.get(k) or {}).get("discovered_at") or "", k)):
             e = q.get(key)
             if isinstance(e, dict) and e.get("status") in ("new", "recheck_failed", "staged"):
                 if e.get("status") == "staged" and _stage_age_days(e) > STAGE_TTL_DAYS:
                     e["status"] = "stage_expired"
                     continue
                 previous = e.get("eligible_at")
-                _defer_entry(e, root)
+                _stage_entry(e, root, q)
                 n += int(previous != e.get("eligible_at"))
     if n:
         log(root, "stage", f"{n} candidates", "next business day at 04:00")
     return n
+
+
+def _stage_entry(entry: dict, root: Path, queue: dict) -> None:
+    if entry.get("status") != "staged" and staged_candidate_count(queue) >= STAGED_CANDIDATE_LIMIT:
+        entry.update(status="coarse_blocked", coarse_reason=STAGED_FULL_REASON,
+                     updated_at=business_now().isoformat(timespec="seconds"))
+        return
+    _defer_entry(entry, root)
 
 
 def _defer_entry(entry: dict, root: Path) -> None:
@@ -1111,7 +1123,6 @@ def _defer_entry(entry: dict, root: Path) -> None:
     if due_time is not None and due_time.tzinfo is None:
         due_time = due_time.replace(tzinfo=now.tzinfo)
     if due_time is None or due_time <= now:
-        entry["quota_deferred_day"] = now.date().isoformat()
         entry["updated_at"] = now.isoformat(timespec="seconds")
         entry["eligible_at"] = dt.datetime.combine(now.date() + dt.timedelta(days=1),
                                                   dt.time(hour, minute), tzinfo=now.tzinfo).isoformat()
@@ -1160,13 +1171,8 @@ def _eligible(entry: dict, *, refill_day: str = "") -> bool:
             due = dt.datetime.fromisoformat(ts.replace("Z", "+00:00"))
             if due.tzinfo is None:
                 due = due.replace(tzinfo=now.tzinfo)
-            # Older queue entries only have the original staged time and the next
-            # due date. A next-day due date was assigned by that day's quota deferral.
-            deferred = entry.get("quota_deferred_day")
-            if not deferred and entry.get("staged_at") and entry.get("eligible_at"):
-                deferred = (due.astimezone(now.tzinfo).date() - dt.timedelta(days=1)).isoformat()
             refill = (index == 1 and entry.get("status") == "staged"
-                      and refill_day == now.date().isoformat() == deferred)
+                      and refill_day == now.date().isoformat())
             if due > now and not refill:
                 return False
         except (ValueError, TypeError):
@@ -1180,7 +1186,7 @@ def _order_candidates(entries: list[tuple[str, dict]],
     """暂存优先，且同组内先到先出。
 
     新候选全天可消费；暂存到次日 04:00 后才参与排序，使用当日剩余额度。
-    未到期的暂存不阻挡新候选，不预留额度，也不施加额外限速。
+    满额后当天关闭 PR 腾出名额时，暂存可提前按原顺序补位。
 
     超过 STAGE_TTL_DAYS 的暂存不再返回：一个 issue 放了三天，多半已经被人修了、
     被关了，或者上下文已经变了；拿去修反而浪费额度并可能撞车。
@@ -1248,8 +1254,9 @@ def drain_ai_graded(root: Path, limit: int = 3, dry_run: bool = True,
     if db.exists():
         ledger = ClaimLedger(db)
         try:
-            day = business_now().date().isoformat()
-            if ledger.has_publication_release(day):
+            eng, err = PolicyEngine.load(root)
+            day = business_now(eng.tz_name).date().isoformat()
+            if not err and ledger.has_publication_release(day, min_published=eng.max_claims_per_day):
                 refill_day = day
         finally:
             ledger.close()
