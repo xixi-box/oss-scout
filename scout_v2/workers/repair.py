@@ -16,6 +16,7 @@ import os
 import subprocess
 import time
 import tempfile
+from contextlib import ExitStack
 from pathlib import Path
 
 from ..schemas import Job, Result
@@ -62,14 +63,27 @@ actually uses. You may modify test files (you are adding a regression test) but 
 NOT reformat unrelated code and do NOT touch CI config.
 
 As soon as you identify the regression command, write OSSCOUT_RESULT.json in the
-repository root and update it as you go:
+repository root. Complete it using the output of the actual base and patched runs:
 
-{{"test_cmd": "<the exact single command that runs your regression test, run from the repo root>",
+{{"setup_steps": [{{"kind": "setup", "command": "<install dependencies or prepare fixtures>"}},
+                  {{"kind": "build", "command": "<build from the currently checked-out sources>"}}],
+ "test_cmd": "<the exact command that runs the same regression on both versions>",
  "test_file": "<repo-relative path of the regression test you added>",
+ "base_failure": ["<literal test name present in both runs>", "<literal assertion or wrong result for this bug>"],
+ "patched_success": ["<literal output showing the targeted test ran successfully>"],
  "root_cause": "<one sentence>"}}
 
-Write it as real JSON - no code fences, no comments. This file is how your work is
-picked up; if it is missing or unparseable the run is discarded.
+Use an empty setup_steps list only if the test runs directly from a fresh checkout.
+The verifier runs the same steps in two fresh source trees from the repository
+root. Each command runs in its own process. Include any cd or environment
+assignments in the command that uses them. Build and test the checked-out source,
+never reuse a binary from another checkout. If a service must run during the
+test, start it from the current checkout and stop it in the same command.
+Do not use source-text assertions, mock the behavior under test, or print the
+evidence strings yourself unless they report an actual checked result. Use
+short, stable excerpts from the test output without paths, timings, or colors.
+Enable verbose output if needed so the same case name appears in both runs.
+Write real JSON. A missing or incomplete verification plan blocks publication.
 For Rust inline tests, keep test edits inside the existing trailing #[cfg(test)]
 module so the verifier can apply the test without applying the production fix.
 """
@@ -117,14 +131,24 @@ def _verify_command(cmd, work, env, out_dir, stage, *, rebuild=False):
         for index, command in enumerate(commands):
             started = time.time()
             rc, stdout, stderr = _run_cmd(command, work, env)
+            stdout, stderr = _mask_opencode_key(stdout), _mask_opencode_key(stderr)
+            logged_command = [_mask_opencode_key(arg) for arg in command]
             log_file.write(json.dumps({
-                "stage": stage, "command": command, "started_at_epoch": started,
+                "stage": stage, "command": logged_command, "started_at_epoch": started,
                 "elapsed_seconds": round(time.time() - started, 2), "returncode": rc,
             }, ensure_ascii=False) + "\n")
             log_file.flush()
+            with (out_dir / "verification.log").open("a", encoding="utf-8") as output:
+                output.write(f"=== {stage}: {json.dumps(logged_command, ensure_ascii=False)} (rc={rc}) ===\n"
+                             f"--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}\n")
             if rebuild and index == 0 and rc:
                 return rc, stdout, f"verification rebuild failed\n{stderr}"
     return rc, stdout, stderr
+
+
+def _mask_opencode_key(text: str) -> str:
+    key = os.environ.get("OPENCODE_API_KEY")
+    return text.replace(key, "[REDACTED]") if key else text
 
 
 def enforce_domain_b(work_dir: Path) -> str:
@@ -266,7 +290,7 @@ def _read_result_file(work_dir: Path) -> dict:
         if not p.is_file():
             continue
         try:
-            data = _json.loads(p.read_text(encoding="utf-8"))
+            data = _json.loads(_mask_opencode_key(p.read_text(encoding="utf-8")))
         except (OSError, ValueError):
             continue
         if not isinstance(data, dict):
@@ -283,6 +307,9 @@ def _read_result_file(work_dir: Path) -> dict:
         rc = data.get("root_cause") or data.get("cause")
         if isinstance(rc, str) and rc.strip():
             out["root_cause"] = rc.strip()[:300]
+        for key in ("setup_steps", "base_failure", "patched_success"):
+            if key in data:
+                out[key] = data[key]
         return out
     return {}
 
@@ -330,11 +357,13 @@ def _split_cmd(cmd: str) -> list[str]:
 
 _SHELL_TOKENS = ("&&", "||", "|", ";", ">", "<", "$(", "`", "\n",
                  " 2>&1", " & ", "cd ")
+_ENV_ASSIGNMENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*=")
 
 
 def _needs_shell(text: str) -> bool:
     """这条命令需要 shell 解释吗（管道、重定向、串接、命令替换）。"""
-    return any(tok in text for tok in _SHELL_TOKENS)
+    return bool(_ENV_ASSIGNMENT.match(text)) or any(
+        tok in text for tok in _SHELL_TOKENS)
 
 
 def opencode_patch_producer(job: Job, work_dir: Path, context: str,
@@ -377,6 +406,7 @@ def opencode_patch_producer(job: Job, work_dir: Path, context: str,
             FIX_PROMPT.format(context=context, rules=rules or "(none)"),
             encoding="utf-8")
         ok, detail = client.run(model, RUN_TASK_MSG)
+        detail = _mask_opencode_key(detail or "")
         diff_early = _git(["diff"], work_dir).stdout
         # 2026-10-29 实测：模型有时只回一句"I'll start by reading the task file"
         # 就以 rc=0 退出，什么都没做（langchain#41448 那次只跑了 36 秒）。
@@ -386,6 +416,7 @@ def opencode_patch_producer(job: Job, work_dir: Path, context: str,
             nudge = (RUN_TASK_MSG + " You already said you would start - actually do it "
                      "now. No narration.")
             ok, detail = client.run(model, nudge)
+            detail = _mask_opencode_key(detail or "")
             diff_early = _git(["diff"], work_dir).stdout
         if not ok and not diff_early.strip():
             raise RuntimeError(f"opencode repair run failed: {detail[:300]}")
@@ -452,9 +483,12 @@ def opencode_patch_producer(job: Job, work_dir: Path, context: str,
             f"agent said: {(detail or '')[:400]}")
 
     cmd_str = markers.get("test_cmd", "").strip()
+    has_plan = any(key in markers for key in ("setup_steps", "base_failure", "patched_success"))
     return {
         "patch": patch,
-        "test_cmd": _normalise_test_target(_split_cmd(cmd_str)) if cmd_str else [],
+        "test_cmd": _split_cmd(cmd_str) if has_plan else _normalise_test_target(_split_cmd(cmd_str)),
+        "verification_plan": {key: markers.get(key) for key in
+                              ("setup_steps", "base_failure", "patched_success")} if has_plan else None,
         "test_files": test_files,
         "mixed_tests": mixed_tests,
         "root_cause": markers.get("root_cause", "")[:300],
@@ -517,6 +551,8 @@ _BROKEN_ENV_MARKERS = (
     # 曾被记成 reproduced=true。
     "file or directory not found",
     "no tests ran",
+    "no tests were found",
+    "collected 0 items",
     "error: not found:",
     "unrecognized arguments",
     "no such option",
@@ -532,9 +568,71 @@ def _test_env_broken(stdout: str, stderr: str) -> str | None:
     return None
 
 
+def _verification_error(rc: int, stdout: str, stderr: str, kind: str = "test") -> tuple[str, str] | None:
+    if not rc and kind != "test":
+        return None
+    text = f"{stdout}\n{stderr}".lower()
+    if rc == 124:
+        return "timeout", "verification timed out"
+    missing = re.search(
+        r"no module named [^\n]+|cannot find module [^\n]+|[^\n]+was not found in path"
+        r"|fatal error: [^\n]+no such file or directory|could not find a package configuration file[^\n]*",
+        text)
+    if missing:
+        return "missing_dependency", missing.group().strip()[:180]
+    if rc in (126, 127, 9009) or (rc == 2 and "syntax error" in text):
+        return "command_error", f"command could not run (exit {rc})"
+    if "verification rebuild failed" in text or (rc and (
+        kind == "build" or re.search(
+            r"\[build failed\]|error\[e\d+\]|fatal error:|(?:^|\n)[^\n]+:\d+(?::\d+)?: error:"
+            r"|error ts\d+:|compilation failed|could not compile", text)
+    )):
+        return "compile_failed", "build or test compilation failed"
+    broken = _test_env_broken(stdout, stderr)
+    if broken:
+        return "command_error", broken
+    if rc and kind == "setup":
+        return "setup_failed", f"environment preparation failed (exit {rc})"
+    return None
+
+
+def _verification_plan_valid(plan: dict) -> bool:
+    steps = plan.get("setup_steps")
+    if not isinstance(steps, list) or not all(
+        isinstance(step, dict) and step.get("kind") in ("setup", "build")
+        and isinstance(step.get("command"), str) and step["command"].strip()
+        for step in steps
+    ):
+        return False
+    for key, minimum in (("base_failure", 2), ("patched_success", 1)):
+        markers = plan.get(key)
+        if (not isinstance(markers, list) or not all(isinstance(marker, str) and marker.strip()
+                                                     for marker in markers)
+                or len({marker.strip() for marker in markers}) < minimum):
+            return False
+    return True
+
+
+def _replay_regression(cmd, plan, work, env, out_dir, stage, *, rebuild=False):
+    if plan and plan["setup_steps"]:
+        # Include new source and test files from the patch in the source guard.
+        _git(["add", "-N", "--", "."], work)
+        source = _git(["diff", "HEAD", "--binary"], work).stdout
+        for index, step in enumerate(plan["setup_steps"], 1):
+            kind = step["kind"]
+            rc, stdout, stderr = _verify_command(
+                _split_cmd(step["command"]), work, env, out_dir, f"{stage}-{kind}-{index}")
+            if error := _verification_error(rc, stdout, stderr, kind):
+                return rc, stdout, stderr, error
+        if source != _git(["diff", "HEAD", "--binary"], work).stdout:
+            return 1, "", "", ("setup_changed_sources", "setup modified tracked source or tests")
+    rc, stdout, stderr = _verify_command(cmd, work, env, out_dir, stage, rebuild=rebuild)
+    return rc, stdout, stderr, _verification_error(rc, stdout, stderr)
+
+
 def _write_base_diagnostics(out_dir: Path, job: Job, cmd: list[str], rc: int,
                             stdout: str, stderr: str,
-                            test_files: dict, patch: str) -> None:
+                            test_files: dict, patch: str, *, failure_kind: str, plan: dict | None) -> None:
     """base 阶段中止时也要留下可诊断的证据。
 
     2026-10-30：blocked 分支原样返回，test-report 不生成，于是"测试在 base 上
@@ -545,6 +643,7 @@ def _write_base_diagnostics(out_dir: Path, job: Job, cmd: list[str], rc: int,
         (out_dir / "test-report.json").write_text(json.dumps({
             "schema_version": 1, "job_id": job.job_id, "base_sha": job.base_sha,
             "stage": "base", "test_cmd": cmd, "base_returncode": rc,
+            "failure_kind": failure_kind, "verification_plan": plan,
             "base_stdout_tail": stdout[-4000:], "base_stderr_tail": stderr[-4000:],
             "regression_test_files": sorted(test_files),
             "patch_bytes": len(patch or ""),
@@ -559,6 +658,11 @@ def _write_base_diagnostics(out_dir: Path, job: Job, cmd: list[str], rc: int,
 def _restore_sources_to_base(work: Path, base_sha: str) -> None:
     """Restore the index and sources, including removal of newly staged files."""
     _git(["restore", f"--source={base_sha}", "--staged", "--worktree", "--", "."], work)
+
+
+def _checkout_repair_tree(repo_dir: Path, work: Path, base_sha: str) -> None:
+    _git(["clone", "--quiet", str(repo_dir), str(work)], repo_dir)
+    _git(["checkout", "--quiet", "--detach", base_sha], work)
 
 
 def _seed_test_files(repo_dir: Path,
@@ -639,7 +743,7 @@ _NON_VERIFYING_BINARIES = {
     "ls", "dir", "cat", "head", "tail", "wc", "stat", "find", "git", "echo",
     "printf", "sleep", "curl", "wget", "diff", "cmp",
     # 目录切换本身不验证任何行为：`cd sub && grep -q x f` 的退出码仍只反映 grep
-    "cd", "export", "source", ".", "set", "pushd", "popd",
+    "cd", "export", "source", ".", "set", "pushd", "popd", "mkdir",
 }
 
 
@@ -666,7 +770,9 @@ def _implausible_verification(cmd: list[str], patch: str,
         # 第 2 个 token 是 -c 或 /c
         payload = " ".join(tokens[2:])
         try:
-            tokens = shlex.split(payload)
+            lexer = shlex.shlex(payload, posix=True, punctuation_chars=";&|")
+            lexer.whitespace_split = True
+            tokens = list(lexer)
         except ValueError:
             tokens = payload.split()
     # 只看命令的"程序名"位置：首词，以及 `&&` / `;` / `|` 之后的词。
@@ -678,6 +784,8 @@ def _implausible_verification(cmd: list[str], patch: str,
             expect_prog = True
             continue
         if expect_prog:
+            if _ENV_ASSIGNMENT.match(token) or token == "env":
+                continue
             progs.append(token)
             expect_prog = False
     names = {_os.path.basename(p).lower() for p in progs if p and not p.startswith("-")}
@@ -729,14 +837,15 @@ def run_repair(job: Job, repo_dir: Path, out_dir: Path, *,
     # ---- 阶段 1：agent 自主修复 ----
     patch = ""
     ai_cmd: list[str] = []
+    plan = None
     test_files: dict[str, str] = dict(extra_test_files or {})
     mixed_tests: dict[str, tuple[str, str]] = {}
     root_cause = ""
     agent_out = ""
-    with tempfile.TemporaryDirectory() as td:
-        work = Path(td) / "work"
-        _git(["clone", "--quiet", str(repo_dir), str(work)], repo_dir)
-        _git(["checkout", "--quiet", "--detach", job.base_sha], work, check=False)
+    with ExitStack() as workspace:
+        agent_dir = tempfile.TemporaryDirectory()
+        work = Path(workspace.enter_context(agent_dir)) / "work"
+        _checkout_repair_tree(repo_dir, work, job.base_sha)
         # 控制器若已备好测试文件（旧路径/兜底），先放进去让 agent 看得到
         for rel_path, content in (extra_test_files or {}).items():
             tf = work / rel_path
@@ -759,6 +868,7 @@ def run_repair(job: Job, repo_dir: Path, out_dir: Path, *,
         if isinstance(produced, dict):
             patch = produced.get("patch") or ""
             ai_cmd = list(produced.get("test_cmd") or [])
+            plan = produced.get("verification_plan")
             test_files.update(produced.get("test_files") or {})
             mixed_tests = produced.get("mixed_tests") or {}
             root_cause = produced.get("root_cause") or ""
@@ -799,6 +909,14 @@ def run_repair(job: Job, repo_dir: Path, out_dir: Path, *,
                           unverified_items=[raise_no_cmd])
 
         raw_patch = patch          # 剔除测试文件之前的完整改动（供完整性检查）
+        if (patch_producer is None or plan is not None) and not (
+            isinstance(plan, dict) and _verification_plan_valid(plan)
+        ):
+            reason = "verification_plan_invalid: missing setup steps or observed test evidence"
+            (out_dir / "worker.log").write_text(reason, encoding="utf-8")
+            return Result(job_id=job.job_id, backend=backend_name, outcome="blocked",
+                          base_sha=job.base_sha, logs_path=f"artifacts/{job.job_id}/worker.log",
+                          unverified_items=[reason])
         errs = check_patch_content(patch)
         if errs:
             (out_dir / "worker.log").write_text(patch[:2000], encoding="utf-8")
@@ -814,7 +932,7 @@ def run_repair(job: Job, repo_dir: Path, out_dir: Path, *,
         #
         # 只对真实 agent 产物生效：自定义 producer 是测试/运维注入，它自己负责
         # 证据语义（很多用例故意只给补丁不给测试文件）。
-        if patch_producer is None:
+        if patch_producer is None or plan is not None:
             bad = _implausible_verification(cmd, raw_patch, test_files | mixed_tests)
             if bad:
                 (out_dir / "worker.log").write_text(
@@ -828,52 +946,55 @@ def run_repair(job: Job, repo_dir: Path, out_dir: Path, *,
         # 交付的补丁必须只含源码：把测试文件的整段 diff 剔掉（双重保险——
         # producer 已经按路径排除过一次，这里防自定义 producer 或未来改动漏掉）
         patch = _strip_test_files_from_patch(patch, list(test_files.keys()))
-        rebuild = (job.repo.lower() == "python/cpython" and cmd[0] == "./python"
+        rebuild = (plan is None and job.repo.lower() == "python/cpython" and cmd[0] == "./python"
                    and bool(re.search(r"(?m)^diff --git a/.+\.[ch] b/.+\.[ch]$", patch)))
 
-        # ---- 阶段 2：独立验证（在 agent 自己的环境里，回到 base 代码）----
+        # Legacy injected producers can still reuse the agent's work tree.
         # 2026-10-29 教训：在 repo_dir 上验证是错的。agent 把依赖装在 work/
         # （.venv、~/.local/bin/uv、node_modules），repo_dir 里什么都没有，
         # 于是同一份代码在"能跑的环境"外被验证，必然 127。
         # 现在：在 work 里把源码退回 base、只保留 agent 装的依赖，再跑同一条命令。
-        _restore_sources_to_base(work, job.base_sha)
+        if plan is not None:
+            agent_dir.cleanup()
+            base_dir = tempfile.TemporaryDirectory()
+            work = Path(workspace.enter_context(base_dir)) / "verify-base"
+            _checkout_repair_tree(repo_dir, work, job.base_sha)
+        else:
+            _restore_sources_to_base(work, job.base_sha)
         baseline_tests = test_files | {path: versions[0] for path, versions in mixed_tests.items()}
         seeded = _seed_test_files(work, baseline_tests)
         try:
-            base_rc, base_out, base_err = _verify_command(cmd, work, env, out_dir, "base", rebuild=rebuild)
+            base_rc, base_out, base_err, error = _replay_regression(
+                cmd, plan, work, env, out_dir, "base", rebuild=rebuild)
         finally:
             _unseed_test_files(work, seeded)
-        broken = _test_env_broken(base_out, base_err)
-        if base_rc == 124:
-            broken = "verification timed out"
-        reproduced = base_rc not in (0, 127, 9009) and broken is None
-
-        if base_rc == 0:
+        if error is None and base_rc == 0:
+            error = "base_test_passed", "test does not fail on base"
+        if error is None and plan and not all(marker.strip() in f"{base_out}\n{base_err}"
+                                             for marker in plan["base_failure"]):
+            error = "base_failure_unconfirmed", "target test and bug symptom not found in base output"
+        if error:
+            kind, detail = error
+            reason = f"{kind} on base: {detail}"
             (out_dir / "worker.log").write_text(
-                "the reported test passes on base; nothing to fix or the test does "
-                "not capture the bug\n", encoding="utf-8")
-            # 即使在这里中止也要落盘诊断：否则"测试在 base 上没失败"这句话
-            # 无法区分"agent 的测试没抓住 bug"和"我们把它的测试文件搞丢了"。
-            _write_base_diagnostics(out_dir, job, cmd, base_rc, base_out, base_err,
-                                    baseline_tests, raw_patch)
-            return Result(job_id=job.job_id, backend=backend_name, outcome="blocked",
-                          base_sha=job.base_sha, reproduced_on_base=False,
-                          logs_path=f"artifacts/{job.job_id}/worker.log",
-                          unverified_items=["test does not fail on base — refusing to claim a fix"])
-        if broken is not None:
-            (out_dir / "worker.log").write_text(
-                f"test command could not run on base: {broken}\n\n"
+                f"{reason}\n\n"
                 f"--- stdout ---\n{base_out[-2000:]}\n--- stderr ---\n{base_err[-2000:]}",
                 encoding="utf-8")
             _write_base_diagnostics(out_dir, job, cmd, base_rc, base_out, base_err,
-                                    baseline_tests, raw_patch)
-            return Result(job_id=job.job_id, backend=backend_name, outcome="failed",
-                          base_sha=job.base_sha, reproduced_on_base=False,
+                                    baseline_tests, raw_patch, failure_kind=kind, plan=plan)
+            return Result(job_id=job.job_id, backend=backend_name,
+                          outcome="blocked" if kind == "base_test_passed" else "failed",
+                          base_sha=job.base_sha, test_report_path=f"artifacts/{job.job_id}/test-report.json",
                           logs_path=f"artifacts/{job.job_id}/worker.log",
-                          unverified_items=[f"test environment unusable on base: {broken}"])
+                          unverified_items=[reason])
 
         # ---- 阶段 3：补丁后必须通过 ----
-        _restore_sources_to_base(work, job.base_sha)
+        if plan is not None:
+            base_dir.cleanup()
+            work = Path(workspace.enter_context(tempfile.TemporaryDirectory())) / "verify-patched"
+            _checkout_repair_tree(repo_dir, work, job.base_sha)
+        else:
+            _restore_sources_to_base(work, job.base_sha)
         ap = subprocess.run(["git", "apply", "--whitespace=nowarn", "-"], cwd=work,
                             input=patch, capture_output=True, text=True,
                             encoding="utf-8", errors="replace")
@@ -881,22 +1002,33 @@ def run_repair(job: Job, repo_dir: Path, out_dir: Path, *,
             (out_dir / "worker.log").write_text(
                 "base fail evidence kept; patch apply failed:\n" + ap.stderr, encoding="utf-8")
             return Result(job_id=job.job_id, backend=backend_name, outcome="failed",
-                          base_sha=job.base_sha, reproduced_on_base=reproduced,
+                          base_sha=job.base_sha, reproduced_on_base=True,
                           logs_path=f"artifacts/{job.job_id}/worker.log",
                           unverified_items=["patch failed to apply on base"])
         # 补丁落下之后再写回归测试：补丁只含源码，测试不在里面
         _seed_test_files(work, test_files | {path: versions[1] for path, versions in mixed_tests.items()})
-        fixed_rc, out, err = _verify_command(cmd, work, env, out_dir, "patched", rebuild=rebuild)
-        fixed = fixed_rc == 0
+        fixed_rc, out, err, error = _replay_regression(
+            cmd, plan, work, env, out_dir, "patched", rebuild=rebuild)
+        if error is None and fixed_rc:
+            error = "patched_test_failed", f"regression failed on the patch (exit {fixed_rc})"
+        if error is None and plan and not all(marker.strip() in f"{out}\n{err}" for marker in
+                                             [plan["base_failure"][0], *plan["patched_success"]]):
+            error = "patched_test_unconfirmed", "target test success not found in patched output"
+        fixed = error is None
+        failure = f"{error[0]} on patched: {error[1]}" if error else ""
         additional_checks = {}
+        additional_check_output = {}
         if fixed and job.repo.lower() == "rclone/rclone":
             for command in (["go", "build"], ["make", "quicktest"]):
                 name = " ".join(command)
-                rc, _, _ = _verify_command(command, work, env, out_dir, "rclone-" + "-".join(command))
+                rc, check_out, check_err = _verify_command(
+                    command, work, env, out_dir, "rclone-" + "-".join(command))
                 additional_checks[name] = rc
                 if rc != 0:
-                    unverified.append(f"required rclone check failed: {name}")
-                    fixed = False
+                    additional_check_output[name] = {"stdout_tail": check_out[-3000:],
+                                                     "stderr_tail": check_err[-3000:]}
+                    error = "additional_check_failed", f"required rclone check failed: {name} (exit {rc})"
+                    failure = f"{error[0]}: {error[1]}"
                     break
         if root_cause:
             unverified.append(f"agent root cause: {root_cause[:200]}")
@@ -905,27 +1037,26 @@ def run_repair(job: Job, repo_dir: Path, out_dir: Path, *,
         (out_dir / "test-report.json").write_text(json.dumps({
             "schema_version": 1, "job_id": job.job_id, "base_sha": job.base_sha,
             "test_cmd": cmd, "base_returncode": base_rc, "patched_returncode": fixed_rc,
+            "failure_kind": error[0] if error else None, "verification_plan": plan,
             # base 输出必须留存：否则"复现证据"无法审计，假阳性也无从发现
             "base_stdout_tail": base_out[-3000:], "base_stderr_tail": base_err[-3000:],
             "patched_stdout_tail": out[-3000:], "patched_stderr_tail": err[-3000:],
             "regression_test_files": sorted(baseline_tests),
             "additional_checks": additional_checks,
+            "additional_check_output": additional_check_output,
         }, ensure_ascii=False, indent=1), encoding="utf-8")
         (out_dir / "worker.log").write_text(
             f"=== base (rc={base_rc}) ===\n{base_out[-2000:]}\n{base_err[-2000:]}\n"
             f"=== patched (rc={fixed_rc}) ===\n{out[-4000:]}\n{err[-4000:]}",
             encoding="utf-8")
 
-    if fixed and not reproduced:
-        unverified.append("patched test passed but base evidence missing — do not claim fixed")
     return Result(job_id=job.job_id, backend=backend_name,
-                  outcome="succeeded" if fixed else "failed",
+                  outcome="failed" if failure else "succeeded",
                   base_sha=job.base_sha,
-                  reproduced_on_base=reproduced,
+                  reproduced_on_base=True,
                   fixed_on_patch=fixed,
                   regression_tests_passed=fixed,
                   patch_path=f"artifacts/{job.job_id}/change.patch",
                   test_report_path=f"artifacts/{job.job_id}/test-report.json",
                   logs_path=f"artifacts/{job.job_id}/worker.log",
-                  unverified_items=unverified if fixed else
-                  unverified + ["patched test failed — fix is not verified"])
+                  unverified_items=[failure, *unverified] if failure else unverified)

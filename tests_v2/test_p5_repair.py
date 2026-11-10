@@ -44,6 +44,12 @@ GOOD_PATCH = """--- a/calc.py
 """
 
 
+def replay_plan(*, setup_steps=()):
+    return {"setup_steps": list(setup_steps),
+            "base_failure": ["test_div", "assert 3 == 3.5"],
+            "patched_success": ["PASSED"]}
+
+
 class TestRepairEvidenceChain:
     def test_inline_rust_regression_does_not_apply_fix_on_base(self, tmp_path, monkeypatch):
         from scout_v2.workers import repair
@@ -63,7 +69,9 @@ class TestRepairEvidenceChain:
             def run(self, model, prompt):
                 (self.workdir / path).write_text(source.replace("{ 0 }", "{ 1 }") + new_tests, encoding="utf-8")
                 (self.workdir / repair.RESULT_FILE).write_text(json.dumps({
-                    "test_file": path, "test_cmd": "cargo test regression"}), encoding="utf-8")
+                    "test_file": path, "test_cmd": "cargo test regression", "setup_steps": [],
+                    "base_failure": ["regression", "assertion failed"], "patched_success": ["ok"],
+                }), encoding="utf-8")
                 return True, ""
 
         def producer(j, work, ctx):
@@ -75,7 +83,7 @@ class TestRepairEvidenceChain:
             contents = (work / path).read_text(encoding="utf-8")
             assert new_tests in contents
             observed.append(contents)
-            return (1 if "{ 0 }" in contents else 0), "", ""
+            return (1, "regression: assertion failed", "") if "{ 0 }" in contents else (0, "regression ... ok", "")
 
         monkeypatch.setattr(repair, "_run_cmd", verify)
         out = tmp_path / "out"
@@ -454,6 +462,143 @@ class TestReproductionMustBeReal:
                                                          "notes": []})
         assert res.reproduced_on_base is False
         assert res.outcome != "succeeded"
+
+    @pytest.mark.parametrize(("rc", "output", "expected"), [
+        (1, "clickhouse was not found in PATH", "missing_dependency"),
+        (1, "ModuleNotFoundError: No module named 'clickhouse_driver'", "missing_dependency"),
+        (127, "[Errno 2] No such file or directory: 'PATH=$PWD/build/programs:$PATH'", "command_error"),
+        (1, "./multidb_fd_test.go:440:69: undefined: fdOutcomeToken\nFAIL redis [build failed]", "compile_failed"),
+        (1, "test_div FAILED: unrelated assertion", "base_failure_unconfirmed"),
+        (0, "test_io.test_textio passed\nTotal tests: run=2 (filtered)", "base_test_passed"),
+    ])
+    def test_historical_base_results_do_not_release_patch(self, tmp_path, monkeypatch, rc, output, expected):
+        from scout_v2.workers import repair
+
+        r, sha = make_repo(tmp_path)
+        commands = []
+
+        def run(cmd, cwd, env):
+            commands.append(cmd)
+            return rc, output, ""
+
+        monkeypatch.setattr(repair, "_run_cmd", run)
+        out = tmp_path / "out"
+        result = run_repair(job(sha), r, out, patch_producer=lambda *_: {
+            "patch": GOOD_PATCH, "test_cmd": ["pytest", "-v", "test_div.py"],
+            "test_files": {"test_div.py": (r / "test_div.py").read_text()},
+            "verification_plan": replay_plan(),
+        })
+        assert not result.reproduced_on_base and not result.fixed_on_patch
+        assert result.unverified_items[0].startswith(expected)
+        assert len(commands) == 1
+        assert json.loads((out / "test-report.json").read_text())["failure_kind"] == expected
+        assert output in (out / "verification.log").read_text()
+
+    def test_agent_setup_runs_in_each_fresh_tree(self, tmp_path, monkeypatch):
+        from scout_v2.workers import repair
+
+        r, sha = make_repo(tmp_path)
+        setup = {"kind": "build", "command": 'python -c "open(\'ready\', \'w\').close()"'}
+        test = (r / "test_div.py").read_text().replace(
+            "    assert", "    assert __import__('pathlib').Path('ready').is_file()\n    assert")
+        commands = []
+        real_run = repair._run_cmd
+
+        def run(cmd, cwd, env):
+            commands.append((cmd, cwd.name))
+            return real_run(cmd, cwd, env)
+
+        monkeypatch.setattr(repair, "_run_cmd", run)
+        result = run_repair(job(sha), r, tmp_path / "out", patch_producer=lambda *_: {
+            "patch": GOOD_PATCH, "test_cmd": [sys.executable, "-m", "pytest", "-v", "test_div.py::test_div"],
+            "test_files": {"test_div.py": test},
+            "verification_plan": replay_plan(setup_steps=[setup]),
+        })
+        assert result.outcome == "succeeded"
+        assert [cwd for _, cwd in commands] == ["verify-base", "verify-base", "verify-patched", "verify-patched"]
+        assert commands[1][0] == commands[3][0]
+
+    def test_patched_success_must_be_from_same_case(self, tmp_path, monkeypatch):
+        from scout_v2.workers import repair
+
+        r, sha = make_repo(tmp_path)
+        outcomes = iter([(1, "test_div FAILED: assert 3 == 3.5", ""), (0, "test_other PASSED", "")])
+        monkeypatch.setattr(repair, "_run_cmd", lambda *_: next(outcomes))
+        result = run_repair(job(sha), r, tmp_path / "out", patch_producer=lambda *_: {
+            "patch": GOOD_PATCH, "test_cmd": ["pytest", "-v", "test_div.py"],
+            "test_files": {"test_div.py": (r / "test_div.py").read_text()},
+            "verification_plan": replay_plan(),
+        })
+        assert result.reproduced_on_base and not result.fixed_on_patch
+        assert result.unverified_items[0].startswith("patched_test_unconfirmed")
+
+    def test_production_agent_cannot_fall_back_to_a_bare_command(self, tmp_path, monkeypatch):
+        from scout_v2.workers import repair
+
+        r, sha = make_repo(tmp_path)
+        monkeypatch.setattr(repair, "opencode_patch_producer", lambda *args, **kwargs: {
+            "patch": GOOD_PATCH, "test_cmd": ["pytest", "-v", "test_div.py"],
+        })
+        result = run_repair(job(sha), r, tmp_path / "out")
+        assert result.outcome == "blocked"
+        assert result.unverified_items[0].startswith("verification_plan_invalid")
+
+    def test_wasmtime_assertion_replay_still_passes(self, tmp_path, monkeypatch):
+        from scout_v2.workers import repair
+
+        r, sha = make_repo(tmp_path)
+        case = "copying_collector_grow_heuristic_uses_active_semi_space"
+        outcomes = iter([(101, f"test {case} ... FAILED\nassertion `left == right` failed", ""),
+                         (0, f"test {case} ... ok", "")])
+        monkeypatch.setattr(repair, "_run_cmd", lambda *_: next(outcomes))
+        result = run_repair(job(sha), r, tmp_path / "out", patch_producer=lambda *_: {
+            "patch": GOOD_PATCH, "test_cmd": ["cargo", "test", case],
+            "test_files": {"test_div.py": (r / "test_div.py").read_text()},
+            "verification_plan": {"setup_steps": [], "base_failure": [case, "assertion `left == right` failed"],
+                                  "patched_success": ["... ok"]},
+        })
+        assert result.outcome == "succeeded" and result.reproduced_on_base and result.fixed_on_patch
+
+    def test_rclone_quicktest_preserves_passed_regression_and_check_output(self, tmp_path, monkeypatch):
+        from scout_v2.workers import repair
+
+        r, sha = make_repo(tmp_path)
+        j = job(sha)
+        j.repo = "rclone/rclone"
+        monkeypatch.setenv("OPENCODE_API_KEY", "test-only-opencode-secret")
+        outcomes = iter([(1, "test_div FAILED: assert 3 == 3.5", ""), (0, "test_div PASSED", ""),
+                         (0, "go build passed", ""),
+                         (2, "quicktest failing package", "make: Error 2 test-only-opencode-secret")])
+        monkeypatch.setattr(repair, "_run_cmd", lambda *_: next(outcomes))
+        out = tmp_path / "out"
+        result = run_repair(j, r, out, patch_producer=lambda *_: {
+            "patch": GOOD_PATCH, "test_cmd": ["go", "test"],
+            "test_files": {"test_div.py": (r / "test_div.py").read_text()},
+            "verification_plan": replay_plan(),
+        })
+        assert result.outcome == "failed" and result.reproduced_on_base and result.fixed_on_patch
+        assert result.regression_tests_passed
+        assert result.unverified_items[0].startswith("additional_check_failed")
+        report = json.loads((out / "test-report.json").read_text())
+        assert report["additional_check_output"]["make quicktest"]["stderr_tail"] == "make: Error 2 [REDACTED]"
+        assert "quicktest failing package" in (out / "verification.log").read_text()
+        assert "test-only-opencode-secret" not in (out / "verification.log").read_text()
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX environment assignment")
+    def test_clickhouse_path_assignment_is_executed_by_shell(self, tmp_path):
+        import os
+        from scout_v2.workers import repair
+
+        cmd = 'PATH="$PWD/build/programs:$PATH" printenv PATH'
+        rc, stdout, stderr = repair._run_cmd(repair._split_cmd(cmd), tmp_path, os.environ)
+        assert (rc, stderr) == (0, "")
+        assert stdout.startswith(f"{tmp_path}/build/programs:")
+
+    def test_environment_assignment_does_not_turn_grep_into_regression_test(self):
+        from scout_v2.workers import repair
+
+        cmd = repair._split_cmd("PATH=$PWD/bin:$PATH grep -q token calc.py")
+        assert repair._implausible_verification(cmd, GOOD_PATCH, {"test_div.py": ""})
 
     def test_seeded_file_is_written_for_base_then_removed(self, tmp_path):
         """AI 测试文件要能被 base 阶段看到，但跑完必须清理，不污染工作区。"""
