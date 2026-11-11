@@ -592,7 +592,7 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen
         if _reconcile_publication(budget, eng.tz_name, root=root) is None:
             return {**summary, "abort": "previous publication awaiting reconciliation"}
         day = business_now(eng.tz_name).date().isoformat()
-        refill_day = day if budget.has_publication_release(day, min_published=eng.max_claims_per_day) else ""
+        refill_day = day if budget.has_publication_release(day) else ""
         if latest is not None and not _eligible(entry, refill_day=refill_day):
             return {**summary, "abort": "candidate not currently eligible"}
         if budget.quota_used(day) >= eng.max_claims_per_day:
@@ -1273,6 +1273,68 @@ def _order_candidates(entries: list[tuple[str, dict]],
     return staged
 
 
+def open_scheduled_batch(root: Path) -> list[str]:
+    """Authorize the due historical snapshot once per business day, durably.
+
+    The dispatcher may be busy at the scheduled time. Its snapshot can continue
+    afterwards, but ordinary polling never enrolls additional historical items.
+    """
+    import yaml
+    now = business_now()
+    cfg = root / "configs/dashboard.yaml"
+    settings = (yaml.safe_load(cfg.read_text(encoding="utf-8")) or {}) if cfg.exists() else {}
+    scheduled = now.replace(hour=int(settings.get("staged_flush_hour_local", 4)),
+                            minute=int(settings.get("staged_flush_minute_local", 0)),
+                            second=0, microsecond=0)
+    if now < scheduled:
+        return []
+    day = now.date().isoformat()
+    marker = root / "state/staged_consumption.json"
+    with queue_transaction(root) as queue:
+        previous = json.loads(marker.read_text(encoding="utf-8")) if marker.exists() else {}
+        if previous.get("day") == day:
+            # Recover a crash between writing the marker and committing the queue.
+            for key in previous.get("candidate_ids", []):
+                entry = queue.get(key) or {}
+                if entry.get("status") == "staged" and not entry.get("dispatch_started_at"):
+                    entry["scheduled_consume_day"] = day
+            return []
+        keys = []
+        for key, entry in _order_candidates(list(queue.items())):
+            if not _discovered_today(entry) and not entry.get("dispatch_started_at"):
+                entry["scheduled_consume_day"] = day
+                keys.append(key)
+        atomic_json_write(marker, {"day": day, "candidate_ids": keys})
+    log(root, "scheduled_consumption", day, f"authorized {len(keys)} historical candidates")
+    return keys
+
+
+def _discovered_today(entry: dict) -> bool:
+    stamp = entry.get("discovered_at")
+    try:
+        then = dt.datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+        now = business_now()
+        then = then.astimezone(now.tzinfo) if then.tzinfo else then.replace(tzinfo=now.tzinfo)
+        return then.date() == now.date()
+    except (AttributeError, TypeError, ValueError):
+        return False
+
+
+def _dispatch_candidates(ordered: list[tuple[str, dict]], *, refill_day: str = "",
+                         manual: bool = False) -> list[tuple[str, dict]]:
+    if manual:
+        return ordered
+    day = business_now().date().isoformat()
+    fresh, historical = [], []
+    for item in ordered:
+        entry = item[1]
+        if _discovered_today(entry):
+            fresh.append(item)
+        elif refill_day == day or entry.get("scheduled_consume_day") == day:
+            historical.append(item)
+    return fresh + historical
+
+
 def drain_ai_graded(root: Path, limit: int = 3, dry_run: bool = True,
                     max_new_claims: int = 0, *, rescreen: bool = False) -> list[dict]:
     """扫描候选池：AI 判定可处理、无客观否决、未处理过的 → 逐条走后端 pipeline。
@@ -1282,8 +1344,9 @@ def drain_ai_graded(root: Path, limit: int = 3, dry_run: bool = True,
     AI 的判断再加一道更粗糙的复核，两层经常互相打架。规则只留客观事实否决
     （blockers 非空 = 已有 PR / 认领信号 / 纯文档 / 计费抱怨这类不需要判断的事实）。
 
-    max_new_claims：当日还剩几个额度。额度耗尽时今天新识别出的候选标成
-    staged（留到明天），而不是留在 new 里等着被同一轮反复扫描。
+    普通派发优先选择今天发现的候选，历史项必须有当日定时批次授权或
+    当天 PR 关闭释放额度。rescreen=True 是显式手动消费，按 FIFO 重筛。
+    max_new_claims 保留旧调用参数；实际额度由每日发布账本原子判断。
 
     内部测试仓库（fixture）不参与自动 drain：P5 演练用手动触发，演练轮也
     烧 Actions 分钟（2026-10-31 审计发现 3 条 fixture 失败记录）。手动验证
@@ -1318,11 +1381,12 @@ def drain_ai_graded(root: Path, limit: int = 3, dry_run: bool = True,
         try:
             eng, err = PolicyEngine.load(root)
             day = business_now(eng.tz_name).date().isoformat()
-            if not err and ledger.has_publication_release(day, min_published=eng.max_claims_per_day):
+            if not err and ledger.has_publication_release(day):
                 refill_day = day
         finally:
             ledger.close()
     ordered = _order_candidates(eligible, expired_out=expired, refill_day=refill_day)
+    ordered = _dispatch_candidates(ordered, refill_day=refill_day, manual=rescreen)
     if expired and not dry_run:
         for key in expired:
             mark_candidate(root, key, "stage_expired")

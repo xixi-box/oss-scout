@@ -118,6 +118,7 @@ class TestRepairLoopConcurrency:
         (root / "queue" / "candidates.json").write_text(_json.dumps({
             "docker/compose#1": {"id": "docker/compose#1", "repo": "docker/compose", "number": 1,
                             "status": "staged", "eligible_at": "2000-01-01T00:00:00+08:00", "screened_at": queue_now().isoformat(), "blockers": [],
+                            "discovered_at": queue_now().isoformat(),
                             "ai_verdict": {"usable": True, "reason": "clear bug"}},
         }), encoding="utf-8")
         ready = drain_ai_graded(root, limit=5, dry_run=True)
@@ -209,13 +210,13 @@ class TestStagedCandidates:
         import json as _json
         return _json.loads((root / "queue" / "candidates.json").read_text(encoding="utf-8"))
 
-    def test_staged_come_before_fresh(self, tmp_path):
-        """暂存项必须排在当天新扫的前面。"""
+    def test_fresh_comes_before_historical_backlog(self, tmp_path):
+        """Ordinary dispatch only consumes today's discoveries."""
         from scout_v2.workers.auto_pipeline import drain_ai_graded
         root = self._root(tmp_path, {
             "docker/compose#2": {"id": "docker/compose#2", "repo": "docker/compose", "number": 2,
                           "status": "staged", "eligible_at": "2000-01-01T00:00:00+08:00", "screened_at": queue_now().isoformat(), "blockers": [],
-                          "discovered_at": self._ts(0.1),
+                          "discovered_at": queue_now().isoformat(),
                           "ai_verdict": {"usable": True}},
             "docker/compose#1": {"id": "docker/compose#1", "repo": "docker/compose", "number": 1,
                         "status": "staged", "blockers": [],
@@ -225,7 +226,7 @@ class TestStagedCandidates:
                         "ai_verdict": {"usable": True}},
         })
         ready = drain_ai_graded(root, limit=1, dry_run=True)
-        assert [r["id"] for r in ready] == ["docker/compose#1"]
+        assert [r["id"] for r in ready] == ["docker/compose#2"]
 
     def test_batch_limit_does_not_spend_daily_quota(self, tmp_path):
         """额度只剩 1 条时，新扫到的其余候选标 staged 并记时间。"""

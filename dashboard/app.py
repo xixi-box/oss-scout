@@ -200,7 +200,7 @@ def create_app(root: Path | None = None, gh_runner=None,
             current = _load_candidate(root, key) or {}
             if out.get("abort") != "dispatcher busy" and current.get("status") != "staged":
                 _bitable_wake.set()
-                _dispatch(rescreen=rescreen)
+                _dispatch()
 
     def _handle_pr_event(root: Path, ev: dict) -> dict:
         from scripts.monitor_prs import dispatch_pr_fix
@@ -232,8 +232,9 @@ def create_app(root: Path | None = None, gh_runner=None,
         try:
             from scout_v2.repo_policy import PolicyEngine
             from scout_v2.state_store import publication_quota_remaining
-            from scout_v2.workers.auto_pipeline import expire_staged
+            from scout_v2.workers.auto_pipeline import expire_staged, open_scheduled_batch
             expire_staged(root)
+            open_scheduled_batch(root)
             with _inflight_lock:
                 room = _MAX_CONCURRENT - len(_inflight)
             eng, err = PolicyEngine.load(root)
@@ -251,8 +252,10 @@ def create_app(root: Path | None = None, gh_runner=None,
             if room <= 0:
                 return started
             from scout_v2.workers.auto_pipeline import drain_ai_graded
-            # Every trigger chooses from the complete FIFO, including old backlog.
-            cands = [c["id"] for c in drain_ai_graded(root, limit=room, dry_run=True)]
+            # Fresh issues first. History needs a scheduled batch, closure refill,
+            # or an explicit manual request; ordinary polling cannot enroll it.
+            cands = [c["id"] for c in drain_ai_graded(root, limit=room, dry_run=True,
+                                                     rescreen=rescreen)]
             for key in cands:
                 with _inflight_lock:
                     if len(_inflight) >= _MAX_CONCURRENT:

@@ -17,7 +17,8 @@ def queue_root(tmp_path, monkeypatch):
     now = dt.datetime.fromisoformat("2026-11-12T02:00:00+08:00")
     monkeypatch.setattr(state_store, "business_now", lambda *a: now)
     monkeypatch.setattr(pipeline, "business_now", lambda *a: now)
-    eng = SimpleNamespace(tz_name="Asia/Shanghai", max_claims_per_day=5, repo_lane=lambda _: "open")
+    eng = SimpleNamespace(tz_name="Asia/Shanghai", max_claims_per_day=5,
+                          repo_lane=lambda _: "open", repo_entry=lambda _: {})
     monkeypatch.setattr(pipeline.PolicyEngine, "load", lambda _: (eng, None))
     (tmp_path / "queue").mkdir()
     (tmp_path / "queue/candidates.json").write_text("{}")
@@ -65,6 +66,103 @@ def test_waiting_reuses_only_same_business_day_fine_screen(queue_root, monkeypat
     monkeypatch.setattr(pipeline, "business_now", lambda *a: dt.datetime.fromisoformat(
         "2026-11-13T00:00:00+08:00"))
     assert pipeline._fine_rescreen_due(entry)
+
+
+def test_daily_dispatch_prefers_today_and_does_not_consume_due_history(queue_root):
+    history = {"status": "staged", "staged_at": "2026-11-11T01:00:00+08:00",
+               "discovered_at": "2026-11-11T01:00:00+08:00",
+               "eligible_at": "2026-11-11T04:00:00+08:00"}
+    fresh = {**history, "discovered_at": "2026-11-11T16:30:00Z",
+             "staged_at": "2026-11-12T00:30:00+08:00"}
+    ordered = pipeline._order_candidates([("history", history), ("fresh", fresh)])
+    assert [key for key, _ in pipeline._dispatch_candidates(ordered)] == ["fresh"]
+    # Even an authorized historical batch cannot jump ahead of today's issue.
+    history["scheduled_consume_day"] = "2026-11-12"
+    assert [key for key, _ in pipeline._dispatch_candidates(ordered)] == ["fresh", "history"]
+    assert [key for key, _ in pipeline._dispatch_candidates(ordered, manual=True)] == ["history", "fresh"]
+
+
+def test_schedule_snapshots_history_once_and_survives_restart(queue_root, monkeypatch):
+    history = {"status": "staged", "discovered_at": "2026-11-11T01:00:00+08:00",
+               "staged_at": "2026-11-11T01:00:00+08:00",
+               "eligible_at": "2026-11-12T04:00:00+08:00"}
+    running = {**history, "status": "running"}
+    reserved = {**history, "dispatch_started_at": "2026-11-12T03:59:00+08:00"}
+    write_queue(queue_root, {"old": history, "running": running, "reserved": reserved})
+    assert pipeline.open_scheduled_batch(queue_root) == []  # 02:00
+    monkeypatch.setattr(pipeline, "business_now", lambda *a: dt.datetime.fromisoformat(
+        "2026-11-12T04:00:00+08:00"))
+    assert pipeline.open_scheduled_batch(queue_root) == ["old"]
+    after = read_queue(queue_root)
+    assert after["running"] == running and after["reserved"] == reserved
+    assert after["old"]["scheduled_consume_day"] == "2026-11-12"
+    # Simulate a queue write lost after the durable schedule marker was saved.
+    after["old"].pop("scheduled_consume_day")
+    after["late"] = history
+    write_queue(queue_root, after)
+    assert pipeline.open_scheduled_batch(queue_root) == []
+    after = read_queue(queue_root)
+    assert after["old"]["scheduled_consume_day"] == "2026-11-12"
+    assert "scheduled_consume_day" not in after["late"]
+    monkeypatch.setattr(pipeline, "business_now", lambda *a: dt.datetime.fromisoformat(
+        "2026-11-13T00:00:00+08:00"))
+    assert pipeline._dispatch_candidates(pipeline._order_candidates([("old", after["old"])])) == []
+
+
+def test_closure_allows_due_history_but_ordinary_new_day_quota_does_not(queue_root):
+    history = {"status": "staged", "staged_at": "2026-11-11T01:00:00+08:00",
+               "discovered_at": "2026-11-11T01:00:00+08:00",
+               "eligible_at": "2026-11-13T04:00:00+08:00", "defer_reason": "daily_quota"}
+    write_queue(queue_root, {"docker/compose#1": {**history, "id": "docker/compose#1",
+                "repo": "docker/compose", "number": 1, "ai_verdict": {"usable": True}}})
+    assert pipeline.drain_ai_graded(queue_root) == []
+    ledger = ClaimLedger(queue_root / "state/scout_v2.sqlite3")
+    # A same-day close releases a real slot even before all five were filled.
+    assert ledger.reserve_publication("Asia/Shanghai", 5, "job", "docker/compose", "head", "x/y")
+    url = "https://github.com/docker/compose/pull/2"
+    ledger.finish_publication("job", day="2026-11-12", url=url)
+    ledger.record_publication_status(url, "closed", "2026-11-12")
+    assert [row["id"] for row in pipeline.drain_ai_graded(queue_root)] == ["docker/compose#1"]
+    ledger.close()
+
+
+@pytest.mark.parametrize("fresh,manual,expected", [(True, False, ["docker/compose#2"]),
+                                                 (False, False, []),
+                                                 (False, True, ["docker/compose#1"])])
+def test_controller_dispatch_respects_the_selected_consumption_lane(
+        queue_root, monkeypatch, fresh, manual, expected):
+    import inspect
+    import threading
+    from dashboard.app import create_app
+
+    monkeypatch.setenv("OSSCOUT_DISABLE_AUTO_REPAIR", "1")
+    old = {"id": "docker/compose#1", "repo": "docker/compose", "number": 1,
+           "status": "staged", "discovered_at": "2026-11-11T01:00:00+08:00",
+           "staged_at": "2026-11-11T01:00:00+08:00",
+           "eligible_at": "2026-11-11T04:00:00+08:00", "ai_verdict": {"usable": True}}
+    entries = {old["id"]: old}
+    if fresh:
+        entries["docker/compose#2"] = {**old, "id": "docker/compose#2", "number": 2,
+            "discovered_at": "2026-11-12T01:00:00+08:00",
+            "staged_at": "2026-11-12T01:00:00+08:00"}
+    write_queue(queue_root, entries)
+    launched = []
+
+    class Thread:
+        def __init__(self, *, target, args, **kwargs):
+            self.args = args
+
+        def start(self):
+            launched.append(self.args[0]["id"])
+
+    monkeypatch.setattr(threading, "Thread", Thread)
+    app = create_app(queue_root, auth_enabled=False, password="test")
+    monkeypatch.delenv("OSSCOUT_DISABLE_AUTO_REPAIR", raising=False)
+    route = next(r for r in app.routes if r.path == "/api/pipeline/run")
+    dispatch = inspect.getclosurevars(route.endpoint).nonlocals["_dispatch"]
+    assert dispatch(rescreen=manual) == expected
+    assert launched == expected
+    assert read_queue(queue_root) == entries  # selection never changes a running task
 
 
 def test_refill_uses_one_fifo_but_never_bypasses_retry_or_nonquota_due_time(queue_root):
