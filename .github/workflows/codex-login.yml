@@ -26,7 +26,7 @@ jobs:
     needs: login
     if: ${{ !cancelled() && (needs.login.result == 'success' || inputs.smoke_only) }}
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
         with:
@@ -35,7 +35,9 @@ jobs:
         with:
           python-version: "3.11"
       - run: pip install -r requirements.txt
-      - run: npm install -g @openai/codex@0.151.0
+      - run: |
+          npm install -g @openai/codex@0.167.1
+          codex --version
       - name: Verify subscription repair on an isolated fixture
         env:
           CF_INGEST_TOKEN: ${{ secrets.CF_INGEST_TOKEN }}
@@ -57,7 +59,8 @@ jobs:
                   "commit", "-qm", "seed division bug")
               sha = git("rev-parse", "HEAD")
               job = Job(mode="repair", repo="xixi-box/oss-scout-v2-test", base_sha=sha,
-                        idempotency_key="codex-subscription-smoke", repair_agent="codex")
+                        idempotency_key="codex-subscription-smoke", repair_agent="codex",
+                        model="gpt-6.1-sol#medium")
               candidate = {}
               def produce(job, work, context):
                   candidate.update(opencode_patch_producer(job, work, context))
@@ -66,7 +69,7 @@ jobs:
                   context="calc.div(7, 2) returns 3 but must return 3.5. Fix division and add a unittest regression. "
                           "Use python -m unittest -v so the same case name appears on both runs. "
                           "Do not commit or push. Record the real verification plan in OSSCOUT_RESULT.json.")
-              print(json.dumps({"outcome": result.outcome, "base_bug_confirmed": result.reproduced_on_base,
+              print(json.dumps({"requested_model": job.model, "outcome": result.outcome, "base_bug_confirmed": result.reproduced_on_base,
                                 "patched_test_passed": result.fixed_on_patch}))
               if result.outcome != "succeeded":
                   report = pathlib.Path(directory) / "artifacts/test-report.json"

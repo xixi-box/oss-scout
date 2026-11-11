@@ -167,7 +167,9 @@ jobs:
 
       - name: Install Codex CLI
         if: steps.job.outputs.preview_replay != 'true' && steps.job.outputs.repair_agent == 'codex'
-        run: npm install -g @openai/codex@0.151.0
+        run: |
+          npm install -g @openai/codex@0.167.1
+          codex --version
 
       - name: Collect PR evidence
         env:
