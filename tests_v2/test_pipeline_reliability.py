@@ -1,4 +1,5 @@
 """Regression coverage for ingestion, queue ordering and daily consumption."""
+from scout_v2.state_store import business_now as queue_now
 import datetime as dt
 import json
 from types import SimpleNamespace
@@ -74,15 +75,15 @@ def test_candidate_capacity_blocks_before_openjev_only_when_quota_is_full(intake
         assert json.loads(queue.read_text(encoding="utf-8"))["a/b#13"]["status"] == "staged"
 
 
-def test_full_staged_backlog_does_not_block_new_issue_with_quota(intake):
+def test_full_waiting_queue_blocks_before_ai_even_with_free_quota(intake):
     ds, issue = intake
     queue = ds.root / "queue/candidates.json"
     queue.write_text(json.dumps({f"a/b#{n}": {"status": "staged"} for n in range(2, 12)}))
     with patch("scout_v2.workers.openjev.OpenJevClient") as cls:
         cls.return_value.score_issue.return_value = {"usable": True, "reason": "repro"}
-        assert d.ingest_cloudflare_issues(ds, [issue]) == (1, ["a/b#1"])
-        cls.return_value.score_issue.assert_called_once()
-    assert json.loads(queue.read_text())["a/b#1"]["status"] == "new"
+        assert d.ingest_cloudflare_issues(ds, [issue]) == (0, [])
+        cls.return_value.score_issue.assert_not_called()
+    assert len(json.loads(queue.read_text())) == 10
 
 
 def test_candidate_capacity_is_rechecked_before_inserting(intake):
@@ -115,20 +116,21 @@ def test_candidate_capacity_is_rechecked_before_inserting(intake):
 def test_pending_issues_fit_only_remaining_staged_slots(intake):
     ds, _ = intake
     path = ds.root / "queue/candidates.json"
-    entries = {f"a/b#{n}": {"status": "staged"} for n in range(3, 12)}
-    entries["a/b#1"] = {"status": "new", "discovered_at": "2026-11-10T08:00:00+08:00"}
-    entries["a/b#2"] = {"status": "new", "discovered_at": "2026-11-10T08:01:00+08:00"}
+    entries = {}
+    entries["a/b#1"] = {"status": "staged", "eligible_at": "2000-01-01T00:00:00+08:00", "screened_at": queue_now().isoformat(), "discovered_at": "2026-11-10T08:00:00+08:00"}
+    entries["a/b#2"] = {"status": "staged", "eligible_at": "2000-01-01T00:00:00+08:00", "screened_at": queue_now().isoformat(), "discovered_at": "2026-11-10T08:01:00+08:00"}
     path.write_text(json.dumps(entries))
     assert p._stage_candidates(ds.root, ["a/b#2", "a/b#1"], tz_name="Asia/Shanghai", cap=5) == 0
     _fill_publication_quota(ds.root)
-    assert p._stage_candidates(ds.root, ["a/b#2", "a/b#1"], tz_name="Asia/Shanghai", cap=5) == 1
+    assert p._stage_candidates(ds.root, ["a/b#2", "a/b#1"], tz_name="Asia/Shanghai", cap=5) == 2
     updated = json.loads(path.read_text(encoding="utf-8"))
     assert updated["a/b#1"]["status"] == "staged"
-    assert updated["a/b#2"]["status"] == "coarse_blocked"
-    assert updated["a/b#2"]["coarse_reason"] == "候选列表已满"
+    assert updated["a/b#2"]["status"] == "staged"
+    assert updated["a/b#1"]["staged_at"] < updated["a/b#2"]["staged_at"]
+    assert updated["a/b#1"]["defer_reason"] == "daily_quota"
 
 
-def test_prune_keeps_latest_and_protects_unreconciled_repair(intake):
+def test_prune_keeps_oldest_and_protects_unreconciled_repair(intake):
     from scout_v2.state_store import staged_candidate_count
 
     ds, _ = intake
@@ -143,10 +145,10 @@ def test_prune_keeps_latest_and_protects_unreconciled_repair(intake):
     ledger = ClaimLedger(ds.root / "state/scout_v2.sqlite3")
     try:
         assert ledger.reserve_publication("Asia/Shanghai", 5, "job-id", "a/b", "fork:fix/issue-13-ab-cd", "x/y")
-        assert set(d.prune_candidate_backlog(ds.root)) == {"a/b#1", "a/b#3"}
+        assert set(d.prune_candidate_backlog(ds.root)) == {"a/b#2", "a/b#12"}
         updated = json.loads(queue.read_text(encoding="utf-8"))
-        assert updated["a/b#2"]["status"] == "staged"
-        assert updated["a/b#1"]["status"] == "queue_pruned"
+        assert updated["a/b#1"]["status"] == "staged"
+        assert updated["a/b#2"]["status"] == "queue_pruned"
         assert updated["a/b#13"]["status"] == "escalated"
         assert updated["a/b#14"]["status"] == "pr_open"
         assert staged_candidate_count(updated) == 10
@@ -252,7 +254,7 @@ def test_openjev_receives_actor_time_and_linked_pr_evidence(intake, monkeypatch)
 def test_prestart_coarse_blocker_stops_before_claim(tmp_path, monkeypatch, check_overrides, reason):
     (tmp_path / "queue").mkdir()
     (tmp_path / "state").mkdir()
-    entry = {"id": "docker/compose#1", "repo": "docker/compose", "number": 1, "status": "new"}
+    entry = {"id": "docker/compose#1", "repo": "docker/compose", "number": 1, "status": "staged", "eligible_at": "2000-01-01T00:00:00+08:00", "screened_at": queue_now().isoformat()}
     queue = tmp_path / "queue/candidates.json"
     queue.write_text(json.dumps({entry["id"]: entry}))
     monkeypatch.setattr(p.PolicyEngine, "load", lambda _: (
@@ -276,7 +278,7 @@ def test_queue_rescreen_input_limit_is_terminal(tmp_path, monkeypatch):
     (tmp_path / "queue").mkdir()
     (tmp_path / "state").mkdir()
     repo, key = "docker/compose", "docker/compose#1"
-    entry = {"id": key, "repo": repo, "number": 1, "status": "new", "ai_verdict": {"usable": True}}
+    entry = {"id": key, "repo": repo, "number": 1, "status": "staged", "eligible_at": "2000-01-01T00:00:00+08:00", "screened_at": queue_now().isoformat(), "ai_verdict": {"usable": True}}
     queue = tmp_path / "queue/candidates.json"
     queue.write_text(json.dumps({key: entry}), encoding="utf-8")
     (tmp_path / "state/seen.json").write_text(json.dumps({
@@ -326,7 +328,7 @@ def test_staged_is_not_consumed_before_next_four_am():
 def test_queue_updates_do_not_lose_other_threads(tmp_path):
     from concurrent.futures import ThreadPoolExecutor
     (tmp_path / "queue").mkdir()
-    entries = {f"a/b#{i}": {"status": "new"} for i in range(50)}
+    entries = {f"a/b#{i}": {"status": "staged", "eligible_at": "2000-01-01T00:00:00+08:00", "screened_at": queue_now().isoformat()} for i in range(50)}
     qp = tmp_path / "queue/candidates.json"
     qp.write_text(json.dumps(entries))
     with ThreadPoolExecutor(max_workers=10) as pool:
@@ -354,7 +356,7 @@ def test_staging_keeps_original_due_time(tmp_path, monkeypatch):
     from zoneinfo import ZoneInfo
     monkeypatch.setattr(p, "business_now", lambda *a: dt.datetime(2026, 11, 6, 23, 59,
                                                                 tzinfo=ZoneInfo("Asia/Shanghai")))
-    entry = {"status": "new"}
+    entry = {"status": "staged", "eligible_at": "2000-01-01T00:00:00+08:00", "screened_at": queue_now().isoformat()}
     p._defer_entry(entry, tmp_path)
     assert entry["eligible_at"] == "2026-11-07T04:00:00+08:00"
     p._defer_entry(entry, tmp_path)
@@ -466,7 +468,7 @@ def test_failed_repair_does_not_spend_publication_quota(tmp_path, monkeypatch, m
     (tmp_path / "queue").mkdir()
     (tmp_path / "state").mkdir()
     entries = {f"docker/compose#{i}": {"id": f"docker/compose#{i}", "repo": "docker/compose", "number": i,
-                            "title": "Parser bug", "status": "new", "context_complete": True,
+                            "title": "Parser bug", "status": "staged", "eligible_at": "2000-01-01T00:00:00+08:00", "screened_at": queue_now().isoformat(), "context_complete": True,
                             "ai_verdict": {"usable": True, "provider": "codiv"}}
                for i in range(1, 8)}
     if mode.startswith("staged"):
@@ -475,6 +477,7 @@ def test_failed_repair_does_not_spend_publication_quota(tmp_path, monkeypatch, m
         for i in (4, 5, 6):
             entries[f"docker/compose#{i}"].update(
                 status="staged", staged_at=(now - dt.timedelta(days=2)).isoformat(),
+                screened_at=(now - dt.timedelta(days=2)).isoformat(),
                 eligible_at=dt.datetime.combine(now.date() - dt.timedelta(days=1),
                                                 dt.time(4), tzinfo=now.tzinfo).isoformat())
     (tmp_path / "queue/candidates.json").write_text(json.dumps(entries))
@@ -705,7 +708,7 @@ def test_same_day_pr_closure_refills_one_slot_without_rewriting_queue(tmp_path, 
     queue = {}
     for number in (1, 2):
         key = f"{repo}#{number}"
-        entry = {"id": key, "repo": repo, "number": number, "status": "new",
+        entry = {"id": key, "repo": repo, "number": number, "status": "staged", "eligible_at": "2000-01-01T00:00:00+08:00", "screened_at": queue_now().isoformat(),
                  "discovered_at": f"{day}T01:0{number}:00+08:00", "ai_verdict": {"usable": True}}
         p._defer_entry(entry, tmp_path)
         queue[key] = entry
@@ -880,5 +883,5 @@ def test_fresh_issue_consumes_normally_before_four_am_with_staged_backlog(monkey
                                                                 tzinfo=ZoneInfo("Asia/Shanghai")))
     old = {"status": "staged", "staged_at": "2026-11-06T20:00:00+08:00",
            "eligible_at": "2026-11-07T04:00:00+08:00"}
-    new = {"status": "new", "discovered_at": f"2026-11-07T{hour:02d}:{minute:02d}:00+08:00"}
+    new = {"status": "staged", "eligible_at": "2000-01-01T00:00:00+08:00", "screened_at": queue_now().isoformat(), "discovered_at": f"2026-11-07T{hour:02d}:{minute:02d}:00+08:00"}
     assert p._order_candidates([("old", old), ("new", new)]) == [("new", new)]

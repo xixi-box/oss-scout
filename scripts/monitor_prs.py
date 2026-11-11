@@ -1193,8 +1193,8 @@ def build_scan_rows(root, running_keys=(), published=None, pr_states=None) -> li
 
 # ---- 候选池/扫描发现的入队状态：黄=排队中，绿=已解决，红=已失效 ----
 
-_QUEUE_YELLOW = {"new", "staged", "needs_maintainer_confirm", "needs_cla",
-                 "gated_alignment_only", "running", "recheck_failed"}
+_QUEUE_YELLOW = {"staged", "needs_maintainer_confirm", "needs_cla",
+                 "gated_alignment_only", "running"}
 _QUEUE_GREEN = {"pr_open", "merged", "completed"}
 _QUEUE_RED = {"aborted_stale", "stage_expired", "escalated", "aborted_competed",
               "aborted_duplicate", "aborted_closed", "aborted_no_evidence",
@@ -1263,12 +1263,10 @@ _SCAN_OTHER_OUTCOMES = {
 
 
 def candidate_activity_state(key: str, status: str, running_keys) -> str:
-    if key.lower() in running_keys and status in {"running", "escalated"}:
+    if key.lower() in running_keys and status in {"staged", "running", "escalated"}:
         return "执行中"
-    if status == "staged":
+    if status in {"staged", "running"}:
         return "暂存"
-    if status in {"new", "recheck_failed", "running"}:
-        return "待执行"
     return ""
 
 

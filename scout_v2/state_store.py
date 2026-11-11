@@ -24,6 +24,17 @@ def staged_candidate_count(queue: dict) -> int:
     return sum(entry.get("status") == "staged" for entry in queue.values())
 
 
+def candidate_fifo_key(key: str, entry: dict) -> tuple[float, str]:
+    stamp = entry.get("staged_at") or entry.get("discovered_at")
+    try:
+        then = dt.datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+        if then.tzinfo is None:
+            then = then.replace(tzinfo=ZoneInfo("Asia/Shanghai"))
+        return then.timestamp(), key
+    except (AttributeError, TypeError, ValueError):
+        return 0.0, key
+
+
 def publication_quota_remaining(root: Path, tz_name: str, cap: int) -> int:
     if cap <= 0:
         return 10 ** 6

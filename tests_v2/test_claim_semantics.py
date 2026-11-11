@@ -9,6 +9,7 @@
   被这个循环架空了，所以那个数字一直是假的。
 """
 from __future__ import annotations
+from scout_v2.state_store import business_now as queue_now
 
 import json
 import sys
@@ -83,9 +84,9 @@ class TestAttemptCounter:
         q = tmp_path / "queue"
         q.mkdir(parents=True)
         (q / "candidates.json").write_text(json.dumps({
-            "a/x#1": {"id": "a/x#1", "repo": "a/x", "number": 1, "status": "new"}
+            "a/x#1": {"id": "a/x#1", "repo": "a/x", "number": 1, "status": "staged", "eligible_at": "2000-01-01T00:00:00+08:00", "screened_at": queue_now().isoformat()}
         }), encoding="utf-8")
-        mark_candidate(tmp_path, "a/x#1", "new", extra={"attempts": 2})
+        mark_candidate(tmp_path, "a/x#1", "staged", extra={"attempts": 2})
         d = json.loads((q / "candidates.json").read_text(encoding="utf-8"))
         assert d["a/x#1"]["attempts"] == 2
 
@@ -132,58 +133,19 @@ class TestAttemptFuseWorklogCount:
 
 
 class TestStagedFlush:
-    """凌晨批量激活 staged：细筛结果复用，不再重跑 AI。
+    def test_waiting_does_not_clear_original_enqueue_time(self, tmp_path):
+        from scout_v2.workers.auto_pipeline import _wait_entry
+        entry = {"status": "staged", "staged_at": "2026-11-05T01:00:00+08:00",
+                 "ai_verdict": {"usable": True}}
+        _wait_entry(entry, tmp_path)
+        assert entry["status"] == "staged"
+        assert entry["staged_at"] == "2026-11-05T01:00:00+08:00"
+        assert entry["ai_verdict"] == {"usable": True}
 
-    用户裁定 2026-11-05 的两段式消费：
-      白天 每分钟发现 → 名额内当场修，满了标 staged
-      凌晨 全部 staged → new，供当天消费（只做"有没有人做"的实时复检）
-    """
-
-    def test_flush_revives_and_clears_staged_at(self, tmp_path, monkeypatch):
-        from scout_v2.workers.auto_pipeline import _data_root
-        (tmp_path / "queue").mkdir()
-        (tmp_path / "state").mkdir()
-        qpath = tmp_path / "queue" / "candidates.json"
-        qpath.write_text(json.dumps({
-            "a/b#1": {"status": "staged", "staged_at": "2026-11-05T01:00:00",
-                      "ai_verdict": {"usable": True}},
-            "a/b#2": {"status": "new", "ai_verdict": {"usable": True}},
-            "a/b#3": {"status": "aborted_competed"},
-        }), encoding="utf-8")
-
-        from scout_v2.state_store import atomic_json_write
-        q = json.loads(qpath.read_text(encoding="utf-8"))
-        revived = 0
-        for key, e in q.items():
-            if (e or {}).get("status") == "staged":
-                e["status"] = "new"
-                e.pop("staged_at", None)
-                revived += 1
-        atomic_json_write(qpath, q)
-
-        after = json.loads(qpath.read_text(encoding="utf-8"))
-        assert revived == 1
-        assert after["a/b#1"]["status"] == "new"
-        assert "staged_at" not in after["a/b#1"]
-        assert after["a/b#2"]["status"] == "new"
-        assert after["a/b#3"]["status"] == "aborted_competed"   # 终态不动
-
-    def test_flush_does_not_touch_ai_verdict(self, tmp_path):
-        """凌晨复活不重跑细筛：ai_verdict 原样保留。"""
-        (tmp_path / "queue").mkdir()
-        qpath = tmp_path / "queue" / "candidates.json"
-        verdict = {"usable": True, "reason": "reproducible bug", "model": "m"}
-        qpath.write_text(json.dumps({
-            "a/b#1": {"status": "staged", "staged_at": "x", "ai_verdict": verdict},
-        }), encoding="utf-8")
-        from scout_v2.state_store import atomic_json_write
-        q = json.loads(qpath.read_text(encoding="utf-8"))
-        for e in q.values():
-            if (e or {}).get("status") == "staged":
-                e["status"] = "new"
-                e.pop("staged_at", None)
-        atomic_json_write(qpath, q)
-        assert json.loads(qpath.read_text(encoding="utf-8"))["a/b#1"]["ai_verdict"] == verdict
+    def test_cross_day_waiting_requires_fresh_ai(self):
+        from scout_v2.workers.auto_pipeline import _fine_rescreen_due
+        assert _fine_rescreen_due({"screened_at": "2020-01-01T00:00:00+08:00"})
+        assert not _fine_rescreen_due({"screened_at": queue_now().isoformat()})
 
 
 class TestAlwaysReleaseSemantics:

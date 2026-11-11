@@ -1,5 +1,6 @@
 """路由测试（计划 §5 矩阵 + §16：broad_scan 拒 Actions、回退仅限平台问题）。"""
 from __future__ import annotations
+from scout_v2.state_store import business_now as queue_now
 
 import sys
 from pathlib import Path
@@ -116,7 +117,7 @@ class TestRepairLoopConcurrency:
         (root / "queue").mkdir(parents=True)
         (root / "queue" / "candidates.json").write_text(_json.dumps({
             "docker/compose#1": {"id": "docker/compose#1", "repo": "docker/compose", "number": 1,
-                            "status": "new", "blockers": [],
+                            "status": "staged", "eligible_at": "2000-01-01T00:00:00+08:00", "screened_at": queue_now().isoformat(), "blockers": [],
                             "ai_verdict": {"usable": True, "reason": "clear bug"}},
         }), encoding="utf-8")
         ready = drain_ai_graded(root, limit=5, dry_run=True)
@@ -132,7 +133,7 @@ class TestRepairLoopConcurrency:
         (root / "queue").mkdir(parents=True)
         (root / "queue" / "candidates.json").write_text(_json.dumps({
             "docker/compose#2": {"id": "docker/compose#2", "repo": "docker/compose", "number": 2,
-                            "status": "new", "blockers": [],
+                            "status": "staged", "eligible_at": "2000-01-01T00:00:00+08:00", "screened_at": queue_now().isoformat(), "blockers": [],
                             "ai_verdict": {"usable": False, "reason": "needs design"}},
         }), encoding="utf-8")
         assert drain_ai_graded(root, limit=5, dry_run=True) == []
@@ -146,7 +147,7 @@ class TestRepairLoopConcurrency:
         (root / "queue").mkdir(parents=True)
         (root / "queue" / "candidates.json").write_text(_json.dumps({
             "docker/compose#3": {"id": "docker/compose#3", "repo": "docker/compose", "number": 3,
-                            "status": "new", "blockers": ["docs_only"],
+                            "status": "staged", "eligible_at": "2000-01-01T00:00:00+08:00", "screened_at": queue_now().isoformat(), "blockers": ["docs_only"],
                             "ai_verdict": {"usable": True, "reason": "looks fine"}},
         }), encoding="utf-8")
         assert drain_ai_graded(root, limit=5, dry_run=True) == []
@@ -213,7 +214,7 @@ class TestStagedCandidates:
         from scout_v2.workers.auto_pipeline import drain_ai_graded
         root = self._root(tmp_path, {
             "docker/compose#2": {"id": "docker/compose#2", "repo": "docker/compose", "number": 2,
-                          "status": "new", "blockers": [],
+                          "status": "staged", "eligible_at": "2000-01-01T00:00:00+08:00", "screened_at": queue_now().isoformat(), "blockers": [],
                           "discovered_at": self._ts(0.1),
                           "ai_verdict": {"usable": True}},
             "docker/compose#1": {"id": "docker/compose#1", "repo": "docker/compose", "number": 1,
@@ -231,7 +232,7 @@ class TestStagedCandidates:
         from scout_v2.workers.auto_pipeline import drain_ai_graded
         entries = {
             f"docker/compose#{i}": {"id": f"docker/compose#{i}", "repo": "docker/compose", "number": i,
-                         "status": "new", "blockers": [],
+                         "status": "staged", "eligible_at": "2000-01-01T00:00:00+08:00", "screened_at": queue_now().isoformat(), "blockers": [],
                          "discovered_at": self._ts(0.05 * i),
                          "ai_verdict": {"usable": True}}
             for i in range(1, 4)
@@ -240,8 +241,8 @@ class TestStagedCandidates:
         drain_ai_graded(root, limit=1, dry_run=False)
         q = self._read(root)
         staged = [k for k, v in q.items() if v.get("status") == "staged"]
-        assert len(staged) == 0
-        assert all(q[k].get("staged_at") for k in staged)
+        assert len(staged) == 3
+        assert all(q[k].get("defer_reason") != "daily_quota" for k in staged)
 
     def test_expired_stage_is_dropped(self, tmp_path):
         """超过 3 天的暂存不再参与派发。"""
@@ -263,7 +264,7 @@ class TestStagedCandidates:
                          "staged_at": self._ts(1.5),
                          "ai_verdict": {"usable": True}},
             "docker/compose#2": {"id": "docker/compose#2", "repo": "docker/compose", "number": 2,
-                        "status": "new", "blockers": [],
+                        "status": "staged", "eligible_at": "2000-01-01T00:00:00+08:00", "screened_at": queue_now().isoformat(), "blockers": [],
                         "discovered_at": self._ts(0.02),
                         "ai_verdict": {"usable": True}},
         })
@@ -283,7 +284,7 @@ class TestInternalRepoExcluded:
             "xixi-box/oss-scout-v2-test#9": {
                 "id": "xixi-box/oss-scout-v2-test#9",
                 "repo": "xixi-box/oss-scout-v2-test", "number": 9,
-                "status": "new", "blockers": [],
+                "status": "staged", "eligible_at": "2000-01-01T00:00:00+08:00", "screened_at": queue_now().isoformat(), "blockers": [],
                 "ai_verdict": {"usable": True}},
         }), encoding="utf-8")
         assert drain_ai_graded(tmp_path, limit=5, dry_run=True) == []

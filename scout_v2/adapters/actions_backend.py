@@ -134,7 +134,8 @@ class ActionsBackend:
             return {"job_id": remote_job_id, "state": "unknown", "error": out[:200]}
         run = json.loads(out)
         if run.get("status") != "completed":
-            return {"job_id": remote_job_id, "state": "running"}
+            return {"job_id": remote_job_id, "state": "running",
+                    "started_at": run.get("run_started_at") if run.get("status") == "in_progress" else None}
         conclusion = run.get("conclusion") or "unknown"
         return {"job_id": remote_job_id,
                 "state": "succeeded" if conclusion == "success" else "failed",

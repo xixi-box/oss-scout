@@ -198,8 +198,7 @@ def create_app(root: Path | None = None, gh_runner=None,
             with _inflight_lock:
                 _inflight.pop(key, None)
             current = _load_candidate(root, key) or {}
-            if out.get("abort") != "dispatcher busy" and current.get("status") not in (
-                    "new", "recheck_failed", "staged"):
+            if out.get("abort") != "dispatcher busy" and current.get("status") != "staged":
                 _bitable_wake.set()
                 _dispatch(rescreen=rescreen)
 
@@ -245,7 +244,7 @@ def create_app(root: Path | None = None, gh_runner=None,
                 from scout_v2.workers.auto_pipeline import _stage_candidates
                 queued = json.loads((root / "queue/candidates.json").read_text(encoding="utf-8"))
                 _stage_candidates(root, [k for k, e in queued.items()
-                                        if e.get("status") in ("new", "recheck_failed", "staged")],
+                                        if e.get("status") == "staged"],
                                   tz_name=eng.tz_name, cap=eng.max_claims_per_day)
                 return started
             room = min(room, left)
@@ -611,7 +610,8 @@ def create_app(root: Path | None = None, gh_runner=None,
             path.parent.mkdir(parents=True, exist_ok=True)
             _atomic_write_text(path, yaml.safe_dump(cfg, allow_unicode=True))
             for entry in queue.values():
-                if entry.get("status") != "staged" or not entry.get("eligible_at"):
+                if (entry.get("status") != "staged" or entry.get("defer_reason") != "daily_quota"
+                        or not entry.get("eligible_at")):
                     continue
                 try:
                     due = dt.datetime.fromisoformat(entry["eligible_at"])

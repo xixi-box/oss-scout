@@ -44,9 +44,9 @@ def test_service_updates_queue_schedule_and_opens_existing_feishu_table(tmp_path
     (root / "state/feishu_bitable.json").write_text(
         json.dumps({"app_token": "baseExample", "pr_table_id": "tblExample"}))
     (root / "queue/candidates.json").write_text(json.dumps({
-        "docker/compose#12": {"status": "staged", "staged_at": business_now().isoformat(),
+        "docker/compose#12": {"status": "staged", "defer_reason": "daily_quota", "staged_at": business_now().isoformat(),
                               "eligible_at": "2099-11-08T04:00:00+08:00"},
-        "docker/compose#13": {"status": "new"},
+        "docker/compose#13": {"status": "staged"},
     }))
     client = TestClient(create_app(root, auth_enabled=False))
     table = client.get("/", follow_redirects=False)

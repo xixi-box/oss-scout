@@ -325,7 +325,7 @@ class TestCandidateRows:
     def test_candidate_table_tracks_real_actions_start(self, tmp_path):
         (tmp_path / "queue").mkdir()
         (tmp_path / "queue" / "candidates.json").write_text(json.dumps({
-            "a/b#1": self._entry("new"),
+            "a/b#1": self._entry("staged"),
             "a/b#2": self._entry("pr_open"),
             "a/b#3": self._entry("aborted_stale"),
             "a/b#4": self._entry("needs_maintainer_confirm"),
@@ -338,8 +338,8 @@ class TestCandidateRows:
         rows = mp.build_candidate_rows(tmp_path, running_keys={"a/b#8"})
         fields = {r["key"]: fb.cand_row_to_fields(r) for r in rows}
         assert {k: f["处理状态"] for k, f in fields.items()} == {
-            "a/b#1": "待执行", "a/b#6": "暂存",
-            "a/b#7": "待执行", "A/B#8": "执行中",
+            "a/b#1": "暂存", "a/b#6": "暂存",
+            "a/b#7": "暂存", "A/B#8": "执行中",
         }
         assert fields["a/b#6"]["入队时间"] == fb._timestamp("2026-11-05T04:00:00+08:00")
 
@@ -384,7 +384,7 @@ def test_scan_outcomes_follow_candidate_and_publication_state(tmp_path):
     (tmp_path / "state").mkdir()
     (tmp_path / "queue").mkdir()
     entries = {
-        "a/b#1": {"status": "new"},
+        "a/b#1": {"status": "staged"},
         "a/b#2": {"status": "staged"},
         "a/b#3": {"status": "running"},
         "a/b#4": {"status": "running"},
@@ -401,7 +401,7 @@ def test_scan_outcomes_follow_candidate_and_publication_state(tmp_path):
     rows = mp.build_scan_rows(tmp_path, {"a/b#3"}, {"a/b#8": "https://github.com/a/b/pull/18"})
     fields = {row["key"]: fb.scan_row_to_fields(row) for row in rows}
     assert [fields[f"a/b#{i}"]["最终结果"] for i in (1, 2, 3, 4, 5, 6, 9)] == [
-        "待执行", "暂存", "执行中", "待执行", "修复失败 · 缺少复现证据",
+        "暂存", "暂存", "执行中", "暂存", "修复失败 · 缺少复现证据",
         "粗筛淘汰 · 人工签署", None,
     ]
     assert fields["a/b#7"]["最终结果"][0]["link"] == "https://github.com/a/b/pull/17"

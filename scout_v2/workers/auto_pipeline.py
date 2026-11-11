@@ -40,7 +40,7 @@ from ..schemas import Job, Result
 from ..roster import monitored_repo
 from ..state_store import ClaimLedger, Worklog, queue_transaction, business_day, business_now, atomic_json_write
 from ..state_store import (STAGED_CANDIDATE_LIMIT, STAGED_FULL_REASON, publication_quota_remaining,
-                           staged_candidate_count)
+                           staged_candidate_count, candidate_fifo_key)
 from .quality_gate import verify_result
 
 # 推送目标：对第三方仓库我们没有写权限，分支一律推自己的 fork，再向原仓库发 PR。
@@ -91,7 +91,8 @@ def _emergency_release(root: Path, candidate_id: str = "", tz_name: str = "Asia/
     if candidate_id:
         with queue_transaction(root) as queue:
             candidate = queue.get(candidate_id)
-            if candidate and candidate.get("status") == "running":
+            if candidate and (candidate.get("status") == "running" or (
+                    candidate.get("status") == "staged" and candidate.get("dispatch_started_at"))):
                 candidate.update(status="escalated", updated_at=business_now(tz_name).isoformat(timespec="seconds"),
                                  abort_reason="controller interrupted; inspect remote job before retry")
 
@@ -256,6 +257,7 @@ def _reconcile_publication(ledger: ClaimLedger, tz_name: str, *, root: Path | No
                 candidate.update(status=status, updated_at=business_now().isoformat(timespec="seconds"),
                                  repair_job_id=job_id, repair_run_id=str(remote_id),
                                  workflow_conclusion=run.get("conclusion"), **extra)
+                candidate.pop("dispatch_started_at", None)
         if recovery:
             if pr:
                 log(root, "pr_open", key, f"{pr['html_url']} (reconciled from Actions)")
@@ -399,6 +401,12 @@ def _collect(root: Path, backend: str, remote_id: str, extra: dict, timeout_s: i
     while True:
         st = be.poll(remote_id)
         state = st.get("state")
+        if extra.get("candidate_id") and st.get("started_at"):
+            with queue_transaction(root) as queue:
+                candidate = queue.get(extra["candidate_id"])
+                if candidate and candidate.get("status") == "staged":
+                    candidate.update(status="running", started_at=st["started_at"],
+                                     updated_at=business_now().isoformat(timespec="seconds"))
         if state != "running":
             break
         if time.time() - t0 > timeout_s:
@@ -502,8 +510,10 @@ def _abort_release_impl(msg: str, *, candidate_id: str, ledger, eng,
     if ledger is not None:
         ledger.close()
         with queue_transaction(root) as q:
-            if key in q and q[key].get("status") == "running":
+            if key in q and (q[key].get("status") == "running" or (
+                    q[key].get("status") == "staged" and q[key].get("dispatch_started_at"))):
                 q[key].update(status="aborted_pipeline", abort_reason=msg[:300])
+                q[key].pop("dispatch_started_at", None)
     summary["abort"] = msg
     log_fn(root, "abort", key, msg)
     return summary
@@ -548,10 +558,10 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen
         if latest is not None:
             immediate = immediate and latest == entry
             entry = dict(latest)
-            if entry.get("status") not in ("new", "recheck_failed", "staged"):
+            if entry.get("status") != "staged":
                 return {**summary, "abort": "candidate not currently eligible"}
 
-    rescreen = rescreen or bool(entry.get("staged_at") or entry.get("rescreen_pending")) or entry.get("status") == "staged"
+    rescreen = rescreen or _fine_rescreen_due(entry)
 
     def _abort_release(msg: str, *, give_back: bool = True) -> dict:
         # 委托模块级实现（显式传参）。2026-11-06 实录：模块级版本曾漏参
@@ -597,7 +607,7 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen
     summary["steps"].append(f"lane={lane}")
 
     # Only the synchronous intake handoff can reuse its live coarse check.
-    reuse_screen = immediate and latest is not None and entry.get("status") == "new" and not rescreen
+    reuse_screen = immediate and latest is not None and entry.get("status") == "staged" and not rescreen
     recheck = None
     fresh = None
     from dashboard.data import (coarse_issue_blockers, fine_screen_issue,
@@ -610,12 +620,11 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen
         if recheck is None or not recheck.complete:
             summary["abort"] = f"recheck incomplete: {recheck.errors if recheck else 'None'}"
             log(root, "abort", key, summary["abort"])
-            # 复检失败会重试（状态 recheck_failed 在 drain 的候选集里）。修复循环
+            # 粗筛取数失败仍保留暂存，按独立退避时间重试。修复循环
             # 现在每 60 秒一轮，如果 GitHub 持续抖动就会每分钟打一次。记失败次数，
             # 超过 3 次就标 escalated 不再自动重试，避免无意义刷 API。
             n = int(entry.get("recheck_failures") or 0) + 1
-            retry_status = "staged" if entry.get("status") == "staged" else "recheck_failed"
-            mark_candidate(root, key, "escalated" if n >= 3 else retry_status,
+            mark_candidate(root, key, "escalated" if n >= 3 else "staged",
                            extra={"recheck_failures": n, "rescreen_pending": rescreen,
                                   "abort_reason": summary["abort"],
                                   "screen_retry_at": (business_now() + dt.timedelta(minutes=5)).isoformat()})
@@ -635,7 +644,7 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen
                 eng, fresh or entry, lane=lane, live_blockers=live_issue_blockers(recheck), root=root)
         except Exception as ex:
             summary["abort"] = f"coarse screening unavailable: {ex}"
-            mark_candidate(root, key, str(entry.get("status") or "new"), extra={
+            mark_candidate(root, key, "staged", extra={
                 "screen_retry_at": (business_now() + dt.timedelta(minutes=5)).isoformat(),
                 "abort_reason": summary["abort"], "rescreen_pending": rescreen})
             return summary
@@ -695,14 +704,14 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen
             return _abort_release(f"queue fine screening skipped: {reason}")
         if verdict.get("usable") is not True:
             retry = verdict.get("usable") is None
-            status = (entry.get("status") or "new") if retry else "fine_blocked"
+            status = "staged" if retry else "fine_blocked"
             reason = str(verdict.get("reason") or "no eligibility verdict")
             mark_candidate(root, key, status, extra={"abort_reason": reason, "fine_reason": reason, "rescreen_pending": retry,
                 "screen_retry_at": (business_now() + dt.timedelta(minutes=5)).isoformat() if retry else None})
             return _abort_release(f"queue fine screening {'unavailable' if retry else 'rejected'}: {reason}")
         entry = {**fresh, "ai_verdict": verdict, "screened_at": business_now().isoformat(),
                  "rescreen_pending": False, "fine_reason": verdict.get("reason", "")}
-        mark_candidate(root, key, str(entry.get("status") or "new"),
+        mark_candidate(root, key, "staged",
                        extra={k: v for k, v in entry.items() if k != "updated_at"})
         summary["steps"].append("queue coarse and fine screening passed")
     if assignment_rule.get("claim_comment"):
@@ -713,7 +722,7 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen
                 "rejected": "GitHub 拒绝认领留言",
                 "unavailable": "暂无法确认认领留言",
             }[claim]
-            status = str(entry.get("status") or "new") if claim == "unavailable" else "coarse_blocked"
+            status = "staged" if claim == "unavailable" else "coarse_blocked"
             mark_candidate(root, key, status,
                            extra={"coarse_reason": reason, "abort_reason": reason,
                                   "screen_retry_at": (business_now() + dt.timedelta(minutes=5)).isoformat()})
@@ -724,7 +733,7 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen
     # The queue lock protects state across days; the ledger serializes the cap.
     with queue_transaction(root) as q:
         current = q.get(key)
-        if current is not None and current.get("status") not in ("new", "recheck_failed", "staged"):
+        if current is not None and current.get("status") != "staged":
             ledger.close()
             return {**summary, "abort": "candidate already running or terminal"}
         if current is not None and not _order_candidates([(key, current)], refill_day=refill_day):
@@ -740,8 +749,8 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen
             ledger.close()
             return summary
         if current is not None:
-            current.update(status="running", attempts=attempts + 1,
-                           started_at=business_now(eng.tz_name).isoformat())
+            current.update(attempts=attempts + 1,
+                           dispatch_started_at=business_now(eng.tz_name).isoformat())
     wl.append({"ts": business_now(eng.tz_name).isoformat(timespec="seconds"), "action": "claim",
                "target": key, "source": "auto-pipeline"})
     summary["steps"].append("repair attempt recorded")
@@ -827,6 +836,7 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen
     summary["steps"].append(f"backend={backend} ({extra.get('note', '')})")
 
     ledger.set_publication_run(job.job_id, remote_id)
+    extra["candidate_id"] = key
     collected = _collect(root, backend, remote_id, extra)
     runner_pr = _runner_published(collected)
     if runner_pr and runner_pr.get("created") and runner_pr.get("pr"):
@@ -1098,7 +1108,8 @@ def expire_staged(root: Path) -> int:
     expired = []
     with queue_transaction(root) as q:
         for key, entry in q.items():
-            if entry.get("status") == "staged" and _stage_age_days(entry) > STAGE_TTL_DAYS:
+            if (entry.get("status") == "staged" and not entry.get("dispatch_started_at")
+                    and _stage_age_days(entry) > STAGE_TTL_DAYS):
                 entry["status"] = "stage_expired"
                 expired.append(key)
     if expired:
@@ -1121,7 +1132,7 @@ def _stage_candidates(root: Path, keys: list[str], *, tz_name: str, cap: int) ->
             return 0
         for key in sorted(keys, key=lambda k: ((q.get(k) or {}).get("discovered_at") or "", k)):
             e = q.get(key)
-            if isinstance(e, dict) and e.get("status") in ("new", "recheck_failed", "staged"):
+            if isinstance(e, dict) and e.get("status") == "staged" and not e.get("dispatch_started_at"):
                 if e.get("status") == "staged" and _stage_age_days(e) > STAGE_TTL_DAYS:
                     e["status"] = "stage_expired"
                     continue
@@ -1152,7 +1163,8 @@ def _defer_entry(entry: dict, root: Path) -> None:
         hour = int(schedule.get("staged_flush_hour_local", 4))
         minute = int(schedule.get("staged_flush_minute_local", 0))
     entry["status"] = "staged"
-    entry.setdefault("staged_at", now.isoformat(timespec="seconds"))
+    entry["defer_reason"] = "daily_quota"
+    entry.setdefault("staged_at", entry.get("discovered_at") or now.isoformat(timespec="seconds"))
     due = entry.get("eligible_at")
     due_time = dt.datetime.fromisoformat(due) if due else None
     if due_time is not None and due_time.tzinfo is None:
@@ -1163,7 +1175,29 @@ def _defer_entry(entry: dict, root: Path) -> None:
                                                   dt.time(hour, minute), tzinfo=now.tzinfo).isoformat()
 
 
-STAGED_STATUS = "staged"          # 今天额度用完了，留到明天再处理
+def _wait_entry(entry: dict, root: Path) -> None:
+    """One waiting state; a free daily quota makes the item eligible immediately."""
+    now = business_now().isoformat(timespec="seconds")
+    entry.update(status="staged", defer_reason="execution_wait")
+    entry.setdefault("staged_at", now)
+    entry.setdefault("eligible_at", now)
+
+
+def _fine_rescreen_due(entry: dict) -> bool:
+    """Same-day waiting reuses AI; unknown or previous-day evidence is re-scored."""
+    if entry.get("rescreen_pending"):
+        return True
+    stamp = entry.get("screened_at")
+    try:
+        then = dt.datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+        now = business_now()
+        then = then.astimezone(now.tzinfo) if then.tzinfo else then.replace(tzinfo=now.tzinfo)
+        return then.date() != now.date()
+    except (AttributeError, TypeError, ValueError):
+        return True
+
+
+STAGED_STATUS = "staged"          # All waiting candidates, including same-day work.
 # 同一条候选一天内最多试几次。额度闸管总额，这里管单条别无限重试
 # （2026-11-03 实测 deer-flow#7846 一天被 claim 7 次）。
 MAX_ATTEMPTS_PER_CANDIDATE = 3
@@ -1207,6 +1241,7 @@ def _eligible(entry: dict, *, refill_day: str = "") -> bool:
             if due.tzinfo is None:
                 due = due.replace(tzinfo=now.tzinfo)
             refill = (index == 1 and entry.get("status") == "staged"
+                      and entry.get("defer_reason") == "daily_quota"
                       and refill_day == now.date().isoformat())
             if due > now and not refill:
                 return False
@@ -1218,17 +1253,13 @@ def _eligible(entry: dict, *, refill_day: str = "") -> bool:
 def _order_candidates(entries: list[tuple[str, dict]],
                       expired_out: list[str] | None = None, *, refill_day: str = "",
                       ) -> list[tuple[str, dict]]:
-    """暂存优先，且同组内先到先出。
+    """Eligible waiting candidates share one FIFO, regardless of why they waited.
 
-    新候选全天可消费；暂存到次日 04:00 后才参与排序，使用当日剩余额度。
-    满额后当天关闭 PR 腾出名额时，暂存可提前按原顺序补位。
-
-    超过 STAGE_TTL_DAYS 的暂存不再返回：一个 issue 放了三天，多半已经被人修了、
-    被关了，或者上下文已经变了；拿去修反而浪费额度并可能撞车。
-    expired_out 收集被丢弃的 key，调用方负责写日志——静默丢弃会让"这周处理了几
-    条"这类问题无从查起。
+    Quota-deferred items wait until their due time, except same-day closure
+    refills. A retry backoff remains binding. Expired items are returned to the
+    caller for an explicit audited transition.
     """
-    staged, fresh = [], []
+    staged = []
     for key, e in entries:
         if e.get("status") == STAGED_STATUS:
             if _stage_age_days(e) > STAGE_TTL_DAYS:
@@ -1238,12 +1269,8 @@ def _order_candidates(entries: list[tuple[str, dict]],
             if not _eligible(e, refill_day=refill_day):
                 continue
             staged.append((key, e))
-        elif _eligible(e):
-            fresh.append((key, e))
-    staged.sort(key=lambda kv: (str(kv[1].get("staged_at") or kv[1].get("discovered_at") or ""),
-                                str(kv[1].get("discovered_at") or ""), kv[0]))
-    fresh.sort(key=lambda kv: (str(kv[1].get("discovered_at") or ""), kv[0]))
-    return staged + fresh
+    staged.sort(key=lambda kv: candidate_fifo_key(kv[0], kv[1]))
+    return staged
 
 
 def drain_ai_graded(root: Path, limit: int = 3, dry_run: bool = True,
@@ -1265,7 +1292,7 @@ def drain_ai_graded(root: Path, limit: int = 3, dry_run: bool = True,
     root = _data_root(root)
     qpath = root / "queue" / "candidates.json"
     q = json.loads(qpath.read_text(encoding="utf-8"))
-    ACTIVE = ("new", "recheck_failed", STAGED_STATUS)
+    ACTIVE = (STAGED_STATUS,)
     eligible: list[tuple[str, dict]] = []
     for key, e in q.items():
         if e.get("status") not in ACTIVE:

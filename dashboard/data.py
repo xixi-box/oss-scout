@@ -371,24 +371,52 @@ def fine_screen_issue(eng, it: dict, *, lane: str, linked_prs: list | None = Non
 
 
 def prune_candidate_backlog(root: Path) -> list[str]:
-    """Keep the newest staged entries if a legacy backlog is over capacity."""
-    from scout_v2.state_store import STAGED_CANDIDATE_LIMIT, business_now, queue_transaction
+    """Migrate legacy waiting states and keep the oldest ten; never alter writers."""
+    from scout_v2.state_store import (STAGED_CANDIDATE_LIMIT, business_now, queue_transaction,
+                                      publication_quota_remaining, candidate_fifo_key)
+    from scout_v2.repo_policy import PolicyEngine
+    from scout_v2.workers.auto_pipeline import _defer_entry, _wait_entry
 
     now = business_now()
-
-    def entered_at(entry):
-        stamp = entry.get("staged_at") or entry.get("discovered_at")
-        try:
-            parsed = dt.datetime.fromisoformat(stamp)
-            return (parsed if parsed.tzinfo else parsed.replace(tzinfo=now.tzinfo)).timestamp()
-        except (TypeError, ValueError):
-            return float("-inf")
+    eng, error = PolicyEngine.load(root)
+    left = publication_quota_remaining(root, eng.tz_name, eng.max_claims_per_day) if not error else 0
+    protected = set()
+    db = root / "state/scout_v2.sqlite3"
+    if db.exists():
+        with sqlite3.connect(db.resolve().as_uri() + "?mode=ro", uri=True) as conn:
+            try:
+                for repo, head in conn.execute("SELECT repo,head FROM publications WHERE day IS NULL"):
+                    match = re.search(r":fix/issue-(\d+)-", head)
+                    if match:
+                        protected.add(f"{repo}#{match[1]}".lower())
+            except sqlite3.OperationalError as exc:
+                if "no such table" not in str(exc):
+                    raise
 
     with queue_transaction(root) as queue:
+        for key, entry in queue.items():
+            if key.lower() in protected or entry.get("dispatch_started_at"):
+                protected.add(key.lower())
+                continue
+            if entry.get("status") in ("new", "recheck_failed"):
+                entry.setdefault("staged_at", entry.get("discovered_at") or now.isoformat())
+                _wait_entry(entry, root)
+                if not left:
+                    _defer_entry(entry, root)
+            elif entry.get("status") == "staged":
+                entry.setdefault("staged_at", entry.get("discovered_at") or now.isoformat())
+                entry.setdefault("defer_reason", "daily_quota")
+                if not entry.get("eligible_at"):
+                    stamp = candidate_fifo_key(key, entry)[0]
+                    entered = dt.datetime.fromtimestamp(stamp, now.tzinfo) if stamp else now
+                    entry["eligible_at"] = dt.datetime.combine(
+                        entered.date() + dt.timedelta(days=1), dt.time(4), tzinfo=now.tzinfo).isoformat()
         waiting = [key for key, entry in queue.items()
-                   if entry.get("status") == "staged"]
-        waiting.sort(key=lambda key: (entered_at(queue[key]), key), reverse=True)
-        removed = waiting[STAGED_CANDIDATE_LIMIT:]
+                   if entry.get("status") == "staged" and key.lower() not in protected]
+        waiting.sort(key=lambda key: candidate_fifo_key(key, queue[key]))
+        reserved = sum(key.lower() in protected and e.get("status") == "staged"
+                       for key, e in queue.items())
+        removed = waiting[max(0, STAGED_CANDIDATE_LIMIT - reserved):]
         for key in removed:
             queue[key].update(status="queue_pruned", updated_at=now.isoformat(timespec="seconds"))
     return removed
@@ -425,8 +453,7 @@ def ingest_cloudflare_issues(ds, items: list[dict], *, refresh: bool = False) ->
             if key in q or (prior.get("fingerprint") == fingerprint and prior.get("status") in
                             ("blocked", "rejected", "archived", "screen_skipped")):
                 continue
-            full = (staged_candidate_count(q) >= STAGED_CANDIDATE_LIMIT
-                    and publication_quota_remaining(ds.root, eng.tz_name, eng.max_claims_per_day) == 0)
+            full = staged_candidate_count(q) >= STAGED_CANDIDATE_LIMIT
         lane = eng.repo_lane(repo)
         if full:
             blockers, verdict = [STAGED_FULL_REASON], {}
@@ -447,14 +474,16 @@ def ingest_cloudflare_issues(ds, items: list[dict], *, refresh: bool = False) ->
                 continue
             if not blockers and verdict.get("usable") is True:
                 stage = publication_quota_remaining(ds.root, eng.tz_name, eng.max_claims_per_day) == 0
-                if stage and staged_candidate_count(q) >= STAGED_CANDIDATE_LIMIT:
+                if staged_candidate_count(q) >= STAGED_CANDIDATE_LIMIT:
                     rec.update(status="blocked", coarse_reason=STAGED_FULL_REASON)
                 else:
                     q[key] = {**it, "id": key, "repo": repo, "number": number, "lane": lane,
                               "blockers": [], "ai_verdict": verdict,
-                              "discovered_at": now, "status": "new", "lease": None,
+                              "discovered_at": now, "status": "staged", "lease": None,
                               "source": "cloudflare-worker", "screened_at": now,
                               "url": it.get("url") or f"https://github.com/{repo}/issues/{number}"}
+                    from scout_v2.workers.auto_pipeline import _wait_entry
+                    _wait_entry(q[key], ds.root)
                     if stage:
                         _defer_entry(q[key], ds.root)
                     added.append(key)
