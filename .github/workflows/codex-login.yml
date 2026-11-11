@@ -44,7 +44,7 @@ jobs:
           python - <<'PY'
           import json, pathlib, subprocess, tempfile
           from scout_v2.schemas import Job
-          from scout_v2.workers.repair import run_repair
+          from scout_v2.workers.repair import run_repair, opencode_patch_producer
           with tempfile.TemporaryDirectory() as directory:
               repo = pathlib.Path(directory) / "repo"
               repo.mkdir()
@@ -58,7 +58,11 @@ jobs:
               sha = git("rev-parse", "HEAD")
               job = Job(mode="repair", repo="xixi-box/oss-scout-v2-test", base_sha=sha,
                         idempotency_key="codex-subscription-smoke", repair_agent="codex")
-              result = run_repair(job, repo, pathlib.Path(directory) / "artifacts",
+              candidate = {}
+              def produce(job, work, context):
+                  candidate.update(opencode_patch_producer(job, work, context))
+                  return candidate
+              result = run_repair(job, repo, pathlib.Path(directory) / "artifacts", patch_producer=produce,
                   context="calc.div(7, 2) returns 3 but must return 3.5. Fix division and add a unittest regression. "
                           "Use python -m unittest -v so the same case name appears on both runs. "
                           "Do not commit or push. Record the real verification plan in OSSCOUT_RESULT.json.")
@@ -68,5 +72,9 @@ jobs:
                   report = pathlib.Path(directory) / "artifacts/test-report.json"
                   if report.exists():
                       print(report.read_text())
+                  log = pathlib.Path(directory) / "artifacts/worker.log"
+                  if log.exists():
+                      print(log.read_text())
+                  print(json.dumps({key: candidate.get(key) for key in ("patch", "verification_plan")}))
                   raise SystemExit("; ".join(result.unverified_items)[:500])
           PY
