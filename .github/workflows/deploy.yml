@@ -22,6 +22,11 @@ on:
         required: false
         default: main
         type: string
+      reuse_runtime_image:
+        description: Build a code-only update on the server when hosted ACR uploads stall
+        required: false
+        default: false
+        type: boolean
 
 env:
   ALIYUN_ACR_REGISTRY: ${{ vars.ALIYUN_ACR_REGISTRY }}
@@ -39,14 +44,67 @@ jobs:
     # 构建在 GitHub 托管 runner（Actions 构建）；产物只有镜像 → ACR，
     # 无 artifact 中转（存储配额免疫）。deploy job 经 SHA 标签从 ACR 拉取。
     name: Build and push to ACR
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.reuse_runtime_image && fromJSON(format('["self-hosted","{0}"]', inputs.target_env)) || fromJSON('["ubuntu-latest"]') }}
+    timeout-minutes: 20
     steps:
       - name: Checkout source code
+        if: ${{ !inputs.reuse_runtime_image }}
         uses: actions/checkout@v7
         with:
           ref: ${{ github.event.inputs.deploy_ref || 'main' }}
 
+      - name: Build code update from existing runtime
+        if: inputs.reuse_runtime_image
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUESTED_REF: ${{ inputs.deploy_ref }}
+        run: |
+          set -euo pipefail
+          if [ "$REQUESTED_REF" != main ] && [ "$REQUESTED_REF" != "$GITHUB_SHA" ]; then
+            echo "Server code update requires this workflow commit" >&2
+            exit 1
+          fi
+          BUILD_DIR=$(mktemp -d /tmp/oss-scout-build.XXXXXX)
+          trap 'rm -rf "$BUILD_DIR"' EXIT
+          curl --fail --location --retry 2 --connect-timeout 15 --max-time 120 \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/tarball/$GITHUB_SHA" \
+            -o "$BUILD_DIR/source.tgz"
+          mkdir "$BUILD_DIR/source"
+          tar -xzf "$BUILD_DIR/source.tgz" -C "$BUILD_DIR/source" --strip-components=1
+          BASE_IMAGE=$(docker inspect --format '{{.Image}}' oss-scout)
+          docker run --rm --entrypoint cat "$BASE_IMAGE" /app/requirements.txt > "$BUILD_DIR/requirements.txt"
+          cmp "$BUILD_DIR/requirements.txt" "$BUILD_DIR/source/requirements.txt" || {
+            echo "Dependencies changed; a complete runtime build is required" >&2
+            exit 1
+          }
+          cat > "$BUILD_DIR/source/RuntimeDockerfile" <<EOF
+          FROM $BASE_IMAGE
+          USER root
+          RUN rm -rf /app/scout_v2 /app/dashboard /app/scripts /app/configs.seed /app/cloudflare /app/tests_v2
+          COPY scout_v2 /app/scout_v2
+          COPY dashboard /app/dashboard
+          COPY scripts /app/scripts
+          COPY configs /app/configs.seed
+          COPY cloudflare /app/cloudflare
+          COPY tests_v2 /app/tests_v2
+          COPY discover.py health_check.py AGENTS.md config.json /app/
+          COPY --chmod=0755 docker/entrypoint-dashboard.sh /entrypoint.sh
+          USER scout
+          EOF
+          IMAGE="$ALIYUN_ACR_REGISTRY/$ALIYUN_ACR_IMAGE_NAME"
+          printf '%s' "$ALIYUN_ACR_PASSWORD" | docker login "$ALIYUN_ACR_REGISTRY" \
+            -u "$ALIYUN_ACR_USERNAME" --password-stdin
+          docker build -f "$BUILD_DIR/source/RuntimeDockerfile" \
+            --tag "$IMAGE:$GITHUB_SHA" --tag "$IMAGE:latest" \
+            --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
+            --label "org.opencontainers.image.revision=$GITHUB_SHA" "$BUILD_DIR/source"
+          timeout 300 docker push "$IMAGE:$GITHUB_SHA"
+          timeout 300 docker push "$IMAGE:latest"
+
       - name: Validate required files
+        if: ${{ !inputs.reuse_runtime_image }}
         shell: bash
         run: |
           set -euo pipefail
@@ -58,6 +116,7 @@ jobs:
           fi
 
       - name: Log in to Aliyun ACR
+        if: ${{ !inputs.reuse_runtime_image }}
         uses: docker/login-action@v4
         with:
           registry: ${{ env.ALIYUN_ACR_REGISTRY }}
@@ -65,9 +124,11 @@ jobs:
           password: ${{ env.ALIYUN_ACR_PASSWORD }}
 
       - name: Set up Docker Buildx
+        if: ${{ !inputs.reuse_runtime_image }}
         uses: docker/setup-buildx-action@v4
 
       - name: Build and push to ACR (SHA + latest)
+        if: ${{ !inputs.reuse_runtime_image }}
         shell: bash
         run: |
           set -euo pipefail
