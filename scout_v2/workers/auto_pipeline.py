@@ -144,6 +144,18 @@ def _actions_workflow_name(root: Path) -> str:
     return "oss-scout-repair.yml"
 
 
+def _publication_run_missing(runner_repo: str, remote_id: str) -> bool:
+    """Only an explicit HTTP 404 is evidence of a missing run, never a timeout."""
+    try:
+        response = subprocess.run(
+            ["gh", "api", f"repos/{runner_repo}/actions/runs/{remote_id}", "--include"],
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=45)
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return response.returncode != 0 and bool(
+        re.search(r"^HTTP/\S+ 404\b", response.stdout, re.MULTILINE))
+
+
 def _reconcile_publication(ledger: ClaimLedger, tz_name: str, *, root: Path | None = None,
                            worker_result: dict | None = None) -> dict | None:
     """Resolve the previous writer before another job can publish."""
@@ -159,6 +171,23 @@ def _reconcile_publication(ledger: ClaimLedger, tz_name: str, *, root: Path | No
             return None
         ledger.set_publication_run(job_id, remote_id)
     run = gh_read([f"repos/{runner_repo}/actions/runs/{remote_id}"])
+    missing_run = False
+    if run is None and _publication_run_missing(runner_repo, str(remote_id)):
+        # A 404 can also hide a repository permission failure. Require a
+        # successful run listing, and recover a replacement ID before concluding
+        # that this writer no longer exists.
+        runs = gh_read([f"repos/{runner_repo}/actions/workflows/oss-scout-repair.yml/runs?event=workflow_dispatch&per_page=100"])
+        if not isinstance(runs, dict) or not isinstance(runs.get("workflow_runs"), list):
+            return None
+        run = next((r for r in runs["workflow_runs"]
+                    if r.get("display_title") == f"repair {job_id}"), None)
+        if run is not None:
+            remote_id = str(run["id"])
+            ledger.set_publication_run(job_id, remote_id)
+        else:
+            missing_run = True
+            run = {"display_title": f"repair {job_id}", "status": "completed",
+                   "conclusion": "unavailable"}
     if not run or run.get("display_title") != f"repair {job_id}" or run.get("status") != "completed":
         return None
     prs = gh_read([f"repos/{repo}/pulls", "-X", "GET", "-f", "state=all", "-f", f"head={head}"])
@@ -168,6 +197,10 @@ def _reconcile_publication(ledger: ClaimLedger, tz_name: str, *, root: Path | No
                and (p.get("html_url") == expected_url
                     or f"<!-- oss-scout-job:{job_id} -->" in (p.get("body") or ""))), None)
     if pr is None and expected_url:
+        return None
+    if missing_run and prs and pr is None:
+        # Unexpected head matches need investigation rather than an assumption
+        # that no PR was published.
         return None
     created = dt.datetime.fromisoformat(pr["created_at"].replace("Z", "+00:00")) if pr else None
     issue = re.fullmatch(r"[^:]+:fix/issue-(\d+)-[0-9a-f]+(?:-[0-9a-f]+)?", head)
@@ -179,7 +212,7 @@ def _reconcile_publication(ledger: ClaimLedger, tz_name: str, *, root: Path | No
             extra = {"pr_url": pr["html_url"], "repair_outcome": "succeeded", "abort_reason": ""}
         else:
             result = worker_result
-            if recovery:
+            if recovery and not missing_run:
                 result = ActionsBackend(runner_repo=runner_repo, artifact_dir=root / "artifacts").collect(str(remote_id))
             result = result or {}
             if result.get("job_id") != job_id:
@@ -205,6 +238,8 @@ def _reconcile_publication(ledger: ClaimLedger, tz_name: str, *, root: Path | No
                 status = "aborted_pipeline"
             elif run.get("conclusion") in ("failure", "cancelled", "timed_out"):
                 status, reason = "aborted_pipeline", f"工作流已结束（{run['conclusion']}），未发布 PR"
+            elif missing_run:
+                status, reason = "escalated", "Actions 运行记录已不存在；已核对目标分支未开 PR，转人工核查"
             else:
                 status, reason = "escalated", "工作流已结束，未发布 PR，修复结果无法确认"
             extra = {"repair_outcome": outcome or "unknown", "abort_reason": reason[:300]}

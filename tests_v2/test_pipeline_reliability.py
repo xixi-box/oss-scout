@@ -624,6 +624,62 @@ def test_controller_restart_recovers_candidate_and_feishu_status(tmp_path, monke
     assert not p.recover_pending_publication(tmp_path)
 
 
+@pytest.mark.parametrize("case", ["missing", "published", "transient", "no_access",
+                                  "pr_lookup_failed", "expected_url", "unexpected_pr", "replacement_running"])
+def test_missing_actions_writer_is_reconciled_only_with_complete_evidence(tmp_path, monkeypatch, case):
+    key = "docker/compose#123"
+    job = "job-missing-run"
+    url = "https://github.com/docker/compose/pull/456"
+    (tmp_path / "queue").mkdir()
+    queue = tmp_path / "queue/candidates.json"
+    queue.write_text(json.dumps({key: {"status": "escalated"}}))
+    ledger = ClaimLedger(tmp_path / "state/scout_v2.sqlite3")
+    assert ledger.reserve_publication("Asia/Shanghai", 5, job, "docker/compose",
+                                      "xixi-box:fix/issue-123-abcdef0", "xixi-box/oss-scout")
+    ledger.set_publication_run(job, "deleted")
+    if case == "expected_url":
+        ledger.expect_publication(job, url)
+    monkeypatch.setattr(p, "_publication_run_missing", lambda *a: case != "transient")
+    replacement = {"id": 99, "display_title": f"repair {job}", "status": "in_progress"}
+    pr = {"body": f"<!-- oss-scout-job:{job} -->", "created_at": p.business_now().isoformat(),
+          "html_url": url, "user": {"login": "xixi-box"}}
+
+    def read(args):
+        if "/workflows/" in args[0]:
+            return None if case == "no_access" else {"workflow_runs": (
+                [replacement] if case == "replacement_running" else [])}
+        if args[0].endswith("/pulls"):
+            return (None if case == "pr_lookup_failed" else [pr] if case == "published"
+                    else [{**pr, "body": "unrelated"}] if case == "unexpected_pr" else [])
+        return None
+
+    monkeypatch.setattr(p, "gh_read", read)
+    monkeypatch.setattr(p.ActionsBackend, "collect", lambda *a: pytest.fail("missing run cannot be collected"))
+    result = p._reconcile_publication(ledger, "Asia/Shanghai", root=tmp_path)
+    resolved = case in {"missing", "published"}
+    assert (result is not None) == resolved
+    assert (ledger.pending_publication() is None) == resolved
+    entry = json.loads(queue.read_text(encoding="utf-8"))[key]
+    assert entry["status"] == ("pr_open" if case == "published" else "escalated")
+    if case == "missing":
+        assert "未开 PR" in entry["abort_reason"]
+    assert ledger.published_today("Asia/Shanghai") == int(case == "published")
+    if case == "replacement_running":
+        assert ledger.pending_publication()[4] == "99"
+    ledger.close()
+
+
+@pytest.mark.parametrize("header,code,expected", [
+    ("HTTP/2.0 404 Not Found\n", 1, True),
+    ("HTTP/2.0 403 Forbidden\n", 1, False),
+    ("HTTP/2.0 500 Server Error\n", 1, False),
+    ("", 1, False), ("HTTP/2.0 200 OK\n", 0, False)])
+def test_missing_run_requires_explicit_404(monkeypatch, header, code, expected):
+    monkeypatch.setattr(p.subprocess, "run", lambda *a, **kw: SimpleNamespace(
+        stdout=header, returncode=code))
+    assert p._publication_run_missing("xixi-box/oss-scout", "123") == expected
+
+
 def test_same_day_pr_closure_refills_one_slot_without_rewriting_queue(tmp_path, monkeypatch):
     from scout_v2 import state_store
     from scout_v2.feishu_bitable import scan_row_to_fields
