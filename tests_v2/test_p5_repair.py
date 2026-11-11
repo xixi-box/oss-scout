@@ -532,6 +532,25 @@ class TestReproductionMustBeReal:
         assert result.reproduced_on_base and not result.fixed_on_patch
         assert result.unverified_items[0].startswith("patched_test_unconfirmed")
 
+    @pytest.mark.parametrize(("failed", "passed"), [
+        ("test_div (test_calc.TestCalc.test_div) ... FAIL", "test_div (test_calc.TestCalc.test_div) ... ok"),
+        ("test test_div ... FAILED", "test test_div ... ok"),
+        ("test_div FAILED", "test_div PASSED"),
+    ])
+    def test_real_runner_status_change_preserves_case_identity(self, tmp_path, monkeypatch, failed, passed):
+        from scout_v2.workers import repair
+
+        r, sha = make_repo(tmp_path)
+        outcomes = iter([(1, failed + "\nAssertionError: 3 != 3.5", ""), (0, passed, "")])
+        monkeypatch.setattr(repair, "_run_cmd", lambda *_: next(outcomes))
+        result = run_repair(job(sha), r, tmp_path / "out", patch_producer=lambda *_: {
+            "patch": GOOD_PATCH, "test_cmd": ["python", "-m", "unittest", "-v", "test_div"],
+            "test_files": {"test_div.py": (r / "test_div.py").read_text()},
+            "verification_plan": {"setup_steps": [], "base_failure": [failed, "AssertionError: 3 != 3.5"],
+                                  "patched_success": [passed]},
+        })
+        assert result.outcome == "succeeded" and result.reproduced_on_base and result.fixed_on_patch
+
     def test_production_agent_cannot_fall_back_to_a_bare_command(self, tmp_path, monkeypatch):
         from scout_v2.workers import repair
 

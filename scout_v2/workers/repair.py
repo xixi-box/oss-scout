@@ -627,6 +627,12 @@ def _verification_plan_valid(plan: dict) -> bool:
     return True
 
 
+def _test_case_identity(marker: str) -> str:
+    """A runner's FAIL/ok suffix changes while the case identity stays fixed."""
+    marker = re.sub(r"^(?:FAILED|FAIL|ERROR|PASSED|PASS)[: ]+", "", marker.strip())
+    return re.sub(r"\s+(?:\.{2,}\s*)?(?:FAILED|FAIL|ERROR|PASSED|PASS|OK|ok)$", "", marker)
+
+
 def _replay_regression(cmd, plan, work, env, out_dir, stage, *, rebuild=False):
     if plan and plan["setup_steps"]:
         # Include new source and test files from the patch in the source guard.
@@ -1026,7 +1032,8 @@ def run_repair(job: Job, repo_dir: Path, out_dir: Path, *,
         if error is None and fixed_rc:
             error = "patched_test_failed", f"regression failed on the patch (exit {fixed_rc})"
         if error is None and plan and not all(marker.strip() in f"{out}\n{err}" for marker in
-                                             [plan["base_failure"][0], *plan["patched_success"]]):
+                                             [_test_case_identity(plan["base_failure"][0]),
+                                              *plan["patched_success"]]):
             error = "patched_test_unconfirmed", "target test success not found in patched output"
         fixed = error is None
         failure = f"{error[0]} on patched: {error[1]}" if error else ""
