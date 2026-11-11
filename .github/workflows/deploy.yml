@@ -73,7 +73,7 @@ jobs:
             -o "$BUILD_DIR/source.tgz"
           mkdir "$BUILD_DIR/source"
           tar -xzf "$BUILD_DIR/source.tgz" -C "$BUILD_DIR/source" --strip-components=1
-          BASE_IMAGE=$(docker inspect --format '{{.Image}}' oss-scout)
+          BASE_IMAGE=$(docker inspect --format '{{.Config.Image}}' oss-scout)
           docker run --rm --entrypoint cat "$BASE_IMAGE" /app/requirements.txt > "$BUILD_DIR/requirements.txt"
           cmp "$BUILD_DIR/requirements.txt" "$BUILD_DIR/source/requirements.txt" || {
             echo "Dependencies changed; a complete runtime build is required" >&2
