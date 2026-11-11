@@ -1,0 +1,62 @@
+name: Install Codex subscription login
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  login:
+    runs-on: [self-hosted, aliyun]
+    timeout-minutes: 5
+    steps:
+      - name: Save subscription credentials
+        shell: bash
+        env:
+          CODEX_LOGIN_JSON: ${{ secrets.CODEX_LOGIN_JSON }}
+        run: |
+          set -euo pipefail
+          test -n "$CODEX_LOGIN_JSON"
+          printf '%s' "$CODEX_LOGIN_JSON" | docker exec -i oss-scout python -m scout_v2.codex_auth
+  smoke:
+    needs: login
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements.txt
+      - run: npm install -g @openai/codex@0.151.0
+      - name: Verify subscription repair on an isolated fixture
+        env:
+          CF_INGEST_TOKEN: ${{ secrets.CF_INGEST_TOKEN }}
+          DASHBOARD_URL: ${{ secrets.DASHBOARD_PUBLIC_URL }}
+        run: |
+          python - <<'PY'
+          import json, pathlib, subprocess, tempfile
+          from scout_v2.schemas import Job
+          from scout_v2.workers.repair import run_repair
+          with tempfile.TemporaryDirectory() as directory:
+              repo = pathlib.Path(directory) / "repo"
+              repo.mkdir()
+              def git(*args):
+                  return subprocess.check_output(["git", *args], cwd=repo, text=True).strip()
+              git("init", "-q")
+              (repo / "calc.py").write_text("def div(a, b):\n    return a // b\n")
+              git("add", ".")
+              git("-c", "user.name=smoke", "-c", "user.email=smoke@example.invalid",
+                  "commit", "-qm", "seed division bug")
+              sha = git("rev-parse", "HEAD")
+              job = Job(mode="repair", repo="xixi-box/oss-scout-v2-test", base_sha=sha,
+                        idempotency_key="codex-subscription-smoke", repair_agent="codex")
+              result = run_repair(job, repo, pathlib.Path(directory) / "artifacts",
+                  context="calc.div(7, 2) returns 3 but must return 3.5. Fix division and add a unittest regression. "
+                          "Use python -m unittest -v so the same case name appears on both runs. "
+                          "Do not commit or push. Record the real verification plan in OSSCOUT_RESULT.json.")
+              print(json.dumps({"outcome": result.outcome, "base_bug_confirmed": result.reproduced_on_base,
+                                "patched_test_passed": result.fixed_on_patch}))
+              if result.outcome != "succeeded":
+                  raise SystemExit("; ".join(result.unverified_items)[:500])
+          PY

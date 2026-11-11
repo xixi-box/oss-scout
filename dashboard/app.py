@@ -1078,6 +1078,24 @@ def create_app(root: Path | None = None, gh_runner=None,
             return JSONResponse({"detail": "snapshot unavailable"}, status_code=404)
         return FileResponse(path, media_type="application/json")
 
+    @app.post("/api/ingest/codex-auth")
+    async def api_codex_auth(request: Request):
+        from scout_v2.codex_auth import exchange
+        expect = (D.cloudflare_cfg(ds).get("ingest_token") or "").strip()
+        if not expect or not hmac.compare_digest(request.headers.get("X-Ingest-Token", ""), expect):
+            return JSONResponse({"detail": "forbidden"}, status_code=403)
+        raw = await request.body()
+        if len(raw) > 64_000:
+            return JSONResponse({"detail": "request too large"}, status_code=413)
+        try:
+            body = json.loads(raw)
+            if not isinstance(body, dict):
+                raise ValueError()
+            response, status = exchange(root, body)
+        except ValueError:
+            return JSONResponse({"detail": "invalid request"}, status_code=400)
+        return JSONResponse(response, status_code=status, headers={"Cache-Control": "no-store"})
+
     @app.post("/api/ingest/pr-comments")
     async def api_ingest_pr_comments(request: Request):
         """Worker 推过来的 PR 新评论（我们自己开出去的 PR）。

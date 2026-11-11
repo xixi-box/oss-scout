@@ -8,13 +8,17 @@ from .console_models import effective_models, model_setting_error, read_models, 
 
 TABLE = "模型配置"
 PROVIDERS = {
+    "运行设置": {"修复工具": "repair_agent"},
     "OpenCode": {"模型名": "repair_model", "回复模型": "reply_model", "API 密钥": "opencode_key",
                  "Base URL": "opencode_base", "思考强度": "opencode_variant"},
     "Codiv": {"模型名": "codiv_model", "API 密钥": "codiv_key", "Base URL": "codiv_base",
               "思考预算 (tokens)": "codiv_think"},
+    "Codex": {"模型名": "codex_model", "思考强度": "codex_variant"},
 }
 FIELDS = [{"field_name": name, "type": 1} for name in (
     "键", "模型名", "回复模型", "API 密钥", "Base URL", "思考强度", "思考预算 (tokens)", "应用状态")]
+FIELDS.append({"field_name": "修复工具", "type": 3, "property": {
+    "options": [{"name": "OpenCode", "color": 0}, {"name": "Codex", "color": 4}]}})
 _LEGACY = {"repair_model": "OpenCode 修复模型", "reply_model": "OpenCode 回复模型",
            "codiv_base": "Codiv Base URL", "codiv_model": "Codiv 细筛模型"}
 _OLD_COLUMNS = {"当前生效", "修改为", "安全设置"}
@@ -27,7 +31,9 @@ def _field_value(value, key):
     if isinstance(value, dict) and key in _BASE_URL_KEYS:
         value = value.get("link")
     value = value.strip() if isinstance(value, str) else ""
-    return "" if key == "opencode_variant" and value in {"默认", "default"} else value
+    if key == "repair_agent":
+        return value.lower()
+    return "" if key in {"opencode_variant", "codex_variant", "codex_model"} and value in {"默认", "default"} else value
 
 
 def _digest(value):
@@ -48,7 +54,7 @@ def sync_model_settings(root: Path, model_lock) -> str:
     binding = fb.load_binding(root)
     same_base = binding.get("app_token") == app_token
     table_id = binding.get("model_table_id") if same_base else None
-    migrating = not (same_base and table_id and binding.get("model_table_layout") == 2)
+    migrating = not (same_base and table_id and binding.get("model_table_layout") == 3)
     if not table_id:
         table_id = fb.find_or_create_table(app_token, TABLE, FIELDS)
         fb.save_binding(root, {"app_token": app_token, "model_table_id": table_id})
@@ -86,6 +92,10 @@ def sync_model_settings(root: Path, model_lock) -> str:
                     elif key == "codiv_think" and not entered:
                         entered = "0"
                     error = model_setting_error(key, entered)
+                    if not error and key == "repair_agent" and entered == "codex":
+                        from .codex_auth import auth_ready
+                        if not auth_ready(root):
+                            error = "Codex 待登录 ChatGPT"
                     if not error and key == "codiv_think" and int(entered) and not str(
                             values.get("codiv_model") or effective["codiv_model"]).startswith(("openjev-", "jev-")):
                         error = "思考预算适用于 OpenJev 模型。"
@@ -105,9 +115,17 @@ def sync_model_settings(root: Path, model_lock) -> str:
                         current = str(int(entered)) if key == "codiv_think" else entered
                         if current != effective[key]:
                             values[key] = current
-                desired[column] = current or ("默认" if key == "opencode_variant" else None)
+                if key == "repair_agent":
+                    desired[column] = {"opencode": "OpenCode", "codex": "Codex"}[current]
+                else:
+                    desired[column] = current or (
+                        "默认" if key in {"opencode_variant", "codex_variant", "codex_model"} else None)
                 next_last[key] = _digest(current)
             desired["应用状态"] = "；".join(errors) if errors else "已同步"
+            if label == "Codex":
+                from .codex_auth import auth_ready
+                desired["应用状态"] = ("；".join(errors) if errors else "已同步") + (
+                    " · ChatGPT 已登录" if auth_ready(root) else " · 待登录 ChatGPT")
             if existing:
                 changed = {key: value for key, value in desired.items() if remote.get(key) != value}
                 if changed:
@@ -132,5 +150,5 @@ def sync_model_settings(root: Path, model_lock) -> str:
         for field in fields.get("items", []):
             if field["field_name"] in _OLD_COLUMNS:
                 _table_request(table_url, "DELETE", f"fields/{field['field_id']}")
-        fb.save_binding(root, {"app_token": app_token, "model_table_id": table_id, "model_table_layout": 2})
+        fb.save_binding(root, {"app_token": app_token, "model_table_id": table_id, "model_table_layout": 3})
     return f"https://my.feishu.cn/base/{app_token}?table={table_id}"

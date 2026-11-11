@@ -452,8 +452,16 @@ def main() -> int:
             print("##OSSCOUT_PRFIX##" + json.dumps({"fixed": False, "skipped": "commit SHA only"}))
             return 0
     from .repair import resolve_model
-    model = payload.get("model") or resolve_model()
-    client = OpenCodeClient(timeout_seconds=1800, workdir=repo_dir)
+    agent = payload.get("repair_agent") or "opencode"
+    if agent == "codex":
+        from .codex_client import CodexClient
+        model = payload.get("model") or ""
+        client = CodexClient(timeout_seconds=1800, workdir=repo_dir)
+    elif agent == "opencode":
+        model = payload.get("model") or resolve_model()
+        client = OpenCodeClient(timeout_seconds=1800, workdir=repo_dir)
+    else:
+        raise ValueError("Unknown repair agent")
     if followup:
         response_format = (
             'responses (object keyed by every exact ID in "targets", with each value an object '

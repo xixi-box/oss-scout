@@ -41,7 +41,8 @@ def main():
             except Exception:
                 raise RuntimeError("Unable to read Feishu model settings") from None
             expected = fm.PROVIDERS.keys()
-            if (expected == records.keys() and all(records[key]["fields"].get("模型名") for key in expected)
+            if (expected == records.keys() and all(records[key]["fields"].get("模型名")
+                    for key, columns in fm.PROVIDERS.items() if "模型名" in columns)
                     and records["OpenCode"]["fields"].get("Base URL")):
                 break
         time.sleep(5)

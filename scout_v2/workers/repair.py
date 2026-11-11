@@ -388,10 +388,14 @@ def opencode_patch_producer(job: Job, work_dir: Path, context: str,
     cfg_path = work_dir / "opencode.json"
     original_cfg = cfg_path.read_bytes() if cfg_path.exists() else None
     baseline = _git(["rev-parse", "HEAD"], work_dir).stdout.strip()
-    notes = [enforce_domain_b(work_dir)]
-    provider = _ensure_opencode_auth()
-    notes.append(f"opencode auth: {provider}" if provider
-                 else "opencode auth: no OPENCODE_API_KEY in env")
+    if job.repair_agent not in ("opencode", "codex"):
+        raise RuntimeError("Unknown repair agent")
+    notes = []
+    if job.repair_agent == "opencode":
+        notes.append(enforce_domain_b(work_dir))
+        provider = _ensure_opencode_auth()
+        notes.append(f"opencode auth: {provider}" if provider
+                     else "opencode auth: no OPENCODE_API_KEY in env")
     detail = ""
     try:
         # 1200s：agent 现在要装依赖、跑测试、迭代，比只改文件慢得多。
@@ -399,8 +403,15 @@ def opencode_patch_producer(job: Job, work_dir: Path, context: str,
         # 再装工具链、跑 go test。2026-10-30 实测 1200s 正好在"还没开始改"时被
         # 掐断。workflow 本身有 90 分钟预算，这里给 40 分钟留给 agent，剩下
         # 50 分钟够两轮测试跑完。
-        client = client or OpenCodeClient(timeout_seconds=2400, workdir=work_dir)
-        model = model or (job.model or "").strip() or resolve_model()
+        if client is None:
+            if job.repair_agent == "codex":
+                from .codex_client import CodexClient
+                client = CodexClient(timeout_seconds=2400, workdir=work_dir)
+            else:
+                client = OpenCodeClient(timeout_seconds=2400, workdir=work_dir)
+        model = model or (job.model or "").strip()
+        if not model and job.repair_agent == "opencode":
+            model = resolve_model()
         rules = repo_rules_block(job.repo)
         (work_dir / TASK_FILE).write_text(
             FIX_PROMPT.format(context=context, rules=rules or "(none)"),
@@ -419,7 +430,7 @@ def opencode_patch_producer(job: Job, work_dir: Path, context: str,
             detail = _mask_opencode_key(detail or "")
             diff_early = _git(["diff"], work_dir).stdout
         if not ok and not diff_early.strip():
-            raise RuntimeError(f"opencode repair run failed: {detail[:300]}")
+            raise RuntimeError(f"{job.repair_agent} repair run failed: {detail[:300]}")
         notes.append(f"model({model}) said: {detail[:200]}")
     finally:
         if original_cfg is None:

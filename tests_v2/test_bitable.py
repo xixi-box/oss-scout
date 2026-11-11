@@ -468,8 +468,8 @@ def test_feishu_model_settings_migrates_and_applies_two_provider_rows(tmp_path, 
     monkeypatch.setattr(fm.feishu_app, "_request", request)
     lock = Lock()
     assert fm.sync_model_settings(tmp_path, lock).endswith("?table=tblExample")
-    assert set(records) == {"OpenCode", "Codiv"}
-    assert binding["model_table_layout"] == 2
+    assert set(records) == {"运行设置", "OpenCode", "Codex", "Codiv"}
+    assert binding["model_table_layout"] == 3
     opencode, codiv = (records[label]["fields"] for label in ("OpenCode", "Codiv"))
     assert codiv["模型名"] == "openjev-0.1"
     assert codiv["API 密钥"] == "old-codiv-test"
@@ -487,6 +487,22 @@ def test_feishu_model_settings_migrates_and_applies_two_provider_rows(tmp_path, 
     fm.sync_model_settings(tmp_path, lock)
     assert opencode["Base URL"] == "https://opencode.ai/zen/go/v1"
     assert opencode["应用状态"] == "已同步"
+    assert records["运行设置"]["fields"]["修复工具"] == "OpenCode"
+    assert "待登录" in records["Codex"]["fields"]["应用状态"]
+    records["运行设置"]["fields"]["修复工具"] = "Codex"
+    records["Codex"]["fields"].update({"模型名": "example-codex-model", "思考强度": "high"})
+    fm.sync_model_settings(tmp_path, lock)
+    assert read_models(tmp_path).get("repair_agent", "opencode") == "opencode"
+    assert "待登录" in records["运行设置"]["fields"]["应用状态"]
+    from scout_v2.codex_auth import install_auth
+    install_auth(tmp_path, {"tokens": {"access_token": "access", "refresh_token": "refresh"}})
+    fm.sync_model_settings(tmp_path, lock)
+    assert read_models(tmp_path)["repair_agent"] == "codex"
+    assert repair_model_selector(tmp_path) == "example-codex-model#high"
+    assert "已登录" in records["Codex"]["fields"]["应用状态"]
+    records["运行设置"]["fields"]["修复工具"] = "OpenCode"
+    fm.sync_model_settings(tmp_path, lock)
+    assert read_models(tmp_path)["codex_model"] == "example-codex-model"
 
     direct_base = "https://opencode.ai/inference/go/openai/v1"
     opencode.update({"API 密钥": "new-opencode-test", "思考强度": "high",

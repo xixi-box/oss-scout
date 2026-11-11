@@ -54,6 +54,10 @@ jobs:
           print("pr:", j["upstream_repo"], "#", j["pr_number"],
                 "| branch:", j["branch"], "| head:", j["head_sha"][:10])
           with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              agent = j.get("repair_agent", "opencode")
+              if agent not in ("opencode", "codex"):
+                  raise SystemExit("unknown repair agent")
+              f.write(f"repair_agent={agent}\n")
               f.write(f"fork_repo={j['fork_repo']}\nbranch={j['branch']}\nhead_sha={j['head_sha']}\n")
               f.write(f"preview={str(preview).lower()}\n")
               f.write(f"preview_replay={str(preview and j.get('preview_replay') is True).lower()}\n")
@@ -113,7 +117,7 @@ jobs:
           fi
 
       - name: Install OpenCode CLI
-        if: steps.job.outputs.preview_replay != 'true'
+        if: steps.job.outputs.preview_replay != 'true' && steps.job.outputs.repair_agent == 'opencode'
         shell: bash
         run: |
           set -euo pipefail
@@ -144,6 +148,7 @@ jobs:
           check-latest: true
 
       - name: Write opencode auth
+        if: steps.job.outputs.repair_agent == 'opencode'
         shell: bash
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
@@ -160,6 +165,10 @@ jobs:
           os.chmod(p, 0o600)
           PY
 
+      - name: Install Codex CLI
+        if: steps.job.outputs.preview_replay != 'true' && steps.job.outputs.repair_agent == 'codex'
+        run: npm install -g @openai/codex@0.151.0
+
       - name: Collect PR evidence
         env:
           GH_TOKEN: ${{ github.token }}
@@ -172,6 +181,8 @@ jobs:
       - name: Prepare fix and reply
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          CF_INGEST_TOKEN: ${{ secrets.CF_INGEST_TOKEN }}
+          DASHBOARD_URL: ${{ secrets.DASHBOARD_PUBLIC_URL }}
         run: |
           set -euo pipefail
           cd "$GITHUB_WORKSPACE/worker"

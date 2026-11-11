@@ -49,7 +49,11 @@ jobs:
           import json, os
           j = json.load(open(os.environ["RUNNER_TEMP"] + "/job.json"))
           print("mode:", j["mode"], "repo:", j["repo"], "sha:", j["base_sha"][:12])
+          agent = j.get("repair_agent", "opencode")
+          if agent not in ("opencode", "codex"):
+              raise SystemExit("unknown repair agent")
           with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write(f"repair_agent={agent}\n")
               f.write(f"target_repo={j['repo']}\n")
               f.write(f"base_sha={j['base_sha']}\n")
           PY
@@ -147,6 +151,7 @@ jobs:
           fi
 
       - name: Install OpenCode CLI
+        if: steps.job.outputs.repair_agent == 'opencode'
         shell: bash
         # runner 上 opencode 装到 ~/.opencode/bin；用 --no-modify-path 避免改 shell 配置。
         # 不用 `|| true`：装不上就让 job 明确失败，而不是跑到一半报奇怪的错。
@@ -157,6 +162,7 @@ jobs:
           "$HOME/.opencode/bin/opencode" --version
 
       - name: Write opencode auth
+        if: steps.job.outputs.repair_agent == 'opencode'
         shell: bash
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
@@ -173,10 +179,16 @@ jobs:
           os.chmod(p, 0o600)
           PY
 
+      - name: Install Codex CLI
+        if: steps.job.outputs.repair_agent == 'codex'
+        run: npm install -g @openai/codex@0.151.0
+
       - name: Run worker
         shell: bash
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          CF_INGEST_TOKEN: ${{ secrets.CF_INGEST_TOKEN }}
+          DASHBOARD_URL: ${{ secrets.DASHBOARD_PUBLIC_URL }}
         run: |
           set -euo pipefail
           cd "$GITHUB_WORKSPACE/worker"

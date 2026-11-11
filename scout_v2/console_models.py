@@ -12,12 +12,16 @@ import yaml
 
 DEFAULT_OPENCODE_BASE = "https://opencode.ai/zen/go/v1"
 MODEL_PATTERNS = {"repair_model": r"opencode-go/[\w.-]+", "reply_model": r"(?:opencode-go/)?[\w.-]+",
-                  "codiv_model": r"[\w./-]+"}
+                  "codiv_model": r"[\w./-]+", "codex_model": r"[\w.-]*"}
 
 
 def model_setting_error(key: str, value: str) -> str:
     if len(value) > 512:
         return "输入超过 512 字符。"
+    if key == "repair_agent":
+        return "" if value in ("opencode", "codex") else "请选择 OpenCode 或 Codex。"
+    if key == "codex_variant":
+        return "" if value in ("", "low", "medium", "high", "xhigh") else "请选择默认、low、medium、high 或 xhigh。"
     if key in {"opencode_key", "codiv_key"}:
         return "" if value and not any(c.isspace() for c in value) else "API 密钥不能为空或包含空白。"
     if key == "opencode_variant":
@@ -51,6 +55,9 @@ def effective_models(root: Path) -> dict:
     codiv = OpenJevClient(root)
     values = read_models(root)
     return {
+        "repair_agent": values.get("repair_agent") or "opencode",
+        "codex_model": values.get("codex_model") or "",
+        "codex_variant": values.get("codex_variant") or "",
         "repair_model": values.get("repair_model") or resolve_model(),
         "reply_model": reply["model"], "opencode_key": reply.get("api_key") or "",
         "opencode_base": reply["base_url"],
@@ -72,12 +79,24 @@ def opencode_base_url(root: Path) -> str:
 
 
 def repair_model_selector(root: Path) -> str:
+    return repair_settings(root)[1]
+
+
+def repair_settings(root: Path) -> tuple[str, str]:
+    """Read the tool and its model from one atomic configuration snapshot."""
     from .workers.repair import resolve_model
 
     values = read_models(root)
-    model = values.get("repair_model") or resolve_model()
-    variant = values.get("opencode_variant")
-    return f"{model}#{variant}" if variant else model
+    agent = values.get("repair_agent") or "opencode"
+    if agent not in ("opencode", "codex"):
+        raise ValueError("Unknown repair agent")
+    if agent == "codex":
+        model = values.get("codex_model") or ""
+        variant = values.get("codex_variant") or ""
+    else:
+        model = values.get("repair_model") or resolve_model()
+        variant = values.get("opencode_variant") or ""
+    return agent, f"{model}#{variant}" if variant else model
 
 
 def rotate_opencode_key(root: Path, key: str) -> None:
