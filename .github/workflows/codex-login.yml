@@ -1,10 +1,16 @@
 name: Install Codex subscription login
 on:
   workflow_dispatch:
+    inputs:
+      smoke_only:
+        description: Verify the existing server login without installing new credentials
+        type: boolean
+        default: false
 permissions:
   contents: read
 jobs:
   login:
+    if: ${{ !inputs.smoke_only }}
     runs-on: [self-hosted, aliyun]
     timeout-minutes: 5
     steps:
@@ -18,6 +24,7 @@ jobs:
           printf '%s' "$CODEX_LOGIN_JSON" | docker exec -i oss-scout python -m scout_v2.codex_auth
   smoke:
     needs: login
+    if: ${{ !cancelled() && (needs.login.result == 'success' || inputs.smoke_only) }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -58,5 +65,8 @@ jobs:
               print(json.dumps({"outcome": result.outcome, "base_bug_confirmed": result.reproduced_on_base,
                                 "patched_test_passed": result.fixed_on_patch}))
               if result.outcome != "succeeded":
+                  report = pathlib.Path(directory) / "artifacts/test-report.json"
+                  if report.exists():
+                      print(report.read_text())
                   raise SystemExit("; ".join(result.unverified_items)[:500])
           PY
