@@ -533,12 +533,58 @@ def candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen:
             if "locked" in str(ex).lower():
                 return {"id": entry.get("id"), "abort": "dispatcher busy"}
             raise
+        # Intake may have reserved the idle slot while the waiting queue is full.
+        # Every automatic/manual entrypoint must respect that durable handoff.
+        with queue_transaction(root) as queue:
+            if any(k != entry.get("id") and e.get("status") == "staged"
+                   and e.get("direct_start_reserved_at") for k, e in queue.items()):
+                return {"id": entry.get("id"), "abort": "dispatcher busy"}
         try:
             return _candidate_pipeline(root, entry, max_files=max_files, rescreen=rescreen, immediate=immediate)
         except Exception as ex:
             _emergency_release(root, entry.get("id", ""))
             log(root, "crash", entry.get("id", ""), str(ex)[:200])
             raise
+        finally:
+            release_direct_start(root, entry.get("id", ""))
+    finally:
+        conn.close()
+
+
+def release_direct_start(root: Path, key: str) -> None:
+    """A failed handoff either joins the bounded waiters or records a clear result."""
+    with queue_transaction(root) as queue:
+        entry = queue.get(key)
+        if not entry or not entry.pop("direct_start_reserved_at", None):
+            return
+        if entry.get("status") == "staged" and not entry.get("dispatch_started_at"):
+            if staged_candidate_count(queue) > STAGED_CANDIDATE_LIMIT:
+                entry.update(status="coarse_blocked", coarse_reason=STAGED_FULL_REASON,
+                             abort_reason="Immediate start unavailable; " + STAGED_FULL_REASON,
+                             updated_at=business_now().isoformat(timespec="seconds"))
+
+
+def expire_direct_starts(root: Path) -> None:
+    """An unstarted handoff cannot reserve today's slot after a day rollover."""
+    import sqlite3
+    (root / "state").mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(root / "state/dispatcher.sqlite3"), timeout=0, isolation_level=None)
+    try:
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+        except sqlite3.OperationalError as exc:
+            if "locked" in str(exc).lower():
+                return  # a pipeline owns the slot; never touch that reservation
+            raise
+        path = root / "queue/candidates.json"
+        queue = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+        now = business_now()
+        for key, entry in queue.items():
+            stamp = entry.get("direct_start_reserved_at")
+            if not stamp or entry.get("status") != "staged" or entry.get("dispatch_started_at"):
+                continue
+            if business_day(dt.datetime.fromisoformat(stamp), "Asia/Shanghai") != now.date().isoformat():
+                release_direct_start(root, key)
     finally:
         conn.close()
 
@@ -1109,6 +1155,7 @@ def expire_staged(root: Path) -> int:
     with queue_transaction(root) as q:
         for key, entry in q.items():
             if (entry.get("status") == "staged" and not entry.get("dispatch_started_at")
+                    and not entry.get("direct_start_reserved_at")
                     and _stage_age_days(entry) > STAGE_TTL_DAYS):
                 entry["status"] = "stage_expired"
                 expired.append(key)
@@ -1132,7 +1179,8 @@ def _stage_candidates(root: Path, keys: list[str], *, tz_name: str, cap: int) ->
             return 0
         for key in sorted(keys, key=lambda k: ((q.get(k) or {}).get("discovered_at") or "", k)):
             e = q.get(key)
-            if isinstance(e, dict) and e.get("status") == "staged" and not e.get("dispatch_started_at"):
+            if (isinstance(e, dict) and e.get("status") == "staged"
+                    and not e.get("dispatch_started_at") and not e.get("direct_start_reserved_at")):
                 if e.get("status") == "staged" and _stage_age_days(e) > STAGE_TTL_DAYS:
                     e["status"] = "stage_expired"
                     continue
@@ -1332,7 +1380,8 @@ def _dispatch_candidates(ordered: list[tuple[str, dict]], *, refill_day: str = "
             fresh.append(item)
         elif refill_day == day or entry.get("scheduled_consume_day") == day:
             historical.append(item)
-    return fresh + historical
+    direct = [item for item in fresh if item[1].get("direct_start_reserved_at")]
+    return direct + [item for item in fresh if not item[1].get("direct_start_reserved_at")] + historical
 
 
 def drain_ai_graded(root: Path, limit: int = 3, dry_run: bool = True,

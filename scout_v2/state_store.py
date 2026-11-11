@@ -21,7 +21,36 @@ STAGED_FULL_REASON = "候选列表已满"
 
 
 def staged_candidate_count(queue: dict) -> int:
-    return sum(entry.get("status") == "staged" for entry in queue.values())
+    return sum(entry.get("status") == "staged" and not entry.get("direct_start_reserved_at")
+               for entry in queue.values())
+
+
+def direct_start_available(root: Path, queue: dict, tz_name: str, cap: int) -> bool:
+    """Call under queue_transaction: one immediate handoff shares the execution slot.
+
+    A nonblocking probe also respects a pipeline still screening or reconciling,
+    before its remote execution has been recorded in the candidate JSON.
+    """
+    if any(e.get("status") in ("staged", "running") and (
+            e.get("status") == "running" or e.get("dispatch_started_at")
+            or e.get("direct_start_reserved_at")) for e in queue.values()):
+        return False
+    conn = sqlite3.connect(str(root / "state/dispatcher.sqlite3"), timeout=0, isolation_level=None)
+    try:
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+        except sqlite3.OperationalError as exc:
+            if "locked" in str(exc).lower():
+                return False
+            raise
+    finally:
+        conn.close()
+    ledger = ClaimLedger(root / "state/scout_v2.sqlite3")
+    try:
+        return ledger.pending_publication() is None and ledger.quota_used(
+            business_now(tz_name).date().isoformat()) < cap
+    finally:
+        ledger.close()
 
 
 def candidate_fifo_key(key: str, entry: dict) -> tuple[float, str]:

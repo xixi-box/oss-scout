@@ -456,7 +456,8 @@ def main() -> int:
     if agent == "codex":
         from .codex_client import CodexClient
         model = payload.get("model") or ""
-        client = CodexClient(timeout_seconds=1800, workdir=repo_dir)
+        client = CodexClient(timeout_seconds=1800, workdir=repo_dir,
+                             diagnostics_dir=Path(args.fix).resolve().parent / "artifacts")
     elif agent == "opencode":
         model = payload.get("model") or resolve_model()
         client = OpenCodeClient(timeout_seconds=1800, workdir=repo_dir)

@@ -23,6 +23,25 @@ from ..schemas import Job, Result
 from .opencode_client import OpenCodeClient
 from .reproduce import sanitized_env
 
+
+class _RepairWorkspace(tempfile.TemporaryDirectory):
+    """Cleanup failures must never discard the repair result or its evidence."""
+
+    def __init__(self, out_dir: Path):
+        self.out_dir = out_dir
+        super().__init__(ignore_cleanup_errors=True)
+
+    def cleanup(self):
+        error = ""
+        try:
+            super().cleanup()
+        except OSError as exc:
+            error = type(exc).__name__
+        if error or Path(self.name).exists():
+            with (self.out_dir / "cleanup.log").open("a", encoding="utf-8") as log:
+                log.write(f"Temporary workspace cleanup incomplete ({error or 'directory remains'}); "
+                          "repair result retained; runner teardown will release it.\n")
+
 FIX_PROMPT = """You are fixing a bug in this repository. Work autonomously.
 
 Bug report:
@@ -369,7 +388,8 @@ def _needs_shell(text: str) -> bool:
 def opencode_patch_producer(job: Job, work_dir: Path, context: str,
                             client: OpenCodeClient | None = None,
                             model: str | None = None,
-                            ai_test_paths: list[str] | None = None) -> dict:
+                            ai_test_paths: list[str] | None = None,
+                            diagnostics_dir: Path | None = None) -> dict:
     """让 OpenCode 在 work_dir 里自主完成"探索→写测试→修→验证"。
 
     返回 dict：
@@ -406,7 +426,8 @@ def opencode_patch_producer(job: Job, work_dir: Path, context: str,
         if client is None:
             if job.repair_agent == "codex":
                 from .codex_client import CodexClient
-                client = CodexClient(timeout_seconds=2400, workdir=work_dir)
+                client = CodexClient(timeout_seconds=2400, workdir=work_dir,
+                                     diagnostics_dir=diagnostics_dir)
             else:
                 client = OpenCodeClient(timeout_seconds=2400, workdir=work_dir)
         model = model or (job.model or "").strip()
@@ -863,7 +884,7 @@ def run_repair(job: Job, repo_dir: Path, out_dir: Path, *,
     root_cause = ""
     agent_out = ""
     with ExitStack() as workspace:
-        agent_dir = tempfile.TemporaryDirectory()
+        agent_dir = _RepairWorkspace(out_dir)
         work = Path(workspace.enter_context(agent_dir)) / "work"
         _checkout_repair_tree(repo_dir, work, job.base_sha)
         # 控制器若已备好测试文件（旧路径/兜底），先放进去让 agent 看得到
@@ -875,7 +896,7 @@ def run_repair(job: Job, repo_dir: Path, out_dir: Path, *,
             if patch_producer is None:
                 produced = opencode_patch_producer(
                     job, work, context,
-                    ai_test_paths=list((extra_test_files or {}).keys()))
+                    ai_test_paths=list((extra_test_files or {}).keys()), diagnostics_dir=out_dir)
             else:
                 produced = patch_producer(job, work, context)
         except RuntimeError as e:
@@ -976,7 +997,7 @@ def run_repair(job: Job, repo_dir: Path, out_dir: Path, *,
         # 现在：在 work 里把源码退回 base、只保留 agent 装的依赖，再跑同一条命令。
         if plan is not None:
             agent_dir.cleanup()
-            base_dir = tempfile.TemporaryDirectory()
+            base_dir = _RepairWorkspace(out_dir)
             work = Path(workspace.enter_context(base_dir)) / "verify-base"
             _checkout_repair_tree(repo_dir, work, job.base_sha)
         else:
@@ -1011,7 +1032,7 @@ def run_repair(job: Job, repo_dir: Path, out_dir: Path, *,
         # ---- 阶段 3：补丁后必须通过 ----
         if plan is not None:
             base_dir.cleanup()
-            work = Path(workspace.enter_context(tempfile.TemporaryDirectory())) / "verify-patched"
+            work = Path(workspace.enter_context(_RepairWorkspace(out_dir))) / "verify-patched"
             _checkout_repair_tree(repo_dir, work, job.base_sha)
         else:
             _restore_sources_to_base(work, job.base_sha)

@@ -179,7 +179,8 @@ def test_refill_uses_one_fifo_but_never_bypasses_retry_or_nonquota_due_time(queu
 
 
 def test_concurrent_screening_cannot_overfill_the_waiting_queue(queue_root, monkeypatch):
-    write_queue(queue_root, {f"a/b#{i}": {"status": "staged"} for i in range(10, 19)})
+    write_queue(queue_root, {**{f"a/b#{i}": {"status": "staged"} for i in range(10, 19)},
+                             "a/b#99": {"status": "running"}})
     barrier = Barrier(2)
 
     def score(*a, **kw):
@@ -193,6 +194,83 @@ def test_concurrent_screening_cannot_overfill_the_waiting_queue(queue_root, monk
             ds, [{"repo": "a/b", "number": n}]), (1, 2)))
     assert sum(n for n, _ in results) == 1
     assert staged_candidate_count(read_queue(queue_root)) == 10
+
+
+def test_full_queue_with_idle_slot_admits_one_direct_start(queue_root, monkeypatch):
+    entries = {f"a/b#{i}": {"status": "staged"} for i in range(10, 20)}
+    write_queue(queue_root, entries)
+    monkeypatch.setattr(data, "screen_issue", lambda *a, **kw: ([], {"usable": True}))
+    assert data.ingest_cloudflare_issues(SimpleNamespace(root=queue_root), [
+        {"repo": "a/b", "number": 1}]) == (1, ["a/b#1"])
+    q = read_queue(queue_root)
+    assert staged_candidate_count(q) == 10
+    assert q["a/b#1"]["direct_start_reserved_at"]
+    assert q["a/b#1"]["status"] == "staged"  # not a fabricated Actions start
+    assert all(q[k] == v for k, v in entries.items())
+    # Other entrypoints cannot take the reserved slot, even with free PR quota.
+    assert pipeline.candidate_pipeline(queue_root, {"id": "a/b#10"})["abort"] == "dispatcher busy"
+    # If direct launch fails, the reservation cannot become an eleventh waiter.
+    monkeypatch.setattr(pipeline, "_candidate_pipeline", lambda *a, **kw: {"abort": "workflow unavailable"})
+    assert pipeline.candidate_pipeline(queue_root, q["a/b#1"])["abort"] == "workflow unavailable"
+    assert read_queue(queue_root)["a/b#1"]["status"] == "coarse_blocked"
+    assert staged_candidate_count(read_queue(queue_root)) == 10
+
+
+def test_two_concurrent_arrivals_cannot_both_take_the_direct_slot(queue_root, monkeypatch):
+    write_queue(queue_root, {f"a/b#{i}": {"status": "staged"} for i in range(10, 20)})
+    barrier = Barrier(2)
+
+    def screen(*a, **kw):
+        barrier.wait(timeout=10)
+        return [], {"usable": True}
+
+    monkeypatch.setattr(data, "screen_issue", screen)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(lambda n: data.ingest_cloudflare_issues(
+            SimpleNamespace(root=queue_root), [{"repo": "a/b", "number": n}]), (1, 2)))
+    assert sum(n for n, _ in results) == 1
+    q = read_queue(queue_root)
+    assert sum(bool(e.get("direct_start_reserved_at")) for e in q.values()) == 1
+    assert staged_candidate_count(q) == 10
+
+
+def test_slot_taken_during_fine_screen_does_not_overfill_queue(queue_root, monkeypatch):
+    write_queue(queue_root, {f"a/b#{i}": {"status": "staged"} for i in range(10, 20)})
+
+    def screen(*a, **kw):
+        with state_store.queue_transaction(queue_root) as q:
+            q["a/b#99"] = {"status": "running"}
+        return [], {"usable": True}
+
+    monkeypatch.setattr(data, "screen_issue", screen)
+    assert data.ingest_cloudflare_issues(SimpleNamespace(root=queue_root), [
+        {"repo": "a/b", "number": 1}]) == (0, [])
+    assert staged_candidate_count(read_queue(queue_root)) == 10
+
+
+@pytest.mark.parametrize("pending", [False, True])
+def test_full_queue_has_no_direct_bypass_without_known_free_budget(queue_root, monkeypatch, pending):
+    write_queue(queue_root, {f"a/b#{i}": {"status": "staged"} for i in range(10, 20)})
+    ledger = ClaimLedger(queue_root / "state/scout_v2.sqlite3")
+    for n in range(1 if pending else 5):
+        assert ledger.reserve_publication("Asia/Shanghai", 5, f"job-{n}", "a/b", "head", "x/y")
+        if not pending:
+            ledger.finish_publication(f"job-{n}", day="2026-11-12", url=f"https://github.com/a/b/pull/{n}")
+    ledger.close()
+    monkeypatch.setattr(data, "screen_issue", lambda *a, **kw: pytest.fail("must not spend AI tokens"))
+    assert data.ingest_cloudflare_issues(SimpleNamespace(root=queue_root), [
+        {"repo": "a/b", "number": 1}]) == (0, [])
+
+
+def test_day_rollover_releases_only_unstarted_direct_handoffs(queue_root):
+    write_queue(queue_root, {"a/b#1": {"status": "staged", "direct_start_reserved_at":
+                "2026-11-11T23:59:00+08:00"},
+                "a/b#2": {"status": "running", "direct_start_reserved_at":
+                "2026-11-11T23:59:00+08:00"}})
+    pipeline.expire_direct_starts(queue_root)
+    q = read_queue(queue_root)
+    assert "direct_start_reserved_at" not in q["a/b#1"]
+    assert q["a/b#2"]["direct_start_reserved_at"]
 
 
 def test_actions_queue_keeps_its_waiting_slot_until_real_start(queue_root, monkeypatch):

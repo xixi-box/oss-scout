@@ -397,7 +397,7 @@ def prune_candidate_backlog(root: Path) -> list[str]:
     expired = []
     with queue_transaction(root) as queue:
         for key, entry in queue.items():
-            if key.lower() in protected or entry.get("dispatch_started_at"):
+            if key.lower() in protected or entry.get("dispatch_started_at") or entry.get("direct_start_reserved_at"):
                 protected.add(key.lower())
                 continue
             if entry.get("status") in ("new", "recheck_failed"):
@@ -420,6 +420,7 @@ def prune_candidate_backlog(root: Path) -> list[str]:
                    if entry.get("status") == "staged" and key.lower() not in protected]
         waiting.sort(key=lambda key: candidate_fifo_key(key, queue[key]))
         reserved = sum(key.lower() in protected and e.get("status") == "staged"
+                       and not e.get("direct_start_reserved_at")
                        for key, e in queue.items())
         removed = waiting[max(0, STAGED_CANDIDATE_LIMIT - reserved):]
         for key in removed:
@@ -434,7 +435,7 @@ def ingest_cloudflare_issues(ds, items: list[dict], *, refresh: bool = False) ->
     import hashlib
     from scout_v2.state_store import (STAGED_CANDIDATE_LIMIT, STAGED_FULL_REASON, atomic_json_write,
                                       business_now, publication_quota_remaining, queue_transaction,
-                                      staged_candidate_count)
+                                      staged_candidate_count, direct_start_available)
     from scout_v2.repo_policy import PolicyEngine
     from scout_v2.workers.auto_pipeline import _defer_entry
     eng, err = PolicyEngine.load(ds.root)
@@ -460,7 +461,8 @@ def ingest_cloudflare_issues(ds, items: list[dict], *, refresh: bool = False) ->
             if key in q or (prior.get("fingerprint") == fingerprint and prior.get("status") in
                             ("blocked", "rejected", "archived", "screen_skipped")):
                 continue
-            full = staged_candidate_count(q) >= STAGED_CANDIDATE_LIMIT
+            full = (staged_candidate_count(q) >= STAGED_CANDIDATE_LIMIT
+                    and not direct_start_available(ds.root, q, eng.tz_name, eng.max_claims_per_day))
         lane = eng.repo_lane(repo)
         if full:
             blockers, verdict = [STAGED_FULL_REASON], {}
@@ -481,7 +483,8 @@ def ingest_cloudflare_issues(ds, items: list[dict], *, refresh: bool = False) ->
                 continue
             if not blockers and verdict.get("usable") is True:
                 stage = publication_quota_remaining(ds.root, eng.tz_name, eng.max_claims_per_day) == 0
-                if staged_candidate_count(q) >= STAGED_CANDIDATE_LIMIT:
+                direct = direct_start_available(ds.root, q, eng.tz_name, eng.max_claims_per_day)
+                if not direct and staged_candidate_count(q) >= STAGED_CANDIDATE_LIMIT:
                     rec.update(status="blocked", coarse_reason=STAGED_FULL_REASON)
                 else:
                     q[key] = {**it, "id": key, "repo": repo, "number": number, "lane": lane,
@@ -491,6 +494,8 @@ def ingest_cloudflare_issues(ds, items: list[dict], *, refresh: bool = False) ->
                               "url": it.get("url") or f"https://github.com/{repo}/issues/{number}"}
                     from scout_v2.workers.auto_pipeline import _wait_entry
                     _wait_entry(q[key], ds.root)
+                    if direct:
+                        q[key]["direct_start_reserved_at"] = now
                     if stage:
                         _defer_entry(q[key], ds.root)
                     added.append(key)

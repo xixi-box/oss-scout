@@ -75,15 +75,16 @@ def test_candidate_capacity_blocks_before_openjev_only_when_quota_is_full(intake
         assert json.loads(queue.read_text(encoding="utf-8"))["a/b#13"]["status"] == "staged"
 
 
-def test_full_waiting_queue_blocks_before_ai_even_with_free_quota(intake):
+def test_full_waiting_queue_blocks_before_ai_when_execution_is_busy(intake):
     ds, issue = intake
     queue = ds.root / "queue/candidates.json"
-    queue.write_text(json.dumps({f"a/b#{n}": {"status": "staged"} for n in range(2, 12)}))
+    queue.write_text(json.dumps({**{f"a/b#{n}": {"status": "staged"} for n in range(2, 12)},
+                                  "a/b#99": {"status": "running"}}))
     with patch("scout_v2.workers.openjev.OpenJevClient") as cls:
         cls.return_value.score_issue.return_value = {"usable": True, "reason": "repro"}
         assert d.ingest_cloudflare_issues(ds, [issue]) == (0, [])
         cls.return_value.score_issue.assert_not_called()
-    assert len(json.loads(queue.read_text())) == 10
+    assert len(json.loads(queue.read_text())) == 11  # ten waiters plus the running task
 
 
 def test_candidate_capacity_is_rechecked_before_inserting(intake):

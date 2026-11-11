@@ -62,6 +62,8 @@ def test_codex_client_updates_login_and_has_no_api_key_in_child_env(tmp_path, mo
         return {"lease": "lease", "auth": credentials()} if operation == "acquire" else {"ok": True}
 
     class Process:
+        pid = 99999999
+
         def __init__(self, args, **kwargs):
             command.extend(args)
             self.home = Path(kwargs["env"]["CODEX_HOME"])

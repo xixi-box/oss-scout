@@ -232,7 +232,8 @@ def create_app(root: Path | None = None, gh_runner=None,
         try:
             from scout_v2.repo_policy import PolicyEngine
             from scout_v2.state_store import publication_quota_remaining
-            from scout_v2.workers.auto_pipeline import expire_staged, open_scheduled_batch
+            from scout_v2.workers.auto_pipeline import expire_staged, open_scheduled_batch, expire_direct_starts
+            expire_direct_starts(root)
             expire_staged(root)
             open_scheduled_batch(root)
             with _inflight_lock:
