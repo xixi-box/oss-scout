@@ -131,3 +131,14 @@ def test_expiration_never_changes_a_dispatched_waiter(queue_root):
     assert pipeline.expire_staged(queue_root) == 1
     assert read_queue(queue_root)["a/b#1"]["status"] == "stage_expired"
     assert read_queue(queue_root)["a/b#2"] == protected
+
+
+def test_migration_removes_expired_waiters_before_selecting_the_oldest_ten(queue_root):
+    entries = {f"a/b#{i}": {"status": "staged", "staged_at": f"2026-11-12T01:{i:02d}:00+08:00"}
+               for i in range(1, 12)}
+    entries["a/b#old"] = {"status": "new", "discovered_at": "2020-01-01T00:00:00+08:00"}
+    write_queue(queue_root, entries)
+    assert data.prune_candidate_backlog(queue_root) == ["a/b#11"]
+    queue = read_queue(queue_root)
+    assert queue["a/b#old"]["status"] == "stage_expired"
+    assert staged_candidate_count(queue) == 10

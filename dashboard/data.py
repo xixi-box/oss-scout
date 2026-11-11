@@ -375,7 +375,8 @@ def prune_candidate_backlog(root: Path) -> list[str]:
     from scout_v2.state_store import (STAGED_CANDIDATE_LIMIT, business_now, queue_transaction,
                                       publication_quota_remaining, candidate_fifo_key)
     from scout_v2.repo_policy import PolicyEngine
-    from scout_v2.workers.auto_pipeline import _defer_entry, _wait_entry
+    from scout_v2.workers.auto_pipeline import (_defer_entry, _wait_entry, _stage_age_days,
+                                               STAGE_TTL_DAYS, log)
 
     now = business_now()
     eng, error = PolicyEngine.load(root)
@@ -393,6 +394,7 @@ def prune_candidate_backlog(root: Path) -> list[str]:
                 if "no such table" not in str(exc):
                     raise
 
+    expired = []
     with queue_transaction(root) as queue:
         for key, entry in queue.items():
             if key.lower() in protected or entry.get("dispatch_started_at"):
@@ -411,6 +413,9 @@ def prune_candidate_backlog(root: Path) -> list[str]:
                     entered = dt.datetime.fromtimestamp(stamp, now.tzinfo) if stamp else now
                     entry["eligible_at"] = dt.datetime.combine(
                         entered.date() + dt.timedelta(days=1), dt.time(4), tzinfo=now.tzinfo).isoformat()
+            if entry.get("status") == "staged" and _stage_age_days(entry) > STAGE_TTL_DAYS:
+                entry.update(status="stage_expired", updated_at=now.isoformat())
+                expired.append(key)
         waiting = [key for key, entry in queue.items()
                    if entry.get("status") == "staged" and key.lower() not in protected]
         waiting.sort(key=lambda key: candidate_fifo_key(key, queue[key]))
@@ -419,6 +424,8 @@ def prune_candidate_backlog(root: Path) -> list[str]:
         removed = waiting[max(0, STAGED_CANDIDATE_LIMIT - reserved):]
         for key in removed:
             queue[key].update(status="queue_pruned", updated_at=now.isoformat(timespec="seconds"))
+    if expired:
+        log(root, "stage_expired", str(len(expired)), "expired before queue consolidation: " + ", ".join(expired[:5]))
     return removed
 
 

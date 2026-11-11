@@ -134,10 +134,11 @@ def test_prune_keeps_oldest_and_protects_unreconciled_repair(intake):
     from scout_v2.state_store import staged_candidate_count
 
     ds, _ = intake
-    entries = {f"a/b#{n}": {"status": "staged", "staged_at": f"2026-11-{n:02d}T12:00:00+08:00"}
+    now = queue_now()
+    entries = {f"a/b#{n}": {"status": "staged", "staged_at": (now - dt.timedelta(minutes=13-n)).isoformat()}
                for n in range(1, 13)}
     entries["a/b#2"].pop("staged_at")
-    entries["a/b#2"]["discovered_at"] = "2026-11-13T12:00:00"
+    entries["a/b#2"]["discovered_at"] = (now + dt.timedelta(minutes=1)).replace(tzinfo=None).isoformat()
     entries["a/b#13"] = {"status": "escalated"}
     entries["a/b#14"] = {"status": "pr_open"}
     queue = ds.root / "queue/candidates.json"
