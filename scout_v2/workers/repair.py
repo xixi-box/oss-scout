@@ -485,6 +485,9 @@ def opencode_patch_producer(job: Job, work_dir: Path, context: str,
     if excludes:
         _git(["reset", "-q", "--", *excludes], work_dir, check=False)
     patch = _git(["diff", "--cached"], work_dir).stdout
+    # Verify the same source patch that the publisher will actually apply.
+    from .publish_remote import filter_patch_junk
+    patch = filter_patch_junk(patch)
     if not patch.strip():
         # 诊断信息必须带出 agent 自己说了什么、动了哪些文件——否则"没改源码"
         # 这句话无法区分"它没找到地方"和"它改了但我们的分类把它当测试剔掉了"。
