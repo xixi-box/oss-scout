@@ -1,169 +1,159 @@
 # oss-scout
 
-全自动开源贡献流水线：扫描监控仓库的新 issue → AI 判断能否自动修 → 在 GitHub
-Actions 上跑 opencode 修复并验证 → 以你的名义开 PR → 盯住后续的 CI 和评论，
-该修的修、该回的回。
+自动开源贡献流水线：每分钟发现 issue，机械粗筛后交给 OpenJev 细筛，由 OpenCode 或
+Codex 在 GitHub Actions 修复、运行测试，再以账号持有者的身份提交 PR。
+日常通过飞书查看扫描结果、候选队列、PR 记录和审批卡，并修改模型与运行配置。
 
-## 一图看懂当前工作流
+## 当前工作流
 
-```
-┌─ 发现层（每分钟）─────────────────────────────────────────────┐
-│ Cloudflare Worker 扫描 50 个监控仓库的新 issue                │
-│   → POST /api/ingest/issues（token 鉴权）                     │
-│   → 客观否决：已有 PR / 纯文档 / 计费抱怨 → 直接拒绝          │
-│   → 粗筛通过才做 OpenJev 细筛，暂存或手动消费时用最新证据重筛 │
-└──────────────────────┬───────────────────────────────────────┘
-                       ▼
-┌─ 认领层（额度真实有效）───────────────────────────────────────┐
-│ 每日最多成功创建 5 个新 PR（北京时间，SQLite 串行化）       │
-│   开工前：实时复检 + CLA 预检，不消耗额度                          │
-│   只有确认创建的新 PR 才记额度，未确认的远程写入先核实         │
-│ 单条候选最多尝试 3 次（防无限重试循环）                        │
-│ 额度满 → staged 暂存，次日北京时间 04:00 起 FIFO 消费                │
-└──────────────────────┬───────────────────────────────────────┘
-                       ▼
-┌─ 复检层（认领前最后一道闸）───────────────────────────────────┐
-│ issue 是否仍 open？有无 assignee？                             │
-│ 有没有竞争 PR？（关键词搜索 + timeline，排除自己开的）         │
-│ 有没有 claim 信号（评论里有人说"我来修"）？                    │
-│ 有没有被标记 duplicate？（qdrant 教训）                        │
-│ CLA 预检：需要人工签的 → needs_cla 终态，不浪费资源            │
-└──────────────────────┬───────────────────────────────────────┘
-                       ▼
-┌─ 修复层（GitHub Actions，仓库本身）───────────────────────────┐
-│ clone 目标仓库到 base SHA → opencode --auto 多轮修复          │
-│   → base 上复现失败 → 补丁后通过 → 证据链 gate                 │
-│   → DCO 签名（账号真身）→ push 到 fork → 开 PR                │
-│   → comment_sign 类 CLA 自动签                                │
-└──────────────────────┬───────────────────────────────────────┘
-                       ▼
-┌─ 监控层（三条通道互补）───────────────────────────────────────┐
-│ Worker 秒级轮询 PR 评论 / dashboard 15 分钟 / Actions 30 分钟 │
-│ 分类：fix_ci / address_review / answer_question / wait        │
-│ fix_ci → 外因过滤（Vercel/CLA/等指派/flaky）→ pr-fix 修复推回 │
-│ bot 机械要求（changeset）随修复单带上                          │
-│ maintainer 评论 → AI 草稿落盘 → 人审后发送（绝不自动发）      │
-└──────────────────────────────────────────────────────────────┘
+```text
+Cloudflare Worker：每分钟扫描 50 个监控仓库
+  → token 鉴权 → SQLite inbox 持久接收
+  → 获取最新正文、完整评论、评论作者身份、关联 PR 和仓库规则
+  → 机械粗筛 → OpenJev 细筛
+  → 有额度且执行位空闲：先选今天最早可消费的暂存；没有则新候选直接开工
+  → 需要等待：进入滚动暂存池，普通暂存最多 10 条
+  → Actions：OpenCode / Codex 自主搭环境、定位、修复并运行测试
+  → 独立复跑：原版触发目标 bug，完整补丁版同一回归测试通过
+  → 核对交付文件及补丁哈希 → 账号身份与 DCO 签名 → 推送 fork → 开 PR
+  → 同步飞书，持续监控 PR 状态、CI 和评论
 ```
 
-## 开源贡献运行台
+所有日期、每日额度及凌晨 4 点均按北京时间计算。监控名单以
+[configs/repositories.yaml](configs/repositories.yaml) 为准，当前每分钟扫描 50 个仓库。
 
-飞书多维表格的「开源贡献运行台」可以打开需登录的服务器页面 `/console`。页面每 5 秒读取实际队列、工作流和完成记录，按北京时间展示最近 60 分钟。新的细筛、粗筛和回复草稿事件从上线后开始累计。
+## 每日额度、暂存与消费顺序
 
-「工作中」链接到已开始执行的 GitHub Actions 运行。「今日 PR 记录」来自成功创建账本，「修复记录」来自成功推送回执。「总 PR 记录」直接打开现有飞书表。
+- 每个北京时间自然日最多成功创建 **5 个新 PR**，按 GitHub 确认的创建时间记账。
+  修复失败、重复 PR 和已有 PR 的跟进不占新 PR 额度；发布结果不明时先对账。
+- 新 issue 全天正常发现和消费，包括 **00:00–04:00**，不预留额度、不额外限速。
+- 今天可消费的合格候选优先，同日按原入队时间 FIFO；新到候选不能插到今天已等待的
+  合格候选前面。取数或模型故障的重试退避仍有效。
+- 普通暂存滚动保留 **最新 10 条**。新 issue 粗筛、细筛都通过后入队；满池时清除最早
+  的普通暂存，昨天、今天一视同仁。不合格的新 issue 不会挤掉已有候选。
+- 执行中、已预留派发、已派发和待对账任务受保护；执行中与派发预留不占普通等待容量。
+  Actions 真正开始后才显示「执行中」。各入口共用单个执行锁与每日额度账本。
+- 当天额度满后继续扫描、筛选并滚动更新暂存池，可消费时间顺延至次日 **04:00**。
+- 每日 **04:00** 为当时已到期的历史暂存建立持久消费快照，按原入队顺序补位。
+  批次可以在 4 点之后继续执行；今天可消费的候选仍优先。普通轮询不会额外捞取其他历史暂存。
+- **当天创建的 PR 当天关闭**会释放一个额度，允许队列补位；旧日 PR 今天关闭不退今天额度，
+  合并也不退额度。历史暂存还可由人工明确消费。
 
-「手动触发实际消费」遵守 FIFO、暂存可消费时间与当天剩余额度。调整每日触发时间会应用于尚未到期的暂存项。模型配置应用于新任务，密钥留空时保留现值。修改 OpenCode 密钥需要服务器具备 GitHub Actions 仓库密钥管理权限。
+例如 A 正在执行且暂存已满：B 双筛通过后入队并清除最早普通暂存。A 完成后若还有额度，
+优先执行今天最早可消费的候选；如果是 B，就先做 B。后来的 C、D 继续排队并滚动替换，
+不会挤掉已经选中派发的 B。
+
+## 粗筛、细筛与修复验证
+
+**机械条件统一归粗筛**：issue 是否开放、指派与认领、重复标记、明确关联的修复 PR，
+以及仓库的 CLA、授权等硬性要求。关键词命中只作为竞争 PR 的线索，明确修复同一个
+issue 才拦截。完整评论和作者身份同时供后续 AI 判断。
+
+粗筛通过后调用 OpenJev。刚筛完直接开工复用粗筛、细筛；同日短暂等待刷新粗筛、复用
+细筛，正文或标题变化则重新核查；跨日、手动消费使用最新证据重新粗筛和细筛。
+临时故障退避重试，正式淘汰与临时错误分别记录。
+
+OpenCode / Codex 自主选择环境、构建方式和测试命令，并先运行。程序随后按它报告的
+步骤独立复跑，只有原版确实触发目标 bug、补丁版同一测试通过才允许发布。
+缺依赖、命令错误、编译失败、回归失败和额外检查失败分别记录并保留日志。
+
+**回归测试随源码交付**，包括可分离验证的 Rust 内联测试。报告记录文件清单和补丁
+SHA-256；发布前核对任务、base、验证结果及实际暂存补丁，防止验证与交付不一致。
+构建垃圾不入补丁，锁文件与 CI 配置的改动退出自动发布。PR 描述使用真实根因、可复跑
+测试命令和实际使用的工具名称。
+
+自动发布、PR 跟进审批包与手动发布统一通过 `commit_as_owner` 创建提交：作者、提交者和
+`Signed-off-by` 均为 `wangshun <96341168+xixi-box@users.noreply.github.com>`，覆盖 CLI
+遗留的身份环境变量。历史漏签优先采用仓库 DCO 机器人明确支持的补签提交，不强推、不改写历史。
+
+## 飞书日常操作
+
+| 位置 | 用途 |
+| --- | --- |
+| 扫描发现 | 粗筛、细筛各自记录结论；最终结果显示暂存、执行中、已开 PR 和链接，或具体淘汰、失败原因；含发现时间与更新时间 |
+| 候选列表 | 只展示暂存、执行中；滚动挤出的候选移除，在扫描发现显示「已清除」及原因，保留原筛选结论 |
+| PR 记录 | 查看 PR 当前状态、创建时间和源 issue 发现时间；关闭状态也回填扫描发现 |
+| 仓库池 | 查看当前 50 个监控仓库 |
+| 模型配置 | 在运行设置、OpenCode、Codex、Codiv 四行调整运行与模型配置 |
+
+「模型配置」约 **30 秒**读取一次，校验通过后用于新任务：
+
+- **运行设置 → 修复工具**：切换 OpenCode / Codex，两套配置独立保留。
+- **运行设置 → PR 评论触发**：开启／关闭，默认开启，统一控制人工和机器人评论的自动跟进。
+  关闭会停止即时与定时评论入口的 AI 跟进及回复草稿；PR 状态同步、额度对账和独立 CI
+  修复继续运行，已有审批卡仍可人工确认。
+- **OpenCode**：模型、回复模型、Base URL、API 密钥及思考强度。
+- **Codex**：模型与思考强度，使用 ChatGPT 订阅设备登录；登录凭据独立保存在服务器，
+  串行借给 Actions 并回存刷新结果，不写进飞书。
+- **Codiv**：细筛模型、Base URL、API 密钥及思考预算。
+
+按账号持有者授权，OpenCode / Codiv 密钥在飞书显示明文；公开日志与控制台查询接口
+不返回密钥或 Codex 登录凭据。修改 OpenCode 密钥需服务器具备 Actions 仓库密钥管理权限。
+
+飞书各业务表独立同步，单表失败互不阻断；完整空快照可清理旧行，源读取失败不得冒充空结果。
+日常使用飞书，原前端看板已移除，`dashboard/` 保留控制器 API 与后台服务。
+
+## PR 评论与 CI 跟进
+
+Worker 每分钟检查 PR 评论，控制器每 15 分钟及 Actions 每 30 分钟补查。
+按现有规则过滤噪声通知、判断是否需要改代码或回复；已有 PR 跟进不占新 PR 额度。
+
+一轮评审对应一张飞书审批卡：需要改代码时合成一个经过验证的提交，各条回复可单独编辑、
+勾选。代码提交和回复都先等待确认；确认后先推送，再分别回复原讨论串。
+只有验证通过的提交才提供推送操作；验证失败与无需处理分开，必要时保留独立成立的回复草稿。
+
+回复草稿只留在飞书卡片，确认时使用卡片提交的文本。未推送的提交包与审批状态保留
+**7 天**，到期清理；推送成功立即删包，回复失败显示在卡片中，服务器不保存回复草稿。
 
 ## 目录结构
 
-```
-├─ AGENTS.md                # Playbook：全部规则与教训（必读）
-├─ configs/
-│  ├─ repositories.yaml     # 50 个监控仓库 + 每日额度（唯一名单真值）
-│  ├─ pr_gates.yaml         # 各仓库 PR 门禁 + CLA 机制分类
-│  ├─ v2.yaml               # 调度 / 路由 / 预算
-│  └─ cloudflare.yaml       # Worker 配置（token 在 Secrets）
-├─ scout_v2/
-│  ├─ repo_policy.py        # 车道与授权（fail-closed）
-│  ├─ repo_score.py         # 仓库评分模型（三指标合成）
-│  ├─ state_store.py        # SQLite：额度账本 / Job / 拦截器
-│  ├─ job_router.py         # scan→Modal，repair→Actions（互不兜底）
-│  └─ workers/
-│     ├─ auto_pipeline.py   # 认领→修复→发布 主流程
-│     ├─ repair.py          # opencode 修复（repair prompt）
-│     ├─ scan.py            # bug hunter 扫描（semgrep + xfail 挖掘）
-│     ├─ cla.py             # CLA 三机制处理
-│     ├─ pr_fix.py          # PR CI 修复（comment 触发）
-│     └─ publish_remote.py  # runner 侧 push + 开 PR
-├─ dashboard/               # FastAPI + HTMX 看板（127.0.0.1:8787）
-├─ scripts/
-│  ├─ monitor_prs.py        # PR 分类 + pr-fix 派发 + 回复草拟
-│  ├─ pool_rates.py         # 池子三指标实测（改池子后必跑）
-│  ├─ pool_audit.py         # 全池审视：指标 + 自动化阻碍
-│  ├─ audit_ai_policy.py    # AI 政策审计（加仓库前必跑）
-│  ├─ cap_audit.py          # 额度穿透审计
-│  ├─ evidence_audit.py     # 证据链失败分布
-│  ├─ p6_bug_hunter.py      # bug hunter（Modal 沙箱执行）
-│  └─ cleanup_stale_candidates.py
-├─ cloudflare/worker.js     # 发现层 Worker（每分钟）
-├─ .github/workflows/
-│  ├─ oss-scout-repair.yml  # 修复执行（issue → PR）
-│  ├─ oss-scout-pr-fix.yml  # PR CI 修复（fork 分支推回）
-│  ├─ pr-watch.yml          # PR 监控（30 分钟）
-│  ├─ bh-daily.yml          # bug hunter（每日 04:00 上海）
-│  ├─ worker-deploy.yml     # Cloudflare Worker 部署
-│  └─ deploy.yml            # Docker 构建部署（主部署）
-└─ tests_v2/ tests_dashboard/  # 343 个测试
+```text
+AGENTS.md                         当前运行约定、仓库规则与历史教训
+configs/repositories.yaml         唯一监控名单与每日额度
+configs/pr_gates.yaml              仓库门禁与 CLA 规则
+configs/console_models.yaml        飞书同步的本地配置覆盖（运行时文件）
+scout_v2/state_store.py            持久 inbox、额度账本、队列事务与滚动容量
+scout_v2/feishu_models.py          飞书模型与运行设置同步
+scout_v2/pr_approval.py            PR 跟进审批、提交包和保留期
+scout_v2/workers/auto_pipeline.py  筛选、派发、对账主流程
+scout_v2/workers/repair.py         OpenCode / Codex 修复与独立复跑
+scout_v2/workers/commit_identity.py 统一作者、提交者与 DCO 签名
+scout_v2/workers/publish_remote.py 验证交付后推送 fork 并开 PR
+dashboard/                        FastAPI 控制器与后台循环
+scripts/monitor_prs.py             PR 监控及飞书业务表数据
+cloudflare/worker.js              每分钟发现与 PR 评论轮询
+.github/workflows/                修复、跟进、测试、部署和诊断工作流
+tests_v2/、tests_dashboard/        系统自身的回归测试
 ```
 
-## 队列与筛选可靠性
-
-Worker 每分钟通过 GraphQL 批量扫描全部 50 仓库，分页读取，投递持久化后才推进各仓库水位。
-接收请求只写 SQLite inbox；后台读取最新 issue 正文和完整评论，机械排除后调用 AI。
-临时故障进入退避重试，内容变化后允许重新评估正式拒绝的 issue。
-
-即时、轮询和手动消费共用 FIFO、执行锁和每日 5 个新 PR 的额度。超额候选保存次日
-北京时间 04:00 的 eligible_at，重启后按持久时间继续；按 GitHub 确认的 PR 创建日期记账，失败不计。
-新 issue 全天正常消费，包括 00:00–04:00。暂存队列从 04:00 起使用当天剩余
-额度；不预留名额、不额外限速，当天 5 个名额可以在 04:00 前用完。已有 PR 的跟进只处理同一份 50 仓库名单，不占额度，回复草稿经人工确认才发送。
-队列 JSON 为兼容看板保留，所有运行时读改写通过 SQLite 事务锁串行化。
-飞书四张表在独立同步循环里更新，单表失败互不阻断。
-
-## 关键设计决策（为什么长这样）
-
-**路由互不兜底**：scan 只走 Modal（临时沙箱、ToS 合规），repair 只走 Actions
-（opencode 在 Modal 瘦镜像里卡 bootstrap，实测从未成功）。不可用就 pause 上报，
-绝不静默降级到跑不通的平台。
-
-**仓库准入靠实测不看名声**：三个指标合成 0–100 分——外部合并率（45%，√ 曲线）、
-中位合并耗时（35%，指数衰减）、外部 PR/周（20%，log 压缩）。低于 50 分不入池，
-当前 50 个全部 ≥69 分。被否决的仓库记录在 `configs/repositories.yaml` 头部，
-防止 creeping back。
-
-**对外文字零自动化**：PR 描述只用 agent 真实产出的 root_cause；maintainer 评论
-由 AI 起草但必须人审后发送。astral-sh 和 biome 的教训：AI 生成的沟通文字会直接
-毁掉账号。
-
-**DCO 用账号真身**：签名必须与 commit 作者一致，bot 逐 commit 校验。签名错了
-只能重写历史或关掉重开——防不胜防，所以提交侧一步到位。
-
-## 日常操作
+## 日常检查与部署
 
 ```bash
-# 看池子质量（改池子后必跑）
+# 测试系统自身
+python -m pytest tests_v2 tests_dashboard -q
+
+# 仓库指标、准入规则审计
 python scripts/pool_rates.py
-
-# 全池审视（指标 + 自动化阻碍）
 python scripts/pool_audit.py
-
-# AI 政策审计（加仓库前必跑）
 python scripts/audit_ai_policy.py
 
-# 手动跑 PR 监控
+# 手动运行 PR 监控
 python scripts/monitor_prs.py
 
-# 手动触发 bug hunter
-gh workflow run bh-daily.yml -f repos=3
+# 只读运行诊断
+gh workflow run diagnose.yml --ref main
+
+# 主控制器部署
+gh workflow run deploy.yml --ref main -f target_env=aliyun -f deploy_ref=main
+
+# Worker 部署；修改 REPOS 后须重新部署 Worker
+gh workflow run worker-deploy.yml --ref main
 ```
 
-## 部署
+独立 bug hunter 支线在 Modal 执行，默认每日北京时间 04:00 触发；它与历史候选消费批次
+是两件事，不自动把发现直接发布为新 issue。仓库是否适合自动贡献以最新规则和审计为准，
+不把历史评分或门禁统计当作永久结论。
 
-- **主服务**（看板 + 修复派发）：`gh workflow run deploy.yml -f target_env=aliyun`
-- **Cloudflare Worker**（发现层）：`gh workflow run worker-deploy.yml`
-- Worker 的 `REPOS` 改动只有重新部署 Worker 才生效
-
-## 当前状态与已知边界
-
-- 池子 50 个，全部实测过外部合并率 / 中位耗时 / 周机会量
-- AI 政策审计 50/50 通过（零排除）
-- 自动化阻碍：45 个无阻碍、3 个 comment_sign 自动签、2 个需人工签 CLA
-  （cockroachdb 与 gemini-cli 已由账号持有者签过，litellm 是受限档）
-- bug hunter（独立支线）：Modal 独占、每日 04:00、semgrep correctness 子集 +
-  xfail 挖掘。**"findings → 开 issue"环节刻意未接**，等 correctness 命中率
-  有数据再说
-
-## 教训记录
-
-所有踩过的坑（DCO 身份、额度穿透、run 错配、base 坏窗口、AI 政策、
-duplicate issue……）连同修复方式都写在 `AGENTS.md` 里。改代码前先读它，
-同样的错不犯第二次。
+审计记录保存在 `state/worklog.jsonl`。队列 JSON 为兼容飞书与控制器保留，所有运行时
+读改写通过 `queue_transaction` 跨线程、跨进程串行化。重启后的远程任务先核对再继续，
+不重复派发可能仍在执行的写操作。更多约定见 [AGENTS.md](AGENTS.md)。
