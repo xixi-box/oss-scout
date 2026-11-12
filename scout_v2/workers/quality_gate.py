@@ -8,6 +8,32 @@ from pathlib import Path, PurePosixPath
 
 from ..schemas import Job, Result
 
+
+def patch_files(patch: str) -> list[str]:
+    """Both sides matter for renames/deletions; ignore /dev/null headers."""
+    paths = set()
+    for line in patch.splitlines():
+        match = re.match(r"^diff --git a/(.+) b/(.+)$", line)
+        if match:
+            paths.update(match.groups())
+        if line.startswith(("--- a/", "+++ b/")):
+            paths.add(line[6:].split("\t", 1)[0])
+    return sorted(paths)
+
+
+def check_delivery_scope(patch: str) -> list[str]:
+    """Automatic bug fixes must not deliver dependency churn or CI changes."""
+    lockfiles = {"yarn.lock", "package-lock.json", "npm-shrinkwrap.json", "pnpm-lock.yaml",
+                 "bun.lock", "bun.lockb", "Cargo.lock", "uv.lock", "poetry.lock",
+                 "Pipfile.lock", "pdm.lock", "composer.lock", "Gemfile.lock", "go.sum"}
+    errors = []
+    for path in patch_files(patch):
+        if PurePosixPath(path).name in lockfiles:
+            errors.append(f"dependency_lockfile_change_requires_review: {path}")
+        if path.startswith((".github/workflows/", ".github/actions/")):
+            errors.append(f"ci_change_outside_repair_scope: {path}")
+    return errors
+
 # Result 内路径必须是安全的相对 artifact 路径
 _UNSAFE_PATH = re.compile(r"^([A-Za-z]:|\\\\|/|\.\.)")
 

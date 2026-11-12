@@ -17,6 +17,8 @@ RE_CLAIM = re.compile(
     r"\bi\s?(?:'ll|will|'m\s+(?:working|on\s+it)|'d\s+like\s+to\s+(?:work|take|fix))\b"
     r"|\bworking\s+on\s+(?:this|a\s+fix|it)\b"
     r"|\btaking\s+(?:this|it)\b|\bpick(?:ed|ing)?\s+(?:this|it)\s?up\b"
+    r"|\bi\s+(?:can|would\s+like\s+to)\s+(?:take|work\s+on|fix|handle|implement)\s+"
+    r"(?:this\b|it\b|(?:a|the)\b[^\n.!?]{0,80}\b(?:fix|issue|bug|patch)\b)"
     r"|\bPR\s+(?:is\s+)?(?:open|coming|up)\b|\bopened?\s+a\s+(?:PR|pull\s+request)\b"
     # 派单："you can fix this" / "@groeneai you can handle it"——活被指给了
     # 别人（2026-11-05 clickhouse#126287 实录：成员评论派单，我们没拦住）

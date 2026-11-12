@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import re
 import os
 import subprocess
@@ -105,6 +106,11 @@ Enable verbose output if needed so the same case name appears in both runs.
 Write real JSON. A missing or incomplete verification plan blocks publication.
 For Rust inline tests, keep test edits inside the existing trailing #[cfg(test)]
 module so the verifier can apply the test without applying the production fix.
+The regression tests will be delivered in the PR with the fix. Keep them in the
+project's normal test locations and run the affected existing tests too.
+Restore incidental dependency-installation changes before finishing. Do not
+change lockfiles or CI workflows for these automatic bug fixes. If the task
+requires dependency or CI changes, report that blocker instead of broadening it.
 """
 
 # Windows 教训（P5 演练实测）：多行 prompt 经 argv 传给 opencode.CMD（批处理 shim）
@@ -471,9 +477,13 @@ def opencode_patch_producer(job: Job, work_dir: Path, context: str,
                             ".oss-scout-result.json") if p in changed]
 
     test_file = markers.get("test_file", "")
+    from .publish_remote import _JUNK_PATH, filter_patch_junk
     test_files: dict[str, str] = {}
     mixed_tests: dict[str, tuple[str, str]] = {}
     for path in changed:
+        if _JUNK_PATH.search(path):
+            excludes.append(path)
+            continue
         is_test = (path == test_file) or _looks_like_test(path)
         if not is_test:
             continue
@@ -507,7 +517,6 @@ def opencode_patch_producer(job: Job, work_dir: Path, context: str,
         _git(["reset", "-q", "--", *excludes], work_dir, check=False)
     patch = _git(["diff", "--cached"], work_dir).stdout
     # Verify the same source patch that the publisher will actually apply.
-    from .publish_remote import filter_patch_junk
     patch = filter_patch_junk(patch)
     if not patch.strip():
         # 诊断信息必须带出 agent 自己说了什么、动了哪些文件——否则"没改源码"
@@ -958,7 +967,10 @@ def run_repair(job: Job, repo_dir: Path, out_dir: Path, *,
             return Result(job_id=job.job_id, backend=backend_name, outcome="blocked",
                           base_sha=job.base_sha, logs_path=f"artifacts/{job.job_id}/worker.log",
                           unverified_items=[reason])
-        errs = check_patch_content(patch)
+        from .quality_gate import check_delivery_scope, patch_files, check_patch_path
+        errs = check_patch_content(patch) + check_delivery_scope(patch)
+        for path in test_files | mixed_tests:
+            errs.extend(check_patch_path(path))
         if errs:
             (out_dir / "worker.log").write_text(patch[:2000], encoding="utf-8")
             return Result(job_id=job.job_id, backend=backend_name, outcome="blocked",
@@ -984,8 +996,8 @@ def run_repair(job: Job, repo_dir: Path, out_dir: Path, *,
                               logs_path=f"artifacts/{job.job_id}/worker.log",
                               unverified_items=[f"verification rejected: {bad}"])
 
-        # 交付的补丁必须只含源码：把测试文件的整段 diff 剔掉（双重保险——
-        # producer 已经按路径排除过一次，这里防自定义 producer 或未来改动漏掉）
+        # Base verification needs test-only changes separated from the fix.
+        # Reassemble them into the exact deliverable before patched verification.
         patch = _strip_test_files_from_patch(patch, list(test_files.keys()))
         rebuild = (plan is None and job.repo.lower() == "python/cpython" and cmd[0] == "./python"
                    and bool(re.search(r"(?m)^diff --git a/.+\.[ch] b/.+\.[ch]$", patch)))
@@ -1046,8 +1058,12 @@ def run_repair(job: Job, repo_dir: Path, out_dir: Path, *,
                           base_sha=job.base_sha, reproduced_on_base=True,
                           logs_path=f"artifacts/{job.job_id}/worker.log",
                           unverified_items=["patch failed to apply on base"])
-        # 补丁落下之后再写回归测试：补丁只含源码，测试不在里面
+        # Stage only the fix and the regression files, never setup/build output.
         _seed_test_files(work, test_files | {path: versions[1] for path, versions in mixed_tests.items()})
+        delivery_files = sorted(set(patch_files(patch)) | set(test_files) | set(mixed_tests))
+        if delivery_files:
+            _git(["add", "-A", "--", *delivery_files], work)
+        delivery_patch = _git(["diff", "--cached", "--binary"], work).stdout
         fixed_rc, out, err, error = _replay_regression(
             cmd, plan, work, env, out_dir, "patched", rebuild=rebuild)
         if error is None and fixed_rc:
@@ -1072,10 +1088,15 @@ def run_repair(job: Job, repo_dir: Path, out_dir: Path, *,
                     error = "additional_check_failed", f"required rclone check failed: {name} (exit {rc})"
                     failure = f"{error[0]}: {error[1]}"
                     break
+        if fixed and not failure and delivery_files:
+            after = _git(["diff", "HEAD", "--binary", "--", *delivery_files], work).stdout
+            if after != delivery_patch:
+                fixed = False
+                error = "delivery_changed_during_verification", "tests/setup changed files intended for publication"
+                failure = f"{error[0]}: {error[1]}"
         if root_cause:
             unverified.append(f"agent root cause: {root_cause[:200]}")
-        # 交付补丁只含源码改动；回归测试单独记录（PR 里不带我们的验证用例）
-        (out_dir / "change.patch").write_text(patch, encoding="utf-8")
+        (out_dir / "change.patch").write_bytes(delivery_patch.encode("utf-8"))
         (out_dir / "test-report.json").write_text(json.dumps({
             "schema_version": 1, "job_id": job.job_id, "base_sha": job.base_sha,
             "test_cmd": cmd, "base_returncode": base_rc, "patched_returncode": fixed_rc,
@@ -1084,6 +1105,10 @@ def run_repair(job: Job, repo_dir: Path, out_dir: Path, *,
             "base_stdout_tail": base_out[-3000:], "base_stderr_tail": base_err[-3000:],
             "patched_stdout_tail": out[-3000:], "patched_stderr_tail": err[-3000:],
             "regression_test_files": sorted(baseline_tests),
+            "delivery_files": patch_files(delivery_patch),
+            "delivery_patch_sha256": hashlib.sha256((out_dir / "change.patch").read_bytes()).hexdigest(),
+            "root_cause": root_cause,
+            "repair_agent": job.repair_agent, "model": job.model,
             "additional_checks": additional_checks,
             "additional_check_output": additional_check_output,
         }, ensure_ascii=False, indent=1), encoding="utf-8")

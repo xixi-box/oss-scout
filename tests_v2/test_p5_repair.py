@@ -90,7 +90,7 @@ class TestRepairEvidenceChain:
         result = run_repair(job(sha), repo, out, patch_producer=producer)
         assert result.outcome == "succeeded"
         assert ["{ 0 }" in contents for contents in observed] == [True, False]
-        assert "fn regression" not in (out / "change.patch").read_text()
+        assert "fn regression" in (out / "change.patch").read_text()
         assert len((out / "verification-steps.jsonl").read_text().splitlines()) == 2
 
     def test_full_chain_reproduced_and_fixed(self, tmp_path):
@@ -389,15 +389,10 @@ class TestEnvironmentNotMistakenForBug:
         assert res.outcome == "failed"
 
 
-class TestAiTestFilesExcludedFromPatch:
-    """AI 回归测试是验证手段，不是修复内容，绝不能进补丁。
+class TestRegressionFilesDelivered:
+    """The verified regression must accompany the delivered fix."""
 
-    2026-10-28 实录：排除列表硬编码 test_ai_regression_issue.py，而实际路径是
-    由 job.ai_test_files 决定的（这次是 test_ai_regression.py），于是测试文件
-    连同修复一起进了 patch。
-    """
-
-    def test_arbitrary_test_path_is_excluded(self, tmp_path):
+    def test_arbitrary_test_path_is_delivered(self, tmp_path):
         import subprocess
         r, sha = make_repo(tmp_path)
 
@@ -421,7 +416,7 @@ class TestAiTestFilesExcludedFromPatch:
         assert res.outcome == "succeeded"
         patch = (tmp_path / "out" / "change.patch").read_text(encoding="utf-8")
         assert "calc.py" in patch
-        assert "test_custom_name.py" not in patch
+        assert "test_custom_name.py" in patch
 
 
 class TestReproductionMustBeReal:

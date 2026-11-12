@@ -15,6 +15,8 @@ fork 模型：对第三方仓库没有 push 权限，分支推到自己的 fork�
 from __future__ import annotations
 
 import json
+import hashlib
+import shlex
 import os
 import re
 import subprocess
@@ -122,11 +124,16 @@ def publish(repo_dir: Path, patch_file: Path, publish_cfg: dict) -> dict:
             return {"ok": False, "error": reason, "coarse_reason": reason}
     if not patch_file.is_file() or not patch_file.read_text(encoding="utf-8").strip():
         return {"ok": False, "error": "no patch to publish"}
+    expected_hash = publish_cfg.get("verified_patch_sha256")
+    if expected_hash and hashlib.sha256(patch_file.read_bytes()).hexdigest() != expected_hash:
+        return {"ok": False, "error": "verified delivery patch hash mismatch"}
     filtered = filter_patch_junk(patch_file.read_text(encoding="utf-8"))
     if not filtered.strip():
         return {"ok": False, "error": "no patch to publish (all sections were "
                                       "build-artifact junk)"}
     if filtered != patch_file.read_text(encoding="utf-8"):
+        if expected_hash:
+            return {"ok": False, "error": "verified delivery contains build artifacts; re-verification required"}
         patch_file.write_text(filtered, encoding="utf-8")
     if upstream.lower() == "prometheus/prometheus":
         area_match = re.search(r"(?m)^diff --git a/\S+ b/([\w.-]+)/", filtered)
@@ -179,7 +186,16 @@ def publish(repo_dir: Path, patch_file: Path, publish_cfg: dict) -> dict:
                             encoding="utf-8", errors="replace", timeout=120)
     if ap.returncode != 0:
         return {"ok": False, "error": f"patch apply failed: {ap.stderr[-200:]}"}
-    _run(["git", "add", "-A"], cwd=repo_dir)
+    if expected_hash:
+        from .quality_gate import patch_files
+        paths = patch_files(patch_file.read_text(encoding="utf-8"))
+        staged = _run(["git", "add", "-A", "--", *paths], cwd=repo_dir)
+        actual = _run(["git", "diff", "--cached", "--binary"], cwd=repo_dir)
+        if (staged.returncode or actual.returncode
+                or hashlib.sha256(actual.stdout.encode("utf-8")).hexdigest() != expected_hash):
+            return {"ok": False, "error": "staged publication differs from verified patch"}
+    else:
+        _run(["git", "add", "-A"], cwd=repo_dir)
     # DCO：Playbook §4.3 要求查，但代码里一直没实现，导致 vllm/milvus 的 PR
     # 全部挂着 DCO 红灯（2026-10-30 实测 #64811、#64800、#54926）。
     #
@@ -198,7 +214,8 @@ def publish(repo_dir: Path, patch_file: Path, publish_cfg: dict) -> dict:
     if publish_cfg.get("commit_issue_reference") and issue_no > 0:
         commit_message.append(f"Fixes: #{issue_no}")
     if upstream.lower() == "apache/rocketmq":
-        commit_message.append("Generated-by: OpenCode")
+        tool = "Codex" if publish_cfg.get("repair_agent") == "codex" else "OpenCode"
+        commit_message.append(f"Generated-by: {tool}")
     commit_message.append(sign_off)
     ci = _run(["git", *identity, "commit", "-qm", "\n\n".join(commit_message)], cwd=repo_dir)
     if ci.returncode != 0:
@@ -251,8 +268,37 @@ def publish_from_env(job_dict: dict, repo_dir: Path, out_dir: Path) -> dict | No
         if checks != {"go build": 0, "make quicktest": 0}:
             return {"ok": False, "error": "rclone required build and quicktest evidence missing or failed"}
         cfg["body"] = str(cfg.get("body") or "") + "\n\nAdditional checks passed: `go build`, `make quicktest`."
-    cfg["body"] = _rewrite_body(cfg, out_dir)
     patch = out_dir / "change.patch"
+    try:
+        report = json.loads((out_dir / "test-report.json").read_text(encoding="utf-8"))
+        result = json.loads((out_dir / "result.json").read_text(encoding="utf-8"))
+        text = patch.read_text(encoding="utf-8")
+    except (OSError, ValueError):
+        return {"ok": False, "error": "verified delivery metadata or patch missing"}
+    from .quality_gate import patch_files, check_delivery_scope
+    digest = hashlib.sha256(patch.read_bytes()).hexdigest()
+    if (report.get("job_id") != job_dict.get("job_id")
+            or report.get("base_sha") != job_dict.get("base_sha")
+            or result.get("job_id") != job_dict.get("job_id")
+            or result.get("base_sha") != job_dict.get("base_sha")
+            or result.get("outcome") != "succeeded"
+            or not all(result.get(key) is True for key in (
+                "reproduced_on_base", "fixed_on_patch", "regression_tests_passed"))
+            or report.get("base_returncode") in (None, 0)
+            or report.get("patched_returncode") != 0 or report.get("failure_kind")
+            or report.get("delivery_patch_sha256") != digest
+            or set(report.get("delivery_files") or []) != set(patch_files(text))):
+        return {"ok": False, "error": "delivery does not match verified result, lineage, or patch hash"}
+    regressions = set(report.get("regression_test_files") or [])
+    if not regressions or not regressions <= set(patch_files(text)):
+        return {"ok": False, "error": "verified regression tests missing from delivery patch"}
+    if not str(report.get("root_cause") or "").strip() or not report.get("test_cmd"):
+        return {"ok": False, "error": "root cause or reproducible test command missing"}
+    if check_delivery_scope(text) or filter_patch_junk(text) != text:
+        return {"ok": False, "error": "delivery contains lockfile, CI, or build-artifact changes"}
+    cfg["verified_patch_sha256"] = digest
+    cfg["repair_agent"] = job_dict.get("repair_agent") or "opencode"
+    cfg["body"] = _rewrite_body(cfg, out_dir, repair_agent=job_dict.get("repair_agent") or "opencode")
     result = publish(repo_dir, patch, cfg)
     (out_dir / "publish.json").write_text(json.dumps(result, ensure_ascii=False, indent=1),
                                           encoding="utf-8")
@@ -260,7 +306,7 @@ def publish_from_env(job_dict: dict, repo_dir: Path, out_dir: Path) -> dict | No
     return result
 
 
-def _rewrite_body(cfg: dict, out_dir: Path) -> str:
+def _rewrite_body(cfg: dict, out_dir: Path, *, repair_agent: str = "opencode") -> str:
     """用 agent 真正查到的根因重写 PR 描述。
 
     控制器组 job 时还没跑出结果，只能拿 issue 标题占位，于是 PR 里出现
@@ -273,11 +319,12 @@ def _rewrite_body(cfg: dict, out_dir: Path) -> str:
     body = str(cfg.get("body") or "")
     issue_number = cfg.get("issue_number")
     root_cause = ""
-    res_file = out_dir / "result.json"
+    res_file = out_dir / "test-report.json"
+    report = {}
     if res_file.is_file():
         try:
-            res = json.loads(res_file.read_text(encoding="utf-8"))
-            root_cause = str(res.get("root_cause") or "").strip()
+            report = json.loads(res_file.read_text(encoding="utf-8"))
+            root_cause = str(report.get("root_cause") or "").strip()
         except Exception:  # noqa: BLE001
             root_cause = ""
     # 只留真正的归因；与 issue 标题雷同的（就是占位串）当没有
@@ -293,14 +340,20 @@ def _rewrite_body(cfg: dict, out_dir: Path) -> str:
         lines.append("")
     if body:
         kept = [ln for ln in body.splitlines()
-                if not ln.startswith("Fixes #") and not ln.startswith("Root cause:")]
+                if not ln.startswith(("Fixes #", "Root cause:", "AI assistance:",
+                                      "Verified by running the failing test at"))]
         kept = [ln for ln in kept if ln.strip()]
         lines.extend(kept)
     upstream = str(cfg.get("upstream") or "").lower()
-    if upstream in {"qdrant/qdrant", "modelcontextprotocol/rust-sdk", "prometheus/prometheus",
-                    "nvidia/nemo-agent-toolkit", "rclone/rclone", "apache/rocketmq"}:
-        lines.extend(["", "AI assistance: OpenCode generated the fix and tests. "
-                      "oss-scout verified the regression and opened this PR automatically."])
+    if report.get("test_cmd"):
+        command = shlex.join(report["test_cmd"]).replace("`", "\\`")
+        lines.extend(["", f"Tests: `{command}` (fails on base; passes with this patch)."])
+    if report.get("regression_test_files"):
+        lines.append("Regression coverage: " + ", ".join(
+            f"`{path}`" for path in report["regression_test_files"]) + ".")
+    agent = {"opencode": "OpenCode", "codex": "Codex"}.get(repair_agent, "a coding agent")
+    lines.extend(["", f"AI assistance: {agent} helped implement and test this change. "
+                  "oss-scout independently replayed the regression before opening this PR."])
     if upstream == "qdrant/qdrant" and issue_number:
         lines.extend(["", f"Repair task: reproduce the bug in #{issue_number}, implement a focused fix, "
                       "and verify that the regression test fails on dev and passes with the patch."])

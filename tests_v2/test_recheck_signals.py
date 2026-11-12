@@ -11,6 +11,7 @@
 """
 from __future__ import annotations
 
+import pytest
 import sys
 from pathlib import Path
 
@@ -105,7 +106,7 @@ class TestDispatchAndAntiAiPatterns:
 
     def test_reclaim_non_matches(self):
         m = git_host.RE_CLAIM.search
-        assert not m("I can fix this")            # 第一人称不在派单模式里
+        assert m("I can fix this")  # explicit first-person offer
         assert not m("he can fix this")           # 派单只认 you / @user
         assert not m("can you provide a traceback?")
         assert not m("you can take inspiration from the docs")
@@ -228,3 +229,16 @@ class TestExplicitRefPr:
         assert r.complete is True
         assert r.issue_open and r.unassigned and not r.has_claim_signal
         assert r.open_pr_hits or r.has_cross_ref_pr
+
+
+@pytest.mark.parametrize("body", ["I can take a score-only fix for this.", "I would like to work on this."])
+def test_explicit_takeover_is_a_claim(body, monkeypatch):
+    result = _recheck(monkeypatch, comments=[{
+        "user": {"login": "another-developer"}, "author_association": "NONE", "body": body}])
+    assert result.has_claim_signal is True
+
+
+@pytest.mark.parametrize("body", ["I can reproduce this", "I can take a screenshot",
+                                  "I cannot fix this", "I can take a look at the logs"])
+def test_reproduction_and_noncommitments_are_not_claims(body):
+    assert not git_host.RE_CLAIM.search(body)
