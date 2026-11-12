@@ -45,16 +45,16 @@ def test_migration_unifies_old_states_keeps_fifo_and_never_touches_writers(queue
                                       "fork:fix/issue-20-abcdef0", "x/y")
     ledger.close()
     write_queue(queue_root, entries)
-    assert set(data.prune_candidate_backlog(queue_root)) == {"a/b#10", "a/b#11"}
+    assert set(data.prune_candidate_backlog(queue_root)) == {"a/b#1", "a/b#2"}
     updated = read_queue(queue_root)
     assert staged_candidate_count(updated) == 10
     assert updated["a/b#20"] == entries["a/b#20"]
     assert updated["a/b#21"] == entries["a/b#21"]
     assert updated["a/b#22"] == entries["a/b#22"]
     assert not any(e["status"] in {"new", "recheck_failed"} for e in updated.values())
-    assert updated["a/b#1"]["staged_at"] == entries["a/b#1"]["discovered_at"]
-    assert pipeline._eligible(updated["a/b#1"])
-    assert pipeline._fine_rescreen_due(updated["a/b#1"])
+    assert updated["a/b#3"]["staged_at"] == entries["a/b#3"]["discovered_at"]
+    assert pipeline._eligible(updated["a/b#3"])
+    assert pipeline._fine_rescreen_due(updated["a/b#3"])
     assert data.prune_candidate_backlog(queue_root) == []
 
 
@@ -162,7 +162,10 @@ def test_controller_dispatch_respects_the_selected_consumption_lane(
     dispatch = inspect.getclosurevars(route.endpoint).nonlocals["_dispatch"]
     assert dispatch(rescreen=manual) == expected
     assert launched == expected
-    assert read_queue(queue_root) == entries  # selection never changes a running task
+    after = read_queue(queue_root)
+    for key in expected:
+        assert after[key].pop("direct_start_reserved_at")
+    assert after == entries  # only a durable handoff is added before Actions starts
 
 
 def test_refill_uses_one_fifo_but_never_bypasses_retry_or_nonquota_due_time(queue_root):
@@ -192,7 +195,7 @@ def test_concurrent_screening_cannot_overfill_the_waiting_queue(queue_root, monk
     with ThreadPoolExecutor(max_workers=2) as pool:
         results = list(pool.map(lambda n: data.ingest_cloudflare_issues(
             ds, [{"repo": "a/b", "number": n}]), (1, 2)))
-    assert sum(n for n, _ in results) == 1
+    assert sum(n for n, _ in results) == 2
     assert staged_candidate_count(read_queue(queue_root)) == 10
 
 
@@ -212,7 +215,7 @@ def test_full_queue_with_idle_slot_admits_one_direct_start(queue_root, monkeypat
     # If direct launch fails, the reservation cannot become an eleventh waiter.
     monkeypatch.setattr(pipeline, "_candidate_pipeline", lambda *a, **kw: {"abort": "workflow unavailable"})
     assert pipeline.candidate_pipeline(queue_root, q["a/b#1"])["abort"] == "workflow unavailable"
-    assert read_queue(queue_root)["a/b#1"]["status"] == "coarse_blocked"
+    assert read_queue(queue_root)["a/b#1"]["status"] == "staged"
     assert staged_candidate_count(read_queue(queue_root)) == 10
 
 
@@ -228,7 +231,7 @@ def test_two_concurrent_arrivals_cannot_both_take_the_direct_slot(queue_root, mo
     with ThreadPoolExecutor(max_workers=2) as pool:
         results = list(pool.map(lambda n: data.ingest_cloudflare_issues(
             SimpleNamespace(root=queue_root), [{"repo": "a/b", "number": n}]), (1, 2)))
-    assert sum(n for n, _ in results) == 1
+    assert sum(n for n, _ in results) == 2
     q = read_queue(queue_root)
     assert sum(bool(e.get("direct_start_reserved_at")) for e in q.values()) == 1
     assert staged_candidate_count(q) == 10
@@ -244,7 +247,7 @@ def test_slot_taken_during_fine_screen_does_not_overfill_queue(queue_root, monke
 
     monkeypatch.setattr(data, "screen_issue", screen)
     assert data.ingest_cloudflare_issues(SimpleNamespace(root=queue_root), [
-        {"repo": "a/b", "number": 1}]) == (0, [])
+        {"repo": "a/b", "number": 1}]) == (1, ["a/b#1"])
     assert staged_candidate_count(read_queue(queue_root)) == 10
 
 
@@ -257,9 +260,9 @@ def test_full_queue_has_no_direct_bypass_without_known_free_budget(queue_root, m
         if not pending:
             ledger.finish_publication(f"job-{n}", day="2026-11-12", url=f"https://github.com/a/b/pull/{n}")
     ledger.close()
-    monkeypatch.setattr(data, "screen_issue", lambda *a, **kw: pytest.fail("must not spend AI tokens"))
+    monkeypatch.setattr(data, "screen_issue", lambda *a, **kw: ([], {"usable": True}))
     assert data.ingest_cloudflare_issues(SimpleNamespace(root=queue_root), [
-        {"repo": "a/b", "number": 1}]) == (0, [])
+        {"repo": "a/b", "number": 1}]) == (1, ["a/b#1"])
 
 
 def test_day_rollover_releases_only_unstarted_direct_handoffs(queue_root):
@@ -309,12 +312,12 @@ def test_expiration_never_changes_a_dispatched_waiter(queue_root):
     assert read_queue(queue_root)["a/b#2"] == protected
 
 
-def test_migration_removes_expired_waiters_before_selecting_the_oldest_ten(queue_root):
+def test_migration_removes_expired_waiters_before_selecting_the_newest_ten(queue_root):
     entries = {f"a/b#{i}": {"status": "staged", "staged_at": f"2026-11-12T01:{i:02d}:00+08:00"}
                for i in range(1, 12)}
     entries["a/b#old"] = {"status": "new", "discovered_at": "2020-01-01T00:00:00+08:00"}
     write_queue(queue_root, entries)
-    assert data.prune_candidate_backlog(queue_root) == ["a/b#11"]
+    assert data.prune_candidate_backlog(queue_root) == ["a/b#1"]
     queue = read_queue(queue_root)
     assert queue["a/b#old"]["status"] == "stage_expired"
     assert staged_candidate_count(queue) == 10

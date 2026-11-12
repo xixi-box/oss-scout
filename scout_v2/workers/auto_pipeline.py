@@ -39,8 +39,7 @@ from ..repo_policy import PolicyEngine
 from ..schemas import Job, Result
 from ..roster import monitored_repo
 from ..state_store import ClaimLedger, Worklog, queue_transaction, business_day, business_now, atomic_json_write
-from ..state_store import (STAGED_CANDIDATE_LIMIT, STAGED_FULL_REASON, publication_quota_remaining,
-                           staged_candidate_count, candidate_fifo_key)
+from ..state_store import publication_quota_remaining, candidate_fifo_key
 from .quality_gate import verify_result
 
 # 推送目标：对第三方仓库我们没有写权限，分支一律推自己的 fork，再向原仓库发 PR。
@@ -558,10 +557,9 @@ def release_direct_start(root: Path, key: str) -> None:
         if not entry or not entry.pop("direct_start_reserved_at", None):
             return
         if entry.get("status") == "staged" and not entry.get("dispatch_started_at"):
-            if staged_candidate_count(queue) > STAGED_CANDIDATE_LIMIT:
-                entry.update(status="coarse_blocked", coarse_reason=STAGED_FULL_REASON,
-                             abort_reason="Immediate start unavailable; " + STAGED_FULL_REASON,
-                             updated_at=business_now().isoformat(timespec="seconds"))
+            from scout_v2.state_store import rotate_staged_queue
+            for old in rotate_staged_queue(root, queue, keep=(key,), replacement=key):
+                log(root, "queue_evicted", old, f"replaced by {key} after direct handoff")
 
 
 def expire_direct_starts(root: Path) -> None:
@@ -1191,11 +1189,10 @@ def _stage_candidates(root: Path, keys: list[str], *, tz_name: str, cap: int) ->
 
 
 def _stage_entry(entry: dict, root: Path, queue: dict) -> None:
-    if entry.get("status") != "staged" and staged_candidate_count(queue) >= STAGED_CANDIDATE_LIMIT:
-        entry.update(status="coarse_blocked", coarse_reason=STAGED_FULL_REASON,
-                     updated_at=business_now().isoformat(timespec="seconds"))
-        return
     _defer_entry(entry, root)
+    from scout_v2.state_store import rotate_staged_queue
+    for old in rotate_staged_queue(root, queue):
+        log(root, "queue_evicted", old, "rolling capacity during quota deferral")
 
 
 def _defer_entry(entry: dict, root: Path) -> None:
@@ -1378,8 +1375,7 @@ def _dispatch_candidates(ordered: list[tuple[str, dict]], *, refill_day: str = "
             fresh.append(item)
         elif refill_day == day or entry.get("scheduled_consume_day") == day:
             historical.append(item)
-    direct = [item for item in fresh if item[1].get("direct_start_reserved_at")]
-    return direct + [item for item in fresh if not item[1].get("direct_start_reserved_at")] + historical
+    return fresh + historical
 
 
 def drain_ai_graded(root: Path, limit: int = 3, dry_run: bool = True,

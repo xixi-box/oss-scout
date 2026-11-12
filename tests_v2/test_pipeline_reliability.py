@@ -50,10 +50,8 @@ def _fill_publication_quota(root):
         ledger.close()
 
 
-def test_candidate_capacity_blocks_before_openjev_only_when_quota_is_full(intake):
-    from scout_v2.feishu_bitable import scan_row_to_fields
-    from scripts.monitor_prs import build_scan_rows
-
+def test_full_queue_rotates_after_ai_accepts_even_when_daily_quota_is_full(intake):
+    from scout_v2.state_store import staged_candidate_count
     ds, issue = intake
     queue = ds.root / "queue/candidates.json"
     entries = {f"a/b#{n}": {"status": "staged"} for n in range(2, 12)}
@@ -61,30 +59,26 @@ def test_candidate_capacity_blocks_before_openjev_only_when_quota_is_full(intake
     queue.write_text(json.dumps(entries), encoding="utf-8")
     _fill_publication_quota(ds.root)
     with patch("scout_v2.workers.openjev.OpenJevClient") as cls:
-        assert d.ingest_cloudflare_issues(ds, [issue]) == (0, [])
-        cls.assert_not_called()
-        row, = build_scan_rows(ds.root)
-        fields = scan_row_to_fields(row)
-        assert fields["最终结果"] == "粗筛淘汰 · 候选列表已满"
-        assert fields["细筛结果"] == "未执行"
-        entries["a/b#11"]["status"] = "pr_open"
-        queue.write_text(json.dumps(entries), encoding="utf-8")
         cls.return_value.score_issue.return_value = {"usable": True, "reason": "repro"}
-        later = dict(issue, number=13)
-        assert d.ingest_cloudflare_issues(ds, [later]) == (1, ["a/b#13"])
-        assert json.loads(queue.read_text(encoding="utf-8"))["a/b#13"]["status"] == "staged"
+        assert d.ingest_cloudflare_issues(ds, [issue]) == (1, ["a/b#1"])
+        cls.return_value.score_issue.assert_called_once()
+    updated = json.loads(queue.read_text(encoding="utf-8"))
+    assert updated["a/b#1"]["defer_reason"] == "daily_quota"
+    assert staged_candidate_count(updated) == 10
+    assert sum(e["status"] == "queue_evicted" for e in updated.values()) == 1
+    assert updated["a/b#12"] == entries["a/b#12"]
 
 
-def test_full_waiting_queue_blocks_before_ai_when_execution_is_busy(intake):
+def test_full_waiting_queue_rotates_when_execution_is_busy(intake):
     ds, issue = intake
     queue = ds.root / "queue/candidates.json"
     queue.write_text(json.dumps({**{f"a/b#{n}": {"status": "staged"} for n in range(2, 12)},
                                   "a/b#99": {"status": "running"}}))
     with patch("scout_v2.workers.openjev.OpenJevClient") as cls:
         cls.return_value.score_issue.return_value = {"usable": True, "reason": "repro"}
-        assert d.ingest_cloudflare_issues(ds, [issue]) == (0, [])
-        cls.return_value.score_issue.assert_not_called()
-    assert len(json.loads(queue.read_text())) == 11  # ten waiters plus the running task
+        assert d.ingest_cloudflare_issues(ds, [issue]) == (1, ["a/b#1"])
+        cls.return_value.score_issue.assert_called_once()
+    assert sum(e["status"] == "staged" for e in json.loads(queue.read_text(encoding="utf-8")).values()) == 10
 
 
 def test_candidate_capacity_is_rechecked_before_inserting(intake):
@@ -104,13 +98,13 @@ def test_candidate_capacity_is_rechecked_before_inserting(intake):
 
     with patch("scout_v2.workers.openjev.OpenJevClient") as cls:
         cls.return_value.score_issue.side_effect = score
-        assert d.ingest_cloudflare_issues(ds, [issue]) == (0, [])
+        assert d.ingest_cloudflare_issues(ds, [issue]) == (1, ["a/b#1"])
     with queue_transaction(ds.root) as queue:
-        assert len(queue) == 10
-        assert "a/b#1" not in queue
+        assert sum(e["status"] == "staged" for e in queue.values()) == 10
+        assert queue["a/b#1"]["status"] == "staged"
     row, = build_scan_rows(ds.root)
     fields = scan_row_to_fields(row)
-    assert fields["最终结果"] == "粗筛淘汰 · 候选列表已满"
+    assert fields["最终结果"] == "暂存"
     assert fields["细筛结果"] == "repro"
 
 
@@ -131,7 +125,7 @@ def test_pending_issues_fit_only_remaining_staged_slots(intake):
     assert updated["a/b#1"]["defer_reason"] == "daily_quota"
 
 
-def test_prune_keeps_oldest_and_protects_unreconciled_repair(intake):
+def test_prune_keeps_newest_and_protects_unreconciled_repair(intake):
     from scout_v2.state_store import staged_candidate_count
 
     ds, _ = intake
@@ -147,10 +141,10 @@ def test_prune_keeps_oldest_and_protects_unreconciled_repair(intake):
     ledger = ClaimLedger(ds.root / "state/scout_v2.sqlite3")
     try:
         assert ledger.reserve_publication("Asia/Shanghai", 5, "job-id", "a/b", "fork:fix/issue-13-ab-cd", "x/y")
-        assert set(d.prune_candidate_backlog(ds.root)) == {"a/b#2", "a/b#12"}
+        assert set(d.prune_candidate_backlog(ds.root)) == {"a/b#1", "a/b#3"}
         updated = json.loads(queue.read_text(encoding="utf-8"))
-        assert updated["a/b#1"]["status"] == "staged"
-        assert updated["a/b#2"]["status"] == "queue_pruned"
+        assert updated["a/b#1"]["status"] == "queue_evicted"
+        assert updated["a/b#2"]["status"] == "staged"
         assert updated["a/b#13"]["status"] == "escalated"
         assert updated["a/b#14"]["status"] == "pr_open"
         assert staged_candidate_count(updated) == 10

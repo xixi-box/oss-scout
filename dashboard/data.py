@@ -371,9 +371,9 @@ def fine_screen_issue(eng, it: dict, *, lane: str, linked_prs: list | None = Non
 
 
 def prune_candidate_backlog(root: Path) -> list[str]:
-    """Migrate legacy waiting states and keep the oldest ten; never alter writers."""
-    from scout_v2.state_store import (STAGED_CANDIDATE_LIMIT, business_now, queue_transaction,
-                                      publication_quota_remaining, candidate_fifo_key)
+    """Migrate legacy waiting states and retain the newest ten; protect writers."""
+    from scout_v2.state_store import (business_now, queue_transaction,
+                                      publication_quota_remaining, candidate_fifo_key, rotate_staged_queue)
     from scout_v2.repo_policy import PolicyEngine
     from scout_v2.workers.auto_pipeline import (_defer_entry, _wait_entry, _stage_age_days,
                                                STAGE_TTL_DAYS, log)
@@ -416,15 +416,9 @@ def prune_candidate_backlog(root: Path) -> list[str]:
             if entry.get("status") == "staged" and _stage_age_days(entry) > STAGE_TTL_DAYS:
                 entry.update(status="stage_expired", updated_at=now.isoformat())
                 expired.append(key)
-        waiting = [key for key, entry in queue.items()
-                   if entry.get("status") == "staged" and key.lower() not in protected]
-        waiting.sort(key=lambda key: candidate_fifo_key(key, queue[key]))
-        reserved = sum(key.lower() in protected and e.get("status") == "staged"
-                       and not e.get("direct_start_reserved_at")
-                       for key, e in queue.items())
-        removed = waiting[max(0, STAGED_CANDIDATE_LIMIT - reserved):]
-        for key in removed:
-            queue[key].update(status="queue_pruned", updated_at=now.isoformat(timespec="seconds"))
+        removed = rotate_staged_queue(root, queue, protected=protected)
+    for key in removed:
+        log(root, "queue_evicted", key, "rolling capacity during startup consolidation")
     if expired:
         log(root, "stage_expired", str(len(expired)), "expired before queue consolidation: " + ", ".join(expired[:5]))
     return removed
@@ -433,9 +427,9 @@ def prune_candidate_backlog(root: Path) -> list[str]:
 def ingest_cloudflare_issues(ds, items: list[dict], *, refresh: bool = False) -> tuple[int, list[str]]:
     """Mechanical exclusions, then AI; short atomic writes never enclose network IO."""
     import hashlib
-    from scout_v2.state_store import (STAGED_CANDIDATE_LIMIT, STAGED_FULL_REASON, atomic_json_write,
+    from scout_v2.state_store import (atomic_json_write,
                                       business_now, publication_quota_remaining, queue_transaction,
-                                      staged_candidate_count, direct_start_available)
+                                      direct_start_available, rotate_staged_queue)
     from scout_v2.repo_policy import PolicyEngine
     from scout_v2.workers.auto_pipeline import _defer_entry
     eng, err = PolicyEngine.load(ds.root)
@@ -461,15 +455,9 @@ def ingest_cloudflare_issues(ds, items: list[dict], *, refresh: bool = False) ->
             if key in q or (prior.get("fingerprint") == fingerprint and prior.get("status") in
                             ("blocked", "rejected", "archived", "screen_skipped")):
                 continue
-            full = (staged_candidate_count(q) >= STAGED_CANDIDATE_LIMIT
-                    and not direct_start_available(ds.root, q, eng.tz_name, eng.max_claims_per_day))
         lane = eng.repo_lane(repo)
-        if full:
-            blockers, verdict = [STAGED_FULL_REASON], {}
-            record_issue_screen(eng, it, "coarse_screen", blockers[0])
-        else:
-            blockers, verdict = screen_issue(eng, it, lane=lane, live_blockers=live_blockers, timeline=timeline)
-        now = business_now().isoformat(timespec="seconds")
+        blockers, verdict = screen_issue(eng, it, lane=lane, live_blockers=live_blockers, timeline=timeline)
+        now = business_now().isoformat(timespec="microseconds")
         rec = {"first_seen": prior.get("first_seen") or now, "updated_at": now, "fingerprint": fingerprint,
                "status": "blocked" if blockers else "screen_skipped" if verdict.get("skipped") else
                          "queued" if verdict.get("usable") is True else
@@ -484,21 +472,23 @@ def ingest_cloudflare_issues(ds, items: list[dict], *, refresh: bool = False) ->
             if not blockers and verdict.get("usable") is True:
                 stage = publication_quota_remaining(ds.root, eng.tz_name, eng.max_claims_per_day) == 0
                 direct = direct_start_available(ds.root, q, eng.tz_name, eng.max_claims_per_day)
-                if not direct and staged_candidate_count(q) >= STAGED_CANDIDATE_LIMIT:
-                    rec.update(status="blocked", coarse_reason=STAGED_FULL_REASON)
-                else:
-                    q[key] = {**it, "id": key, "repo": repo, "number": number, "lane": lane,
-                              "blockers": [], "ai_verdict": verdict,
-                              "discovered_at": now, "status": "staged", "lease": None,
-                              "source": "cloudflare-worker", "screened_at": now,
-                              "url": it.get("url") or f"https://github.com/{repo}/issues/{number}"}
-                    from scout_v2.workers.auto_pipeline import _wait_entry
-                    _wait_entry(q[key], ds.root)
-                    if direct:
-                        q[key]["direct_start_reserved_at"] = now
-                    if stage:
-                        _defer_entry(q[key], ds.root)
-                    added.append(key)
+                q[key] = {**it, "id": key, "repo": repo, "number": number, "lane": lane,
+                          "blockers": [], "ai_verdict": verdict,
+                          "discovered_at": now, "staged_at": now, "status": "staged", "lease": None,
+                          "source": "cloudflare-worker", "screened_at": now,
+                          "url": it.get("url") or f"https://github.com/{repo}/issues/{number}"}
+                from scout_v2.workers.auto_pipeline import _wait_entry
+                _wait_entry(q[key], ds.root)
+                if direct:
+                    q[key]["direct_start_reserved_at"] = now
+                if stage:
+                    _defer_entry(q[key], ds.root)
+                for old in rotate_staged_queue(ds.root, q, keep=(key,), replacement=key):
+                    if old in seen:
+                        seen[old].update(updated_at=now)
+                    from scout_v2.workers.auto_pipeline import log
+                    log(ds.root, "queue_evicted", old, f"replaced by {key}")
+                added.append(key)
             seen[key] = rec
             atomic_json_write(seen_path, seen)
     return len(added), added

@@ -47,10 +47,47 @@ def direct_start_available(root: Path, queue: dict, tz_name: str, cap: int) -> b
         conn.close()
     ledger = ClaimLedger(root / "state/scout_v2.sqlite3")
     try:
-        return ledger.pending_publication() is None and ledger.quota_used(
-            business_now(tz_name).date().isoformat()) < cap
+        day = business_now(tz_name).date().isoformat()
+        if ledger.pending_publication() is not None or ledger.quota_used(day) >= cap:
+            return False
+        # Reuse exact dispatch eligibility, including retry backoff and refills.
+        from .workers.auto_pipeline import _discovered_today, _order_candidates
+        today = [(key, entry) for key, entry in queue.items()
+                 if _discovered_today(entry) and not entry.get("blockers")
+                 and (entry.get("ai_verdict") or {}).get("usable") is True]
+        refill = day if ledger.has_publication_release(day) else ""
+        return not _order_candidates(today, refill_day=refill)
     finally:
         ledger.close()
+
+
+def rotate_staged_queue(root: Path, queue: dict, *, keep=(), protected=(), replacement: str = "") -> list[str]:
+    """Under queue_transaction, retain the newest ten ordinary waiting entries."""
+    protected = {key.lower() for key in (*keep, *protected)}
+    db = root / "state/scout_v2.sqlite3"
+    if db.exists():
+        import re
+        with sqlite3.connect(db.resolve().as_uri() + "?mode=ro", uri=True) as conn:
+            try:
+                for repo, head in conn.execute("SELECT repo,head FROM publications WHERE day IS NULL"):
+                    match = re.search(r":fix/issue-(\d+)-", head)
+                    if match:
+                        protected.add(f"{repo}#{match[1]}".lower())
+            except sqlite3.OperationalError as exc:
+                if "no such table" not in str(exc):
+                    raise
+    waiting = [(key, entry) for key, entry in queue.items()
+               if entry.get("status") == "staged" and key.lower() not in protected
+               and not entry.get("dispatch_started_at") and not entry.get("direct_start_reserved_at")]
+    waiting.sort(key=lambda item: candidate_fifo_key(*item))
+    excess = max(0, staged_candidate_count(queue) - STAGED_CANDIDATE_LIMIT)
+    now = business_now().isoformat(timespec="microseconds")
+    removed = []
+    for key, entry in waiting[:excess]:
+        entry.update(status="queue_evicted", updated_at=now, evicted_at=now,
+                     evicted_by=replacement, abort_reason="暂存满 10 条，按入队时间清除最早候选")
+        removed.append(key)
+    return removed
 
 
 def candidate_fifo_key(key: str, entry: dict) -> tuple[float, str]:

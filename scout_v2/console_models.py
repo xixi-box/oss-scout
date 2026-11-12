@@ -20,6 +20,8 @@ def model_setting_error(key: str, value: str) -> str:
         return "输入超过 512 字符。"
     if key == "repair_agent":
         return "" if value in ("opencode", "codex") else "请选择 OpenCode 或 Codex。"
+    if key == "pr_comment_trigger":
+        return "" if value in ("on", "off") else "请选择开启或关闭。"
     if key == "codex_variant":
         return "" if value in ("", "low", "medium", "high", "xhigh") else "请选择默认、low、medium、high 或 xhigh。"
     if key in {"opencode_key", "codiv_key"}:
@@ -56,6 +58,7 @@ def effective_models(root: Path) -> dict:
     values = read_models(root)
     return {
         "repair_agent": values.get("repair_agent") or "opencode",
+        "pr_comment_trigger": values.get("pr_comment_trigger") or "on",
         "codex_model": values.get("codex_model") or "",
         "codex_variant": values.get("codex_variant") or "",
         "repair_model": values.get("repair_model") or resolve_model(),
@@ -119,6 +122,10 @@ def read_models(root: Path) -> dict:
         return yaml.safe_load((root / "configs/console_models.yaml").read_text(encoding="utf-8")) or {}
     except FileNotFoundError:
         return {}
+
+
+def pr_comment_trigger_enabled(root: Path) -> bool:
+    return read_models(root).get("pr_comment_trigger", "on") != "off"
 
 
 def write_models(root: Path, values: dict) -> None:

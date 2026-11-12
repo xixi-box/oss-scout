@@ -203,6 +203,9 @@ def create_app(root: Path | None = None, gh_runner=None,
                 _dispatch()
 
     def _handle_pr_event(root: Path, ev: dict) -> dict:
+        from scout_v2.console_models import pr_comment_trigger_enabled
+        if not pr_comment_trigger_enabled(root):
+            return {"dispatched": False, "reason": "PR comment trigger disabled"}
         from scripts.monitor_prs import dispatch_pr_fix
         repo, number = str(ev["repo"]), int(ev["number"])
         key = f"{repo}#{number}"
@@ -263,13 +266,27 @@ def create_app(root: Path | None = None, gh_runner=None,
                         break
                     if key in _inflight or (key in _intake_handoff and key != just_screened):
                         continue
-                    ent = _load_candidate(root, key)
-                    if ent is None:
-                        continue
+                    from scout_v2.state_store import queue_transaction, business_now
+                    with queue_transaction(root) as queue:
+                        ent = queue.get(key)
+                        if not ent or ent.get("status") != "staged":
+                            continue
+                        if any(k != key and e.get("direct_start_reserved_at")
+                               and e.get("status") == "staged" for k, e in queue.items()):
+                            continue
+                        ent["direct_start_reserved_at"] = business_now().isoformat()
+                        ent = dict(ent)
                     th = _thr.Thread(target=_run_one, args=(ent, rescreen, key == just_screened), daemon=True,
                                      name=f"repair-{key}")
                     _inflight[key] = th
-                th.start()
+                try:
+                    th.start()
+                except Exception:
+                    with _inflight_lock:
+                        _inflight.pop(key, None)
+                    from scout_v2.workers.auto_pipeline import release_direct_start
+                    release_direct_start(root, key)
+                    raise
                 started.append(key)
         except Exception as e:  # noqa: BLE001 — 派发失败不影响主流程
             try:
@@ -1168,7 +1185,8 @@ def create_app(root: Path | None = None, gh_runner=None,
             # 起草回复→飞书通知）。Worker 每分钟推一次，这条通道让维护者
             # 意见的响应延迟从"最多 15 分钟"压到"约 1 分钟"。
             # 不在 HTTP 请求里做（可能烧几分钟 AI/Actions）——后台线程。
-            if cid.isdigit() and human and comment.strip():
+            from scout_v2.console_models import pr_comment_trigger_enabled
+            if cid.isdigit() and human and comment.strip() and pr_comment_trigger_enabled(root):
                 _thr.Thread(target=_handle_pr_event, args=(root, {
                     "repo": repo, "number": num, "comment_id": int(cid), "source_kind": "issue",
                 }), daemon=True).start()

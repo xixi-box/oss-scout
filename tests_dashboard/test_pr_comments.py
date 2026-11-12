@@ -72,6 +72,32 @@ def _post(client: TestClient, body, token: str = TOKEN):
                        headers={"X-Ingest-Token": token})
 
 
+def test_comment_switch_disables_instant_trigger_but_keeps_receipt_and_dedup(client, tmp_path, monkeypatch):
+    import threading
+    from scout_v2.console_models import write_models
+
+    launched = []
+
+    class Thread:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+        def start(self):
+            launched.append(self.kwargs)
+
+    monkeypatch.setattr(threading, "Thread", Thread)
+    write_models(tmp_path, {"pr_comment_trigger": "off"})
+    event = {"repo": "docker/compose", "number": 7, "comment_id": 9898,
+             "author": "maintainer", "body": "Please fix this"}
+    assert _post(client, {"events": [event]}).json()["new"] == 1
+    assert _post(client, {"events": [event]}).json()["new"] == 0
+    assert not launched
+    write_models(tmp_path, {"pr_comment_trigger": "on"})
+    event["comment_id"] = 9899
+    assert _post(client, {"events": [event]}).json()["new"] == 1
+    assert len(launched) == 1
+
+
 class TestAuth:
     def test_wrong_token_is_forbidden(self, client):
         r = _post(client, {"events": []}, token="nope")

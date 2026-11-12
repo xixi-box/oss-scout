@@ -308,6 +308,7 @@ def classify(pr: dict) -> dict:
 
     只做分类，不生成对外文字——那一步要人过。返回的 action 是给调度用的。
     """
+    from scout_v2.console_models import pr_comment_trigger_enabled
     comments = pr.get("comments") or []
     rollup = pr.get("statusCheckRollup") or []
     failing = []
@@ -331,6 +332,8 @@ def classify(pr: dict) -> dict:
     if failing:
         # CI 失败是确定性信号，不需要模型判断
         action, reason = "fix_ci", f"failing checks: {', '.join(failing[:4])}"
+    elif latest and not pr_comment_trigger_enabled(DATA_ROOT):
+        action, reason = "wait", "PR comment trigger disabled"
     elif latest and _is_noise_bot(latest_author, body):
         # 机器人通知（changeset/dependabot/artifacts）按定义没有对话价值，
         # 也省一次模型调用。真正的 CI 结论走上面的 statusCheckRollup；
@@ -499,6 +502,9 @@ def _attempts() -> dict:
 
 
 def dispatch_pr_fix(repo: str, number: int, **kwargs) -> dict:
+    from scout_v2.console_models import pr_comment_trigger_enabled
+    if kwargs.get("kind", "ci") in ("followup", "review") and not pr_comment_trigger_enabled(DATA_ROOT):
+        return {"dispatched": False, "reason": "PR comment trigger disabled"}
     if not monitored_repo(repo):
         return {"dispatched": False, "reason": "repository outside monitored roster"}
     import sqlite3
@@ -740,6 +746,9 @@ def draft_reply(repo: str, number: int, *, force: bool = False,
     context（可选）来自 classify() 的同一份 PR 数据，用于给飞书卡片补上
     issue 标题/根因/对方原话——免得为了发一张卡片再拉一遍 GitHub。
     """
+    from scout_v2.console_models import pr_comment_trigger_enabled
+    if not pr_comment_trigger_enabled(DATA_ROOT):
+        return {"drafted": False, "reason": "PR comment trigger disabled"}
     if not monitored_repo(repo):
         return {"drafted": False, "reason": "repository outside monitored roster"}
     try:
@@ -1199,7 +1208,7 @@ _QUEUE_GREEN = {"pr_open", "merged", "completed"}
 _QUEUE_RED = {"aborted_stale", "stage_expired", "escalated", "aborted_competed",
               "aborted_duplicate", "aborted_closed", "aborted_no_evidence",
               "aborted_blocked_design", "aborted_pipeline", "coarse_blocked", "fine_blocked",
-              "screen_skipped", "queue_pruned"}
+              "screen_skipped", "queue_pruned", "queue_evicted"}
 QUEUE_EXPIRE_DAYS = 3
 
 
@@ -1252,6 +1261,7 @@ def recheck_still_worth(key: str, title: str = "") -> tuple[bool, str]:
 
 
 _SCAN_OTHER_OUTCOMES = {
+    "queue_evicted": "已清除",
     "stage_expired": "暂存已过期",
     "escalated": "待人工核查",
     "needs_cla": "开工拦截 · 需要签署 CLA",

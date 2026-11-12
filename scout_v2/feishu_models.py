@@ -8,7 +8,7 @@ from .console_models import effective_models, model_setting_error, read_models, 
 
 TABLE = "模型配置"
 PROVIDERS = {
-    "运行设置": {"修复工具": "repair_agent"},
+    "运行设置": {"修复工具": "repair_agent", "PR 评论触发": "pr_comment_trigger"},
     "OpenCode": {"模型名": "repair_model", "回复模型": "reply_model", "API 密钥": "opencode_key",
                  "Base URL": "opencode_base", "思考强度": "opencode_variant"},
     "Codiv": {"模型名": "codiv_model", "API 密钥": "codiv_key", "Base URL": "codiv_base",
@@ -19,6 +19,8 @@ FIELDS = [{"field_name": name, "type": 1} for name in (
     "键", "模型名", "回复模型", "API 密钥", "Base URL", "思考强度", "思考预算 (tokens)", "应用状态")]
 FIELDS.append({"field_name": "修复工具", "type": 3, "property": {
     "options": [{"name": "OpenCode", "color": 0}, {"name": "Codex", "color": 4}]}})
+FIELDS.append({"field_name": "PR 评论触发", "type": 3, "property": {
+    "options": [{"name": "开启", "color": 0}, {"name": "关闭", "color": 4}]}})
 _LEGACY = {"repair_model": "OpenCode 修复模型", "reply_model": "OpenCode 回复模型",
            "codiv_base": "Codiv Base URL", "codiv_model": "Codiv 细筛模型"}
 _OLD_COLUMNS = {"当前生效", "修改为", "安全设置"}
@@ -33,6 +35,8 @@ def _field_value(value, key):
     value = value.strip() if isinstance(value, str) else ""
     if key == "repair_agent":
         return value.lower()
+    if key == "pr_comment_trigger":
+        return {"开启": "on", "关闭": "off"}.get(value, value.lower())
     return "" if key in {"opencode_variant", "codex_variant", "codex_model"} and value in {"默认", "default"} else value
 
 
@@ -54,7 +58,7 @@ def sync_model_settings(root: Path, model_lock) -> str:
     binding = fb.load_binding(root)
     same_base = binding.get("app_token") == app_token
     table_id = binding.get("model_table_id") if same_base else None
-    migrating = not (same_base and table_id and binding.get("model_table_layout") == 3)
+    migrating = not (same_base and table_id and binding.get("model_table_layout") == 4)
     if not table_id:
         table_id = fb.find_or_create_table(app_token, TABLE, FIELDS)
         fb.save_binding(root, {"app_token": app_token, "model_table_id": table_id})
@@ -79,6 +83,8 @@ def sync_model_settings(root: Path, model_lock) -> str:
                 if existing:
                     entered = _field_value(remote.get(column), key)
                     if key == "opencode_base" and not entered and key not in last:
+                        entered = current
+                    if key == "pr_comment_trigger" and not entered and key not in last:
                         entered = current
                 else:
                     old = records.get(_LEGACY.get(key), {}).get("fields", {})
@@ -117,6 +123,8 @@ def sync_model_settings(root: Path, model_lock) -> str:
                             values[key] = current
                 if key == "repair_agent":
                     desired[column] = {"opencode": "OpenCode", "codex": "Codex"}[current]
+                elif key == "pr_comment_trigger":
+                    desired[column] = {"on": "开启", "off": "关闭"}[current]
                 else:
                     desired[column] = current or (
                         "默认" if key in {"opencode_variant", "codex_variant", "codex_model"} else None)
@@ -150,5 +158,5 @@ def sync_model_settings(root: Path, model_lock) -> str:
         for field in fields.get("items", []):
             if field["field_name"] in _OLD_COLUMNS:
                 _table_request(table_url, "DELETE", f"fields/{field['field_id']}")
-        fb.save_binding(root, {"app_token": app_token, "model_table_id": table_id, "model_table_layout": 3})
+        fb.save_binding(root, {"app_token": app_token, "model_table_id": table_id, "model_table_layout": 4})
     return f"https://my.feishu.cn/base/{app_token}?table={table_id}"
