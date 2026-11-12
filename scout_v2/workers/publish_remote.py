@@ -205,19 +205,14 @@ def publish(repo_dir: Path, patch_file: Path, publish_cfg: dict) -> dict:
     #   but got "oss-scout <oss-scout@users.noreply.github.com>"
     # DCO 是法律性质的声明（"我有权提交这段代码"），署名必须是账号本人，不能是
     # 工具名。作者与签名统一用 GitHub 的 noreply 地址。
-    author_name = (os.environ.get("GIT_AUTHOR_NAME") or "wangshun").strip()
-    author_email = (os.environ.get("GIT_AUTHOR_EMAIL")
-                    or "96341168+xixi-box@users.noreply.github.com").strip()
-    sign_off = f"Signed-off-by: {author_name} <{author_email}>"
-    identity = ["-c", f"user.name={author_name}", "-c", f"user.email={author_email}"]
+    from .commit_identity import commit_as_owner
     commit_message = [title[:72]]
     if publish_cfg.get("commit_issue_reference") and issue_no > 0:
         commit_message.append(f"Fixes: #{issue_no}")
     if upstream.lower() == "apache/rocketmq":
         tool = "Codex" if publish_cfg.get("repair_agent") == "codex" else "OpenCode"
         commit_message.append(f"Generated-by: {tool}")
-    commit_message.append(sign_off)
-    ci = _run(["git", *identity, "commit", "-qm", "\n\n".join(commit_message)], cwd=repo_dir)
+    ci = commit_as_owner(repo_dir, "\n\n".join(commit_message))
     if ci.returncode != 0:
         return {"ok": False, "error": f"commit failed: {ci.stderr[-200:]}"}
 

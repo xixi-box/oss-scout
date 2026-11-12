@@ -200,8 +200,10 @@ jobs:
           set -euo pipefail
           cd "$RUNNER_TEMP/repo"
           python3 - <<'PY'
-          import json, os, subprocess
+          import json, os, subprocess, sys
           from pathlib import Path
+          sys.path.insert(0, os.environ["GITHUB_WORKSPACE"] + "/worker")
+          from scout_v2.workers.commit_identity import commit_as_owner
           tmp = Path(os.environ["RUNNER_TEMP"])
           result = next(line.split("##OSSCOUT_PRFIX##", 1)[1]
                         for line in (tmp / "prfix.json").read_text().splitlines()
@@ -219,9 +221,7 @@ jobs:
           git("add", "-A")
           if git("write-tree") != result["tested_tree"]:
               raise SystemExit("staged patch does not match the tested tree")
-          git("-c", "core.hooksPath=/dev/null", "-c", "user.name=wangshun",
-              "-c", "user.email=96341168+xixi-box@users.noreply.github.com",
-              "commit", "--signoff", "-m", f"fix: follow up on PR #{job['pr_number']}")
+          commit_as_owner(Path.cwd(), f"fix: follow up on PR #{job['pr_number']}").check_returncode()
           git("update-ref", "refs/heads/oss-scout-approval", "HEAD")
           git("bundle", "create", str(tmp / "pr-fix.bundle"), "refs/heads/oss-scout-approval", f"^{head}")
           with open(os.environ["GITHUB_OUTPUT"], "a") as output:

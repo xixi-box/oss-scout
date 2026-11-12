@@ -1108,10 +1108,8 @@ def _publish_pr(root: Path, entry: dict, base_sha: str, patch_file: Path,
             summary["abort"] = f"patch apply failed: {ap.stderr[:150]}"
             return None
         subprocess.run(["git", "add", "-A"], cwd=clone, check=True)
-        subprocess.run(["git", "-c", "user.name=xixi-box",
-                        "-c", "user.email=wangshun-cn@qq.com",
-                        "commit", "-qm", f"fix: {str(entry.get('title', ''))[:60]}"],
-                       cwd=clone, check=True)
+        from .commit_identity import commit_as_owner
+        commit_as_owner(clone, f"fix: {str(entry.get('title', ''))[:60]}").check_returncode()
         # push 到 fork；代理抖动会让它失败，重试而不是让验证过的修复作废
         push = None
         for attempt in range(3):

@@ -78,6 +78,9 @@ def test_exact_verified_patch_can_be_delivered_by_either_agent(delivered, monkey
 
 def test_real_publication_stages_only_the_verified_files(delivered, monkeypatch):
     repo, out, payload, _ = delivered
+    for kind in ("AUTHOR", "COMMITTER"):
+        monkeypatch.setenv(f"GIT_{kind}_NAME", payload["repair_agent"])
+        monkeypatch.setenv(f"GIT_{kind}_EMAIL", "tool@example.invalid")
     (repo / "accidental-output.txt").write_text("must stay local", encoding="utf-8")
     payload["publish"].update(push_repo="fixture/fork", branch="fix/regression", base_branch="main")
     real_run = publish_remote._run
@@ -90,6 +93,9 @@ def test_real_publication_stages_only_the_verified_files(delivered, monkeypatch)
             files = real_run(["git", "show", "--pretty=", "--name-only", "HEAD"], cwd).stdout
             assert "test_regression.py" in files and "calc.py" in files
             assert "accidental-output.txt" not in files
+            identity = real_run(["git", "show", "-s", "--format=%an|%ae|%cn|%ce"], cwd).stdout.strip()
+            expected = "wangshun|96341168+xixi-box@users.noreply.github.com"
+            assert identity == expected + "|" + expected
             return subprocess.CompletedProcess(args, 0, "", "")
         return real_run(args, cwd)
 

@@ -290,17 +290,13 @@ class TestPublishAuth:
 
         def fake_run(cmd, **kw):
             seen.append(list(cmd))
-            class R:
-                returncode = 0
-                stdout = ""
-                stderr = ""
             if cmd[:2] == ["git", "clone"]:
                 # 模拟真实 clone：建出目录，后续步骤才能在 cwd 里跑
                 target = cmd[-1]
                 import os
                 os.makedirs(target, exist_ok=True)
                 sp.run(["git", "init", "-q", target], check=True, capture_output=True)
-            return R()
+            return sp.CompletedProcess(cmd, 0, "", "")
 
         monkeypatch.setattr(ap.subprocess, "run", fake_run)
         patch = tmp_path / "change.patch"
