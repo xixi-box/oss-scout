@@ -8,7 +8,8 @@ from .console_models import effective_models, model_setting_error, read_models, 
 
 TABLE = "配置"
 PROVIDERS = {
-    "运行设置": {"修复工具": "repair_agent", "PR 评论触发": "pr_comment_trigger"},
+    "运行设置": {"修复工具": "repair_agent", "PR 评论触发": "pr_comment_trigger",
+                 "候选池大小": "candidate_pool_size", "每日 PR 额度": "daily_pr_quota"},
     "OpenCode": {"模型名": "repair_model", "回复模型": "reply_model", "API 密钥": "opencode_key",
                  "Base URL": "opencode_base", "思考强度": "opencode_variant"},
     "Codiv": {"模型名": "codiv_model", "API 密钥": "codiv_key", "Base URL": "codiv_base",
@@ -21,6 +22,8 @@ FIELDS.append({"field_name": "修复工具", "type": 3, "property": {
     "options": [{"name": "OpenCode", "color": 0}, {"name": "Codex", "color": 4}]}})
 FIELDS.append({"field_name": "PR 评论触发", "type": 3, "property": {
     "options": [{"name": "开启", "color": 0}, {"name": "关闭", "color": 4}]}})
+FIELDS.extend({"field_name": name, "type": 2} for name in ("候选池大小", "每日 PR 额度"))
+_LIMIT_KEYS = {"candidate_pool_size", "daily_pr_quota"}
 _LEGACY = {"repair_model": "OpenCode 修复模型", "reply_model": "OpenCode 回复模型",
            "codiv_base": "Codiv Base URL", "codiv_model": "Codiv 细筛模型"}
 _OLD_COLUMNS = {"当前生效", "修改为", "安全设置"}
@@ -28,6 +31,8 @@ _BASE_URL_KEYS = {"codiv_base", "opencode_base"}
 
 
 def _field_value(value, key):
+    if key in _LIMIT_KEYS and isinstance(value, (int, float)) and not isinstance(value, bool):
+        return str(int(value)) if isinstance(value, int) or value.is_integer() else str(value)
     if isinstance(value, list) and len(value) == 1 and key in _BASE_URL_KEYS:
         value = value[0]
     if isinstance(value, dict) and key in _BASE_URL_KEYS:
@@ -58,7 +63,7 @@ def sync_model_settings(root: Path, model_lock) -> str:
     binding = fb.load_binding(root)
     same_base = binding.get("app_token") == app_token
     table_id = binding.get("model_table_id") if same_base else None
-    migrating = not (same_base and table_id and binding.get("model_table_layout") == 4)
+    migrating = not (same_base and table_id and binding.get("model_table_layout") == 5)
     if not table_id:
         table_id = fb.find_or_create_table(app_token, TABLE, FIELDS)
         fb.save_binding(root, {"app_token": app_token, "model_table_id": table_id})
@@ -91,6 +96,8 @@ def sync_model_settings(root: Path, model_lock) -> str:
                     if key == "opencode_base" and not entered and key not in last:
                         entered = current
                     if key == "pr_comment_trigger" and not entered and key not in last:
+                        entered = current
+                    if key in _LIMIT_KEYS and not entered and key not in last:
                         entered = current
                 else:
                     old = records.get(_LEGACY.get(key), {}).get("fields", {})
@@ -131,6 +138,8 @@ def sync_model_settings(root: Path, model_lock) -> str:
                     desired[column] = {"opencode": "OpenCode", "codex": "Codex"}[current]
                 elif key == "pr_comment_trigger":
                     desired[column] = {"on": "开启", "off": "关闭"}[current]
+                elif key in _LIMIT_KEYS:
+                    desired[column] = int(current)
                 else:
                     desired[column] = current or (
                         "默认" if key in {"opencode_variant", "codex_variant", "codex_model"} else None)
@@ -149,6 +158,9 @@ def sync_model_settings(root: Path, model_lock) -> str:
 
         if values != prior:
             write_models(root, values)
+        applied = effective_models(root)
+        if migrating or any(effective[key] != applied[key] for key in _LIMIT_KEYS):
+            _apply_runtime_limits(root, effective, applied)
         for action, batch in (("batch_create", creates), ("batch_update", updates)):
             if batch:
                 _table_request(table_url, "POST", f"records/{action}", {"records": batch})
@@ -164,5 +176,24 @@ def sync_model_settings(root: Path, model_lock) -> str:
         for field in fields.get("items", []):
             if field["field_name"] in _OLD_COLUMNS:
                 _table_request(table_url, "DELETE", f"fields/{field['field_id']}")
-        fb.save_binding(root, {"app_token": app_token, "model_table_id": table_id, "model_table_layout": 4})
+        fb.save_binding(root, {"app_token": app_token, "model_table_id": table_id, "model_table_layout": 5})
     return f"https://my.feishu.cn/base/{app_token}?table={table_id}"
+
+
+def _apply_runtime_limits(root: Path, before: dict, after: dict) -> None:
+    from .state_store import business_now, queue_transaction, rotate_staged_queue
+    from .workers.auto_pipeline import _discovered_today, log
+
+    if not (root / "queue/candidates.json").exists():
+        return
+    now = business_now().isoformat()
+    with queue_transaction(root) as queue:
+        if int(after["daily_pr_quota"]) > int(before["daily_pr_quota"]):
+            for entry in queue.values():
+                if (entry.get("status") == "staged" and entry.get("defer_reason") == "daily_quota"
+                        and _discovered_today(entry) and not entry.get("dispatch_started_at")
+                        and not entry.get("direct_start_reserved_at")):
+                    entry.update(defer_reason="execution_wait", eligible_at=now, updated_at=now)
+        removed = rotate_staged_queue(root, queue)
+    for key in removed:
+        log(root, "queue_evicted", key, "configured rolling capacity")

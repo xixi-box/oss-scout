@@ -42,12 +42,13 @@ def inspect(root: Path) -> dict:
     now = business_now()
     result = {"business_time": now.isoformat(), "repositories": len(repos),
               "automatic_repositories": sum(policy.repo_lane(repo) == "open" for repo in repos),
-              "daily_cap": config["defaults"]["max_new_claims_per_business_day"],
+              "daily_cap": policy.max_claims_per_day,
               "queue": dict(collections.Counter(e.get("status") for e in queue.values()))}
-    from scout_v2.console_models import pr_comment_trigger_enabled
+    from scout_v2.console_models import pr_comment_trigger_enabled, runtime_limit
     from scout_v2.feishu_bitable import load_binding
     from scout_v2.state_store import staged_candidate_count
     result["waiting_candidates"] = staged_candidate_count(queue)
+    result["candidate_pool_size"] = runtime_limit(root, "candidate_pool_size", 10)
     result["pr_comment_trigger_enabled"] = pr_comment_trigger_enabled(root)
     result["model_settings_layout"] = load_binding(root).get("model_table_layout")
     for filename, key, query, args in [
@@ -112,7 +113,7 @@ def main() -> int:
             result["worker_" + key] = len(payload) if key == "watermarks" else payload
     print(json.dumps(result, ensure_ascii=False, indent=2))
     assert result["repositories"] == 50, "repository count changed"
-    assert result["daily_cap"] == 5, "daily cap drift"
+    assert result["daily_cap"] > 0, "invalid daily cap"
     if args.screening:
         assert result["automatic_repositories"] == 50, "repository is not in the automatic lane"
         assert result["screening_probe"]["usable"] is not None, "OpenJev screening probe failed"

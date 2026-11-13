@@ -62,7 +62,10 @@ def direct_start_available(root: Path, queue: dict, tz_name: str, cap: int) -> b
 
 
 def rotate_staged_queue(root: Path, queue: dict, *, keep=(), protected=(), replacement: str = "") -> list[str]:
-    """Under queue_transaction, retain the newest ten ordinary waiting entries."""
+    """Under queue_transaction, retain the configured number of newest waiters."""
+    from .console_models import runtime_limit
+
+    limit = runtime_limit(root, "candidate_pool_size", STAGED_CANDIDATE_LIMIT)
     protected = {key.lower() for key in (*keep, *protected)}
     db = root / "state/scout_v2.sqlite3"
     if db.exists():
@@ -80,12 +83,12 @@ def rotate_staged_queue(root: Path, queue: dict, *, keep=(), protected=(), repla
                if entry.get("status") == "staged" and key.lower() not in protected
                and not entry.get("dispatch_started_at") and not entry.get("direct_start_reserved_at")]
     waiting.sort(key=lambda item: candidate_fifo_key(*item))
-    excess = max(0, staged_candidate_count(queue) - STAGED_CANDIDATE_LIMIT)
+    excess = max(0, staged_candidate_count(queue) - limit)
     now = business_now().isoformat(timespec="microseconds")
     removed = []
     for key, entry in waiting[:excess]:
         entry.update(status="queue_evicted", updated_at=now, evicted_at=now,
-                     evicted_by=replacement, abort_reason="暂存满 10 条，按入队时间清除最早候选")
+                     evicted_by=replacement, abort_reason=f"暂存满 {limit} 条，按入队时间清除最早候选")
         removed.append(key)
     return removed
 

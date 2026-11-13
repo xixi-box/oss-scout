@@ -22,6 +22,8 @@ def model_setting_error(key: str, value: str) -> str:
         return "" if value in ("opencode", "codex") else "请选择 OpenCode 或 Codex。"
     if key == "pr_comment_trigger":
         return "" if value in ("on", "off") else "请选择开启或关闭。"
+    if key in {"candidate_pool_size", "daily_pr_quota"}:
+        return "" if re.fullmatch(r"[1-9][0-9]*", value) else "请填写大于 0 的整数。"
     if key == "codex_variant":
         return "" if value in ("", "low", "medium", "high", "xhigh") else "请选择默认、low、medium、high 或 xhigh。"
     if key in {"opencode_key", "codiv_key"}:
@@ -59,6 +61,8 @@ def effective_models(root: Path) -> dict:
     return {
         "repair_agent": values.get("repair_agent") or "opencode",
         "pr_comment_trigger": values.get("pr_comment_trigger") or "on",
+        "candidate_pool_size": str(runtime_limit(root, "candidate_pool_size", 10)),
+        "daily_pr_quota": str(daily_pr_quota(root)),
         "codex_model": values.get("codex_model") or "",
         "codex_variant": values.get("codex_variant") or "",
         "repair_model": values.get("repair_model") or resolve_model(),
@@ -122,6 +126,18 @@ def read_models(root: Path) -> dict:
         return yaml.safe_load((root / "configs/console_models.yaml").read_text(encoding="utf-8")) or {}
     except FileNotFoundError:
         return {}
+
+
+def runtime_limit(root: Path, key: str, default: int) -> int:
+    value = str(read_models(root).get(key, ""))
+    return default if model_setting_error(key, value) else int(value)
+
+
+def daily_pr_quota(root: Path) -> int:
+    path = root / "configs/repositories.yaml"
+    config = yaml.safe_load(path.read_text(encoding="utf-8")) if path.exists() else {}
+    default = int(((config or {}).get("defaults") or {}).get("max_new_claims_per_business_day", 5))
+    return runtime_limit(root, "daily_pr_quota", default)
 
 
 def pr_comment_trigger_enabled(root: Path) -> bool:

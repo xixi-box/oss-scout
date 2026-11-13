@@ -469,7 +469,7 @@ def test_feishu_model_settings_migrates_and_applies_two_provider_rows(tmp_path, 
     lock = Lock()
     assert fm.sync_model_settings(tmp_path, lock).endswith("?table=tblExample")
     assert set(records) == {"运行设置", "OpenCode", "Codex", "Codiv"}
-    assert binding["model_table_layout"] == 4
+    assert binding["model_table_layout"] == 5
     opencode, codiv = (records[label]["fields"] for label in ("OpenCode", "Codiv"))
     assert codiv["模型名"] == "openjev-0.1"
     assert codiv["API 密钥"] == "old-codiv-test"
@@ -489,6 +489,19 @@ def test_feishu_model_settings_migrates_and_applies_two_provider_rows(tmp_path, 
     assert opencode["应用状态"] == "已同步"
     assert records["运行设置"]["fields"]["修复工具"] == "OpenCode"
     running = records["运行设置"]["fields"]
+    assert running["候选池大小"] == 10
+    assert running["每日 PR 额度"] == 5
+    running.update({"候选池大小": 12.0, "每日 PR 额度": 7})
+    fm.sync_model_settings(tmp_path, lock)
+    assert read_models(tmp_path)["candidate_pool_size"] == "12"
+    assert read_models(tmp_path)["daily_pr_quota"] == "7"
+    running.update({"候选池大小": 0, "每日 PR 额度": 1.5})
+    fm.sync_model_settings(tmp_path, lock)
+    assert read_models(tmp_path)["candidate_pool_size"] == "12"
+    assert read_models(tmp_path)["daily_pr_quota"] == "7"
+    assert "候选池大小：" in running["应用状态"]
+    assert "每日 PR 额度：" in running["应用状态"]
+    running.update({"候选池大小": 10, "每日 PR 额度": 5})
     assert running["PR 评论触发"] == "开启"
     running["PR 评论触发"] = "关闭"
     fm.sync_model_settings(tmp_path, lock)

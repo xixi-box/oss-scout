@@ -45,13 +45,19 @@ class PolicyEngine:
         self.agents_md_text = agents_md or ""
         self.tz_name = self.v2_cfg.get("business_timezone", "Asia/Shanghai")
         defaults = self.repos_cfg.get("defaults") or {}
-        self.max_claims_per_day = int(defaults.get("max_new_claims_per_business_day", 1))
+        self._default_daily_quota = int(defaults.get("max_new_claims_per_business_day", 1))
         self.min_issue_age_hours = float(defaults.get("min_issue_age_hours", 2))
         self.unknown_action = defaults.get("unknown_repo_action", "hold_for_review")
         self.agents_md_sha = (hashlib.sha256(self.agents_md_text.encode("utf-8")).hexdigest()[:16]
                               if self.agents_md_ok else "")
 
     # ---- 构造 ----
+
+    @property
+    def max_claims_per_day(self) -> int:
+        from .console_models import runtime_limit
+
+        return runtime_limit(self.root, "daily_pr_quota", self._default_daily_quota)
 
     @classmethod
     def load(cls, root: Path, db: ClaimLedger | None = None,

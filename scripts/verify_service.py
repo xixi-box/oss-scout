@@ -9,7 +9,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from scout_v2 import feishu_bitable as fb, feishu_models as fm
-from scout_v2.console_models import effective_models
+from scout_v2.console_models import effective_models, runtime_limit
 from scout_v2.state_store import STAGED_CANDIDATE_LIMIT, staged_candidate_count
 
 
@@ -32,7 +32,8 @@ def main():
         raise AssertionError("PR table redirect is missing")
     candidates = json.loads((root / "queue/candidates.json").read_text(encoding="utf-8"))
     staged = staged_candidate_count(candidates)
-    assert staged <= STAGED_CANDIDATE_LIMIT, f"Staged backlog exceeds {STAGED_CANDIDATE_LIMIT}: {staged}"
+    limit = runtime_limit(root, "candidate_pool_size", STAGED_CANDIDATE_LIMIT)
+    assert staged <= limit, f"Staged backlog exceeds {limit}: {staged}"
     for _ in range(8):
         table_id = fb.load_binding(root).get("model_table_id")
         if table_id:
@@ -43,7 +44,9 @@ def main():
             expected = fm.PROVIDERS.keys()
             if (expected == records.keys() and all(records[key]["fields"].get("模型名")
                     for key, columns in fm.PROVIDERS.items() if "模型名" in columns)
-                    and records["OpenCode"]["fields"].get("Base URL")):
+                    and records["OpenCode"]["fields"].get("Base URL")
+                    and all(records["运行设置"]["fields"].get(column)
+                            for column in ("候选池大小", "每日 PR 额度"))):
                 break
         time.sleep(5)
     else:
@@ -51,6 +54,9 @@ def main():
     models = effective_models(root)
     base = fm._field_value(records["OpenCode"]["fields"].get("Base URL"), "opencode_base")
     assert base == models["opencode_base"], "OpenCode Base URL has not synchronized"
+    running = records["运行设置"]["fields"]
+    for column, key in (("候选池大小", "candidate_pool_size"), ("每日 PR 额度", "daily_pr_quota")):
+        assert fm._field_value(running.get(column), key) == models[key], f"{key} has not synchronized"
     keys_present = {}
     for provider, key in (("OpenCode", "opencode_key"), ("Codiv", "codiv_key")):
         actual = records[provider]["fields"].get("API 密钥") or ""
@@ -60,6 +66,7 @@ def main():
     print(json.dumps({"feishu_model_table_id": table_id, "model_settings_rows": len(expected),
                       "credentials_present": keys_present, "opencode_base_synced": True}))
     print(json.dumps({"controller": "verified", "staged_candidates": staged,
+                      "candidate_pool_size": limit, "daily_pr_quota": int(models["daily_pr_quota"]),
                       "pr_table_redirect": True}))
 
 

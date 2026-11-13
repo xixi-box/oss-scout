@@ -112,8 +112,11 @@ def test_pending_issues_fit_only_remaining_staged_slots(intake):
     ds, _ = intake
     path = ds.root / "queue/candidates.json"
     entries = {}
-    entries["a/b#1"] = {"status": "staged", "eligible_at": "2000-01-01T00:00:00+08:00", "screened_at": queue_now().isoformat(), "discovered_at": "2026-11-10T08:00:00+08:00"}
-    entries["a/b#2"] = {"status": "staged", "eligible_at": "2000-01-01T00:00:00+08:00", "screened_at": queue_now().isoformat(), "discovered_at": "2026-11-10T08:01:00+08:00"}
+    now = queue_now()
+    for number in (1, 2):
+        entries[f"a/b#{number}"] = {"status": "staged", "eligible_at": "2000-01-01T00:00:00+08:00",
+                                    "screened_at": now.isoformat(),
+                                    "discovered_at": (now - dt.timedelta(minutes=3-number)).isoformat()}
     path.write_text(json.dumps(entries))
     assert p._stage_candidates(ds.root, ["a/b#2", "a/b#1"], tz_name="Asia/Shanghai", cap=5) == 0
     _fill_publication_quota(ds.root)
