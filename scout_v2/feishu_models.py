@@ -6,7 +6,7 @@ from pathlib import Path
 from . import feishu_app, feishu_bitable as fb
 from .console_models import effective_models, model_setting_error, read_models, rotate_opencode_key, write_models
 
-TABLE = "模型配置"
+TABLE = "配置"
 PROVIDERS = {
     "运行设置": {"修复工具": "repair_agent", "PR 评论触发": "pr_comment_trigger"},
     "OpenCode": {"模型名": "repair_model", "回复模型": "reply_model", "API 密钥": "opencode_key",
@@ -65,6 +65,12 @@ def sync_model_settings(root: Path, model_lock) -> str:
     elif migrating:
         fb.ensure_columns(app_token, table_id, FIELDS)
     table_url = f"https://open.feishu.cn/open-apis/bitable/v1/apps/{app_token}/tables/{table_id}"
+    if binding.get("model_table_name") != TABLE:
+        response = feishu_app._request("PATCH", table_url, {"name": TABLE},
+                                       token=feishu_app.tenant_token())
+        if response.get("code") != 0:
+            raise RuntimeError(f"Feishu settings table rename: {response.get('code')}")
+        fb.save_binding(root, {"model_table_name": TABLE})
     records = fb.load_records(app_token, table_id)
 
     with model_lock:
