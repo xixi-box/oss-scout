@@ -10,6 +10,10 @@ on:
         description: Verify one broker-owned OAuth refresh shared by two concurrent callers
         type: boolean
         default: true
+      recover:
+        description: Allow one explicit recovery attempt after an uncertain refresh
+        type: boolean
+        default: false
 permissions:
   contents: read
 jobs:
@@ -35,10 +39,12 @@ jobs:
           DASHBOARD_URL: ${{ secrets.DASHBOARD_PUBLIC_URL }}
           CHECK_MODEL: ${{ inputs.model }}
           CHECK_REFRESH: ${{ inputs.refresh }}
+          CHECK_RECOVER: ${{ inputs.recover }}
         run: |
           python - <<'PY'
           import os,subprocess
           command=['python','scripts/verify_codex_concurrency.py','--model',os.environ['CHECK_MODEL']]
           if os.environ['CHECK_REFRESH']=='true': command.append('--refresh')
+          if os.environ['CHECK_RECOVER']=='true': command.append('--recover')
           subprocess.run(command,check=True)
           PY

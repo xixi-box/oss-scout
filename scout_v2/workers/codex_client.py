@@ -44,6 +44,48 @@ class CodexClient:
                 return {"busy": True}
             raise RuntimeError(f"Codex login broker returned {exc.code}") from None
 
+    def refresh_credentials(self, credentials, recover=False):
+        """Rotate once on the hosted runner, then persist using the broker's ticket.
+
+        A failed OAuth response is never retried. A lost broker acknowledgement
+        retries only the identical commit, which cannot rotate the upstream token.
+        """
+        from ..codex_auth import _refresh
+
+        deadline = time.monotonic() + 35
+        while True:
+            grant = self._exchange("refresh_begin", protocol=2, lease=credentials["lease"],
+                                   generation=credentials["generation"], recover=recover)
+            if not grant.get("pending"):
+                break
+            if time.monotonic() >= deadline:
+                raise RuntimeError("Codex refresh owner is still pending; no upstream retry attempted")
+            time.sleep(0.25)
+        if not grant.get("ticket"):
+            return grant
+        try:
+            updated = _refresh(grant["auth"])
+        except (OSError, ValueError, RuntimeError) as exc:
+            # Only class and HTTP status are safe to retain; exception strings and
+            # response bodies may contain the rotating refresh token.
+            failure = type(exc).__name__
+            if isinstance(exc, urllib.error.HTTPError):
+                failure += f" HTTP {exc.code}"
+            try:
+                self._exchange("refresh_abort", protocol=2, lease=credentials["lease"],
+                               ticket=grant["ticket"], failure=failure)
+            except (OSError, ValueError, RuntimeError):
+                pass  # The pending ticket expires into quarantine if abort is lost.
+            raise RuntimeError(f"Codex delegated token refresh failed ({failure}); login must be checked") from None
+        for attempt in range(2):
+            try:
+                return self._exchange("refresh_commit", protocol=2, lease=credentials["lease"],
+                                      ticket=grant["ticket"], auth=updated)
+            except (OSError, ValueError, RuntimeError):
+                if attempt:
+                    raise RuntimeError("Codex refresh result awaits broker confirmation; no upstream retry attempted") from None
+                time.sleep(0.2)
+
     def run(self, model: str, prompt: str) -> tuple[bool, str]:
         lease, process, reader = None, None, None
         refresh_proxy = None
@@ -223,7 +265,7 @@ class CodexClient:
 
 
 class _RefreshProxy:
-    """A loopback-only OAuth adapter; the real refresh token stays on the server.
+    """A loopback-only OAuth adapter; only the parent process sees refresh authority.
 
     CLI 0.167.1 reads CODEX_REFRESH_TOKEN_URL_OVERRIDE and sends JSON OAuth requests.
     Each runner sees its own opaque refresh handle and never writes authority tokens.
@@ -252,8 +294,7 @@ class _RefreshProxy:
                             or not hmac.compare_digest(body["refresh_token"], proxy.handle)):
                         status, response = 401, {"error": "invalid_grant"}
                     else:
-                        fresh = client._exchange("refresh", protocol=2, lease=credentials["lease"],
-                                                 generation=proxy.credentials["generation"])
+                        fresh = client.refresh_credentials(proxy.credentials)
                         if fresh.get("protocol") != 2:
                             raise RuntimeError("Unsupported credential protocol")
                         secrets_from(fresh)

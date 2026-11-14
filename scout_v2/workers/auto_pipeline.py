@@ -689,6 +689,19 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen
     if err is not None:
         summary["abort"] = f"policy fail-closed: {err}"
         return summary
+    # Authentication outages are retryable infrastructure failures, not bad repairs.
+    from scout_v2.console_models import repair_settings
+    from scout_v2.codex_auth import auth_ready
+    try:
+        repair_agent, _ = repair_settings(root)
+    except Exception:
+        repair_agent = None  # The existing model validation below reports invalid settings.
+    if repair_agent == "codex" and not auth_ready(root):
+        reason = "Codex login temporarily unavailable; waiting for credential recovery"
+        mark_candidate(root, key, "staged", extra={
+            "abort_reason": reason, "rescreen_pending": rescreen,
+            "screen_retry_at": (business_now(eng.tz_name) + dt.timedelta(minutes=5)).isoformat()})
+        return {**summary, "abort": reason}
     lane = eng.repo_lane(repo)
     assignment_rule = eng.pr_assignment(repo) if hasattr(eng, "pr_assignment") else {}
     wl = Worklog(root / "state" / "worklog.jsonl")

@@ -885,3 +885,27 @@ def test_fresh_issue_consumes_normally_before_four_am_with_staged_backlog(monkey
            "eligible_at": "2026-11-07T04:00:00+08:00"}
     new = {"status": "staged", "eligible_at": "2000-01-01T00:00:00+08:00", "screened_at": queue_now().isoformat(), "discovered_at": f"2026-11-07T{hour:02d}:{minute:02d}:00+08:00"}
     assert p._order_candidates([("old", old), ("new", new)]) == [("new", new)]
+
+
+def test_unavailable_codex_login_preserves_candidate_without_remote_work(tmp_path, monkeypatch):
+    (tmp_path / "queue").mkdir()
+    (tmp_path / "state").mkdir()
+    key = "traefik/traefik#1"
+    entry = {"id": key, "repo": "traefik/traefik", "number": 1, "status": "staged",
+             "eligible_at": "2000-01-01T00:00:00+08:00", "screened_at": queue_now().isoformat()}
+    queue = tmp_path / "queue/candidates.json"
+    queue.write_text(json.dumps({key: entry}), encoding="utf-8")
+    monkeypatch.setattr(p.PolicyEngine, "load", lambda _: (
+        SimpleNamespace(tz_name="Asia/Shanghai", max_claims_per_day=5), None))
+    monkeypatch.setattr("scout_v2.console_models.repair_settings", lambda _: ("codex", "test#medium"))
+    with patch.object(p, "recheck_candidate") as screening, patch.object(p, "_submit_job") as dispatch:
+        result = p.candidate_pipeline(tmp_path, entry)
+    assert "credential recovery" in result["abort"]
+    screening.assert_not_called()
+    dispatch.assert_not_called()
+    saved = json.loads(queue.read_text(encoding="utf-8"))[key]
+    assert saved["status"] == "staged" and saved["screen_retry_at"]
+    assert not saved.get("dispatch_job_id")
+    ledger = ClaimLedger(tmp_path / "state/scout_v2.sqlite3")
+    assert ledger.dispatch_capacity("Asia/Shanghai", 5)["active"] == 0
+    ledger.close()

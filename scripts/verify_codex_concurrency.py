@@ -21,20 +21,21 @@ def main():
     parser=argparse.ArgumentParser()
     parser.add_argument("--model",default="gpt-6.1-sol#medium")
     parser.add_argument("--refresh",action="store_true")
+    parser.add_argument("--recover",action="store_true",help="One explicit recovery attempt for a quarantined refresh generation")
     args=parser.parse_args()
     leases=[]
     control=CodexClient(timeout_seconds=180,workdir=Path.cwd())
     refreshed=False
     try:
         for _ in range(2):
-            acquired=control._exchange("acquire",protocol=2)
+            acquired=control._exchange("acquire",protocol=2,recover=args.recover)
             assert acquired.get("protocol")==2 and acquired.get("lease"), "Concurrent credential lease was not granted"
             leases.append(acquired)
         assert leases[0]["lease"]!=leases[1]["lease"], "Lease ownership was reused"
         assert all(x["auth"]["tokens"]["refresh_token"].startswith("oss-scout-lease:") for x in leases)
         if args.refresh:
             def refresh(value):
-                return control._exchange("refresh",protocol=2,lease=value["lease"],generation=value["generation"])
+                return control.refresh_credentials(value,recover=args.recover)
             with ThreadPoolExecutor(max_workers=2) as workers:
                 responses=list(workers.map(refresh,leases))
             assert responses[0]["generation"]==responses[1]["generation"], "Concurrent refresh generations diverged"
