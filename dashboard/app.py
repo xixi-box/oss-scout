@@ -446,11 +446,15 @@ def create_app(root: Path | None = None, gh_runner=None,
     def _reap_orphan_claim():
         from scout_v2.repo_policy import PolicyEngine
         from scout_v2.state_store import business_now, queue_transaction, ClaimLedger, candidate_execution_lock
+        from scout_v2.workers.auto_pipeline import _authorized_retry
         policy, _ = PolicyEngine.load(root)
         ledger = ClaimLedger(root / "state/scout_v2.sqlite3")
         try:
             ledger.reconcile_legacy_starts(root / "state/worklog.jsonl", "Asia/Shanghai")
             previously_started = {r[0] for r in ledger._conn.execute("SELECT DISTINCT candidate_id FROM claim_days")}
+            active_claims = {r[0].lower() for r in ledger._conn.execute(
+                "SELECT candidate_id FROM claim_days WHERE day=? AND action='claim'",
+                (business_now().date().isoformat(),))}
             for job_id, candidate in ledger.preparations():
                 with candidate_execution_lock(root, candidate) as owned:
                     if not owned:
@@ -469,7 +473,8 @@ def create_app(root: Path | None = None, gh_runner=None,
             for key, entry in q.items():
                 if key.lower() in protected:
                     continue  # remote/preparing writer still owns its durable reservation
-                if entry.get("status") == "running" or (key in previously_started and entry.get("status") in (
+                safe_retry = _authorized_retry(entry) and key.lower() not in active_claims
+                if entry.get("status") == "running" or (key in previously_started and not safe_retry and entry.get("status") in (
                         "new", "recheck_failed", "staged")):
                     entry.update(status="escalated", abort_reason="controller restarted; inspect remote run before retry")
                     _audit(root, "orphan_requires_review", key, "daily start retained")

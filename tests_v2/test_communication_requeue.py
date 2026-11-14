@@ -153,3 +153,34 @@ def test_code_failures_and_total_runtime_timeout_are_not_reclassified(tmp_path,m
     assert saved['status']=='aborted_no_evidence' and not saved.get('retry_authorized_job_id')
     assert not ledger.try_claim(TZ,key,retry_failed=True)[0]
     ledger.close()
+
+
+def test_controller_restart_preserves_confirmed_retry_but_protects_unknown_claims(tmp_path,monkeypatch):
+    import threading
+    monkeypatch.setenv('OSSCOUT_DISABLE_AUTO_REPAIR','1')
+    from dashboard import app as dashboard
+    (tmp_path/'queue').mkdir()
+    queue={}
+    ledger=ClaimLedger(tmp_path/'state/scout_v2.sqlite3')
+    for number in (1,2,3,4):
+        key=f'traefik/traefik#{number}'
+        queue[key]={'id':key,'repo':'traefik/traefik','number':number,'status':'staged',
+                    'repair_job_id':f'job-{number}','retry_authorized_job_id':f'job-{number}'}
+        assert ledger.try_claim(TZ,key)[0]
+    ledger.release_claim('traefik/traefik#1',TZ)
+    ledger.release_claim('traefik/traefik#2',TZ)
+    queue['traefik/traefik#2'].pop('retry_authorized_job_id')
+    queue['traefik/traefik#4']['status']='running'
+    assert ledger.reserve_publication(TZ,10,'job-4','traefik/traefik','xixi-box:fix/issue-4-abcdef0-12345678','xixi-box/oss-scout')
+    ledger.close()
+    (tmp_path/'queue/candidates.json').write_text(json.dumps(queue))
+    monkeypatch.setattr(pipeline.PolicyEngine,'load',lambda _: (SimpleNamespace(repo_entry=lambda _:{},tz_name=TZ,max_claims_per_day=5),None))
+    monkeypatch.setattr(dashboard,'modifiable_repo',lambda _:True)
+    monkeypatch.setattr(threading.Thread,'start',lambda _:None)
+    monkeypatch.delenv('OSSCOUT_DISABLE_AUTO_REPAIR')
+    dashboard.create_app(tmp_path,auth_enabled=False,password='test')
+    result=json.loads((tmp_path/'queue/candidates.json').read_text(encoding='utf-8'))
+    assert result['traefik/traefik#1']['status']=='staged'
+    assert result['traefik/traefik#2']['status']=='escalated'
+    assert result['traefik/traefik#3']['status']=='escalated'
+    assert result['traefik/traefik#4']['status']=='running'
