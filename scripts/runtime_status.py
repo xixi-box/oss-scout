@@ -61,6 +61,11 @@ def inspect(root: Path) -> dict:
     result["waiting_candidates"] = staged_candidate_count(queue)
     result["candidate_pool_size"] = runtime_limit(root, "candidate_pool_size", 10)
     result["pr_followup_enabled"] = False
+    from scout_v2.state_store import repair_dispatch_capacity
+    from scout_v2.feishu_bitable import PR_RECORD_SYNC_SECONDS, FULL_TABLE_SYNC_SECONDS
+    result["dispatch_capacity"] = repair_dispatch_capacity(root, policy.tz_name, policy.max_claims_per_day)
+    result["pr_record_sync_seconds"] = PR_RECORD_SYNC_SECONDS
+    result["other_table_sync_seconds"] = FULL_TABLE_SYNC_SECONDS
     result["model_settings_layout"] = load_binding(root).get("model_table_layout")
     for filename, key, query, args in [
         ("scout_v2.sqlite3", "starts_today", "SELECT COUNT(*) FROM claim_days WHERE day=?", (now.date().isoformat(),)),

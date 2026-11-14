@@ -64,6 +64,22 @@ def main():
     table_url = f"https://open.feishu.cn/open-apis/bitable/v1/apps/{fb._binding_app_token(root)}/tables/{table_id}"
     columns = fm._table_request(table_url, "GET", "fields?page_size=100")
     assert not {"PR 评论触发", "回复模型"} & {f["field_name"] for f in columns.get("items", [])}
+    assert fb.PR_RECORD_SYNC_SECONDS == 300 and fb.FULL_TABLE_SYNC_SECONDS == 900
+    from scout_v2.codex_auth import auth_ready, exchange
+    concurrent_auth = False
+    if auth_ready(root):
+        leases = []
+        try:
+            for _ in range(2):
+                payload, status = exchange(root, {"operation": "acquire", "protocol": 2})
+                assert status == 200 and payload.get("protocol") == 2, "Concurrent Codex lease failed"
+                leases.append(payload["lease"])
+                assert payload["auth"]["tokens"]["refresh_token"].startswith("oss-scout-lease:")
+            assert len(set(leases)) == 2
+            concurrent_auth = True
+        finally:
+            for lease in leases:
+                exchange(root, {"operation": "release", "protocol": 2, "lease": lease})
     models = effective_models(root)
     base = fm._field_value(records["OpenCode"]["fields"].get("Base URL"), "opencode_base")
     assert base == models["opencode_base"], "OpenCode Base URL has not synchronized"
@@ -80,7 +96,8 @@ def main():
                       "credentials_present": keys_present, "opencode_base_synced": True}))
     print(json.dumps({"controller": "verified", "staged_candidates": staged,
                       "candidate_pool_size": limit, "daily_pr_quota": int(models["daily_pr_quota"]),
-                      "pr_table_redirect": True, "pr_followup_removed": True, "retired_settings_removed": True}))
+                      "pr_table_redirect": True, "pr_followup_removed": True, "retired_settings_removed": True, "pr_record_sync_seconds": fb.PR_RECORD_SYNC_SECONDS,
+                      "codex_concurrent_leases_verified": concurrent_auth}))
 
 
 if __name__ == "__main__":

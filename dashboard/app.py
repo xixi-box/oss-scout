@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from scout_v2.roster import monitored_repo as modifiable_repo
+from scout_v2.feishu_bitable import PR_RECORD_SYNC_SECONDS, FULL_TABLE_SYNC_SECONDS
 
 import base64
 import hashlib
@@ -95,7 +96,7 @@ def _staged_flush_once(root: Path, cfg: dict) -> dict:
 _BITABLE_SYNC_LOCK = threading.Lock()
 
 
-def _sync_bitables(root: Path, *, ds=None, activity_only=False, activity_cache=None) -> dict:
+def _sync_bitables(root: Path, *, ds=None, activity_only=False, activity_cache=None, table_names=None) -> dict:
     """Independent table snapshots; a failed source cannot clear remote data."""
     from scout_v2 import feishu_bitable as fb
     from .console_activity import candidate_activity
@@ -114,6 +115,8 @@ def _sync_bitables(root: Path, *, ds=None, activity_only=False, activity_cache=N
     ]
     activity = None
     for name, build, table, fields, convert, binding, source in tables:
+        if table_names is not None and name not in table_names:
+            continue
         tracks_activity = name in {"scan", "candidates"}
         if activity_only and not tracks_activity:
             continue
@@ -176,11 +179,7 @@ def create_app(root: Path | None = None, gh_runner=None,
     _bitable_wake = _thr.Event()
     _intake_handoff: set[str] = set()
     model_lock = _thr.Lock()
-    # 真正的修复跑在 GitHub Actions runner 上（VPS 只负责派发、提交
-    # workflow_dispatch，不 clone 也不编译），所以这里的上限跟 VPS 算力无关，
-    # 只用来防止一次性把几百条一起甩给 Actions 打爆自动化的并发配额。
-    # repair job 没有 concurrency 组，可以并行跑，实测 3 条同时在飞。
-    _MAX_CONCURRENT = 1
+    # Durable quota reservations determine dynamic concurrency across processes.
 
     def _run_one(entry: dict, rescreen: bool = False, immediate: bool = False) -> None:
         key = str(entry.get("id", ""))
@@ -217,13 +216,11 @@ def create_app(root: Path | None = None, gh_runner=None,
             return started
         try:
             from scout_v2.repo_policy import PolicyEngine
-            from scout_v2.state_store import publication_quota_remaining
+            from scout_v2.state_store import publication_quota_remaining, repair_dispatch_capacity
             from scout_v2.workers.auto_pipeline import expire_staged, open_scheduled_batch, expire_direct_starts
             expire_direct_starts(root)
             expire_staged(root)
             open_scheduled_batch(root)
-            with _inflight_lock:
-                room = _MAX_CONCURRENT - len(_inflight)
             eng, err = PolicyEngine.load(root)
             if err:
                 return started
@@ -235,7 +232,9 @@ def create_app(root: Path | None = None, gh_runner=None,
                                         if e.get("status") == "staged"],
                                   tz_name=eng.tz_name, cap=eng.max_claims_per_day)
                 return started
-            room = min(room, left)
+            capacity = repair_dispatch_capacity(root, eng.tz_name, eng.max_claims_per_day)
+            with _inflight_lock:
+                room = min(capacity["available"], capacity["limit"] - len(_inflight))
             if room <= 0:
                 return started
             from scout_v2.workers.auto_pipeline import drain_ai_graded
@@ -245,7 +244,8 @@ def create_app(root: Path | None = None, gh_runner=None,
                                                      rescreen=rescreen)]
             for key in cands:
                 with _inflight_lock:
-                    if len(_inflight) >= _MAX_CONCURRENT:
+                    capacity = repair_dispatch_capacity(root, eng.tz_name, eng.max_claims_per_day)
+                    if len(_inflight) >= capacity["limit"] or capacity["available"] <= 0:
                         break
                     if key in _inflight or (key in _intake_handoff and key != just_screened):
                         continue
@@ -254,10 +254,9 @@ def create_app(root: Path | None = None, gh_runner=None,
                         ent = queue.get(key)
                         if not ent or ent.get("status") != "staged":
                             continue
-                        if any(k != key and e.get("direct_start_reserved_at")
-                               and e.get("status") == "staged" for k, e in queue.items()):
+                        if ent.get("dispatch_job_id") or ent.get("dispatch_started_at"):
                             continue
-                        ent["direct_start_reserved_at"] = business_now().isoformat()
+                        ent.setdefault("direct_start_reserved_at", business_now().isoformat())
                         ent = dict(ent)
                     th = _thr.Thread(target=_run_one, args=(ent, rescreen, key == just_screened), daemon=True,
                                      name=f"repair-{key}")
@@ -390,17 +389,23 @@ def create_app(root: Path | None = None, gh_runner=None,
                 return
             time.sleep(10)
             full_sync_at = 0.0
+            pr_sync_at = 0.0
             activity_cache = {}
             while True:
                 _bitable_wake.clear()
                 full = time.monotonic() >= full_sync_at
+                pr_due = time.monotonic() >= pr_sync_at
+                names = None if full else {"pr", "scan", "candidates"} if pr_due else {"scan", "candidates"}
                 try:
-                    _sync_bitables(root, ds=ds, activity_only=not full, activity_cache=activity_cache)
+                    _sync_bitables(root, ds=ds, activity_only=not (full or pr_due),
+                                   activity_cache=activity_cache, table_names=names)
                     if full:
-                        full_sync_at = time.monotonic() + 900
+                        full_sync_at = time.monotonic() + FULL_TABLE_SYNC_SECONDS
+                    if full or pr_due:
+                        pr_sync_at = time.monotonic() + PR_RECORD_SYNC_SECONDS
                 except Exception as ex:
                     _audit(root, "bitable_sync_error", "-", str(ex)[:200])
-                _bitable_wake.wait(30)
+                _bitable_wake.wait(max(1, min(30, pr_sync_at - time.monotonic(), full_sync_at - time.monotonic())))
         _thr.Thread(target=_loop, daemon=True, name="bitable-sync").start()
 
     def _model_settings_loop():
@@ -440,17 +445,30 @@ def create_app(root: Path | None = None, gh_runner=None,
 
     def _reap_orphan_claim():
         from scout_v2.repo_policy import PolicyEngine
-        from scout_v2.state_store import business_now, queue_transaction, ClaimLedger
+        from scout_v2.state_store import business_now, queue_transaction, ClaimLedger, candidate_execution_lock
         policy, _ = PolicyEngine.load(root)
         ledger = ClaimLedger(root / "state/scout_v2.sqlite3")
         try:
             ledger.reconcile_legacy_starts(root / "state/worklog.jsonl", "Asia/Shanghai")
             previously_started = {r[0] for r in ledger._conn.execute("SELECT DISTINCT candidate_id FROM claim_days")}
+            for job_id, candidate in ledger.preparations():
+                with candidate_execution_lock(root, candidate) as owned:
+                    if not owned:
+                        continue
+                    ledger.release_preparation(job_id)
+                    with queue_transaction(root) as queue:
+                        entry = queue.get(candidate)
+                        if entry and entry.get("dispatch_job_id") == job_id:
+                            entry.pop("dispatch_job_id", None)
+                            entry.pop("direct_start_reserved_at", None)
+            protected = {key.lower() for key in ledger.reserved_candidates()}
         finally:
             ledger.close()
         # A runner may still publish after the controller restarts. Do not resubmit it.
         with queue_transaction(root) as q:
             for key, entry in q.items():
+                if key.lower() in protected:
+                    continue  # remote/preparing writer still owns its durable reservation
                 if entry.get("status") == "running" or (key in previously_started and entry.get("status") in (
                         "new", "recheck_failed", "staged")):
                     entry.update(status="escalated", abort_reason="controller restarted; inspect remote run before retry")
@@ -716,7 +734,8 @@ def create_app(root: Path | None = None, gh_runner=None,
             body = json.loads(raw)
             if not isinstance(body, dict):
                 raise ValueError()
-            response, status = exchange(root, body)
+            import asyncio
+            response, status = await asyncio.to_thread(exchange, root, body)
         except ValueError:
             return JSONResponse({"detail": "invalid request"}, status_code=400)
         return JSONResponse(response, status_code=status, headers={"Cache-Control": "no-store"})

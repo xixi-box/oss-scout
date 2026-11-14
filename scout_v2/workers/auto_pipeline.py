@@ -39,7 +39,7 @@ from ..repo_policy import PolicyEngine
 from ..schemas import Job, Result
 from ..roster import monitored_repo
 from ..state_store import ClaimLedger, Worklog, queue_transaction, business_day, business_now, atomic_json_write
-from ..state_store import publication_quota_remaining, candidate_fifo_key
+from ..state_store import publication_quota_remaining, candidate_fifo_key, candidate_execution_lock
 from .quality_gate import verify_result
 
 # 推送目标：对第三方仓库我们没有写权限，分支一律推自己的 fork，再向原仓库发 PR。
@@ -156,19 +156,39 @@ def _publication_run_missing(runner_repo: str, remote_id: str) -> bool:
         re.search(r"^HTTP/\S+ 404\b", response.stdout, re.MULTILINE))
 
 
+def _find_repair_run(runner_repo: str, job_id: str) -> tuple[dict | None, bool]:
+    """Find an exact job marker; only a complete listing proves a run absent."""
+    page, seen = 1, set()
+    while True:
+        response = gh_read([f"repos/{runner_repo}/actions/workflows/oss-scout-repair.yml/runs"
+                            f"?event=workflow_dispatch&per_page=100&page={page}"])
+        if not isinstance(response, dict) or not isinstance(response.get("workflow_runs"), list):
+            return None, False
+        runs = response["workflow_runs"]
+        match = next((r for r in runs if r.get("display_title") == f"repair {job_id}"), None)
+        if match:
+            return match, True
+        if len(runs) < 100:
+            return None, True
+        ids = {r.get("id") for r in runs}
+        if ids <= seen:
+            return None, False
+        seen.update(ids)
+        page += 1
+
+
 def _reconcile_publication(ledger: ClaimLedger, tz_name: str, *, root: Path | None = None,
-                           worker_result: dict | None = None) -> dict | None:
-    """Resolve the previous writer before another job can publish."""
-    pending = ledger.pending_publication()
+                           worker_result: dict | None = None, job_id: str | None = None) -> dict | None:
+    """Resolve one writer; callers own its per-candidate execution lock."""
+    pending = ledger.pending_publication(job_id)
     if pending is None:
         return {}
     job_id, repo, head, runner_repo, remote_id, expected_url = pending
     if not remote_id:
-        runs = gh_read([f"repos/{runner_repo}/actions/workflows/oss-scout-repair.yml/runs?event=workflow_dispatch&per_page=30"])
-        remote_id = next((str(r["id"]) for r in (runs or {}).get("workflow_runs", [])
-                          if r.get("display_title") == f"repair {job_id}"), "")
-        if not remote_id:
+        run, _ = _find_repair_run(runner_repo, job_id)
+        if run is None:
             return None
+        remote_id = str(run["id"])
         ledger.set_publication_run(job_id, remote_id)
     run = gh_read([f"repos/{runner_repo}/actions/runs/{remote_id}"])
     missing_run = False
@@ -176,11 +196,9 @@ def _reconcile_publication(ledger: ClaimLedger, tz_name: str, *, root: Path | No
         # A 404 can also hide a repository permission failure. Require a
         # successful run listing, and recover a replacement ID before concluding
         # that this writer no longer exists.
-        runs = gh_read([f"repos/{runner_repo}/actions/workflows/oss-scout-repair.yml/runs?event=workflow_dispatch&per_page=100"])
-        if not isinstance(runs, dict) or not isinstance(runs.get("workflow_runs"), list):
+        run, complete = _find_repair_run(runner_repo, job_id)
+        if run is None and not complete:
             return None
-        run = next((r for r in runs["workflow_runs"]
-                    if r.get("display_title") == f"repair {job_id}"), None)
         if run is not None:
             remote_id = str(run["id"])
             ledger.set_publication_run(job_id, remote_id)
@@ -257,6 +275,8 @@ def _reconcile_publication(ledger: ClaimLedger, tz_name: str, *, root: Path | No
                                  repair_job_id=job_id, repair_run_id=str(remote_id),
                                  workflow_conclusion=run.get("conclusion"), **extra)
                 candidate.pop("dispatch_started_at", None)
+                candidate.pop("dispatch_job_id", None)
+                candidate.pop("direct_start_reserved_at", None)
         if recovery:
             if pr:
                 log(root, "pr_open", key, f"{pr['html_url']} (reconciled from Actions)")
@@ -275,27 +295,26 @@ def _reconcile_publication(ledger: ClaimLedger, tz_name: str, *, root: Path | No
 
 
 def recover_pending_publication(root: Path, tz_name: str = "Asia/Shanghai") -> bool:
-    """Recover completed Actions runs even when the queue has no next candidate."""
-    import sqlite3
-
+    """Reconcile every orphaned writer without blocking live, unrelated jobs."""
     root = _data_root(root)
-    (root / "state").mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(root / "state/dispatcher.sqlite3", timeout=0, isolation_level=None)
+    ledger = ClaimLedger(root / "state/scout_v2.sqlite3")
+    changed = False
     try:
-        try:
-            conn.execute("BEGIN IMMEDIATE")
-        except sqlite3.OperationalError as exc:
-            if "locked" in str(exc).lower():
-                return False
-            raise
-        ledger = ClaimLedger(root / "state/scout_v2.sqlite3")
-        try:
-            return ledger.pending_publication() is not None and _reconcile_publication(
-                ledger, tz_name, root=root) is not None
-        finally:
-            ledger.close()
+        for pending in ledger.pending_publications():
+            job_id, repo, head, _, _, _ = pending
+            match = re.search(r":fix/issue-(\d+)-", head)
+            candidate = f"{repo}#{match[1]}" if match else job_id
+            with candidate_execution_lock(root, candidate) as owned:
+                if not owned:
+                    continue
+                try:
+                    receipt = _reconcile_publication(ledger, tz_name, root=root, job_id=job_id)
+                    changed = receipt is not None or changed
+                except Exception as exc:
+                    log(root, "reconcile_error", job_id, str(exc)[:180])
+        return changed
     finally:
-        conn.close()
+        ledger.close()
 
 
 def refresh_publication_status(root: Path, tz_name: str = "Asia/Shanghai") -> bool:
@@ -521,34 +540,77 @@ def _abort_release_impl(msg: str, *, candidate_id: str, ledger, eng,
 
 def candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen: bool = False,
                        immediate: bool = False) -> dict:
-    """A single durable execution lock covers every entrypoint, even other processes."""
+    """Reserve budget before preparation; serialize only the same candidate."""
     import sqlite3
+    import uuid
     root = _data_root(root)
     (root / "state").mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(root / "state/dispatcher.sqlite3"), timeout=0, isolation_level=None)
+    key = str(entry.get("id") or "")
+    admission = sqlite3.connect(root / "state/dispatcher.sqlite3", timeout=0, isolation_level=None)
     try:
         try:
-            conn.execute("BEGIN IMMEDIATE")
-        except sqlite3.OperationalError as ex:
-            if "locked" in str(ex).lower():
-                return {"id": entry.get("id"), "abort": "dispatcher busy"}
+            admission.execute("BEGIN IMMEDIATE")
+        except sqlite3.OperationalError as exc:
+            if "locked" in str(exc).lower():
+                return {"id": key, "abort": "dispatcher busy"}
             raise
-        # Intake may have reserved the idle slot while the waiting queue is full.
-        # Every automatic/manual entrypoint must respect that durable handoff.
-        with queue_transaction(root) as queue:
-            if any(k != entry.get("id") and e.get("status") == "staged"
-                   and e.get("direct_start_reserved_at") for k, e in queue.items()):
-                return {"id": entry.get("id"), "abort": "dispatcher busy"}
-        try:
-            return _candidate_pipeline(root, entry, max_files=max_files, rescreen=rescreen, immediate=immediate)
-        except Exception as ex:
-            _emergency_release(root, entry.get("id", ""))
-            log(root, "crash", entry.get("id", ""), str(ex)[:200])
-            raise
-        finally:
-            release_direct_start(root, entry.get("id", ""))
+        with candidate_execution_lock(root, key) as owned:
+            if not owned:
+                return {"id": key, "abort": "dispatcher busy"}
+            eng, err = PolicyEngine.load(root)
+            if err:
+                return {"id": key, "abort": f"policy fail-closed: {err}"}
+            ledger = ClaimLedger(root / "state/scout_v2.sqlite3")
+            job_id = f"job-{uuid.uuid4()}"
+            reserved = False
+            try:
+                with queue_transaction(root) as queue:
+                    latest = queue.get(key)
+                    if latest is not None and latest.get("status") != "staged":
+                        return {"id": key, "abort": "candidate already running or terminal"}
+                    work = {**entry, **(latest or {})}
+                    repo = work.get("repo") or key.rsplit("#", 1)[0]
+                    backed = {candidate.lower() for candidate in ledger.reserved_candidates()}
+                    unbacked = sum(k != key and k.lower() not in backed
+                                   and e.get("status") in ("staged", "running")
+                                   and bool(e.get("direct_start_reserved_at") or e.get("dispatch_started_at")
+                                            or e.get("status") == "running") for k, e in queue.items())
+                    if ledger.dispatch_capacity(eng.tz_name, eng.max_claims_per_day)["available"] <= unbacked:
+                        return {"id": key, "abort": "dispatcher busy"}
+                    if not ledger.reserve_dispatch(eng.tz_name, eng.max_claims_per_day, job_id, repo, key):
+                        if latest is not None and key.lower() not in {k.lower() for k in ledger.reserved_candidates()}:
+                            latest.pop("direct_start_reserved_at", None)
+                            from ..state_store import rotate_staged_queue
+                            for old in rotate_staged_queue(root, queue):
+                                log(root, "queue_evicted", old, "handoff had no available execution slot")
+                        return {"id": key, "abort": "dispatcher busy"}
+                    reserved = True
+                    work["dispatch_job_id"] = job_id
+                    if latest is not None:
+                        latest["dispatch_job_id"] = job_id
+                        latest.setdefault("direct_start_reserved_at", business_now().isoformat())
+                        work = {**work, **latest}
+                        work.setdefault("id", key)
+                admission.close()
+                admission = None
+                try:
+                    return _candidate_pipeline(root, work, max_files=max_files, rescreen=rescreen, immediate=immediate)
+                except Exception as exc:
+                    _emergency_release(root, key)
+                    log(root, "crash", key, str(exc)[:200])
+                    raise
+            finally:
+                ledger.release_preparation(job_id)
+                pending = ledger.pending_publication(job_id)
+                if reserved and pending is None:
+                    with queue_transaction(root) as queue:
+                        if queue.get(key, {}).get("dispatch_job_id") == job_id:
+                            queue[key].pop("dispatch_job_id", None)
+                    release_direct_start(root, key)
+                ledger.close()
     finally:
-        conn.close()
+        if admission is not None:
+            admission.close()
 
 
 def release_direct_start(root: Path, key: str) -> None:
@@ -578,7 +640,14 @@ def expire_direct_starts(root: Path) -> None:
         path = root / "queue/candidates.json"
         queue = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
         now = business_now()
+        ledger = ClaimLedger(root / "state/scout_v2.sqlite3")
+        try:
+            protected = {key.lower() for key in ledger.reserved_candidates()}
+        finally:
+            ledger.close()
         for key, entry in queue.items():
+            if key.lower() in protected:
+                continue
             stamp = entry.get("direct_start_reserved_at")
             if not stamp or entry.get("status") != "staged" or entry.get("dispatch_started_at"):
                 continue
@@ -593,6 +662,7 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen
     """单候选：复检 → 合规 → 后端修复 → 质量闸 → push + PR。"""
     root = _data_root(root)
     repo, number = entry["repo"], entry["number"]
+    dispatch_job_id = entry.get("dispatch_job_id")
     key = entry["id"]
     summary: dict = {"id": key, "steps": []}
     ledger = None
@@ -634,8 +704,6 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen
         return summary
     budget = ClaimLedger(root / "state/scout_v2.sqlite3")
     try:
-        if _reconcile_publication(budget, eng.tz_name, root=root) is None:
-            return {**summary, "abort": "previous publication awaiting reconciliation"}
         day = business_now(eng.tz_name).date().isoformat()
         refill_day = day if budget.has_publication_release(day) else ""
         if latest is not None and not _eligible(entry, refill_day=refill_day):
@@ -822,6 +890,8 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen
               execution_scope="project_contribution",
               policy_snapshot_id=eng.snapshot_id(),
               max_estimated_compute_usd=0.5)
+    if dispatch_job_id:
+        job.job_id = dispatch_job_id
     # 测试框架由 agent 现场判断（2026-10-28）：控制器不再预设 pytest。
     # 之前在这里硬编码探测，"探测不到就放弃"，等于把能力锁死在 Python+pytest。
     # 现在只把 issue 交给 agent，它自己看 Cargo.toml / package.json / 测试目录。
@@ -888,7 +958,7 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen
         ledger.expect_publication(job.job_id, runner_pr["pr"])
     receipt = _reconcile_publication(
         ledger, eng.tz_name, root=root,
-        worker_result={**(collected.get("result") or {}), "publish": runner_pr},
+        worker_result={**(collected.get("result") or {}), "publish": runner_pr}, job_id=job.job_id,
     )
     if receipt is None:
         return _abort_release("publication outcome unconfirmed; awaiting reconciliation")
@@ -1403,6 +1473,8 @@ def drain_ai_graded(root: Path, limit: int = 3, dry_run: bool = True,
     eligible: list[tuple[str, dict]] = []
     for key, e in q.items():
         if e.get("status") not in ACTIVE:
+            continue
+        if e.get("dispatch_job_id") or e.get("dispatch_started_at"):
             continue
         if not monitored_repo(e.get("repo", "")):
             continue

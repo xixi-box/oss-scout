@@ -71,6 +71,7 @@ def test_full_queue_rotates_after_ai_accepts_even_when_daily_quota_is_full(intak
 
 def test_full_waiting_queue_rotates_when_execution_is_busy(intake):
     ds, issue = intake
+    p.PolicyEngine.load(ds.root)[0].max_claims_per_day = 3  # one concurrency slot
     queue = ds.root / "queue/candidates.json"
     queue.write_text(json.dumps({**{f"a/b#{n}": {"status": "staged"} for n in range(2, 12)},
                                   "a/b#99": {"status": "running"}}))
@@ -556,8 +557,8 @@ def test_publication_reconciled_on_github_creation_day(tmp_path, monkeypatch):
     tz = "Asia/Shanghai"
     monkeypatch.setattr(state_store, "business_now",
                         lambda _: dt.datetime.fromisoformat("2026-11-08T00:05:00+08:00"))
-    assert ledger.reserve_publication(tz, 5, "test", "traefik/traefik", "xixi-box:fix", "xixi-box/oss-scout")
-    assert not ledger.reserve_publication(tz, 5, "other", "traefik/traefik", "xixi-box:other", "xixi-box/oss-scout")
+    assert ledger.reserve_publication(tz, 3, "test", "traefik/traefik", "xixi-box:fix", "xixi-box/oss-scout")
+    assert not ledger.reserve_publication(tz, 3, "other", "traefik/traefik", "xixi-box:other", "xixi-box/oss-scout")
     ledger.set_publication_run("test", "1")
     responses = iter([
         {"status": "completed", "display_title": "repair test"},
@@ -584,7 +585,7 @@ def test_controller_restart_recovers_candidate_and_feishu_status(tmp_path, monke
     ledger = ClaimLedger(tmp_path / "state/scout_v2.sqlite3")
     tz = "Asia/Shanghai"
     (tmp_path / "state/seen.json").write_text(json.dumps({key: {"status": "ai_passed"}}))
-    assert ledger.reserve_publication(tz, 5, job, "nodejs/node",
+    assert ledger.reserve_publication(tz, 3, job, "nodejs/node",
                                       "xixi-box:fix/issue-67320-5f602d5-ab588978", "xixi-box/oss-scout")
     ledger.close()
     run = {"id": 703, "display_title": f"repair {job}", "status": "in_progress"}

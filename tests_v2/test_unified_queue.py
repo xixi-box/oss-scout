@@ -200,6 +200,7 @@ def test_concurrent_screening_cannot_overfill_the_waiting_queue(queue_root, monk
 
 
 def test_full_queue_with_idle_slot_admits_one_direct_start(queue_root, monkeypatch):
+    pipeline.PolicyEngine.load(queue_root)[0].max_claims_per_day = 3  # one concurrency slot
     entries = {f"a/b#{i}": {"status": "staged"} for i in range(10, 20)}
     write_queue(queue_root, entries)
     monkeypatch.setattr(data, "screen_issue", lambda *a, **kw: ([], {"usable": True}))
@@ -220,6 +221,7 @@ def test_full_queue_with_idle_slot_admits_one_direct_start(queue_root, monkeypat
 
 
 def test_two_concurrent_arrivals_cannot_both_take_the_direct_slot(queue_root, monkeypatch):
+    pipeline.PolicyEngine.load(queue_root)[0].max_claims_per_day = 3  # one concurrency slot
     write_queue(queue_root, {f"a/b#{i}": {"status": "staged"} for i in range(10, 20)})
     barrier = Barrier(2)
 
@@ -255,7 +257,7 @@ def test_slot_taken_during_fine_screen_does_not_overfill_queue(queue_root, monke
 def test_full_queue_has_no_direct_bypass_without_known_free_budget(queue_root, monkeypatch, pending):
     write_queue(queue_root, {f"a/b#{i}": {"status": "staged"} for i in range(10, 20)})
     ledger = ClaimLedger(queue_root / "state/scout_v2.sqlite3")
-    for n in range(1 if pending else 5):
+    for n in range(2 if pending else 5):
         assert ledger.reserve_publication("Asia/Shanghai", 5, f"job-{n}", "a/b", "head", "x/y")
         if not pending:
             ledger.finish_publication(f"job-{n}", day="2026-11-12", url=f"https://github.com/a/b/pull/{n}")

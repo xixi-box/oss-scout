@@ -1,7 +1,9 @@
-"""Run Codex CLI with an exclusive, renewable ChatGPT subscription login."""
+"""Run Codex CLI with concurrent ChatGPT access and broker-owned refresh."""
 from __future__ import annotations
 
 import json
+import hmac
+from http.server import BaseHTTPRequestHandler, HTTPServer
 import re
 import sys
 import threading
@@ -35,7 +37,7 @@ class CodexClient:
             data=json.dumps({"operation": operation, **values}).encode(),
             headers={"Content-Type": "application/json", "X-Ingest-Token": token})
         try:
-            with urllib.request.urlopen(request, timeout=15) as response:
+            with urllib.request.urlopen(request, timeout=30 if operation == "refresh" else 15) as response:
                 return json.load(response)
         except urllib.error.HTTPError as exc:
             if operation == "acquire" and exc.code == 409:
@@ -44,6 +46,7 @@ class CodexClient:
 
     def run(self, model: str, prompt: str) -> tuple[bool, str]:
         lease, process, reader = None, None, None
+        refresh_proxy = None
         released, rc = False, None
         started = time.monotonic()
         tail = deque(maxlen=12)
@@ -90,16 +93,18 @@ class CodexClient:
             auth = home / "auth.json"
             detail, ok = "Codex did not start", False
             try:
-                credentials = self._exchange("acquire")
+                credentials = self._exchange("acquire", protocol=2)
                 while credentials.get("busy"):
                     if time.monotonic() - started >= self.timeout:
                         raise RuntimeError("Codex login is busy; timed out waiting for the active task")
                     time.sleep(10)
-                    credentials = self._exchange("acquire")
+                    credentials = self._exchange("acquire", protocol=2)
                 lease = credentials["lease"]
                 secrets_from(credentials)
                 auth.write_text(json.dumps(credentials["auth"]), encoding="utf-8")
                 auth.chmod(0o600)
+                if credentials.get("protocol") == 2:
+                    refresh_proxy = _RefreshProxy(self, credentials, secrets_from)
                 model, _, effort = model.partition("#")
                 output = home / "last-message.txt"
                 command = [resolve_binary("codex"), "exec", "--ignore-user-config", "--json",
@@ -114,6 +119,10 @@ class CodexClient:
                 command.append("-")
                 env = sanitized_env()
                 env["CODEX_HOME"] = str(home)
+                if refresh_proxy:
+                    env["CODEX_REFRESH_TOKEN_URL_OVERRIDE"] = refresh_proxy.url
+                    env["NO_PROXY"] = env.get("NO_PROXY", env.get("no_proxy", "")) + ",127.0.0.1,localhost"
+                    env["no_proxy"] = env["NO_PROXY"]
                 (home / "prompt.txt").write_text(prompt, encoding="utf-8")
                 record("agent.started", model=model, reasoning_effort=effort, timeout_seconds=self.timeout)
 
@@ -173,7 +182,8 @@ class CodexClient:
                             print(f"[codex] elapsed={elapsed}s; active_commands={list(commands)}", flush=True)
                             if elapsed >= self.timeout:
                                 raise RuntimeError(f"Codex timed out after {self.timeout}s")
-                            self._exchange("sync", lease=lease, auth=json.loads(auth.read_text()))
+                            self._exchange("sync", lease=lease, protocol=credentials.get("protocol", 1),
+                                           **({} if refresh_proxy else {"auth": json.loads(auth.read_text())}))
                 detail = output.read_text(encoding="utf-8") if output.exists() else ""
                 ok = rc == 0 and bool(detail.strip())
                 if rc:
@@ -192,10 +202,13 @@ class CodexClient:
                     try:
                         latest_auth = json.loads(auth.read_text())
                         secrets_from(latest_auth)
-                        self._exchange("release", lease=lease, auth=latest_auth)
+                        self._exchange("release", lease=lease, protocol=credentials.get("protocol", 1),
+                                       **({} if refresh_proxy else {"auth": latest_auth}))
                         released = True
                     except (OSError, ValueError, RuntimeError):
                         record("auth.release_failed")
+                if refresh_proxy:
+                    refresh_proxy.close()
                 if not ok:
                     evidence = last_error or "\n".join(tail)[-1500:]
                     if evidence:
@@ -207,6 +220,70 @@ class CodexClient:
                     events.close()
                 _restore_subreaper(subreaper)
         return ok, detail[:8000]
+
+
+class _RefreshProxy:
+    """A loopback-only OAuth adapter; the real refresh token stays on the server.
+
+    CLI 0.167.1 reads CODEX_REFRESH_TOKEN_URL_OVERRIDE and sends JSON OAuth requests.
+    Each runner sees its own opaque refresh handle and never writes authority tokens.
+    """
+    def __init__(self, client, credentials, secrets_from):
+        self.credentials = credentials
+        self.handle = credentials["auth"]["tokens"]["refresh_token"]
+        proxy = self
+
+        class Handler(BaseHTTPRequestHandler):
+            def setup(self):
+                super().setup()
+                self.connection.settimeout(5)
+
+            def log_message(self, *args):
+                pass  # Request data and credential handles must never enter logs.
+
+            def do_POST(self):
+                status, response = 400, {"error": "invalid_request"}
+                try:
+                    length = int(self.headers.get("Content-Length", "0"))
+                    if not 0 < length <= 4096 or self.path != "/oauth/token":
+                        raise ValueError()
+                    body = json.loads(self.rfile.read(length))
+                    if (body.get("grant_type") != "refresh_token" or not isinstance(body.get("refresh_token"), str)
+                            or not hmac.compare_digest(body["refresh_token"], proxy.handle)):
+                        status, response = 401, {"error": "invalid_grant"}
+                    else:
+                        fresh = client._exchange("refresh", protocol=2, lease=credentials["lease"],
+                                                 generation=proxy.credentials["generation"])
+                        if fresh.get("protocol") != 2:
+                            raise RuntimeError("Unsupported credential protocol")
+                        secrets_from(fresh)
+                        proxy.credentials = fresh
+                        tokens = fresh["auth"]["tokens"]
+                        response = {key: tokens[key] for key in ("access_token", "id_token") if tokens.get(key)}
+                        response["refresh_token"] = proxy.handle
+                        status = 200
+                except (OSError, ValueError, RuntimeError):
+                    status, response = 503, {"error": "temporarily_unavailable"}
+                encoded = json.dumps(response).encode()
+                self.send_response(status)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Content-Length", str(len(encoded)))
+                self.end_headers()
+                try:
+                    self.wfile.write(encoded)
+                except OSError:
+                    pass
+
+        self.server = HTTPServer(("127.0.0.1", 0), Handler)
+        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True, name="codex-refresh-proxy")
+        self.thread.start()
+        self.url = f"http://127.0.0.1:{self.server.server_port}/oauth/token"
+
+    def close(self):
+        self.server.shutdown()
+        self.server.server_close()
+        self.thread.join(timeout=5)
 
 
 def _linux_descendants():

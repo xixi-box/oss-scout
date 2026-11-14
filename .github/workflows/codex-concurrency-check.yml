@@ -1,0 +1,44 @@
+name: Codex concurrency check
+on:
+  workflow_dispatch:
+    inputs:
+      model:
+        description: Model and reasoning effort for two small self-test requests
+        type: string
+        default: gpt-6.1-sol#medium
+      refresh:
+        description: Verify one broker-owned OAuth refresh shared by two concurrent callers
+        type: boolean
+        default: true
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install self-test dependencies
+        run: |
+          pip install -r requirements.txt
+          npm install -g @openai/codex@0.167.1
+          codex --version
+      - name: Check concurrent refresh and CLI execution
+        env:
+          CF_INGEST_TOKEN: ${{ secrets.CF_INGEST_TOKEN }}
+          DASHBOARD_URL: ${{ secrets.DASHBOARD_PUBLIC_URL }}
+          CHECK_MODEL: ${{ inputs.model }}
+          CHECK_REFRESH: ${{ inputs.refresh }}
+        run: |
+          python - <<'PY'
+          import os,subprocess
+          command=['python','scripts/verify_codex_concurrency.py','--model',os.environ['CHECK_MODEL']]
+          if os.environ['CHECK_REFRESH']=='true': command.append('--refresh')
+          subprocess.run(command,check=True)
+          PY

@@ -27,6 +27,7 @@ def seed(root, entries):
 
 
 def test_a_b_c_d_rollovers_keep_todays_fifo_and_link_scan_and_candidate_tables(queue_root, monkeypatch):
+    pipeline.PolicyEngine.load(queue_root)[0].max_claims_per_day = 3  # one concurrency slot
     entries = {f"a/b#{i}": candidate(i, f"2026-11-11T10:{i:02d}:00+08:00") for i in range(10)}
     entries["a/b#99"] = candidate(99, "2026-11-12T01:00:00+08:00", "running")
     seed(queue_root, entries)

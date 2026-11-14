@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import base64
+from contextlib import nullcontext
 import io
 import json
 import subprocess
@@ -29,8 +30,8 @@ DEFAULT_RUNNER_REPO = "xixi-box/oss-scout"
 # artifact / result.json 的固定名字（与 workers/core.py 一致）
 RESULT_FILE = "result.json"
 
-# submit 的 dispatch→认领 段的进程内串行锁（派发线程都跑在 dashboard 进程里）。
-# 跨进程重启窗口仍有极小的竞争面，但认领按时间窗取最早，实际危害已封住。
+# 仅旧版通用 workflow 的时间窗匹配需要进程内串行锁。
+# repair 使用唯一 job_id 精确匹配 run，支持并发派发。
 _SUBMIT_LOCK = __import__("threading").Lock()
 
 
@@ -109,12 +110,9 @@ class ActionsBackend:
         if not self.eligible(job):
             raise RuntimeError("actions backend ineligible for this job (scope/mode/workflow)")
         payload = base64.b64encode(json.dumps(job, ensure_ascii=False).encode("utf-8")).decode()
-        # dispatch→认领 run 的整段必须串行：_find_run 只能按时间窗认"最新"的
-        # dispatch run，GitHub 没有"按 inputs 找 run"的 API。两个线程并发
-        # submit 时，A 可能认到 B 刚 dispatch 的 run，于是 collect 拿到 B 的
-        # result——job_id mismatch，A 修复成功的成果也作废（2026-10-31 实测
-        # 8 条 succeeded+repro+fixed 全被这条拦掉）。
-        with _SUBMIT_LOCK:
+        # Repair runs have unique job titles, so their dispatch/lookup can overlap.
+        # Generic legacy workflows still need the old time-window fallback lock.
+        with (nullcontext() if self.workflow == "oss-scout-repair.yml" else _SUBMIT_LOCK):
             dispatch_at = time.time()
             rc, out = self.gh(["-X", "POST",
                                f"repos/{self.repo}/actions/workflows/{self.workflow}/dispatches",
@@ -248,23 +246,35 @@ class ActionsBackend:
         可能已 dispatch 出更新的 run，认最新就会张冠李戴。
         """
         for _ in range(attempts):
-            rc, out = self.gh([f"repos/{self.repo}/actions/workflows/{self.workflow}/runs",
-                               "-X", "GET", "-f", "per_page=10"])
-            if rc == 0:
-                candidates = []
-                for run in json.loads(out).get("workflow_runs", []):
+            page, seen, candidates = 1, set(), []
+            while True:
+                rc, out = self.gh([f"repos/{self.repo}/actions/workflows/{self.workflow}/runs",
+                                   "-X", "GET", "-f", "per_page=100", "-f", f"page={page}"])
+                if rc != 0:
+                    break
+                runs = json.loads(out).get("workflow_runs", [])
+                older = False
+                for run in runs:
+                    created = _parse_ts(run.get("created_at"))
+                    if not_before is not None and created is not None and created < not_before:
+                        older = True
+                        continue
                     if run.get("event") != "workflow_dispatch":
                         continue
-                    if self.workflow == "oss-scout-repair.yml" and run.get("display_title") != f"repair {job_id}":
-                        continue
-                    if not_before is not None:
-                        created = _parse_ts(run.get("created_at"))
-                        if created is not None and created < not_before:
-                            continue
-                    candidates.append((run.get("created_at") or "", run["id"]))
-                if candidates:
-                    candidates.sort()
-                    return candidates[0][1]
+                    if self.workflow == "oss-scout-repair.yml":
+                        if run.get("display_title") == f"repair {job_id}":
+                            return run["id"]
+                    else:
+                        candidates.append((run.get("created_at") or "", run["id"]))
+                if len(runs) < 100 or older:
+                    break
+                ids = {run.get("id") for run in runs}
+                if ids <= seen:
+                    break
+                seen.update(ids)
+                page += 1
+            if candidates:
+                return min(candidates)[1]
             time.sleep(5)
         return None
 

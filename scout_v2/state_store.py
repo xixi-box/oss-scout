@@ -26,15 +26,7 @@ def staged_candidate_count(queue: dict) -> int:
 
 
 def direct_start_available(root: Path, queue: dict, tz_name: str, cap: int) -> bool:
-    """Call under queue_transaction: one immediate handoff shares the execution slot.
-
-    A nonblocking probe also respects a pipeline still screening or reconciling,
-    before its remote execution has been recorded in the candidate JSON.
-    """
-    if any(e.get("status") in ("staged", "running") and (
-            e.get("status") == "running" or e.get("dispatch_started_at")
-            or e.get("direct_start_reserved_at")) for e in queue.values()):
-        return False
+    """Called under queue_transaction; direct handoffs share durable capacity."""
     conn = sqlite3.connect(str(root / "state/dispatcher.sqlite3"), timeout=0, isolation_level=None)
     try:
         try:
@@ -47,18 +39,44 @@ def direct_start_available(root: Path, queue: dict, tz_name: str, cap: int) -> b
         conn.close()
     ledger = ClaimLedger(root / "state/scout_v2.sqlite3")
     try:
-        day = business_now(tz_name).date().isoformat()
-        if ledger.pending_publication() is not None or ledger.quota_used(day) >= cap:
+        capacity = ledger.dispatch_capacity(tz_name, cap)
+        backed = {key.lower() for key in ledger.reserved_candidates()}
+        unbacked = sum(key.lower() not in backed and e.get("status") in ("staged", "running")
+                       and bool(e.get("direct_start_reserved_at") or e.get("dispatch_started_at")
+                                or e.get("status") == "running") for key, e in queue.items())
+        if capacity["available"] <= unbacked:
             return False
-        # Reuse exact dispatch eligibility, including retry backoff and refills.
         from .workers.auto_pipeline import _discovered_today, _order_candidates
         today = [(key, entry) for key, entry in queue.items()
                  if _discovered_today(entry) and not entry.get("blockers")
+                 and not entry.get("direct_start_reserved_at") and not entry.get("dispatch_started_at")
                  and (entry.get("ai_verdict") or {}).get("usable") is True]
+        day = business_now(tz_name).date().isoformat()
         refill = day if ledger.has_publication_release(day) else ""
         return not _order_candidates(today, refill_day=refill)
     finally:
         ledger.close()
+
+
+@contextmanager
+def candidate_execution_lock(root: Path, candidate_id: str):
+    """Per-candidate process lock; unrelated repair jobs never block each other."""
+    import hashlib
+    folder = Path(root) / "state/candidate_locks"
+    folder.mkdir(parents=True, exist_ok=True)
+    name = hashlib.sha256(candidate_id.lower().encode()).hexdigest()
+    conn = sqlite3.connect(folder / (name + ".sqlite3"), timeout=0, isolation_level=None)
+    try:
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+        except sqlite3.OperationalError as exc:
+            if "locked" not in str(exc).lower():
+                raise
+            yield False
+        else:
+            yield True
+    finally:
+        conn.close()
 
 
 def rotate_staged_queue(root: Path, queue: dict, *, keep=(), protected=(), replacement: str = "") -> list[str]:
@@ -102,6 +120,14 @@ def candidate_fifo_key(key: str, entry: dict) -> tuple[float, str]:
         return then.timestamp(), key
     except (AttributeError, TypeError, ValueError):
         return 0.0, key
+
+
+def repair_dispatch_capacity(root: Path, tz_name: str, cap: int) -> dict:
+    ledger = ClaimLedger(root / "state/scout_v2.sqlite3")
+    try:
+        return ledger.dispatch_capacity(tz_name, cap)
+    finally:
+        ledger.close()
 
 
 def publication_quota_remaining(root: Path, tz_name: str, cap: int) -> int:
@@ -333,7 +359,17 @@ class ClaimLedger:
         db_path.parent.mkdir(parents=True, exist_ok=True)
         self.db_path = db_path
         self._conn = sqlite3.connect(str(db_path), timeout=30, isolation_level=None)
-        self._conn.execute("PRAGMA journal_mode=WAL")
+        import time
+        for attempt in range(20):
+            try:
+                if self._conn.execute("PRAGMA journal_mode").fetchone()[0].lower() != "wal":
+                    self._conn.execute("PRAGMA journal_mode=WAL")
+                break
+            except sqlite3.OperationalError as exc:
+                if "locked" not in str(exc).lower() or attempt == 19:
+                    self._conn.close()
+                    raise
+                time.sleep(min(0.05 * (attempt + 1), 0.2))
         self._migrate()
 
     def _migrate(self) -> None:
@@ -402,10 +438,82 @@ class ClaimLedger:
             "repo TEXT NOT NULL, head TEXT NOT NULL, runner_repo TEXT NOT NULL, "
             "remote_id TEXT, expected_url TEXT, day TEXT, url TEXT UNIQUE)"
         )
-
+        columns = {r[1] for r in self._conn.execute("PRAGMA table_info(publications)")}
+        if not {"candidate_id", "phase", "reserved_day"} <= columns:
+            owned = not self._conn.in_transaction
+            if owned:
+                self._conn.execute("BEGIN IMMEDIATE")
+            try:
+                columns = {r[1] for r in self._conn.execute("PRAGMA table_info(publications)")}
+                for name, definition in (("candidate_id", "TEXT"),
+                                         ("phase", "TEXT NOT NULL DEFAULT 'dispatching'"),
+                                         ("reserved_day", "TEXT")):
+                    if name not in columns:
+                        self._conn.execute(f"ALTER TABLE publications ADD COLUMN {name} {definition}")
+                import re
+                for job, repo, head in self._conn.execute(
+                        "SELECT job_id,repo,head FROM publications WHERE day IS NULL AND candidate_id IS NULL").fetchall():
+                    match = re.search(r":fix/issue-(\d+)-", head)
+                    if match:
+                        self._conn.execute("UPDATE publications SET candidate_id=? WHERE job_id=?",
+                                           (f"{repo}#{match[1]}", job))
+                self._conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS pending_candidate "
+                                   "ON publications(candidate_id COLLATE NOCASE) "
+                                   "WHERE day IS NULL AND candidate_id IS NOT NULL")
+                if owned:
+                    self._conn.execute("COMMIT")
+            except BaseException:
+                if owned:
+                    self._conn.execute("ROLLBACK")
+                raise
         self._conn.execute(
             "CREATE TABLE IF NOT EXISTS publication_status (url TEXT PRIMARY KEY, "
             "state TEXT NOT NULL, closed_day TEXT)")
+
+    def dispatch_capacity(self, tz_name: str, cap: int) -> dict:
+        """Half the unspent confirmed budget; all potential writers reserve a seat."""
+        self._publication_table()
+        day = business_now(tz_name).date().isoformat()
+        used = self.quota_used(day)
+        remaining = max(0, cap - used)
+        limit = max(1, remaining // 2) if remaining else 0
+        active = self._conn.execute("SELECT COUNT(*) FROM publications WHERE day IS NULL").fetchone()[0]
+        return {"used": used, "remaining": remaining, "limit": limit, "active": active,
+                "available": max(0, min(limit - active, remaining - active))}
+
+    def reserved_candidates(self) -> list[str]:
+        self._publication_table()
+        return [r[0] for r in self._conn.execute(
+            "SELECT candidate_id FROM publications WHERE day IS NULL AND candidate_id IS NOT NULL")]
+
+    def reserve_dispatch(self, tz_name: str, cap: int, job_id: str, repo: str,
+                         candidate_id: str) -> bool:
+        self._publication_table()
+        self._conn.execute("BEGIN IMMEDIATE")
+        try:
+            allowed = self.dispatch_capacity(tz_name, cap)["available"] > 0
+            if allowed:
+                try:
+                    self._conn.execute(
+                        "INSERT INTO publications(job_id,repo,head,runner_repo,candidate_id,phase,reserved_day) "
+                        "VALUES (?,?,?,?,?,'preparing',?)", (job_id, repo, "", "", candidate_id,
+                                                          business_now(tz_name).date().isoformat()))
+                except sqlite3.IntegrityError:
+                    allowed = False
+            self._conn.execute("COMMIT")
+            return allowed
+        except BaseException:
+            self._conn.execute("ROLLBACK")
+            raise
+
+    def release_preparation(self, job_id: str) -> None:
+        self._publication_table()
+        self._conn.execute("DELETE FROM publications WHERE job_id=? AND day IS NULL AND phase='preparing'", (job_id,))
+
+    def preparations(self) -> list[tuple[str, str]]:
+        self._publication_table()
+        return self._conn.execute(
+            "SELECT job_id,candidate_id FROM publications WHERE day IS NULL AND phase='preparing'").fetchall()
 
     def published_today(self, tz_name: str) -> int:
         self._publication_table()
@@ -443,24 +551,39 @@ class ClaimLedger:
             "OR publication_status.closed_day IS NOT excluded.closed_day",
             (url, state, closed_day)).rowcount)
 
-    def pending_publication(self) -> tuple | None:
+    def pending_publications(self) -> list[tuple]:
         self._publication_table()
         return self._conn.execute(
             "SELECT job_id, repo, head, runner_repo, remote_id, expected_url "
-            "FROM publications WHERE day IS NULL"
-        ).fetchone()
+            "FROM publications WHERE day IS NULL AND phase!='preparing' ORDER BY rowid"
+        ).fetchall()
+
+    def pending_publication(self, job_id: str | None = None) -> tuple | None:
+        return next((row for row in self.pending_publications() if job_id is None or row[0] == job_id), None)
 
     def reserve_publication(self, tz_name: str, cap: int, job_id: str, repo: str,
                             head: str, runner_repo: str) -> bool:
-        # Serialize the final check with the status poller as well as dispatchers.
+        self._publication_table()
         self._conn.execute("BEGIN IMMEDIATE")
         try:
-            allowed = (not self.pending_publication()
-                       and self.quota_used(business_now(tz_name).date().isoformat()) < cap)
-            if allowed:
-                self._conn.execute(
-                    "INSERT INTO publications(job_id,repo,head,runner_repo) VALUES (?,?,?,?)",
-                    (job_id, repo, head, runner_repo))
+            existing = self._conn.execute("SELECT phase,day,repo FROM publications WHERE job_id=?", (job_id,)).fetchone()
+            if existing:
+                allowed = existing == ("preparing", None, repo)
+                if allowed:
+                    self._conn.execute("UPDATE publications SET head=?,runner_repo=?,phase='dispatching' WHERE job_id=?",
+                                       (head, runner_repo, job_id))
+            else:
+                allowed = self.dispatch_capacity(tz_name, cap)["available"] > 0
+                if allowed:
+                    import re
+                    match = re.search(r":fix/issue-(\d+)-", head)
+                    candidate = f"{repo}#{match[1]}" if match else None
+                    try:
+                        self._conn.execute(
+                            "INSERT INTO publications(job_id,repo,head,runner_repo,candidate_id,reserved_day) VALUES (?,?,?,?,?,?)",
+                            (job_id, repo, head, runner_repo, candidate, business_now(tz_name).date().isoformat()))
+                    except sqlite3.IntegrityError:
+                        allowed = False
             self._conn.execute("COMMIT")
             return allowed
         except BaseException:
@@ -475,7 +598,7 @@ class ClaimLedger:
 
     def finish_publication(self, job_id: str, *, day: str = "", url: str = "") -> None:
         if day and url:
-            self._conn.execute("UPDATE OR IGNORE publications SET day=?,url=? WHERE job_id=?",
+            self._conn.execute("UPDATE OR IGNORE publications SET day=?,url=?,phase='published' WHERE job_id=?",
                                (day, url, job_id))
         self._conn.execute("DELETE FROM publications WHERE job_id=? AND day IS NULL", (job_id,))
 
