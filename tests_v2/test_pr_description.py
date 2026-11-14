@@ -30,3 +30,12 @@ def test_old_jobs_and_invalid_drafts_fall_back_to_facts_without_disclaimer(tmp_p
         body = publish_remote._rewrite_body({"issue_number": 42}, tmp_path)
         assert "Root cause: Null input" in body and "Tests:" in body
         assert "All tests passed" not in body and "AI assistance:" not in body
+
+
+def test_oversized_generated_text_is_not_cut_mid_title_or_template(tmp_path):
+    (tmp_path / repair.RESULT_FILE).write_text(json.dumps({
+        "pr_title": "A" * 241, "pr_body": "{VERIFIED_TESTS}" + "B" * 16000,
+        "root_cause": "A real cause."}))
+    result = repair._read_result_file(tmp_path)
+    assert "pr_title" not in result and "pr_body" not in result
+    assert result["root_cause"] == "A real cause."

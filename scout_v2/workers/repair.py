@@ -336,8 +336,8 @@ def _read_result_file(work_dir: Path) -> dict:
         out: dict = {}
         for key, limit in (("pr_title", 240), ("pr_body", 16000)):
             value = data.get(key)
-            if isinstance(value, str) and value.strip():
-                out[key] = value.strip()[:limit]
+            if isinstance(value, str) and value.strip() and len(value.strip()) <= limit:
+                out[key] = value.strip()
         cmd = data.get("test_cmd") or data.get("command")
         if isinstance(cmd, list):
             cmd = " ".join(str(x) for x in cmd)
