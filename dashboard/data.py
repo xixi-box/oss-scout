@@ -145,17 +145,6 @@ def cloudflare_cfg(ds) -> dict:
     return cfg
 
 
-_RE_OFFER = __import__("re").compile(
-    # 报告者主动提出要自己修：英文常见说法（"May I prepare that focused fix?"、
-    # "I'd like to work on this"、"happy to send a PR"…）
-    r"(may|can|could|shall|should)\s+i\s+(prepare|submit|open|send|provide|fix|take)"
-    r"|i('ll|'d| would like to| am happy to| am going to| will)\s+"
-    r"(prepare|submit|open|work on|fix|send|provide)"
-    r"|(happy|glad|willing)\s+to\s+(prepare|submit|open|send|provide|fix)"
-    r"|i\s+(would like to|want to|plan to|intend to)\s+(fix|work on|prepare|take)",
-    re.I)
-
-
 # 更宽的认领/派单/禁 AI 信号（clickhouse#126287 实录）：报告者在 body 里写
 # "the fix maybe is not trivial to ask AI to do it"、维护者在评论里派单
 # "you can fix this and I can try to review"。Worker 事件只有 body 没有
@@ -194,14 +183,8 @@ _RE_CLAIMISH = re.compile(
 
 def _claimish_sentences(body: str) -> list[str]:
     """body 里命中的认领/派单/禁 AI 句子（至多 5 条，每条截 300 字）。"""
-    out: list[str] = []
-    for chunk in re.split(r"(?<=[.!?])\s+|\n+", body or ""):
-        chunk = chunk.strip()
-        if chunk and _RE_CLAIMISH.search(chunk):
-            out.append(chunk[:300])
-            if len(out) >= 5:
-                break
-    return out
+    from scout_v2.contribution_intent import claim_evidence
+    return claim_evidence(body, pattern=_RE_CLAIMISH)
 
 
 def refresh_issue(item: dict, *, root: Path | None = None) -> tuple[dict, list[str], list]:
@@ -336,6 +319,7 @@ def fine_screen_issue(eng, it: dict, *, lane: str, linked_prs: list | None = Non
     """Evaluate a snapshot that has already passed the mechanical gate."""
     from scout_v2.git_host import own_issue_claim
     from scout_v2.workers.openjev import OpenJevClient
+    from scout_v2.contribution_intent import self_fix_evidence
 
     repo, number = str(it["repo"]), int(it["number"])
     title, body = str(it.get("title") or ""), str(it.get("body_excerpt") or "")
@@ -343,6 +327,10 @@ def fine_screen_issue(eng, it: dict, *, lane: str, linked_prs: list | None = Non
     claim_sents = _claimish_sentences(body)
     try:
         reporter = it.get("reporter")
+        offers = self_fix_evidence(body)
+        for comment in it.get("issue_comments") or []:
+            if reporter and comment.get("author") == reporter:
+                offers.extend(self_fix_evidence(comment.get("body") or ""))
         verdict = OpenJevClient().score_issue({
             "repo": repo, "number": number, "title": title, "labels": labels,
             "body": body, "issue_url": it.get("url"),
@@ -359,8 +347,9 @@ def fine_screen_issue(eng, it: dict, *, lane: str, linked_prs: list | None = Non
                                                  "body": c.get("body") or ""})],
             "linked_pull_requests": linked_prs or [],
             "claim_evidence_in_body": claim_sents,
-            "reporter_offered_fix": bool(_RE_OFFER.search(body)),
-            "claimish_signal": bool(claim_sents),
+            "reporter_offered_fix": True if offers else None,
+            "reporter_offer_evidence": offers[:5],
+            "claimish_signal": True if claim_sents else None,
             "repo_rules": repo_rules_text(repo)})
     except Exception as ex:
         verdict = {"usable": None, "reason": f"scorer error: {ex}"[:200]}

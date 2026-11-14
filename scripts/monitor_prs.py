@@ -33,6 +33,8 @@ ROOT = Path(__file__).resolve().parents[1]
 DATA_ROOT = Path(os.environ.get("OSSCOUT_DASHBOARD_ROOT", str(ROOT)))
 
 from scout_v2.roster import monitored_repo
+from scout_v2.contribution_intent import (claim_evidence, coordination_evidence,
+                                         pr_automation_hold, MULTILINGUAL_REVIEW_RULES)
 from scout_v2.state_store import STAGED_FULL_REASON, atomic_json_write, queue_transaction
 
 # 分类信号。顺序有意义：先判"被关"，再判"要改"，最后才是普通讨论。
@@ -100,6 +102,11 @@ Classify into exactly one:
 
 Judge intent, not keywords. "All green here, but why does this swallow the
 exception?" is answer_question, not wait. "Thanks!" alone is wait.
+Read Chinese, English and mixed-language comments with equal care, including negation and chronology.
+"为避免两边重复投入，我想继续跟进 #4167" and "I submitted my own fix in #4167"
+are assignment_note (ownership/duplicate-work coordination), not wait or a code-change request.
+Chinese requests to add a regression test are address_review; questions are answer_question.
+Do not discard an unfamiliar language as having no actionable intent.
 
 Pull request: {repo}#{number}
 Title: {title}
@@ -150,7 +157,7 @@ def _is_noise_bot(author: str, body: str) -> bool:
     if not _NOISE_BOT_RE.search(who):
         return False
     # bot 发的是"认领/冲突"信息时仍然要留痕，交给后面的规则判
-    return not PATTERNS[4][1].search(body or "")
+    return not (PATTERNS[4][1].search(body or "") or claim_evidence(body) or coordination_evidence(body))
 
 
 def is_human_followup_author(author: str, author_type: str | None = None) -> bool:
@@ -200,8 +207,9 @@ def classify_comment(body: str, *, repo: str = "", number: int = 0,
     text = str(body or "").strip()
     if not text:
         return {"ok": True, "action": "wait", "reason": "no comment"}
-    if len(text) > 4000:
-        text = text[:4000]
+    if coordination_evidence(text):
+        return {"ok": True, "action": "assignment_note", "reason": "ownership / duplicate-work coordination"}
+    text = text[:COMMENT_TEXT_LIMIT]
     key, model = _model()
     if not key:
         return {"ok": False, "action": "wait", "reason": "no model key"}
@@ -234,9 +242,12 @@ def _classify_by_rules(body: str, latest: dict) -> tuple[str, str]:
     修改意见会让 PR 烂尾。
     """
     author = (latest.get("author") or {}).get("login")
-    if is_pleasantry(body):
+    if coordination_evidence(body) or claim_evidence(body):
+        return "assignment_note", "ownership / duplicate-work coordination (rule fallback)"
+    if is_pleasantry(body) or re.fullmatch(
+            r"\s*(?:thanks?(?:\s+you)?|thank\s+you|ok(?:ay)?|done|谢谢(?:你|您|了)?|感谢|收到|好的)[.!！。\s]*", body, re.I):
         return "wait", "pleasantry / review ping (rule fallback)"
-    if PATTERNS[2][1].search(body):
+    if PATTERNS[2][1].search(body) or re.search(r"(?:请|建议|需要|应该|麻烦)[^。！？\n]{0,30}(?:增加|添加|补充|修改|删除|移除|重命名|修复|测试)", body):
         return "address_review", f"review from {author} (rule fallback)"
     if _RE_REVIEWISH.search(body):
         return "answer_question", "question about the change (rule fallback)"
@@ -244,7 +255,9 @@ def _classify_by_rules(body: str, latest: dict) -> tuple[str, str]:
         return "answer_question", "maintainer asked for information (rule fallback)"
     if PATTERNS[4][1].search(body):
         return "assignment_note", "assignment/claim mentioned (rule fallback)"
-    return "wait", "no actionable ask (rule fallback)"
+    if not body.strip() or re.fullmatch(r"[0-9a-fA-F]{7,40}", body.strip()):
+        return "wait", "empty comment or commit reference (rule fallback)"
+    return "answer_question", "unclassified comment requires semantic follow-up (rule fallback)"
 
 
 def _gh(args: list[str], timeout: int = 90) -> str:
@@ -344,7 +357,7 @@ def classify(pr: dict) -> dict:
         # 2026-11-04 教训：「All green, could someone review?」和
         # 「All green, but the test fails」对人是一眼的事，对正则只差一个词。
         # 缓存键含评论时间戳：同一轮 15 分钟扫描之间不重复调用模型。
-        ckey = (f"{pr.get('repo') or pr.get('pr_url') or ''}#"
+        ckey = (f"multilingual-v1:{pr.get('repo') or pr.get('pr_url') or ''}#"
                 f"{pr.get('number') or ''}@{latest.get('createdAt') or ''}")
         cached = _cache_load().get(ckey) if latest.get("createdAt") else None
         if cached:
@@ -502,6 +515,8 @@ def _attempts() -> dict:
 
 
 def dispatch_pr_fix(repo: str, number: int, **kwargs) -> dict:
+    if pr_automation_hold(DATA_ROOT, repo, number):
+        return {"dispatched": False, "reason": "automatic PR actions paused by user"}
     from scout_v2.console_models import pr_comment_trigger_enabled
     if kwargs.get("kind", "ci") in ("followup", "review") and not pr_comment_trigger_enabled(DATA_ROOT):
         return {"dispatched": False, "reason": "PR comment trigger disabled"}
@@ -746,6 +761,8 @@ def draft_reply(repo: str, number: int, *, force: bool = False,
     context（可选）来自 classify() 的同一份 PR 数据，用于给飞书卡片补上
     issue 标题/根因/对方原话——免得为了发一张卡片再拉一遍 GitHub。
     """
+    if pr_automation_hold(DATA_ROOT, repo, number):
+        return {"drafted": False, "reason": "automatic PR actions paused by user"}
     from scout_v2.console_models import pr_comment_trigger_enabled
     if not pr_comment_trigger_enabled(DATA_ROOT):
         return {"drafted": False, "reason": "PR comment trigger disabled"}
@@ -803,6 +820,7 @@ def draft_reply(repo: str, number: int, *, force: bool = False,
         "no AI disclaimers; if the comment asks for a code change, acknowledge and "
         "say what will change (the fix itself is handled separately); plain text, "
         "no markdown headers.\n\n"
+        f"{MULTILINGUAL_REVIEW_RULES}\n\n"
         f"Conversation on {repo}#{number}:\n{convo}\n\n"
         f"Confirmed repair result: {json.dumps((context or {}).get('fix_result') or {})}\n"
         "Describe a change as completed only when the confirmed repair result says it was pushed.\n"

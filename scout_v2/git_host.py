@@ -12,9 +12,10 @@ import re
 import subprocess
 from dataclasses import dataclass, field
 from typing import Any
+from .contribution_intent import WORK_INTENT_PATTERN, claim_evidence
 
 RE_CLAIM = re.compile(
-    r"\bi\s?(?:'ll|will|'m\s+(?:working|on\s+it)|'d\s+like\s+to\s+(?:work|take|fix))\b"
+    r"\bi\s?(?:'m\s+(?:working|on\s+it)|(?:'ll|will|'d\s+like\s+to)\s+(?:fix|work\s+on|take|handle|implement))\b"
     r"|\bworking\s+on\s+(?:this|a\s+fix|it)\b"
     r"|\btaking\s+(?:this|it)\b|\bpick(?:ed|ing)?\s+(?:this|it)\s?up\b"
     r"|\bi\s+(?:can|would\s+like\s+to)\s+(?:take|work\s+on|fix|handle|implement)\s+"
@@ -26,7 +27,7 @@ RE_CLAIM = re.compile(
     # 禁 AI 介入：维护者明说这活不想让 AI 干（同一 issue 正文写
     # "the fix maybe is not trivial to ask AI to do it"）
     r"|\bnot\s+trivial\s+to\s+ask\s+ai\b|\bdon'?t\s+ask\s+ai\b"
-    r"|\bnot\s+for\s+ai\b|\bai-?free\b",
+    r"|\bnot\s+for\s+ai\b|\bai-?free\b|" + WORK_INTENT_PATTERN,
     re.I,
 )
 MAINTAINER_ASSOC = {"MEMBER", "OWNER", "COLLABORATOR"}
@@ -234,7 +235,7 @@ def recheck_candidate(repo: str, number: int, *, my_login: str = "xixi-box",
         signals.append((str(c.get("body") or ""),
                         str(c.get("author_association") or "")))
     for text, assoc in signals:
-        if RE_CLAIM.search(text):
+        if claim_evidence(text, pattern=RE_CLAIM):
             r.has_claim_signal = True
             break
         # 加权：问句式派单出自 MEMBER/OWNER/COLLABORATOR 是任务转交

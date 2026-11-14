@@ -48,6 +48,9 @@ Answer NO if any of these:
 
 Judge this from what the report implies, not from how long it is. A short report can
 be precise; a long one can still be vague.
+Read Chinese, English and mixed-language intent equally. Missing rule matches are
+not evidence that nobody has offered a fix. Conditional self-fix offers count too;
+distinguish reproduction-only offers, quotations, negation and later withdrawals.
 
 Issue from {repo}#{number}
 Repo rules for this repository:
@@ -161,7 +164,7 @@ class GoClient:
             repo=issue.get("repo", ""), number=issue.get("number", ""),
             labels=", ".join(issue.get("labels") or []) or "none",
             reactions=issue.get("reactions", 0), comments=n_comments,
-            offer="yes" if issue.get("reporter_offered_fix") else "no",
+            offer="yes" if issue.get("reporter_offered_fix") is True else "unknown; infer from original text",
             comments_block=comments_block,
             repo_rules=str(issue.get("repo_rules") or "none recorded"),
             title=str(issue.get("title", ""))[:200],

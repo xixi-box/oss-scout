@@ -486,7 +486,8 @@ def _ensure_issue_claim(repo: str, number: int) -> str:
     if comments is None:
         return "unavailable"
     own = [own_issue_claim(comment, FORK_OWNER) for comment in comments]
-    if any(not mine and RE_CLAIM.search(str(comment.get("body") or ""))
+    from ..contribution_intent import claim_evidence
+    if any(not mine and claim_evidence(str(comment.get("body") or ""), pattern=RE_CLAIM)
            for comment, mine in zip(comments, own)):
         return "blocked"
     if any(own):

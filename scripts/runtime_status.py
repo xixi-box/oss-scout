@@ -51,6 +51,8 @@ def inspect(root: Path) -> dict:
     result["candidate_pool_size"] = runtime_limit(root, "candidate_pool_size", 10)
     result["pr_comment_trigger_enabled"] = pr_comment_trigger_enabled(root)
     result["model_settings_layout"] = load_binding(root).get("model_table_layout")
+    holds = root / "configs/pr_automation_holds.yaml"
+    result["pr_automation_holds"] = sorted(yaml.safe_load(holds.read_text(encoding="utf-8")) or {}) if holds.exists() else []
     for filename, key, query, args in [
         ("scout_v2.sqlite3", "starts_today", "SELECT COUNT(*) FROM claim_days WHERE day=?", (now.date().isoformat(),)),
         ("scout_v2.sqlite3", "published_today", "SELECT COUNT(*) FROM publications WHERE day=?", (now.date().isoformat(),)),
@@ -100,6 +102,15 @@ def main() -> int:
                           "Expected an empty result. A focused unit test covers this path.",
                   "comments": [], "linked_pull_requests": []}
         result["screening_probe"] = OpenJevClient().score_issue(sample)
+        result["intent_screening_probes"] = {}
+        for language, offer in (
+            ("zh", "如果没有正在进行的同类工作，我愿意提交一个聚焦该问题的修复和回归测试。"),
+            ("en", "If nobody is working on this, I would like to submit a focused fix and regression test."),
+        ):
+            result["intent_screening_probes"][language] = OpenJevClient().score_issue({
+                **sample, "body": sample["body"] + "\n\n" + offer,
+                "reporter_offered_fix": None,
+            })
     if args.worker:
         import urllib.request
         cfg = yaml.safe_load((args.root / "configs/cloudflare.yaml").read_text(encoding="utf-8"))
@@ -117,6 +128,7 @@ def main() -> int:
     if args.screening:
         assert result["automatic_repositories"] == 50, "repository is not in the automatic lane"
         assert result["screening_probe"]["usable"] is not None, "OpenJev screening probe failed"
+        assert all(probe.get("usable") is False for probe in result["intent_screening_probes"].values()), "self-fix intent screening failed"
     return 0
 
 

@@ -1,0 +1,2 @@
+# Explicit user hold: inspect status, but do not auto-fix or draft replies.
+agentscope-ai/agentscope-java#4163: user requested no action while multilingual intent handling is repaired
