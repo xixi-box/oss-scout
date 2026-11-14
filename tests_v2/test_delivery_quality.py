@@ -33,6 +33,8 @@ def delivered(request, tmp_path):
                 "setup_steps": [], "base_failure": ["test_fractional_division", "assert 3 == 3.5"],
                 "patched_success": ["passed"],
                 "root_cause": "Floor division truncates fractional results.",
+                "pr_title": "fix: preserve fractional division results",
+                "pr_body": "## Problem\nFloor division truncates fractional results.\n\n## Changes\nUse true division for fractional results.\n\n## Tests\n{VERIFIED_TESTS}",
             }), encoding="utf-8")
             return True, ""
 
@@ -65,9 +67,12 @@ def test_exact_verified_patch_can_be_delivered_by_either_agent(delivered, monkey
         subprocess.run(["git", "apply", str(patch_file.resolve())], cwd=checkout, check=True)
         test = subprocess.run(command, cwd=checkout, capture_output=True, text=True)
         assert test.returncode == 0, test.stdout + test.stderr
-        tool = "Codex" if payload["repair_agent"] == "codex" else "OpenCode"
-        assert f"AI assistance: {tool}" in config["body"]
+        assert "AI assistance:" not in config["body"]
+        assert "oss-scout independently replayed" not in config["body"]
         assert "Floor division truncates" in config["body"]
+        assert config["title"] == "fix: preserve fractional division results"
+        assert "## Changes" in config["body"] and "Use true division" in config["body"]
+        assert "{VERIFIED_TESTS}" not in config["body"]
         assert "test_regression.py" in config["body"] and "Tests:" in config["body"]
         assert config["verified_patch_sha256"] == hashlib.sha256(patch_file.read_bytes()).hexdigest()
         return {"ok": True, "pr": "https://github.com/pypa/pipx/pull/123"}

@@ -108,6 +108,19 @@ For Rust inline tests, keep test edits inside the existing trailing #[cfg(test)]
 module so the verifier can apply the test without applying the production fix.
 The regression tests will be delivered in the PR with the fix. Keep them in the
 project's normal test locations and run the affected existing tests too.
+Before finishing, inspect the final diff, CONTRIBUTING rules and the repository's
+PR template (.github/PULL_REQUEST_TEMPLATE.md, .github/pull_request_template.md,
+or the applicable template in .github/PULL_REQUEST_TEMPLATE/).
+Add pr_title and pr_body to OSSCOUT_RESULT.json. Write a concise English change
+title, not a copy of the bug report's title. In pr_body explain the observed
+problem and root cause, the concrete fix and relevant compatibility implications.
+Follow the applicable PR template, preserving its headings and meaningful fields.
+Use exactly one {{VERIFIED_TESTS}} placeholder for all test commands and test
+results: the publisher replaces it with independently verified evidence. Do not
+invent checks, mark unverified checklist items as complete, or claim CI is green.
+Do not add generic AI-assistance or oss-scout promotional text. If a repository
+requires a disclosure or attestation that cannot be satisfied, report the blocker
+instead of claiming it was satisfied. Keep the description focused on this diff.
 Restore incidental dependency-installation changes before finishing. Do not
 change lockfiles or CI workflows for these automatic bug fixes. If the task
 requires dependency or CI changes, report that blocker instead of broadening it.
@@ -321,6 +334,10 @@ def _read_result_file(work_dir: Path) -> dict:
         if not isinstance(data, dict):
             continue
         out: dict = {}
+        for key, limit in (("pr_title", 240), ("pr_body", 16000)):
+            value = data.get(key)
+            if isinstance(value, str) and value.strip():
+                out[key] = value.strip()[:limit]
         cmd = data.get("test_cmd") or data.get("command")
         if isinstance(cmd, list):
             cmd = " ".join(str(x) for x in cmd)
@@ -536,6 +553,8 @@ def opencode_patch_producer(job: Job, work_dir: Path, context: str,
         "test_files": test_files,
         "mixed_tests": mixed_tests,
         "root_cause": markers.get("root_cause", "")[:300],
+        "pr_title": markers.get("pr_title", ""),
+        "pr_body": markers.get("pr_body", ""),
         "notes": notes,
         "baseline": baseline,
         # 保留 agent 的收尾输出与它改动过的文件清单：失败时这是唯一能判断
@@ -892,6 +911,7 @@ def run_repair(job: Job, repo_dir: Path, out_dir: Path, *,
     mixed_tests: dict[str, tuple[str, str]] = {}
     root_cause = ""
     agent_out = ""
+    pr_title, pr_body = "", ""
     with ExitStack() as workspace:
         agent_dir = _RepairWorkspace(out_dir)
         work = Path(workspace.enter_context(agent_dir)) / "work"
@@ -922,6 +942,8 @@ def run_repair(job: Job, repo_dir: Path, out_dir: Path, *,
             test_files.update(produced.get("test_files") or {})
             mixed_tests = produced.get("mixed_tests") or {}
             root_cause = produced.get("root_cause") or ""
+            pr_title = produced.get("pr_title") or ""
+            pr_body = produced.get("pr_body") or ""
             unverified.extend(produced.get("notes") or [])
             # agent 的收尾输出单独落盘：失败时据此判断它理解到哪一步，
             # 而不是只看到"没改源码"这一句。
@@ -1108,6 +1130,7 @@ def run_repair(job: Job, repo_dir: Path, out_dir: Path, *,
             "delivery_files": patch_files(delivery_patch),
             "delivery_patch_sha256": hashlib.sha256((out_dir / "change.patch").read_bytes()).hexdigest(),
             "root_cause": root_cause,
+            "pr_title": pr_title, "pr_body": pr_body,
             "repair_agent": job.repair_agent, "model": job.model,
             "additional_checks": additional_checks,
             "additional_check_output": additional_check_output,

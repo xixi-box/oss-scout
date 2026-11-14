@@ -293,6 +293,11 @@ def publish_from_env(job_dict: dict, repo_dir: Path, out_dir: Path) -> dict | No
         return {"ok": False, "error": "delivery contains lockfile, CI, or build-artifact changes"}
     cfg["verified_patch_sha256"] = digest
     cfg["repair_agent"] = job_dict.get("repair_agent") or "opencode"
+    generated_title = report.get("pr_title")
+    if (isinstance(generated_title, str) and generated_title.strip()
+            and len(generated_title.strip()) <= 240 and "\n" not in generated_title
+            and "\r" not in generated_title):
+        cfg["title"] = generated_title.strip()
     cfg["body"] = _rewrite_body(cfg, out_dir, repair_agent=job_dict.get("repair_agent") or "opencode")
     result = publish(repo_dir, patch, cfg)
     (out_dir / "publish.json").write_text(json.dumps(result, ensure_ascii=False, indent=1),
@@ -346,9 +351,25 @@ def _rewrite_body(cfg: dict, out_dir: Path, *, repair_agent: str = "opencode") -
     if report.get("regression_test_files"):
         lines.append("Regression coverage: " + ", ".join(
             f"`{path}`" for path in report["regression_test_files"]) + ".")
-    agent = {"opencode": "OpenCode", "codex": "Codex"}.get(repair_agent, "a coding agent")
-    lines.extend(["", f"AI assistance: {agent} helped implement and test this change. "
-                  "oss-scout independently replayed the regression before opening this PR."])
+    generated = report.get("pr_body")
+    if (isinstance(generated, str) and len(generated) <= 16000
+            and generated.count("{VERIFIED_TESTS}") == 1
+            and "AI assistance:" not in generated
+            and "oss-scout independently replayed" not in generated):
+        facts = []
+        if report.get("test_cmd"):
+            command = shlex.join(report["test_cmd"]).replace("`", "\\`")
+            facts.append(f"Tests: `{command}` (fails on base; passes with this patch).")
+        if report.get("regression_test_files"):
+            facts.append("Regression coverage: " + ", ".join(
+                f"`{path}`" for path in report["regression_test_files"]) + ".")
+        for name, code in (report.get("additional_checks") or {}).items():
+            if code == 0:
+                facts.append(f"Additional check passed: `{name}`.")
+        rendered = generated.strip().replace("{VERIFIED_TESTS}", "\n".join(facts))
+        # Retain the controller's issue link and idempotency marker.
+        references = [line for line in body.splitlines() if line.startswith("<!-- oss-scout-job:")]
+        lines = ([f"Fixes #{issue_number}", ""] if issue_number else []) + [rendered, *references]
     if upstream == "qdrant/qdrant" and issue_number:
         lines.extend(["", f"Repair task: reproduce the bug in #{issue_number}, implement a focused fix, "
                       "and verify that the regression test fails on dev and passes with the patch."])
