@@ -462,6 +462,9 @@ def opencode_patch_producer(job: Job, work_dir: Path, context: str,
             encoding="utf-8")
         ok, detail = client.run(model, RUN_TASK_MSG)
         detail = _mask_opencode_key(detail or "")
+        from .codex_client import CODEX_COMMUNICATION_RETRY_PREFIX
+        if not ok and detail.startswith(CODEX_COMMUNICATION_RETRY_PREFIX):
+            raise RuntimeError(detail[:1000])
         diff_early = _git(["diff"], work_dir).stdout
         # 2026-10-29 实测：模型有时只回一句"I'll start by reading the task file"
         # 就以 rc=0 退出，什么都没做（langchain#41448 那次只跑了 36 秒）。
@@ -472,6 +475,8 @@ def opencode_patch_producer(job: Job, work_dir: Path, context: str,
                      "now. No narration.")
             ok, detail = client.run(model, nudge)
             detail = _mask_opencode_key(detail or "")
+            if not ok and detail.startswith(CODEX_COMMUNICATION_RETRY_PREFIX):
+                raise RuntimeError(detail[:1000])
             diff_early = _git(["diff"], work_dir).stdout
         if not ok and not diff_early.strip():
             raise RuntimeError(f"{job.repair_agent} repair run failed: {detail[:300]}")
@@ -622,9 +627,23 @@ _BROKEN_ENV_MARKERS = (
 )
 
 
+def _terminal_text(text: str) -> str:
+    """Remove terminal decoration for evidence matching, without changing raw logs."""
+    # OSC includes hyperlinks/title metadata; keep hyperlink labels, not hidden URLs.
+    text = re.sub(r"\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)", "", text or "")
+    text = re.sub(r"(?:\x1b\[|\x9b)[0-?]*[ -/]*[@-~]", "", text)
+    return text.replace("\r\n", "\n").replace("\r", "\n")
+
+
+def _evidence_matches(markers: list[str], stdout: str, stderr: str) -> bool:
+    output = _terminal_text(f"{stdout}\n{stderr}")
+    expected = [_terminal_text(marker).strip() for marker in markers]
+    return all(marker and marker in output for marker in expected)
+
+
 def _test_env_broken(stdout: str, stderr: str) -> str | None:
     """判断退出码是否只是"测试环境不可用"。返回命中的特征串，未命中返回 None。"""
-    text = ((stderr or "") + "\n" + (stdout or "")).lower()
+    text = _terminal_text((stderr or "") + "\n" + (stdout or "")).lower()
     for marker in _BROKEN_ENV_MARKERS:
         if marker in text:
             return marker
@@ -634,7 +653,7 @@ def _test_env_broken(stdout: str, stderr: str) -> str | None:
 def _verification_error(rc: int, stdout: str, stderr: str, kind: str = "test") -> tuple[str, str] | None:
     if not rc and kind != "test":
         return None
-    text = f"{stdout}\n{stderr}".lower()
+    text = _terminal_text(f"{stdout}\n{stderr}").lower()
     if rc == 124:
         return "timeout", "verification timed out"
     missing = re.search(
@@ -678,7 +697,7 @@ def _verification_plan_valid(plan: dict) -> bool:
 
 def _test_case_identity(marker: str) -> str:
     """A runner's FAIL/ok suffix changes while the case identity stays fixed."""
-    marker = re.sub(r"^(?:FAILED|FAIL|ERROR|PASSED|PASS)[: ]+", "", marker.strip())
+    marker = re.sub(r"^(?:FAILED|FAIL|ERROR|PASSED|PASS)[: ]+", "", _terminal_text(marker).strip())
     return re.sub(r"\s+(?:\.{2,}\s*)?(?:FAILED|FAIL|ERROR|PASSED|PASS|OK|ok)$", "", marker)
 
 
@@ -1045,8 +1064,7 @@ def run_repair(job: Job, repo_dir: Path, out_dir: Path, *,
             _unseed_test_files(work, seeded)
         if error is None and base_rc == 0:
             error = "base_test_passed", "test does not fail on base"
-        if error is None and plan and not all(marker.strip() in f"{base_out}\n{base_err}"
-                                             for marker in plan["base_failure"]):
+        if error is None and plan and not _evidence_matches(plan["base_failure"], base_out, base_err):
             error = "base_failure_unconfirmed", "target test and bug symptom not found in base output"
         if error:
             kind, detail = error
@@ -1090,9 +1108,8 @@ def run_repair(job: Job, repo_dir: Path, out_dir: Path, *,
             cmd, plan, work, env, out_dir, "patched", rebuild=rebuild)
         if error is None and fixed_rc:
             error = "patched_test_failed", f"regression failed on the patch (exit {fixed_rc})"
-        if error is None and plan and not all(marker.strip() in f"{out}\n{err}" for marker in
-                                             [_test_case_identity(plan["base_failure"][0]),
-                                              *plan["patched_success"]]):
+        if error is None and plan and not _evidence_matches(
+                [_test_case_identity(plan["base_failure"][0]), *plan["patched_success"]], out, err):
             error = "patched_test_unconfirmed", "target test success not found in patched output"
         fixed = error is None
         failure = f"{error[0]} on patched: {error[1]}" if error else ""

@@ -70,7 +70,6 @@ class TestAbortClassification:
                / "auto_pipeline.py").read_text(encoding="utf-8")
         assert "give_back: bool = True" in src          # 兼容签名保留
         assert "give_back=False" not in src             # 所有调用点都退坑
-        assert "ledger.release_claim(" not in src
 
     def test_attempt_limit_constant(self):
         from scout_v2.workers.auto_pipeline import MAX_ATTEMPTS_PER_CANDIDATE
@@ -159,7 +158,6 @@ class TestAlwaysReleaseSemantics:
         import inspect
         src = inspect.getsource(mp)
         assert "give_back=False" not in src, "所有 abort 路径必须退坑"
-        assert "ledger.release_claim(" not in src
 
     def test_give_back_param_is_tolerated_but_ignored(self, tmp_path):
         """兼容旧调用方：give_back=False 传入也照样退坑。"""

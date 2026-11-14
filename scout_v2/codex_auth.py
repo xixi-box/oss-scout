@@ -19,6 +19,7 @@ from .state_store import atomic_json_write
 
 CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann"
 TOKEN_URL = "https://auth.openai.com/oauth/token"
+LEASE_TTL_SECONDS = 120
 
 
 def auth_path(root: Path) -> Path:
@@ -168,7 +169,7 @@ def exchange(root: Path, body: dict) -> tuple[dict, int]:
                         or (ticket_pending and ticket.get("expires", 0) > now))):
                     return {"detail": "Codex refresh outcome is uncertain; explicit recovery or login required"}, 503
                 lease_id = uuid.uuid4().hex
-                leases[lease_id] = {"expires": now + 120, "identity": list(_identity(value)),
+                leases[lease_id] = {"expires": now + LEASE_TTL_SECONDS, "identity": list(_identity(value)),
                                     "recover": recovering}
             elif operation in ("sync", "release", "refresh", "refresh_begin", "refresh_commit", "refresh_abort"):
                 lease = leases.get(lease_id)
@@ -201,7 +202,7 @@ def exchange(root: Path, body: dict) -> tuple[dict, int]:
                     ticket.update(state="committed", result_generation=generation)
                     atomic_json_write(ticket_path, ticket)
                     blocked_path.unlink(missing_ok=True)
-                    leases[lease_id] = {"expires": now + 120, "identity": list(_identity(value))}
+                    leases[lease_id] = {"expires": now + LEASE_TTL_SECONDS, "identity": list(_identity(value))}
                 elif operation == "refresh_abort":
                     if not owns_ticket or ticket.get("state") != "pending" or ticket.get("generation") != generation:
                         return {"detail": "Codex refresh ticket is no longer valid"}, 409
@@ -222,7 +223,7 @@ def exchange(root: Path, body: dict) -> tuple[dict, int]:
                         # never make a VPS OAuth request or leak an unexecuted ticket to them.
                         return {"detail": "Codex refresh requires the delegated runner protocol"}, 503
                     elif ticket_pending and ticket.get("expires", 0) > now:
-                        leases[lease_id]["expires"] = now + 120
+                        leases[lease_id]["expires"] = now + LEASE_TTL_SECONDS
                         atomic_json_write(leases_path, leases)
                         return {"protocol": 2, "pending": True, "retry_after": 0.25}, 200
                     elif quarantined and not (recovering and lease.get("recover")
@@ -231,11 +232,11 @@ def exchange(root: Path, body: dict) -> tuple[dict, int]:
                     else:
                         ticket = {"id": uuid.uuid4().hex, "lease": lease_id,
                                   "identity": list(_identity(value)), "generation": generation,
-                                  "state": "pending", "expires": now + 120}
+                                  "state": "pending", "expires": now + LEASE_TTL_SECONDS}
                         atomic_json_write(ticket_path, ticket)
                         if quarantined:
                             atomic_json_write(blocked_path, {**blocked, "recovery_attempted": True})
-                        leases[lease_id]["expires"] = now + 120
+                        leases[lease_id]["expires"] = now + LEASE_TTL_SECONDS
                         atomic_json_write(leases_path, leases)
                         # Only this authenticated ticket holder gets the real refresh token.
                         # It remains in the runner's parent Python process, never CLI auth.json.
@@ -244,7 +245,7 @@ def exchange(root: Path, body: dict) -> tuple[dict, int]:
                 if operation == "release":
                     del leases[lease_id]
                 elif operation != "refresh_commit":
-                    leases[lease_id]["expires"] = now + 120
+                    leases[lease_id]["expires"] = now + LEASE_TTL_SECONDS
             else:
                 return {"detail": "Invalid Codex credential operation"}, 400
             atomic_json_write(leases_path, leases)
@@ -258,7 +259,7 @@ def exchange(root: Path, body: dict) -> tuple[dict, int]:
                 return {"detail": "Codex refresh outcome is uncertain; log in again"}, 503
             if legacy.get("expires", 0) > now or leases:
                 return {"detail": "Codex 正在被另一任务使用"}, 409
-            legacy = {"id": uuid.uuid4().hex, "expires": now + 120}
+            legacy = {"id": uuid.uuid4().hex, "expires": now + LEASE_TTL_SECONDS}
             atomic_json_write(lease_path, legacy)
             return {"lease": legacy["id"], "auth": value}, 200
         if (operation not in ("sync", "release") or not lease_id
@@ -271,7 +272,7 @@ def exchange(root: Path, body: dict) -> tuple[dict, int]:
         if operation == "release":
             lease_path.unlink(missing_ok=True)
         else:
-            legacy["expires"] = now + 120
+            legacy["expires"] = now + LEASE_TTL_SECONDS
             atomic_json_write(lease_path, legacy)
         return {"ok": True}, 200
 

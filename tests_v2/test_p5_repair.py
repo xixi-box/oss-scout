@@ -489,6 +489,71 @@ class TestReproductionMustBeReal:
         assert json.loads((out / "test-report.json").read_text())["failure_kind"] == expected
         assert output in (out / "verification.log").read_text()
 
+    def test_colored_vitest_assertion_replays_and_preserves_raw_logs(self, tmp_path, monkeypatch):
+        from scout_v2.workers import repair
+
+        r, sha = make_repo(tmp_path)
+        case = "hides Copy image in Webapp with an insecure context while keeping Copy image address"
+        symptom = "AssertionError: expected <span></span> to be null"
+        base = case + "\n\x1b[31m\x1b[1mAssertionError\x1b[22m: expected <span></span> to be null\x1b[39m\n"
+        passed = "\x1b[32m" + case + "\x1b[39m \x1b[1mPASSED\x1b[22m"
+        outcomes = iter([(1, "", base), (0, passed, "")])
+        monkeypatch.setattr(repair, "_run_cmd", lambda *_: next(outcomes))
+        out = tmp_path / "out"
+        result = run_repair(job(sha), r, out, patch_producer=lambda *_: {
+            "patch": GOOD_PATCH, "test_cmd": ["pytest", "-v", "test_div.py"],
+            "test_files": {"test_div.py": (r / "test_div.py").read_text()},
+            "verification_plan": {"setup_steps": [], "base_failure": [case, symptom],
+                                  "patched_success": ["PASSED"]},
+        })
+        assert result.reproduced_on_base and result.fixed_on_patch
+        report = json.loads((out / "test-report.json").read_text())
+        assert report["base_stderr_tail"] == base
+        assert report["patched_stdout_tail"] == passed
+        log = (out / "verification.log").read_text()
+        assert base in log and passed in log
+
+    @pytest.mark.parametrize("text,markers,expected", [
+        ("test_case\x1b[0m AssertionError\x1b[22m: bad", ["test_case", "AssertionError: bad"], True),
+        ("test_other AssertionError\x1b[22m: bad", ["test_case", "AssertionError: bad"], False),
+        ("test_case AssertionError\x1b[22m: unrelated", ["test_case", "AssertionError: bad"], False),
+        ("test_case PASSED", ["\x1b[31m\x1b[0m"], False),
+        ("\x1b]8;;https://invalid/AssertionError: bad\x07test_case\x1b]8;;\x07",
+         ["test_case", "AssertionError: bad"], False),
+        ("test_case\x9b32m PASSED\x9b0m", ["test_case", "PASSED"], True),
+    ])
+    def test_terminal_normalization_keeps_exact_bug_evidence(self, text, markers, expected):
+        from scout_v2.workers import repair
+        assert repair._evidence_matches(markers, text, "") is expected
+
+    @pytest.mark.parametrize("rc,stdout,expected", [
+        (1, "No module\x1b[0m named pytest", "missing_dependency"),
+        (1, "error\x1b[0m[E0425]: undefined variable", "compile_failed"),
+        (1, "collected \x1b[1m0 items\x1b[0m", "command_error"),
+    ])
+    def test_colored_environment_errors_remain_blockers(self, rc, stdout, expected):
+        from scout_v2.workers import repair
+        assert repair._verification_error(rc, stdout, "")[0] == expected
+
+    def test_partial_codex_changes_do_not_hide_communication_failure(self, tmp_path):
+        from scout_v2.workers import repair
+        from scout_v2.workers.codex_client import CODEX_COMMUNICATION_RETRY_PREFIX
+
+        r, sha = make_repo(tmp_path)
+        calls = []
+        class Client:
+            def run(self, model, prompt):
+                calls.append(prompt)
+                (r / "calc.py").write_text("def div(a, b):\n    return a / b\n", encoding="utf-8")
+                return False, CODEX_COMMUNICATION_RETRY_PREFIX + "broker RPC timed out"
+
+        task = job(sha)
+        task.repair_agent = "codex"
+        with pytest.raises(RuntimeError, match="Codex temporary communication failure:"):
+            repair.opencode_patch_producer(task, r, "test", client=Client(), model="test")
+        assert len(calls) == 1
+        assert "return a / b" in (r / "calc.py").read_text()
+
     def test_agent_setup_runs_in_each_fresh_tree(self, tmp_path, monkeypatch):
         from scout_v2.workers import repair
 

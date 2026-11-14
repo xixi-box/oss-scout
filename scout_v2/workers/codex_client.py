@@ -19,6 +19,15 @@ from pathlib import Path
 
 from .opencode_client import resolve_binary
 from .reproduce import sanitized_env
+from ..codex_auth import LEASE_TTL_SECONDS
+
+CODEX_COMMUNICATION_RETRY_PREFIX = "Codex temporary communication failure:"
+
+
+class CodexCommunicationError(RuntimeError):
+    def __init__(self, detail, *, retryable=True):
+        super().__init__(f"{CODEX_COMMUNICATION_RETRY_PREFIX} {detail}")
+        self.retryable = retryable
 
 
 class CodexClient:
@@ -27,7 +36,7 @@ class CodexClient:
         self.workdir = workdir
         self.diagnostics_dir = diagnostics_dir
 
-    def _exchange(self, operation, **values):
+    def _exchange(self, operation, *, request_timeout=None, **values):
         base = os.environ.get("DASHBOARD_URL", "").rstrip("/")
         token = os.environ.get("CF_INGEST_TOKEN", "")
         if not base.startswith("https://") or not token:
@@ -36,13 +45,22 @@ class CodexClient:
             base + "/api/ingest/codex-auth", method="POST",
             data=json.dumps({"operation": operation, **values}).encode(),
             headers={"Content-Type": "application/json", "X-Ingest-Token": token})
+        started = time.monotonic()
         try:
-            with urllib.request.urlopen(request, timeout=30 if operation == "refresh" else 15) as response:
+            timeout = request_timeout if request_timeout is not None else 15
+            with urllib.request.urlopen(request, timeout=timeout) as response:
                 return json.load(response)
         except urllib.error.HTTPError as exc:
             if operation == "acquire" and exc.code == 409:
                 return {"busy": True}
+            if exc.code in (408, 409, 429, 500, 502, 503, 504):
+                raise CodexCommunicationError(
+                    f"operation={operation}; HTTP {exc.code}; elapsed_seconds={time.monotonic()-started:.2f}",
+                    retryable=exc.code != 409) from None
             raise RuntimeError(f"Codex login broker returned {exc.code}") from None
+        except (OSError, ValueError) as exc:
+            raise CodexCommunicationError(
+                f"operation={operation}; kind={type(exc).__name__}; elapsed_seconds={time.monotonic()-started:.2f}") from None
 
     def refresh_credentials(self, credentials, recover=False):
         """Rotate once on the hosted runner, then persist using the broker's ticket.
@@ -135,13 +153,18 @@ class CodexClient:
             auth = home / "auth.json"
             detail, ok = "Codex did not start", False
             try:
+                acquired_at = time.monotonic()
                 credentials = self._exchange("acquire", protocol=2)
                 while credentials.get("busy"):
                     if time.monotonic() - started >= self.timeout:
                         raise RuntimeError("Codex login is busy; timed out waiting for the active task")
                     time.sleep(10)
+                    acquired_at = time.monotonic()
                     credentials = self._exchange("acquire", protocol=2)
                 lease = credentials["lease"]
+                # Start before the request, so a slow response cannot extend our
+                # estimate beyond the server's actual lease. Keep five seconds spare.
+                lease_valid_until = acquired_at + LEASE_TTL_SECONDS - 5
                 secrets_from(credentials)
                 auth.write_text(json.dumps(credentials["auth"]), encoding="utf-8")
                 auth.chmod(0o600)
@@ -224,8 +247,40 @@ class CodexClient:
                             print(f"[codex] elapsed={elapsed}s; active_commands={list(commands)}", flush=True)
                             if elapsed >= self.timeout:
                                 raise RuntimeError(f"Codex timed out after {self.timeout}s")
-                            self._exchange("sync", lease=lease, protocol=credentials.get("protocol", 1),
-                                           **({} if refresh_proxy else {"auth": json.loads(auth.read_text())}))
+                            attempt = 0
+                            while True:
+                                now = time.monotonic()
+                                if now >= started + self.timeout:
+                                    raise RuntimeError(f"Codex timed out after {self.timeout}s")
+                                if now >= lease_valid_until:
+                                    raise CodexCommunicationError("operation=sync; lease renewal deadline exceeded")
+                                if process.poll() is not None:
+                                    break  # The CLI finished while the broker was unavailable.
+                                attempt += 1
+                                try:
+                                    renewed_at = time.monotonic()
+                                    self._exchange("sync", lease=lease, protocol=credentials.get("protocol", 1),
+                                                   request_timeout=min(15, lease_valid_until-now,
+                                                                       started+self.timeout-now),
+                                                   **({} if refresh_proxy else {"auth": json.loads(auth.read_text())}))
+                                    lease_valid_until = renewed_at + LEASE_TTL_SECONDS - 5
+                                    record("auth.heartbeat_ok", attempt=attempt,
+                                           request_seconds=round(time.monotonic()-renewed_at, 3))
+                                    break
+                                except (CodexCommunicationError, TimeoutError, urllib.error.URLError) as exc:
+                                    remaining = lease_valid_until - time.monotonic()
+                                    record("auth.heartbeat_retry", operation="sync", attempt=attempt,
+                                           error_type=type(exc).__name__,
+                                           request_seconds=round(time.monotonic()-renewed_at, 3),
+                                           lease_seconds_remaining=round(max(0, remaining), 3))
+                                    print(f"[codex] heartbeat retry={attempt}; kind={type(exc).__name__}; "
+                                          f"lease_seconds_remaining={max(0,remaining):.1f}", flush=True)
+                                    if not getattr(exc, "retryable", True):
+                                        raise
+                                    if remaining <= 0:
+                                        raise CodexCommunicationError("operation=sync; lease renewal deadline exceeded") from None
+                                    time.sleep(min(10, 2 ** min(attempt, 3), remaining,
+                                                   max(0, started+self.timeout-time.monotonic())))
                 detail = output.read_text(encoding="utf-8") if output.exists() else ""
                 ok = rc == 0 and bool(detail.strip())
                 if rc:

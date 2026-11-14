@@ -644,12 +644,13 @@ class ClaimLedger:
 
     def try_claim(self, tz_name: str, candidate_id: str, action: str = "claim",
                   now: dt.datetime | None = None,
-                  max_per_day: int = 0) -> tuple[bool, str]:
+                  max_per_day: int = 0, *, retry_failed: bool = False) -> tuple[bool, str]:
         """尝试占用一个当日认领名额。返回 (ok, reason)。
 
         max_per_day <= 0 表示不限条数。
         BEGIN IMMEDIATE 串行化后：同一条候选已认领过 → 拒绝；当日已达上限 →
-        拒绝；否则插入成功。
+        拒绝；否则插入成功。retry_failed 仅供已确认未发布的中止任务使用，
+        可将 abort 认领原子重开一次，仍拒绝正在使用的 claim。
         """
         now = now or business_now(tz_name)
         day = business_day(now, tz_name)
@@ -657,9 +658,10 @@ class ClaimLedger:
         cur = self._conn.cursor()
         cur.execute("BEGIN IMMEDIATE")
         try:
-            existing = [r[0] for r in cur.execute(
-                "SELECT candidate_id FROM claim_days WHERE day=?", (day,)).fetchall()]
-            if candidate_id in existing:
+            existing = cur.execute(
+                "SELECT action FROM claim_days WHERE day=? AND candidate_id=?", (day, candidate_id)).fetchone()
+            retry = bool(retry_failed and existing == ("abort",))
+            if existing and not retry:
                 # 同日闸覆盖所有记录（含 abort）：同一条候选今天失败过就不再
                 # 重试，防死循环保险丝之一（_todays_claim_count 是其二）。
                 cur.execute("ROLLBACK")
@@ -671,8 +673,12 @@ class ClaimLedger:
                 cur.execute("ROLLBACK")
                 return False, (f"daily limit {max_per_day} reached on {day} "
                                f"({len(active)} claimed)")
-            cur.execute("INSERT INTO claim_days(day, candidate_id, action, ts) VALUES (?,?,?,?)",
-                        (day, candidate_id, action, ts))
+            if retry:
+                cur.execute("UPDATE claim_days SET action=?,ts=? WHERE day=? AND candidate_id=? AND action='abort'",
+                            (action, ts, day, candidate_id))
+            else:
+                cur.execute("INSERT INTO claim_days(day, candidate_id, action, ts) VALUES (?,?,?,?)",
+                            (day, candidate_id, action, ts))
             cur.execute("COMMIT")
             return True, "claimed"
         except sqlite3.IntegrityError as e:

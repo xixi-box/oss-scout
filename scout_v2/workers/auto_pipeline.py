@@ -177,6 +177,36 @@ def _find_repair_run(runner_repo: str, job_id: str) -> tuple[dict | None, bool]:
         page += 1
 
 
+def _retryable_codex_communication(details: list) -> bool:
+    from .codex_client import CODEX_COMMUNICATION_RETRY_PREFIX
+    # An older worker may finish after the controller has been upgraded.
+    legacy = r"Codex start/result error: (?:TimeoutError|URLError)\b|Codex login broker returned (?:408|429|5\d\d)\b"
+    return any(CODEX_COMMUNICATION_RETRY_PREFIX in str(detail) or re.search(legacy, str(detail))
+               for detail in details)
+
+
+def _authorized_retry(entry: dict) -> bool:
+    return bool(entry.get("retry_authorized_job_id")
+                and entry.get("retry_authorized_job_id") == entry.get("repair_job_id")
+                and not entry.get("pr_url"))
+
+
+def _communication_retry_fields(entry: dict, job_id: str, reason: str, tz_name: str) -> dict:
+    # Reconciliation can repeat after a restart; do not extend backoff each time.
+    if entry.get("last_communication_job_id") == job_id:
+        return {}
+    now = business_now(tz_name)
+    failures = int(entry.get("communication_failures") or 0) + 1
+    delay = min(60, 5 * 2 ** min(failures - 1, 4))
+    return {"repair_outcome": "communication_unavailable", "abort_reason": reason[:300],
+            "communication_failures": failures, "last_communication_job_id": job_id,
+            "retry_authorized_job_id": job_id,
+            "screen_retry_at": (now + dt.timedelta(minutes=delay)).isoformat(),
+            "eligible_at": (now + dt.timedelta(minutes=delay)).isoformat(),
+            "scheduled_consume_day": now.date().isoformat(),
+            "staged_at": entry.get("staged_at") or now.isoformat()}
+
+
 def _reconcile_publication(ledger: ClaimLedger, tz_name: str, *, root: Path | None = None,
                            worker_result: dict | None = None, job_id: str | None = None) -> dict | None:
     """Resolve one writer; callers own its per-candidate execution lock."""
@@ -224,6 +254,7 @@ def _reconcile_publication(ledger: ClaimLedger, tz_name: str, *, root: Path | No
     issue = re.fullmatch(r"[^:]+:fix/issue-(\d+)-[0-9a-f]+(?:-[0-9a-f]+)?", head)
     if root is not None and issue:
         recovery = worker_result is None
+        communication_retry = False
         key = f"{repo}#{issue[1]}"
         if pr:
             status = "pr_open"
@@ -244,7 +275,14 @@ def _reconcile_publication(ledger: ClaimLedger, tz_name: str, *, root: Path | No
                 return None
             outcome = result.get("outcome")
             details = result.get("unverified_items") or []
-            if outcome and outcome != "succeeded":
+            communication_retry = outcome != "succeeded" and _retryable_codex_communication(details)
+            if communication_retry:
+                status = "staged"
+                reason = f"临时通信故障，暂存重试 · {details[0]}"
+                # The remote run is complete and its head has no PR. Keep the
+                # attempt history, but authorize a fresh claim after backoff.
+                ledger.release_claim(key, tz_name)
+            elif outcome and outcome != "succeeded":
                 status = "aborted_no_evidence"
                 reason = f"修复结果 {outcome}，未发布 PR"
                 if details:
@@ -260,7 +298,8 @@ def _reconcile_publication(ledger: ClaimLedger, tz_name: str, *, root: Path | No
                 status, reason = "escalated", "Actions 运行记录已不存在；已核对目标分支未开 PR，转人工核查"
             else:
                 status, reason = "escalated", "工作流已结束，未发布 PR，修复结果无法确认"
-            extra = {"repair_outcome": outcome or "unknown", "abort_reason": reason[:300]}
+            extra = {"repair_outcome": "communication_unavailable" if communication_retry else outcome or "unknown",
+                     "abort_reason": reason[:300]}
             if publication.get("coarse_reason"):
                 status = "coarse_blocked"
                 extra.update(coarse_reason=publication["coarse_reason"],
@@ -271,6 +310,8 @@ def _reconcile_publication(ledger: ClaimLedger, tz_name: str, *, root: Path | No
             actual_key = next((k for k in queue if k.lower() == key.lower()), key)
             candidate = queue.get(actual_key)
             if candidate is not None:
+                if communication_retry:
+                    extra.update(_communication_retry_fields(candidate, job_id, reason, tz_name))
                 candidate.update(status=status, updated_at=business_now().isoformat(timespec="seconds"),
                                  repair_job_id=job_id, repair_run_id=str(remote_id),
                                  workflow_conclusion=run.get("conclusion"), **extra)
@@ -808,7 +849,8 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen
     # 被认领 6 次、istio#61045 每分钟重试，保险丝永远读不到 3）。worklog 是
     # 只追加的审计账本，认领动作必然留痕，按条数计数并发安全。
     attempts = _todays_claim_count(root, key)
-    if attempts >= MAX_ATTEMPTS_PER_CANDIDATE:
+    retry_authorized = _authorized_retry(entry)
+    if attempts >= MAX_ATTEMPTS_PER_CANDIDATE and not retry_authorized:
         summary["abort"] = (f"candidate attempt limit reached "
                             f"({attempts}/{MAX_ATTEMPTS_PER_CANDIDATE})")
         log(root, "abort", key, summary["abort"])
@@ -865,7 +907,8 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen
         if current is not None and not _order_candidates([(key, current)], refill_day=refill_day):
             ledger.close()
             return {**summary, "abort": "candidate not eligible yet"}
-        ok, reason = ledger.try_claim(eng.tz_name, key)
+        retry_authorized = _authorized_retry(current or entry)
+        ok, reason = ledger.try_claim(eng.tz_name, key, retry_failed=retry_authorized)
         if not ok:
             if current is not None and "daily limit" in reason:
                 _stage_entry(current, root, q)
@@ -875,6 +918,7 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen
             ledger.close()
             return summary
         if current is not None:
+            current.pop("retry_authorized_job_id", None)  # One dispatch consumes the authorization.
             current.update(attempts=attempts + 1,
                            dispatch_started_at=business_now(eng.tz_name).isoformat())
     wl.append({"ts": business_now(eng.tz_name).isoformat(timespec="seconds"), "action": "claim",
@@ -980,6 +1024,11 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen
                     base_sha=base_sha, unverified_items=["no result from backend"])
     if res.backend in ("", None):
         res.backend = backend
+    if not receipt and _retryable_codex_communication(res.unverified_items):
+        ledger.close()
+        summary.update(abort="temporary Codex communication failure; staged for retry", retry=True)
+        log(root, "communication_retry", key, res.unverified_items[0][:300])
+        return summary
     patch_file = _stage_patch_from_backend(root, out_dir, collected)
 
     # ---- 质量闸 ----
