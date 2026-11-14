@@ -1,0 +1,39 @@
+{
+  "test_cmd": [
+    "uv",
+    "run",
+    "--no-sync",
+    "pytest",
+    "-p",
+    "no:pretty",
+    "tests/test_serialize.py",
+    "-k",
+    "test_exclude_defaults_numeric_scalars",
+    "-v"
+  ],
+  "verification_plan": {
+    "setup_steps": [
+      {
+        "kind": "setup",
+        "command": "uv sync --frozen --group dev --group testing-extra --all-packages"
+      },
+      {
+        "kind": "build",
+        "command": "uv pip install --no-deps --reinstall -e ./pydantic-core"
+      }
+    ],
+    "base_failure": [
+      "test_exclude_defaults_numeric_scalars[False-0-False-False-python]",
+      "AssertionError: assert {} == {'number': 0}"
+    ],
+    "patched_success": [
+      "test_exclude_defaults_numeric_scalars[False-0-False-False-python] PASSED",
+      "91 passed, 94 deselected"
+    ]
+  },
+  "base_returncode": 1,
+  "source_run": "https://github.com/xixi-box/oss-scout/actions/runs/43591681401",
+  "base_stdout_tail": "collecting ... collected 185 items / 94 deselected / 91 selected\nCollected 0 items to run in parallel\ntests/test_serialize.py::test_exclude_defaults_numeric_scalars[False-0-False-False-python] FAILED [  1%]\n______ test_exclude_defaults_numeric_scalars[False-0-False-False-python] _______\nE       AssertionError: assert {} == {'number': 0}\nE       AssertionError: assert {} == {'number': 0}\nE       AssertionError: assert {} == {'number': 0}\nE       AssertionError: assert {} == {'number': 0}\nE       AssertionError: assert {} == {'number': 0}\nE       AssertionError: assert {} == {'number': 0}\nE       AssertionError: assert {} == {'number': 0}\nE       AssertionError: assert {} == {'number': 0}\nE       AssertionError: assert {} == {'number': 0}\nE       AssertionError: assert {} == {'number': 0}\nE       AssertionError: assert {} == {'number': 0}\nE       AssertionError: assert {} == {'number': 0}\nFAILED tests/test_serialize.py::test_exclude_defaults_numeric_scalars[False-0-False-False-python] - AssertionError: assert {} == {'number': 0}\nFAILED tests/test_serialize.py::test_exclude_defaults_numeric_scalars[False-0-False-False-json] - AssertionError: assert {} == {'number': 0}\nFAILED tests/test_serialize.py::test_exclude_defaults_numeric_scalars[False-0-False-False-json_bytes] - AssertionError: assert {} == {'number': 0}\nFAILED tests/test_serialize.py::test_exclude_defaults_numeric_scalars[False-0-False-True-python] - AssertionError: assert {} == {'number': 0}\nFAILED tests/test_serialize.py::test_exclude_defaults_numeric_scalars[False-0-False-True-json] - AssertionError: assert {} == {'number': 0}\nFAILED tests/test_serialize.py::test_exclude_defaults_numeric_scalars[False-0-False-True-json_bytes] - AssertionError: assert {} == {'number': 0}\nFAILED tests/test_serialize.py::test_exclude_defaults_numeric_scalars[0.0-0-False-False-python] - AssertionError: assert {} == {'number': 0}\nFAILED tests/test_serialize.py::test_exclude_defaults_numeric_scalars[0.0-0-False-False-json] - AssertionError: assert {} == {'number': 0}\nFAILED tests/test_serialize.py::test_exclude_defaults_numeric_scalars[0.0-0-False-False-json_bytes] - AssertionError: assert {} == {'number': 0}\nFAILED tests/test_serialize.py::test_exclude_defaults_numeric_scalars[0.0-0-False-True-python] - AssertionError: assert {} == {'number': 0}\nFAILED tests/test_serialize.py::test_exclude_defaults_numeric_scalars[0.0-0-False-True-json] - AssertionError: assert {} == {'number': 0}\nFAILED tests/test_serialize.py::test_exclude_defaults_numeric_scalars[0.0-0-False-True-json_bytes] - AssertionError: assert {} == {'number': 0}\n================= 60 failed, 31 passed, 94 deselected in 1.59s =================\n",
+  "base_stderr_tail": "/tmp/tmpijhrxbe1/verify-base/.venv/lib/python3.14/site-packages/pluggy/_callers.py:141: SyntaxWarning: 'return' in a 'finally' block\n  return result\n/tmp/tmpijhrxbe1/verify-base/.venv/lib/python3.14/site-packages/pluggy/_callers.py:182: SyntaxWarning: 'return' in a 'finally' block\n  return outcome.get_result()\n",
+  "excerpt": true
+}

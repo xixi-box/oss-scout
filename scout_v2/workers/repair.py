@@ -644,6 +644,11 @@ def _evidence_matches(markers: list[str], stdout: str, stderr: str) -> bool:
 def _test_env_broken(stdout: str, stderr: str) -> str | None:
     """判断退出码是否只是"测试环境不可用"。返回命中的特征串，未命中返回 None。"""
     text = _terminal_text((stderr or "") + "\n" + (stdout or "")).lower()
+    # pytest-parallel reports its own empty work list even when pytest executes
+    # the selected tests serially. Require an actual pytest result before ignoring
+    # that one diagnostic; genuine empty collection and other errors still block.
+    if re.search(r"(?m)^=+\s+[^\n]*\b[1-9]\d* (?:passed|failed)\b[^\n]* in [\d.]+s\s+=+$", text):
+        text = re.sub(r"(?m)^collected 0 items to run in parallel\s*$", "", text)
     for marker in _BROKEN_ENV_MARKERS:
         if marker in text:
             return marker
@@ -699,6 +704,45 @@ def _test_case_identity(marker: str) -> str:
     """A runner's FAIL/ok suffix changes while the case identity stays fixed."""
     marker = re.sub(r"^(?:FAILED|FAIL|ERROR|PASSED|PASS)[: ]+", "", _terminal_text(marker).strip())
     return re.sub(r"\s+(?:\.{2,}\s*)?(?:FAILED|FAIL|ERROR|PASSED|PASS|OK|ok)$", "", marker)
+
+
+def _wrapper_success_matches(cmd: list[str], plan: dict, base_stdout: str,
+                             base_stderr: str, stdout: str, stderr: str) -> bool:
+    """Hermes' per-file runner hides successful case names, but runs the whole file.
+
+    Bind its success to the base's failed case, the identical unfiltered command,
+    and matching executed counts. A generic passing summary is insufficient.
+    """
+    import shlex
+
+    base = _terminal_text(f"{base_stdout}\n{base_stderr}")
+    output = _terminal_text(f"{stdout}\n{stderr}")
+    case = re.escape(_test_case_identity(plan["base_failure"][0]))
+    failed = re.search(r"(?m)^FAILED (\S+\.py)::" + case + r"(?:\s|$)", base)
+    if not failed or not _evidence_matches(plan["patched_success"], stdout, stderr):
+        return False
+    path = failed[1]
+    tokens = list(cmd)
+    if len(tokens) == 3 and tokens[0] in ("/bin/sh", "/bin/bash", "sh", "bash") and tokens[1] == "-c":
+        try:
+            tokens = shlex.split(tokens[2])
+        except ValueError:
+            return False
+    if tokens and tokens[0].startswith("HERMES_PYTHON="):
+        tokens.pop(0)
+    if (len(tokens) < 2 or tokens[0] not in ("scripts/run_tests.sh", "./scripts/run_tests.sh")
+            or tokens[1] != path or any(arg not in ("-v", "-vv") for arg in tokens[2:])):
+        return False
+    if re.search(r"\b[1-9]\d* (?:skipped|deselected|xfailed|xpassed)\b", base + "\n" + output):
+        return False
+    base_count = re.search(r"(?m)^=+\s+(\d+) failed(?:, (\d+) passed)? in [\d.]+s\s+=+\s*$", base)
+    file_count = re.search(r"(?m)^\[[^\n]+\] ✓ " + re.escape(path) + r" \((\d+)✓, [\d.]+s\)\s*$", output)
+    summary = re.search(r"(?m)^=== Summary: 1 files, (\d+) tests passed, 0 failed "
+                        r"\(100% complete\) in [\d.]+s \(\d+ workers\) ===\s*$", output)
+    return bool(base_count and file_count and summary
+                and int(summary[1]) > 0
+                and int(summary[1]) == int(file_count[1])
+                == int(base_count[1]) + int(base_count[2] or 0))
 
 
 def _replay_regression(cmd, plan, work, env, out_dir, stage, *, rebuild=False):
@@ -1109,7 +1153,8 @@ def run_repair(job: Job, repo_dir: Path, out_dir: Path, *,
         if error is None and fixed_rc:
             error = "patched_test_failed", f"regression failed on the patch (exit {fixed_rc})"
         if error is None and plan and not _evidence_matches(
-                [_test_case_identity(plan["base_failure"][0]), *plan["patched_success"]], out, err):
+                [_test_case_identity(plan["base_failure"][0]), *plan["patched_success"]], out, err) and not _wrapper_success_matches(
+                    cmd, plan, base_out, base_err, out, err):
             error = "patched_test_unconfirmed", "target test success not found in patched output"
         fixed = error is None
         failure = f"{error[0]} on patched: {error[1]}" if error else ""

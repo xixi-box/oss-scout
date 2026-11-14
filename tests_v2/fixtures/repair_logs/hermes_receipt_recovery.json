@@ -1,0 +1,31 @@
+{
+  "test_cmd": [
+    "/bin/sh",
+    "-c",
+    "HERMES_PYTHON=\"$PWD/.venv/bin/python\" scripts/run_tests.sh tests/cron/test_receipt_recovery_profile_scope.py -v"
+  ],
+  "verification_plan": {
+    "setup_steps": [
+      {
+        "kind": "setup",
+        "command": "python -m pm.build_env --source . --out .venv --group dev --group test"
+      }
+    ],
+    "base_failure": [
+      "test_recovery_settles_origin_receipt_under_owning_profile[terminal]",
+      "test_recovery_settles_origin_receipt_under_owning_profile[refusal]",
+      "AssertionError: receipt recovery must retire the settled journal",
+      "get_secret('MATRIX_HOME_ROOM') called with no profile secret scope active while multiplexing is on."
+    ],
+    "patched_success": [
+      "2 tests passed, 0 failed"
+    ]
+  },
+  "base_returncode": 1,
+  "source_run": "https://github.com/xixi-box/oss-scout/actions/runs/43593170978",
+  "base_stdout_tail": "y5c6e/verify-base/cron/scheduler_delivery.py\", line 893, in _resolve_delivery_targets\n    target = _resolve_single_delivery_target(job, part, from_broadcast=from_broadcast)\n  File \"/tmp/tmp_vvy5c6e/verify-base/cron/scheduler_delivery.py\", line 623, in _resolve_single_delivery_target\n    chat_id = _get_home_target_chat_id(platform_name)\n  File \"/tmp/tmp_vvy5c6e/verify-base/cron/scheduler_delivery.py\", line 468, in _get_home_target_chat_id\n    value = _env_home_target_chat_id(platform_name)\n  File \"/tmp/tmp_vvy5c6e/verify-base/cron/scheduler_delivery.py\", line 462, in _env_home_target_chat_id\n    return _home_env_lookup(env_var) if env_var else \"\"\n           ~~~~~~~~~~~~~~~~^^^^^^^^^\n  File \"/tmp/tmp_vvy5c6e/verify-base/cron/scheduler_delivery.py\", line 444, in _home_env_lookup\n    value = read(env_var + suffix)\n  File \"/tmp/tmp_vvy5c6e/verify-base/cron/scheduler_delivery.py\", line 441, in read\n    value = (get_secret(name, \"\") or \"\") if get_secret is not None else os.getenv(name, \"\")\n             ~~~~~~~~~~^^^^^^^^^^\n  File \"/tmp/tmp_vvy5c6e/verify-base/agent/secret_scope.py\", line 271, in get_secret\n    raise UnscopedSecretError(\n    ...<7 lines>...\n    )\nagent.secret_scope.UnscopedSecretError: Hermes could not read this profile's MATRIX_HOME_ROOM (an internal profile-scoping bug on the multiplexed gateway, not your configuration). Run `hermes gateway restart`; if it keeps happening, report it with `hermes debug share`.\nget_secret('MATRIX_HOME_ROOM') called with no profile secret scope active while multiplexing is on. This credential read must run inside a set_secret_scope(...) block (the per-turn / per-adapter profile scope). Reading os.environ here would risk leaking another profile's value. See website/docs/developer-guide/multiplexing-gateway.md (Workstream A).\n=========================== short test summary info ============================\nFAILED tests/cron/test_receipt_recovery_profile_scope.py::test_recovery_settles_origin_receipt_under_owning_profile[terminal] - AssertionError: receipt recovery must retire the settled journal\nassert not True\n +  where True = exists()\n +    where exists = PosixPath('/var/tmp/hermes-pytest-1001/r-g4__5fvo/pytest-of-runner/pytest-0/test_recovery_settles_origin_r0/secondary/cron/admissions/d21e453de4ea45fb048b370db825a59a570e1eab919d8c55e4f23439ff174a3f.json').exists\nFAILED tests/cron/test_receipt_recovery_profile_scope.py::test_recovery_settles_origin_receipt_under_owning_profile[refusal] - AssertionError: receipt recovery must retire the settled journal\nassert not True\n +  where True = exists()\n +    where exists = PosixPath('/var/tmp/hermes-pytest-1001/r-g4__5fvo/pytest-of-runner/pytest-0/test_recovery_settles_origin_r1/secondary/cron/admissions/80f87e22164e9ae4c74cb6a7662a155d43e3ce7d8296cc53b79a12c115a7dc83.json').exists\n============================== 2 failed in 1.27s ===============================\n\n=== 1 file with test failures ===\n  tests/cron/test_receipt_recovery_profile_scope.py  (2 tests failed)\n",
+  "base_stderr_tail": "",
+  "patched_returncode": 0,
+  "patched_stdout_tail": "▶ not activated — using HERMES_PYTHON: /tmp/tmpi3j0hf7f/verify-patched/.venv/bin/python\n▶ running per-file parallel test suite via run_tests_parallel.py\n  (TZ=UTC LANG=C.UTF-8 PYTHONHASHSEED=0; clean env)\n▶ pre-compiling bytecode cache\n▶ launching test runner\nDiscovered 1 test files (~1 tests) under ['tests/cron/test_receipt_recovery_profile_scope.py']; running with -j 4\n[100.0% |     1/~1 | ✓2 | ✗0] ✓ tests/cron/test_receipt_recovery_profile_scope.py (2✓, 2.9s)\n\n=== Summary: 1 files, 2 tests passed, 0 failed (100% complete) in 2.9s (4 workers) ===\n  Durations cached to test_durations.json (1 files)\n\n=== Per-file subprocess time distribution ===\n  Files:   1\n  Total subprocess CPU-wall: 2.9s  (runner wall: 2.9s, parallelism: 4x)\n  P50: 2.86s  P90: 2.86s  P95: 2.86s  P99: 2.86s  Max: 2.86s\n  <1s: 0 files (0%)  <2s: 0 files (0%)\n  Top 10 slowest:\n      2.86s  tests/cron/test_receipt_recovery_profile_scope.py\n",
+  "patched_stderr_tail": ""
+}
