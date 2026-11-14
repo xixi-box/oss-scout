@@ -22,7 +22,15 @@ def main():
     parser.add_argument("--model",default="gpt-6.1-sol#medium")
     parser.add_argument("--refresh",action="store_true")
     parser.add_argument("--recover",action="store_true",help="One explicit recovery attempt for a quarantined refresh generation")
+    parser.add_argument("--cli-probe-root",type=Path,help=argparse.SUPPRESS)
     args=parser.parse_args()
+    if args.cli_probe_root:
+        ok,reply=CodexClient(timeout_seconds=180,workdir=args.cli_probe_root).run(
+            args.model,"Reply with exactly OSS_SCOUT_OK. Do not run commands, modify files, or access other directories.")
+        passed=ok and "OSS_SCOUT_OK" in reply
+        if not passed:
+            print(json.dumps({"cli_probe_ok":ok,"detail":reply[:2000]}),flush=True)
+        raise SystemExit(0 if passed else 1)
     leases=[]
     control=CodexClient(timeout_seconds=180,workdir=Path.cwd())
     refreshed=False
@@ -54,12 +62,15 @@ def main():
             (root/"AGENTS.md").write_text("This is an oss-scout self-test. Reply only; do not run tools or change files.")
         def probe(root):
             start=time.monotonic()
-            ok,reply=CodexClient(timeout_seconds=180,workdir=root).run(
-                args.model,"Reply with exactly OSS_SCOUT_OK. Do not run commands, modify files, or access other directories.")
+            # Separate Python parents mirror separate Actions jobs. Each client's
+            # detached-daemon cleanup then owns only its own descendants.
+            completed=subprocess.run([sys.executable,str(Path(__file__).resolve()),
+                "--model",args.model,"--cli-probe-root",str(root)],
+                capture_output=True,text=True,encoding="utf-8",timeout=210)
             intervals.append((start,time.monotonic()))
-            if not ok or "OSS_SCOUT_OK" not in reply:
-                print(json.dumps({"cli_probe_ok":ok,"detail":reply[:2000]}),flush=True)
-            return ok and "OSS_SCOUT_OK" in reply
+            if completed.returncode:
+                print(completed.stdout[-3000:],flush=True)
+            return completed.returncode==0
         with ThreadPoolExecutor(max_workers=2) as workers:
             results=list(workers.map(probe,roots))
     assert all(results), "Concurrent Codex CLI self-test failed (credential values intentionally omitted)"
