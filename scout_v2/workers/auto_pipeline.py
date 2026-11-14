@@ -264,6 +264,15 @@ def _reconcile_publication(ledger: ClaimLedger, tz_name: str, *, root: Path | No
             if recovery and not missing_run:
                 result = ActionsBackend(runner_repo=runner_repo, artifact_dir=root / "artifacts").collect(str(remote_id))
             result = result or {}
+            if result.get("outcome") == "succeeded" and result.get("patch") and result.get("test_report"):
+                from .publication_guard import retain_collected_delivery
+                retained = retain_collected_delivery(root, {
+                    "job_id": job_id, "repo": repo, "base_sha": result.get("base_sha"),
+                    "source_run": remote_id, "runner_repo": runner_repo,
+                    "publish": {"upstream": repo, "branch": head.split(":", 1)[-1]},
+                }, result)
+                if retained.get("ok"):
+                    log(root, "verified_delivery_saved", key, retained["path"])
             if result.get("job_id") != job_id:
                 if (run.get("conclusion") == "success"
                         and "no artifacts and logs unavailable" in (result.get("unverified_items") or [])):
@@ -487,14 +496,14 @@ def _collect(root: Path, backend: str, remote_id: str, extra: dict, timeout_s: i
     # 无法开 PR（2026-10-28 实测）。
     if "result" in env:
         return {"result": env.get("result"), "patch": env.get("patch"),
-                "test_report": env.get("test_report"), "raw": env}
+                "test_report": env.get("test_report"), "artifact_files": env.get("artifact_files", {}), "raw": env}
     patch = env.get("patch")
     report = env.get("test_report")
     publish = env.get("publish")
     result = {k: v for k, v in env.items()
-              if k not in ("patch", "test_report", "raw", "publish")}
+              if k not in ("patch", "test_report", "raw", "publish", "artifact_files")}
     return {"result": result, "patch": patch, "test_report": report,
-            "publish": publish, "raw": env}
+            "publish": publish, "artifact_files": env.get("artifact_files", {}), "raw": env}
 
 
 def _stage_patch_from_backend(root: Path, out_dir: Path, collected: dict) -> Path | None:
@@ -1010,6 +1019,13 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen
     ledger.set_publication_run(job.job_id, remote_id)
     extra["candidate_id"] = key
     collected = _collect(root, backend, remote_id, extra)
+    if (collected.get("result") or {}).get("outcome") == "succeeded" and collected.get("patch") and collected.get("test_report"):
+        from .publication_guard import retain_collected_delivery
+        retained = retain_collected_delivery(root, {**job.to_dict(), "source_run": remote_id,
+                                                    "runner_repo": runner_repo}, collected)
+        summary["verified_delivery"] = retained
+        log(root, "verified_delivery_saved" if retained.get("ok") else "verified_delivery_preservation_failed",
+            key, str(retained.get("path") or retained.get("error"))[:300])
     runner_pr = _runner_published(collected)
     if runner_pr and runner_pr.get("created") and runner_pr.get("pr"):
         ledger.expect_publication(job.job_id, runner_pr["pr"])

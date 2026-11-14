@@ -22,6 +22,9 @@ import re
 import subprocess
 from pathlib import Path
 
+from .publication_guard import refresh_publication_evidence, preserve_verified_bundle
+from .delivery_review import review_approved
+
 
 def _ensure_fork(push_repo: str, token: str, upstream: str = "") -> str | None:
     """确保 fork 仓库存在；返回 fork 的默认分支名，失败返回 None。
@@ -142,7 +145,9 @@ def publish(repo_dir: Path, patch_file: Path, publish_cfg: dict) -> dict:
         title = f"{area}: {description}"
         body += f"\n\n```release-notes\n[BUGFIX] {area}: {description}\n```"
 
-    token = (os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN") or "").strip()
+    # Match gh's credential precedence so permission checks and git push use
+    # the same actor even when a runner also exports its built-in token.
+    token = (os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN") or "").strip()
 
     # 0) 确保 fork 存在。2026-10-30 实测：langchain 和 pulumi 两次都通过了全部
     #    验证，最后 push 报 "Repository not found" —— 因为 xixi-box/<repo> 还没建。
@@ -299,9 +304,24 @@ def publish_from_env(job_dict: dict, repo_dir: Path, out_dir: Path) -> dict | No
             and "\r" not in generated_title):
         cfg["title"] = generated_title.strip()
     cfg["body"] = _rewrite_body(cfg, out_dir, repair_agent=job_dict.get("repair_agent") or "opencode")
-    result = publish(repo_dir, patch, cfg)
+    evidence = refresh_publication_evidence(job_dict, cfg)
+    (out_dir / "publication-evidence.json").write_text(
+        json.dumps(evidence, ensure_ascii=False, indent=2), encoding="utf-8")
+    if not evidence.get("ok"):
+        result = {"ok": False, "error": evidence.get("error"),
+                  "failure_kind": evidence.get("failure_kind"),
+                  "coarse_reason": evidence.get("coarse_reason")}
+    elif not review_approved(job_dict, out_dir, evidence):
+        result = {"ok": False, "error": "read-only review missing, rejected, or latest discussion changed",
+                  "failure_kind": "code_review_required"}
+    else:
+        result = publish(repo_dir, patch, cfg)
+        if not result.get("ok") and re.search(r"(?i)permission|forbidden|createpullrequest", str(result.get("error"))):
+            result["failure_kind"] = "publication_permission_denied"
     (out_dir / "publish.json").write_text(json.dumps(result, ensure_ascii=False, indent=1),
                                           encoding="utf-8")
+    saved = preserve_verified_bundle(job_dict, out_dir, result)
+    (out_dir / "archive-status.json").write_text(json.dumps(saved, ensure_ascii=False), encoding="utf-8")
     print("##OSSCOUT_PUBLISH##" + json.dumps(result, ensure_ascii=False))
     return result
 

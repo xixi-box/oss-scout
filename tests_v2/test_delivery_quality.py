@@ -12,6 +12,14 @@ from scout_v2.workers.quality_gate import check_delivery_scope
 from test_p5_repair import make_repo
 
 
+@pytest.fixture(autouse=True)
+def isolate_publication_policy(monkeypatch):
+    # This file tests patch delivery; live policy and review binding have their
+    # own integration/negative tests rather than contacting external repositories.
+    monkeypatch.setattr(publish_remote, "refresh_publication_evidence", lambda *_: {"ok": True, "snapshot": {}})
+    monkeypatch.setattr(publish_remote, "review_approved", lambda *_: True)
+
+
 @pytest.fixture(params=["opencode", "codex"])
 def delivered(request, tmp_path):
     repo, sha = make_repo(tmp_path)

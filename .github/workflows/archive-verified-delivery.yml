@@ -1,0 +1,31 @@
+name: Archive verified delivery (read-only)
+on:
+  workflow_dispatch:
+    inputs:
+      source_run:
+        description: Completed repair Actions run ID to preserve; never publishes
+        required: true
+        type: string
+permissions:
+  actions: read
+  contents: read
+jobs:
+  archive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Download and verify original delivery
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN: ${{ inputs.source_run }}
+        run: python3 scripts/archive_verified_delivery.py --run "$SOURCE_RUN" --repository "$GITHUB_REPOSITORY" --out "$RUNNER_TEMP/archive"
+      - name: Retain verified source for 30 days
+        uses: actions/upload-artifact@v4
+        with:
+          name: recovered-verified-${{ inputs.source_run }}
+          path: ${{ runner.temp }}/archive/**/verified-delivery/
+          retention-days: 30
+          if-no-files-found: error

@@ -116,7 +116,37 @@ jobs:
             -r "$GITHUB_WORKSPACE/worker/requirements.txt"
           python3 -c "import pytest, yaml; print('worker deps ok', pytest.__version__)"
 
+      - name: Preflight publication
+        id: preflight
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: |
+          cd "$GITHUB_WORKSPACE/worker"
+          python3 - <<'PY'
+          import json, os, pathlib
+          from scout_v2.schemas import Result
+          from scout_v2.workers.core import emit_envelope
+          from scout_v2.workers.publication_guard import refresh_publication_evidence
+          tmp = pathlib.Path(os.environ['RUNNER_TEMP'])
+          job = json.loads((tmp / 'job.json').read_text())
+          evidence = refresh_publication_evidence(job, job['publish']) if job.get('publish') else {'ok':True}
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('can_repair=' + str(bool(evidence.get('ok'))).lower() + '\n')
+          if not evidence.get('ok'):
+              out = tmp / 'artifacts'
+              out.mkdir(exist_ok=True)
+              result = Result(job_id=job['job_id'], backend='github_actions', outcome='blocked',
+                              base_sha=job['base_sha'], unverified_items=[evidence.get('error') or 'publication unavailable'])
+              (out / 'result.json').write_text(json.dumps(result.to_dict()))
+              publication = {key:evidence.get(key) for key in ('ok','error','failure_kind','coarse_reason')}
+              (out / 'publish.json').write_text(json.dumps(publication, ensure_ascii=False))
+              (out / 'publication-evidence.json').write_text(json.dumps(evidence, ensure_ascii=False))
+              emit_envelope(result, out)
+              print('##OSSCOUT_PUBLISH##' + json.dumps(publication, ensure_ascii=False))
+          PY
+
       - name: Install target repo dependencies
+        if: steps.preflight.outputs.can_repair == 'true'
         shell: bash
         # 目标仓库的依赖由 agent 自己装（它有 shell、会读项目文档、知道 workspace
         # 布局）。这里只做两件事：给出常用包管理器，以及在根目录确实有清单时
@@ -151,7 +181,7 @@ jobs:
           fi
 
       - name: Install OpenCode CLI
-        if: steps.job.outputs.repair_agent == 'opencode'
+        if: steps.preflight.outputs.can_repair == 'true' && steps.job.outputs.repair_agent == 'opencode'
         shell: bash
         # runner 上 opencode 装到 ~/.opencode/bin；用 --no-modify-path 避免改 shell 配置。
         # 不用 `|| true`：装不上就让 job 明确失败，而不是跑到一半报奇怪的错。
@@ -162,7 +192,7 @@ jobs:
           "$HOME/.opencode/bin/opencode" --version
 
       - name: Write opencode auth
-        if: steps.job.outputs.repair_agent == 'opencode'
+        if: steps.preflight.outputs.can_repair == 'true' && steps.job.outputs.repair_agent == 'opencode'
         shell: bash
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
@@ -180,12 +210,13 @@ jobs:
           PY
 
       - name: Install Codex CLI
-        if: steps.job.outputs.repair_agent == 'codex'
+        if: steps.preflight.outputs.can_repair == 'true' && steps.job.outputs.repair_agent == 'codex'
         run: |
           npm install -g @openai/codex@0.167.1
           codex --version
 
       - name: Run worker
+        if: steps.preflight.outputs.can_repair == 'true'
         shell: bash
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
@@ -200,6 +231,42 @@ jobs:
             --repo-dir "$RUNNER_TEMP/repo" \
             --backend github_actions \
             --emit-envelope
+
+      - name: Refresh publication evidence
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: |
+          cd "$GITHUB_WORKSPACE/worker"
+          python3 - <<'PY'
+          import json, os, pathlib
+          from scout_v2.workers.publication_guard import refresh_publication_evidence
+          tmp = pathlib.Path(os.environ['RUNNER_TEMP'])
+          job = json.loads((tmp / 'job.json').read_text())
+          result = json.loads((tmp / 'artifacts/result.json').read_text())
+          if result.get('outcome') == 'succeeded' and job.get('publish'):
+              evidence = refresh_publication_evidence(job, job['publish'])
+              (tmp / 'artifacts/publication-evidence.json').write_text(json.dumps(evidence, ensure_ascii=False))
+              print('publication preflight:', evidence.get('ok'), evidence.get('failure_kind'))
+          PY
+
+      - name: Read-only delivery review
+        # Never expose GitHub write credentials to the reviewing model.
+        env:
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          CF_INGEST_TOKEN: ${{ secrets.CF_INGEST_TOKEN }}
+          DASHBOARD_URL: ${{ secrets.DASHBOARD_PUBLIC_URL }}
+        run: |
+          cd "$GITHUB_WORKSPACE/worker"
+          python3 - <<'PY'
+          import json, os, pathlib
+          from scout_v2.workers.delivery_review import review_delivery
+          tmp = pathlib.Path(os.environ['RUNNER_TEMP'])
+          job = json.loads((tmp / 'job.json').read_text())
+          evidence = tmp / 'artifacts/publication-evidence.json'
+          if evidence.exists():
+              report = review_delivery(job, tmp / 'repo', tmp / 'artifacts', json.loads(evidence.read_text()))
+              print('read-only review:', report['verdict'], 'findings:', len(report['findings']))
+          PY
 
       - name: Publish (push branch + open PR)
         # 只有 job payload 里显式带了 publish 配置才执行，且必须在 worker 自证
@@ -250,6 +317,36 @@ jobs:
               print(f"publish failed: {out.get('error')}")
               sys.exit(1)
           PY
+
+      - name: Preserve verified delivery
+        if: always()
+        run: |
+          cd "$GITHUB_WORKSPACE/worker"
+          python3 - <<'PY'
+          import json, os, pathlib
+          from scout_v2.workers.publication_guard import preserve_verified_bundle
+          tmp = pathlib.Path(os.environ['RUNNER_TEMP'])
+          out = tmp / 'artifacts'
+          if (out / 'result.json').exists():
+              result = json.loads((out / 'result.json').read_text())
+              if result.get('outcome') == 'succeeded':
+                  job = json.loads((tmp / 'job.json').read_text())
+                  publication = json.loads((out / 'publish.json').read_text()) if (out / 'publish.json').exists() else {'ok':False, 'error':'publication not attempted'}
+                  saved = preserve_verified_bundle(job, out, publication)
+                  print('verified delivery preserved:', saved.get('ok'), saved.get('error', ''))
+                  if not saved.get('ok'):
+                      raise SystemExit(1)
+          PY
+
+      - name: Upload verified delivery
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: oss-verified-${{ inputs.job_id }}
+          path: ${{ runner.temp }}/artifacts/verified-delivery/
+          retention-days: 30
+          if-no-files-found: ignore
 
       - name: Upload artifacts
         # artifact 存储有账号级配额，撞上时整包丢失（2026-10-28 实录）。

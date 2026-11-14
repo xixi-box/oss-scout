@@ -80,11 +80,12 @@ def _child_env() -> dict[str, str]:
 
 class OpenCodeClient:
     def __init__(self, binary: str = "opencode", timeout_seconds: int = 600,
-                 workdir: Path | None = None, json_events: bool = False):
+                 workdir: Path | None = None, json_events: bool = False, read_only: bool = False):
         self.binary = resolve_binary(binary)
         self.timeout = timeout_seconds
         self.workdir = workdir
         self.json_events = json_events
+        self.read_only = read_only
         if Path(self.binary).suffix.lower() in {".cmd", ".bat"}:
             raise RuntimeError(
                 f"{self.binary} is a shell shim with no native .exe beside it; "
@@ -118,14 +119,23 @@ class OpenCodeClient:
         if self.workdir is not None:
             cmd += ["--dir", str(self.workdir)]
         cmd.append(prompt)
+        child_env = _child_env()
+        if self.read_only:
+            from .reproduce import sanitized_env
+            api_key = child_env.get("OPENCODE_API_KEY")
+            child_env = sanitized_env(child_env)
+            if api_key:
+                child_env["OPENCODE_API_KEY"] = api_key
+            child_env["OPENCODE_CONFIG_CONTENT"] = json.dumps({"permission": {
+                "edit": "deny", "bash": "deny", "webfetch": "deny", "external_directory": "deny"}})
         last: tuple[bool, str] = (False, "")
-        for attempt in range(3):
+        for attempt in range(1 if self.read_only else 3):
             try:
                 p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
                                    errors="replace", timeout=self.timeout,
                                    cwd=str(self.workdir) if self.workdir else None,
                                    stdin=subprocess.DEVNULL,
-                                   env=_child_env())
+                                   env=child_env)
             except FileNotFoundError:
                 return False, "opencode binary not found"
             except subprocess.TimeoutExpired as exc:

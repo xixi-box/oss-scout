@@ -192,6 +192,12 @@ class ActionsBackend:
             f = p.parent / name
             if f.exists():
                 data[key] = f.read_text(encoding="utf-8", errors="replace")
+        data["artifact_files"] = {}
+        for name in ("base-regression.junit.xml", "patched-regression.junit.xml",
+                     "code-review.json", "publication-evidence.json", "publish.json"):
+            file = p.parent / name
+            if file.is_file() and not file.is_symlink() and file.stat().st_size <= 5_000_000:
+                data["artifact_files"][name] = file.read_bytes()
         return p, data
 
     def _collect_from_log(self, remote_job_id: str) -> dict:

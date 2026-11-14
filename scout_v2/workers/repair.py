@@ -55,7 +55,11 @@ Do this, in order:
 
 1. EXPLORE. Read the issue above, then find the code responsible. Look at how this
    repo is built and tested (pyproject.toml / Cargo.toml / package.json /
-   test dirs / CI config). Do not assume a framework.
+   test dirs / CI config). Do not assume a framework. Read the full issue
+   discussion and repository contribution rules before choosing a direction.
+   Check sibling call paths and run the relevant existing tests before changing
+   behavior. Budget time for reproduction, repair, related checks and reporting;
+   do not spend the whole task on a broad build or unrelated full-repository suite.
 
 2. WRITE A REGRESSION TEST in the repo's OWN style and location, following its
    existing conventions. It must fail on the current code for the reason described
@@ -64,11 +68,11 @@ Do this, in order:
 
 3. FIX the bug with the smallest correct change. Re-run your test until it passes.
 
-4. CHECK that you did not break things: run the narrowest relevant existing test
-   suite for the file(s) you touched.
-
-   Before changing any behaviour, run the FULL test suite of the package you are
-   about to modify, not just your own new test. Existing tests often encode the
+4. CHECK that you did not break things: run the affected existing test module or
+   package sub-suite, including sibling call paths. Read the full package test
+   command, but run the full package only when its cost fits the remaining time
+   or its contribution rules require it. Record the exact scope and any omitted
+   broader checks. Existing tests often encode the
    current behaviour as a contract, and a change that looks correct can contradict
    one. If an existing test asserts the behaviour you are changing, STOP and
    reconsider: either the fix belongs at a different layer, or that test is part of
@@ -103,6 +107,19 @@ Do not use source-text assertions, mock the behavior under test, or print the
 evidence strings yourself unless they report an actual checked result. Use
 short, stable excerpts from the test output without paths, timings, or colors.
 Enable verbose output if needed so the same case name appears in both runs.
+Prefer machine-readable JUnit output when the runner supports it (pytest
+--junitxml, Vitest --reporter=junit --outputFile, or the repository's equivalent).
+Add "test_report": {{"format":"junit", "path":"<relative XML output path>",
+"case":"<exact testcase name or classname::name>"}} to OSSCOUT_RESULT.json.
+Use the same report-producing command and case on base and patched. Never create
+or edit a test report yourself. The verifier removes stale reports before runs.
+Reports are verification artifacts and must not be included in the PR patch.
+Keep base_failure's first entry as the case identity and remaining entries as
+the bug's actual assertion text; JUnit records, rather than console formatting,
+will establish whether the identical case failed and then passed.
+If the runner cannot produce JUnit, retain the observed log evidence contract.
+Update OSSCOUT_RESULT.json after reproduction and again after patched testing;
+save findings as you go so interruption does not lose completed evidence.
 The base failure must demonstrate the reported wrong behavior, not a missing
 new helper module, import error, setup error, or compilation failure. When
 extracting a helper, first reproduce the bug through the existing base behavior;
@@ -344,7 +361,8 @@ def _read_result_file(work_dir: Path) -> dict:
                 out[key] = value.strip()
         cmd = data.get("test_cmd") or data.get("command")
         if isinstance(cmd, list):
-            cmd = " ".join(str(x) for x in cmd)
+            import shlex
+            cmd = shlex.join(str(x) for x in cmd)
         if isinstance(cmd, str) and cmd.strip():
             out["test_cmd"] = cmd.strip()
         tf = data.get("test_file") or data.get("test_path")
@@ -353,7 +371,7 @@ def _read_result_file(work_dir: Path) -> dict:
         rc = data.get("root_cause") or data.get("cause")
         if isinstance(rc, str) and rc.strip():
             out["root_cause"] = rc.strip()[:300]
-        for key in ("setup_steps", "base_failure", "patched_success"):
+        for key in ("setup_steps", "base_failure", "patched_success", "test_report"):
             if key in data:
                 out[key] = data[key]
         return out
@@ -501,12 +519,20 @@ def opencode_patch_producer(job: Job, work_dir: Path, context: str,
                .stdout.splitlines() if p.strip()]
     excludes = [p for p in ("opencode.json", TASK_FILE, RESULT_FILE,
                             ".oss-scout-result.json") if p in changed]
+    from .test_reports import report_spec
+    try:
+        declared_report = report_spec(markers)
+    except ValueError:
+        declared_report = None  # Invalid plans are rejected by the verifier.
 
     test_file = markers.get("test_file", "")
     from .publish_remote import _JUNK_PATH, filter_patch_junk
     test_files: dict[str, str] = {}
     mixed_tests: dict[str, tuple[str, str]] = {}
     for path in changed:
+        if declared_report and path == declared_report["path"]:
+            excludes.append(path)
+            continue
         if _JUNK_PATH.search(path):
             excludes.append(path)
             continue
@@ -553,12 +579,12 @@ def opencode_patch_producer(job: Job, work_dir: Path, context: str,
             f"agent said: {(detail or '')[:400]}")
 
     cmd_str = markers.get("test_cmd", "").strip()
-    has_plan = any(key in markers for key in ("setup_steps", "base_failure", "patched_success"))
+    has_plan = any(key in markers for key in ("setup_steps", "base_failure", "patched_success", "test_report"))
     return {
         "patch": patch,
         "test_cmd": _split_cmd(cmd_str) if has_plan else _normalise_test_target(_split_cmd(cmd_str)),
         "verification_plan": {key: markers.get(key) for key in
-                              ("setup_steps", "base_failure", "patched_success")} if has_plan else None,
+                              ("setup_steps", "base_failure", "patched_success", "test_report")} if has_plan else None,
         "test_files": test_files,
         "mixed_tests": mixed_tests,
         "root_cause": markers.get("root_cause", "")[:300],
@@ -688,6 +714,11 @@ def _verification_error(rc: int, stdout: str, stderr: str, kind: str = "test") -
 
 
 def _verification_plan_valid(plan: dict) -> bool:
+    from .test_reports import report_spec
+    try:
+        report_spec(plan)
+    except ValueError:
+        return False
     steps = plan.get("setup_steps")
     if not isinstance(steps, list) or not all(
         isinstance(step, dict) and step.get("kind") in ("setup", "build")
@@ -695,8 +726,8 @@ def _verification_plan_valid(plan: dict) -> bool:
         for step in steps
     ):
         return False
-    for key, minimum in (("base_failure", 2), ("patched_success", 1)):
-        markers = plan.get(key)
+    for key, minimum in (("base_failure", 2), ("patched_success", 0 if report_spec(plan) else 1)):
+        markers = (plan.get(key) or []) if key == "patched_success" and report_spec(plan) else plan.get(key)
         if (not isinstance(markers, list) or not all(isinstance(marker, str) and marker.strip()
                                                      for marker in markers)
                 or len({marker.strip() for marker in markers}) < minimum):
@@ -762,6 +793,11 @@ def _replay_regression(cmd, plan, work, env, out_dir, stage, *, rebuild=False):
                 return rc, stdout, stderr, error
         if source != _git(["diff", "HEAD", "--binary"], work).stdout:
             return 1, "", "", ("setup_changed_sources", "setup modified tracked source or tests")
+    from .test_reports import prepare_report
+    try:
+        prepare_report(work, plan)
+    except ValueError as exc:
+        return 1, "", "", ("structured_report_invalid", str(exc))
     rc, stdout, stderr = _verify_command(cmd, work, env, out_dir, stage, rebuild=rebuild)
     return rc, stdout, stderr, _verification_error(rc, stdout, stderr)
 
@@ -1114,14 +1150,23 @@ def run_repair(job: Job, repo_dir: Path, out_dir: Path, *,
             _restore_sources_to_base(work, job.base_sha)
         baseline_tests = test_files | {path: versions[0] for path, versions in mixed_tests.items()}
         seeded = _seed_test_files(work, baseline_tests)
+        from .test_reports import collect_report, check_report, report_spec
+        base_evidence = {"format": "log"}
+        patched_evidence = {"format": "log"}
         try:
             base_rc, base_out, base_err, error = _replay_regression(
                 cmd, plan, work, env, out_dir, "base", rebuild=rebuild)
+            if error is None and report_spec(plan):
+                try:
+                    base_evidence = collect_report(work, out_dir, plan, "base")
+                    check_report(base_evidence, plan, "base")
+                except ValueError as exc:
+                    error = "structured_report_invalid", str(exc)
         finally:
             _unseed_test_files(work, seeded)
         if error is None and base_rc == 0:
             error = "base_test_passed", "test does not fail on base"
-        if error is None and plan and not _evidence_matches(plan["base_failure"], base_out, base_err):
+        if error is None and plan and not report_spec(plan) and not _evidence_matches(plan["base_failure"], base_out, base_err):
             error = "base_failure_unconfirmed", "target test and bug symptom not found in base output"
         if error:
             kind, detail = error
@@ -1163,9 +1208,15 @@ def run_repair(job: Job, repo_dir: Path, out_dir: Path, *,
         delivery_patch = _git(["diff", "--cached", "--binary"], work).stdout
         fixed_rc, out, err, error = _replay_regression(
             cmd, plan, work, env, out_dir, "patched", rebuild=rebuild)
+        if error is None and report_spec(plan):
+            try:
+                patched_evidence = collect_report(work, out_dir, plan, "patched")
+                check_report(patched_evidence, plan, "patched", base_evidence)
+            except ValueError as exc:
+                error = "structured_report_invalid", str(exc)
         if error is None and fixed_rc:
             error = "patched_test_failed", f"regression failed on the patch (exit {fixed_rc})"
-        if error is None and plan and not _evidence_matches(
+        if error is None and plan and not report_spec(plan) and not _evidence_matches(
                 [_test_case_identity(plan["base_failure"][0]), *plan["patched_success"]], out, err) and not _wrapper_success_matches(
                     cmd, plan, base_out, base_err, out, err):
             error = "patched_test_unconfirmed", "target test success not found in patched output"
@@ -1198,6 +1249,7 @@ def run_repair(job: Job, repo_dir: Path, out_dir: Path, *,
             "schema_version": 1, "job_id": job.job_id, "base_sha": job.base_sha,
             "test_cmd": cmd, "base_returncode": base_rc, "patched_returncode": fixed_rc,
             "failure_kind": error[0] if error else None, "verification_plan": plan,
+            "base_evidence": base_evidence, "patched_evidence": patched_evidence,
             # base 输出必须留存：否则"复现证据"无法审计，假阳性也无从发现
             "base_stdout_tail": base_out[-3000:], "base_stderr_tail": base_err[-3000:],
             "patched_stdout_tail": out[-3000:], "patched_stderr_tail": err[-3000:],

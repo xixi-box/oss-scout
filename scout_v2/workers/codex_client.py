@@ -31,10 +31,12 @@ class CodexCommunicationError(RuntimeError):
 
 
 class CodexClient:
-    def __init__(self, *, timeout_seconds: int, workdir: Path, diagnostics_dir: Path | None = None):
+    def __init__(self, *, timeout_seconds: int, workdir: Path, diagnostics_dir: Path | None = None,
+                 read_only: bool = False):
         self.timeout = timeout_seconds
         self.workdir = workdir
         self.diagnostics_dir = diagnostics_dir
+        self.read_only = read_only
 
     def _exchange(self, operation, *, request_timeout=None, **values):
         base = os.environ.get("DASHBOARD_URL", "").rstrip("/")
@@ -173,7 +175,7 @@ class CodexClient:
                 model, _, effort = model.partition("#")
                 output = home / "last-message.txt"
                 command = [resolve_binary("codex"), "exec", "--ignore-user-config", "--json",
-                           "--ephemeral", "--sandbox", "danger-full-access",
+                           "--ephemeral", "--sandbox", "read-only" if self.read_only else "danger-full-access",
                            "-c", 'cli_auth_credentials_store="file"',
                            "-c", 'approval_policy="never"',
                            "--color", "never", "-C", str(self.workdir), "-o", str(output)]

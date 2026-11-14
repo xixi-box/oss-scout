@@ -242,6 +242,34 @@ def issue_screening_snapshot(item: dict, issue: dict, comments: list, timeline=(
                                 "body": c.get("body") or ""} for c in comments]}
 
 
+_PUBLICATION_CAPACITY_CACHE = {}
+
+
+def _publication_capacity(repo: str, owner: str, cap):
+    """Read known repository caps before spending AI tokens; never guess a cap."""
+    from scout_v2.workers.publication_guard import check_open_pr_capacity, _OPEN_PR_CAPS
+    from scout_v2.git_host import gh_read
+    if cap is None and repo.lower() not in _OPEN_PR_CAPS:
+        return {"ok": True}
+    import time
+    if cap is not None and (type(cap) is not int or cap < 1):
+        raise RuntimeError("repository open PR cap is invalid")
+    key = (repo.lower(), owner, cap)
+    now = time.monotonic()
+    cached = _PUBLICATION_CAPACITY_CACHE.get(key)
+    if cached and now - cached[0] < 30:
+        return dict(cached[1])
+    metadata = gh_read([f"repos/{repo}"])
+    if not isinstance(metadata, dict) or not isinstance(metadata.get("permissions"), dict):
+        raise RuntimeError("repository publication permissions unavailable")
+    permissions = metadata["permissions"]
+    result = check_open_pr_capacity(repo, owner, cap, has_write=any(
+        permissions.get(key) is True for key in ("push", "maintain", "admin")))
+    if result.get("failure_kind") != "publication_evidence_unavailable":
+        _PUBLICATION_CAPACITY_CACHE[key] = (now, dict(result))
+    return result
+
+
 def coarse_issue_blockers(eng, it: dict, *, lane: str, live_blockers=(), root=None) -> list[str]:
     """Shared mechanical issue rules for intake and the pre-start check."""
     repo = str(it["repo"])
@@ -272,6 +300,14 @@ def coarse_issue_blockers(eng, it: dict, *, lane: str, live_blockers=(), root=No
         blockers.append("excluded_label")
     if it.get("state_reason") == "duplicate":
         blockers.append("confirmed_duplicate")
+    if root is not None and not blockers:
+        entry = eng.repo_entry(repo) if hasattr(eng, "repo_entry") else (
+            getattr(eng, "repos_cfg", {}).get("repositories", {}).get(repo) or {})
+        capacity = _publication_capacity(repo, "xixi-box", entry.get("max_open_prs"))
+        if not capacity.get("ok"):
+            if capacity.get("failure_kind") == "publication_evidence_unavailable":
+                raise RuntimeError(str(capacity.get("error")))
+            blockers.append(str(capacity.get("coarse_reason") or capacity.get("error")))
     if root is not None and not blockers:
         from scout_v2.workers.cla import preflight
         cla = preflight(root, repo)
