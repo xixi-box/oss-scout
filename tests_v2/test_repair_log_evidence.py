@@ -115,3 +115,30 @@ def test_actual_empty_collection_still_blocks(output):
 def test_parallel_diagnostic_does_not_hide_other_environment_errors():
     data = recorded("pydantic_parallel_collection")
     assert repair._verification_error(1, data["base_stdout_tail"], "No module named pytest")[0] == "missing_dependency"
+
+
+def test_interrupted_qwen_report_preserves_original_failure(tmp_path, monkeypatch):
+    from scout_v2.workers.auto_pipeline import _retryable_codex_communication
+
+    repo, sha = make_repo(tmp_path)
+    # Qwen #17232 / Actions 43572328289: the agent wrote a provisional
+    # report, then timed out before recording patched_success.
+    failure = "Codex start/result error: TimeoutError; last output: build and typecheck completed"
+    called = []
+    monkeypatch.setattr(repair, "_run_cmd", lambda *_: called.append(True))
+    out = tmp_path / "out"
+    result = repair.run_repair(job(sha), repo, out, patch_producer=lambda *_: {
+        "patch": GOOD_PATCH, "test_cmd": ["npm", "run", "test:scripts:unit"],
+        "verification_plan": {"setup_steps": [], "base_failure": ["case", "Cannot find module"],
+                              "patched_success": []},
+        "test_files": {"test_div.py": "# regression\n"},
+        "agent_failure": failure, "agent_output": failure,
+        "changed_files": ["calc.py", "test_div.py"], "markers_found": True,
+    })
+    assert result.outcome == "failed" and not result.reproduced_on_base
+    assert _retryable_codex_communication(result.unverified_items)
+    assert "TimeoutError" in result.unverified_items[0]
+    assert "verification_plan_invalid" not in result.unverified_items[0]
+    assert failure in (out / "agent-output.txt").read_text()
+    assert (out / "agent-changed.json").exists()
+    assert not called

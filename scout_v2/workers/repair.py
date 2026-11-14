@@ -103,6 +103,10 @@ Do not use source-text assertions, mock the behavior under test, or print the
 evidence strings yourself unless they report an actual checked result. Use
 short, stable excerpts from the test output without paths, timings, or colors.
 Enable verbose output if needed so the same case name appears in both runs.
+The base failure must demonstrate the reported wrong behavior, not a missing
+new helper module, import error, setup error, or compilation failure. When
+extracting a helper, first reproduce the bug through the existing base behavior;
+do not make the regression depend on a module that only exists after your fix.
 Write real JSON. A missing or incomplete verification plan blocks publication.
 For Rust inline tests, keep test edits inside the existing trailing #[cfg(test)]
 module so the verifier can apply the test without applying the production fix.
@@ -1019,6 +1023,15 @@ def run_repair(job: Job, repo_dir: Path, out_dir: Path, *,
                                 "tests": sorted(produced.get("test_files") or {}),
                                 "markers_found": produced.get("markers_found")},
                                ensure_ascii=False, indent=1), encoding="utf-8")
+            # A provisional report may exist when the CLI is interrupted. Keep
+            # the original error (including legacy communication errors) ahead
+            # of missing-plan/command errors so the controller can retry safely.
+            if produced.get("agent_failure"):
+                reason = f"{job.repair_agent} repair run failed: {produced['agent_failure']}"
+                (out_dir / "worker.log").write_text(reason, encoding="utf-8")
+                return Result(job_id=job.job_id, backend=backend_name, outcome="failed",
+                              base_sha=job.base_sha, logs_path=f"artifacts/{job.job_id}/worker.log",
+                              unverified_items=[reason[:300]])
         else:                      # 兼容旧 producer：(patch, notes)
             patch, notes = produced
             unverified.extend(notes or [])
