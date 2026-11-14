@@ -79,3 +79,29 @@ def test_restart_clears_only_unowned_unstarted_handoffs(tmp_path,monkeypatch):
     assert result['a/b#3']['direct_start_reserved_at']
     assert ledger.preparations()==[('job-live','a/b#2')]
     ledger.close()
+
+
+def test_runtime_smoke_reports_variable_ai_classification_without_blocking_deploy(tmp_path,monkeypatch,capsys):
+    import sys
+    from scripts import runtime_status
+    from scout_v2.workers.openjev import OpenJevClient
+    monkeypatch.setattr(sys,'argv',['runtime_status','--root',str(tmp_path),'--screening'])
+    monkeypatch.setattr(runtime_status,'inspect',lambda root:{'repositories':58,'formal_repositories':50,'honor_repositories':8,'daily_cap':30,'automatic_repositories':57})
+    results=iter(({'usable':True},{'usable':True,'probability':0.651},{'usable':False,'probability':0.315}))
+    monkeypatch.setattr(OpenJevClient,'score_issue',lambda *a:next(results))
+    assert runtime_status.main()==0
+    report=json.loads(capsys.readouterr().out)
+    assert report['intent_screening_warning']
+    assert report['intent_screening_probes']['zh']['probability']==0.651
+
+
+def test_runtime_smoke_still_fails_when_screening_service_unavailable(tmp_path,monkeypatch):
+    import sys
+    import pytest
+    from scripts import runtime_status
+    from scout_v2.workers.openjev import OpenJevClient
+    monkeypatch.setattr(sys,'argv',['runtime_status','--root',str(tmp_path),'--screening'])
+    monkeypatch.setattr(runtime_status,'inspect',lambda root:{'repositories':58,'formal_repositories':50,'honor_repositories':8,'daily_cap':30,'automatic_repositories':57})
+    results=iter(({'usable':True},{'usable':None,'reason':'HTTP 503'},{'usable':False}))
+    monkeypatch.setattr(OpenJevClient,'score_issue',lambda *a:next(results))
+    with pytest.raises(AssertionError,match='service unavailable'):runtime_status.main()
