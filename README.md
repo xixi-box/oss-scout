@@ -2,7 +2,7 @@
 
 自动开源贡献流水线：每分钟发现 issue，机械粗筛后交给 OpenJev 细筛，由 OpenCode 或
 Codex 在 GitHub Actions 修复、运行测试，再以账号持有者的身份提交 PR。
-日常通过飞书查看扫描结果、候选队列、PR 记录和审批卡，并修改模型与运行配置。
+日常通过飞书查看扫描结果、候选队列、PR 记录，并修改模型与运行配置。
 
 ## 当前工作流
 
@@ -16,7 +16,7 @@ Cloudflare Worker：每分钟扫描 57 个仓库（50 个正式＋7 个荣誉）
   → Actions：OpenCode / Codex 自主搭环境、定位、修复并运行测试
   → 独立复跑：原版触发目标 bug，完整补丁版同一回归测试通过
   → 核对交付文件及补丁哈希 → 账号身份与 DCO 签名 → 推送 fork → 开 PR
-  → 同步飞书，持续监控 PR 状态、CI 和评论
+  → 同步飞书，持续同步 PR 状态与额度
 ```
 
 所有日期、每日额度及凌晨 4 点均按北京时间计算。监控名单以
@@ -25,7 +25,7 @@ Cloudflare Worker：每分钟扫描 57 个仓库（50 个正式＋7 个荣誉）
 ## 每日额度、暂存与消费顺序
 
 - 每个北京时间自然日默认最多成功创建 **5 个新 PR**（飞书可调），按 GitHub 确认的创建时间记账。
-  修复失败、重复 PR 和已有 PR 的跟进不占新 PR 额度；发布结果不明时先对账。
+  修复失败、重复 PR不占新 PR 额度；发布结果不明时先对账。
 - 新 issue 全天正常发现和消费，包括 **00:00–04:00**，不预留额度、不额外限速。
 - 今天可消费的合格候选优先，同日按原入队时间 FIFO；新到候选不能插到今天已等待的
   合格候选前面。取数或模型故障的重试退避仍有效。
@@ -89,10 +89,7 @@ SHA-256；发布前核对任务、base、验证结果及实际暂存补丁，防
   前者只限制暂存，执行中和已预留派发的任务受保护；调小后按原入队顺序清除最早普通暂存。
   后者按当天成功创建的 PR 计算，调大不会清空已用额度，并恢复今天因满额而等待的候选资格；
   调小不取消已执行任务，后续派发按新额度检查。非法输入显示在「应用状态」，保留上次有效值。
-- **运行设置 → PR 评论触发**：开启／关闭，默认开启，统一控制人工和机器人评论的自动跟进。
-  关闭会停止即时与定时评论入口的 AI 跟进及回复草稿；PR 状态同步、额度对账和独立 CI
-  修复继续运行，已有审批卡仍可人工确认。
-- **OpenCode**：模型、回复模型、Base URL、API 密钥及思考强度。
+- **OpenCode**：模型、Base URL、API 密钥及思考强度。
 - **Codex**：模型与思考强度，使用 ChatGPT 订阅设备登录；登录凭据独立保存在服务器，
   串行借给 Actions 并回存刷新结果，不写进飞书。
 - **Codiv**：细筛模型、Base URL、API 密钥及思考预算。
@@ -103,21 +100,11 @@ SHA-256；发布前核对任务、base、验证结果及实际暂存补丁，防
 飞书各业务表独立同步，单表失败互不阻断；完整空快照可清理旧行，源读取失败不得冒充空结果。
 日常使用飞书，原前端看板已移除，`dashboard/` 保留控制器 API 与后台服务。
 
-## PR 评论与 CI 跟进
+## PR 发布后的处理
 
-Worker 每分钟检查 PR 评论，控制器每 15 分钟及 Actions 每 30 分钟补查。
-中英文评论按语义区分修改要求、问题、重复投入/贡献归属协调和客套；协调意见不会
-凭空触发代码改动。无法分类的正文保留给语义跟进，不因缺少英文关键词而忽略。
-`configs/pr_automation_holds.yaml` 可暂停指定 PR 的自动修复和回复起草，状态同步照常；
-AgentScope Java #4163 按用户要求暂停，解除时删除对应条目并部署。
-按现有规则过滤噪声通知、判断是否需要改代码或回复；已有 PR 跟进不占新 PR 额度。
-
-一轮评审对应一张飞书审批卡：需要改代码时合成一个经过验证的提交，各条回复可单独编辑、
-勾选。代码提交和回复都先等待确认；确认后先推送，再分别回复原讨论串。
-只有验证通过的提交才提供推送操作；验证失败与无需处理分开，必要时保留独立成立的回复草稿。
-
-回复草稿只留在飞书卡片，确认时使用卡片提交的文本。未推送的提交包与审批状态保留
-**7 天**，到期清理；推送成功立即删包，回复失败显示在卡片中，服务器不保存回复草稿。
+PR 发布后由账号持有者手动跟进评论、评审和 CI。系统不再触发已有 PR 的代码修改、
+回复草稿或审批卡；历史审批卡的推送和回复入口已移除。
+PR 状态、飞书 PR 记录和当天关闭释放额度继续自动同步。
 
 ## 目录结构
 
@@ -128,15 +115,14 @@ configs/pr_gates.yaml              仓库门禁与 CLA 规则
 configs/console_models.yaml        飞书同步的本地配置覆盖（运行时文件）
 scout_v2/state_store.py            持久 inbox、额度账本、队列事务与滚动容量
 scout_v2/feishu_models.py          飞书模型与运行设置同步
-scout_v2/pr_approval.py            PR 跟进审批、提交包和保留期
 scout_v2/workers/auto_pipeline.py  筛选、派发、对账主流程
 scout_v2/workers/repair.py         OpenCode / Codex 修复与独立复跑
 scout_v2/workers/commit_identity.py 统一作者、提交者与 DCO 签名
 scout_v2/workers/publish_remote.py 验证交付后推送 fork 并开 PR
 dashboard/                        FastAPI 控制器与后台循环
-scripts/monitor_prs.py             PR 监控及飞书业务表数据
-cloudflare/worker.js              每分钟发现与 PR 评论轮询
-.github/workflows/                修复、跟进、测试、部署和诊断工作流
+scripts/monitor_prs.py             只读 PR 快照及飞书业务表数据
+cloudflare/worker.js              每分钟发现 issue
+.github/workflows/                新修复、测试、部署和诊断工作流
 tests_v2/、tests_dashboard/        系统自身的回归测试
 ```
 
@@ -150,9 +136,6 @@ python -m pytest tests_v2 tests_dashboard -q
 python scripts/pool_rates.py
 python scripts/pool_audit.py
 python scripts/audit_ai_policy.py
-
-# 手动运行 PR 监控
-python scripts/monitor_prs.py
 
 # 只读运行诊断
 gh workflow run diagnose.yml --ref main

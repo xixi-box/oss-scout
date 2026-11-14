@@ -4,7 +4,7 @@ import { test, mock } from 'node:test';
 
 const source = await readFile(new URL('../cloudflare/worker.js', import.meta.url), 'utf8');
 const worker = await import(`data:text/javascript;base64,${Buffer.from(
-  source + '\nexport { pollOnce, notifyPrComments };').toString('base64')}`);
+  source + '\nexport { pollOnce };').toString('base64')}`);
 const NOW = '2026-11-06T04:00:00.000Z';
 const OLD = '2026-11-06T03:00:00.000Z';
 const RealDate = Date;
@@ -97,18 +97,6 @@ test('no watermark advances when both direct delivery and durable fallback fail'
   assert.equal(JSON.parse(env.stored.get('watermarks'))['a/b'], OLD);
 });
 
-test('PR polling runs even when no eligible issue is found', async t => {
-  t.after(() => mock.restoreAll());
-  const env = setup({ prs: JSON.stringify(['a/b#9']) });
-  let polled = false;
-  mock.method(globalThis, 'fetch', async url => {
-    if (String(url).includes('/issues/9/comments')) polled = true;
-    return response(String(url).endsWith('/graphql') ? { data: { r0: gqlPage() } } : []);
-  });
-  await worker.pollOnce(env);
-  assert.equal(polled, true);
-});
-
 test('fifty repositories use five batched GitHub requests', async t => {
   t.after(() => mock.restoreAll());
   const env = setup();
@@ -141,24 +129,6 @@ test('57 repositories fit in six GitHub requests within the existing budget', as
   assert.equal(JSON.parse(env.stored.get('diag')).ok_repos, 57);
 });
 
-test('paused discovery still tracks PR comments and migrated repository aliases', async t => {
-  t.after(() => mock.restoreAll());
-  const env = setup({ prs: JSON.stringify(['ClickHouse/ClickHouse#9', 'jlowin/fastmcp#10', 'removed/repo#11']) });
-  env.REPOS = 'PrefectHQ/fastmcp';
-  env.TRACKED_REPOS = 'PrefectHQ/fastmcp,clickhouse/clickhouse';
-  const delivered = [];
-  mock.method(globalThis, 'fetch', async (url, options) => {
-    if (String(url).includes('/api/ingest/')) {
-      delivered.push(...JSON.parse(options.body).events);
-      return response({});
-    }
-    assert.doesNotMatch(String(url), /removed\/repo/);
-    return response([{ id: 3, user: { login: 'maintainer' }, body: 'Please fix' }]);
-  });
-  await worker.notifyPrComments(env, new RealDate(NOW));
-  assert.deepEqual(delivered.map(e => e.repo).sort(), ['ClickHouse/ClickHouse', 'jlowin/fastmcp']);
-});
-
 test('overlapping cron invocations share the same in-flight scan', async t => {
   t.after(() => mock.restoreAll());
   const env = setup();
@@ -185,37 +155,17 @@ test('repeated fallback delivery writes one durable batch instead of spending KV
   assert.equal(env.puts.filter(key => key.startsWith('pending:')).length, 1);
 });
 
-test('PR comment HTTP rejection does not advance its delivery watermark', async t => {
-  t.after(() => mock.restoreAll());
-  const env = setup({ prs: JSON.stringify(['a/b#9']), pr_since: OLD });
-  mock.method(globalThis, 'fetch', async url => String(url).includes('/api/ingest/')
-    ? response({}, 503)
-    : response([{ id: 3, user: { login: 'maintainer' }, body: 'Please fix' }]));
-  await worker.notifyPrComments(env, new RealDate(NOW));
-  assert.equal(env.stored.get('pr_since'), OLD);
-  assert.equal(JSON.parse(env.stored.get('pr_watermarks'))['a/b#9'], OLD);
-});
 
-test('PR comments are paginated and failed PRs keep their own watermark', async t => {
+test('stale PR tracking KV never causes PR polling or callback delivery', async t => {
   t.after(() => mock.restoreAll());
-  const env = setup({ prs: JSON.stringify(['a/b#9', 'a/b#10']),
-    pr_watermarks: JSON.stringify({ 'a/b#9': OLD, 'a/b#10': OLD }) });
-  const delivered = [];
+  const env = setup({ prs: JSON.stringify(['a/b#1']), pr_since: OLD });
+  const calls = [];
   mock.method(globalThis, 'fetch', async (url, options) => {
-    if (String(url).includes('/api/ingest/')) {
-      delivered.push(...JSON.parse(options.body).events);
-      return response({});
-    }
-    if (String(url).includes('/issues/10/')) return response({}, 503);
-    const c = id => ({ id, user: { login: 'maintainer' }, body: 'Fix it' });
-    if (new URL(url).searchParams.get('page') === '2') return response([c(2)]);
-    return response([c(1)], 200, {
-      Link: '<https://api.github.com/repos/a/b/issues/9/comments?page=2>; rel="next"',
-    });
+    calls.push(String(url));
+    assert.equal(url, 'https://api.github.com/graphql');
+    return response({ data: { r0: gqlPage() } });
   });
-  await worker.notifyPrComments(env, new RealDate(NOW));
-  assert.deepEqual(delivered.map(x => x.comment_id), [1, 2]);
-  const marks = JSON.parse(env.stored.get('pr_watermarks'));
-  assert.equal(marks['a/b#9'], NOW);
-  assert.equal(marks['a/b#10'], OLD);
+  await worker.pollOnce(env);
+  assert.deepEqual(calls, ['https://api.github.com/graphql']);
+  assert.equal(env.stored.get('pr_since'), OLD);
 });

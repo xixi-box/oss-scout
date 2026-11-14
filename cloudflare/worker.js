@@ -58,24 +58,6 @@ async function request(url, options, budget) {
   return fetch(url, { ...options, signal: AbortSignal.timeout(10000) });
 }
 
-async function ghPages(url, token, budget) {
-  const items = [];
-  while (url) {
-    // Never forward GH_TOKEN to a foreign pagination origin.
-    if (new URL(url).origin !== "https://api.github.com") {
-      throw new Error("unexpected pagination origin");
-    }
-    const response = await request(url, { headers: ghHeaders(token) }, budget);
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const page = await response.json();
-    if (!Array.isArray(page)) throw new Error("expected GitHub array");
-    items.push(...page);
-    const next = (response.headers.get("Link") || "").match(/<([^>]+)>;\s*rel="next"/);
-    url = next ? next[1] : "";
-  }
-  return items;
-}
-
 async function checkpoint(env, key, previous, completed, now) {
   // Avoid moving a cursor backwards if another scan completed in the meantime.
   const latest = await readMap(env, key);
@@ -227,67 +209,5 @@ async function pollIssues(env, now, budget) {
 }
 
 async function pollOnce(env) {
-  const now = new Date();
-  // PR delivery is independent of empty issue scans and discovery failures.
-  // Reserve independent budgets so neither channel can starve the other; the
-  // combined maximum is below the free Worker's 50 external subrequests.
-  const results = await Promise.allSettled([pollIssues(env, now, { remaining: 18 }),
-    notifyPrComments(env, now, { remaining: 30 })]);
-  const failed = results.find(result => result.status === "rejected");
-  if (failed) throw failed.reason;
-}
-
-async function notifyPrComments(env, now, budget = { remaining: 30 }) {
-  const normalize = repo => repo.trim().toLowerCase().replace(/^jlowin\/fastmcp$/, "prefecthq/fastmcp");
-  const roster = new Set((env.TRACKED_REPOS || env.REPOS || "").split(",").map(normalize));
-  const stored = await env.SEEN.get("prs");
-  const list = stored ? JSON.parse(stored)
-    : (env.PRS || "").split(",").map(s => s.trim()).filter(Boolean);
-  if (!list.length || !env.INGEST_URL || !env.INGEST_TOKEN) return;
-  const marks = await readMap(env, "pr_watermarks");
-  const legacy = await env.SEEN.get("pr_since");
-  let bootstrap = false;
-  for (const item of list) {
-    if (!marks[item]) {
-      marks[item] = legacy || new Date(now.getTime() - 20 * 60000).toISOString();
-      bootstrap = true;
-    }
-  }
-  if (bootstrap) await env.SEEN.put("pr_watermarks", JSON.stringify(marks));
-  const events = [];
-  const completed = [];
-  // Rotate when a long PR list exhausts the per-run budget, preventing starvation.
-  const offset = Math.floor(now.getTime() / 60000) % list.length;
-  const ordered = list.slice(offset).concat(list.slice(0, offset));
-  for (const item of ordered) {
-    // Reserve one request for sending each completed event batch.
-    if (budget.remaining <= Math.ceil(events.length / 100)) break;
-    const [repo, numRaw] = item.split("#");
-    const number = Number(numRaw);
-    const repoKey = repo ? normalize(repo) : "";
-    if (!repoKey || !roster.has(repoKey) || !Number.isInteger(number) || number <= 0) continue;
-    try {
-      const since = overlap(marks[item] || legacy, now, 10);
-      const comments = await ghPages(`https://api.github.com/repos/${repo}/issues/${number}`
-        + `/comments?since=${encodeURIComponent(since)}&per_page=100`, env.GH_TOKEN, budget);
-      for (const c of comments) {
-        const author = (c.user && c.user.login) || "";
-        if (author === env.MY_LOGIN) continue;
-        events.push({ repo, number, comment_id: c.id, author,
-          created_at: c.created_at, body: (c.body || "").slice(0, 4000) });
-      }
-      completed.push(item);
-    } catch (e) { /* Preserve this PR's cursor; others may progress. */ }
-  }
-  for (let offset = 0; offset < events.length; offset += 100) {
-    const response = await request(env.INGEST_URL.replace(/\/issues$/, "/pr-comments"), {
-      method: "POST", headers: { "Content-Type": "application/json",
-        "X-Ingest-Token": env.INGEST_TOKEN },
-      body: JSON.stringify({ events: events.slice(offset, offset + 100) }),
-    }, budget);
-    if (!response.ok) return;
-  }
-  if (now.getUTCMinutes() % 10 === 0) {
-    await checkpoint(env, "pr_watermarks", marks, completed, now);
-  }
+  await pollIssues(env, new Date(), { remaining: 18 });
 }

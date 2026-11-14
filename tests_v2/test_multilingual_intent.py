@@ -9,7 +9,6 @@ from dashboard import data
 from scout_v2 import git_host
 from scout_v2.contribution_intent import claim_evidence, self_fix_evidence, coordination_evidence, MULTILINGUAL_REVIEW_RULES
 from scout_v2.workers.openjev import OpenJevClient
-from scripts import monitor_prs as mp
 
 
 ZH_OFFER = "如果没有正在进行的同类工作，我愿意提交一个聚焦该问题的修复和回归测试。"
@@ -97,49 +96,14 @@ def test_fine_screen_no_match_is_unknown_and_reporter_comments_are_included(monk
     assert captured[-1]["comments"][0]["is_reporter"] is True
 
 
-@pytest.mark.parametrize("body", [ZH_COMMENT, EN_COMMENT])
-def test_pr_coordination_is_not_wait_or_code_request(monkeypatch, body):
-    monkeypatch.setattr(mp, "_model", lambda: pytest.fail("explicit coordination is deterministic"))
-    assert mp.classify_comment(body)["action"] == "assignment_note"
-    assert mp._classify_by_rules(body, {"author": {"login": "reporter"}})[0] == "assignment_note"
 
 
-def test_chinese_bot_claim_is_not_discarded_as_routine_noise():
-    body = "这个问题已经被其他人认领，请避免重复投入。"
-    assert not mp._is_noise_bot("github-actions[bot]", body)
-    assert mp._classify_by_rules(body, {"author": {"login": "github-actions[bot]"}})[0] == "assignment_note"
-    assert mp._is_noise_bot("github-actions[bot]", "流水线已完成，构建产物可下载。")
 
 
-@pytest.mark.parametrize("body", ["请修改查询以避免返回重复数据。", "Please change this query to avoid duplicate rows."])
-def test_duplicate_data_is_a_code_request_not_ownership_coordination(body):
-    assert not coordination_evidence(body)
-    assert mp._classify_by_rules(body, {"author": {"login": "reviewer"}})[0] == "address_review"
 
 
-@pytest.mark.parametrize(("body", "action"), [
-    ("请补充一个回归测试，并修改异常处理。", "address_review"),
-    ("为什么这里会吞掉异常？", "answer_question"),
-    ("Podrías explicar esta decisión?", "answer_question"),
-    ("谢谢！", "wait"), ("Thanks!", "wait"),
-])
-def test_fallback_does_not_discard_unfamiliar_language(body, action):
-    assert mp._classify_by_rules(body, {"author": {"login": "reviewer"}})[0] == action
 
 
-def test_semantic_classification_receives_chinese_text_beyond_old_cutoff(monkeypatch):
-    body = "背景说明。" * 950 + "这里的边界情况有待讨论。"
-    seen = []
-    monkeypatch.setattr(mp, "_model", lambda: ("test-key", "test-model"))
-    class Client:
-        def __init__(self, **kwargs):
-            pass
-        def chat(self, prompt, **kwargs):
-            seen.append(prompt)
-            return True, "ACTION: answer_question\nREASON: boundary case needs discussion"
-    monkeypatch.setattr("scout_v2.workers.issue_scorer.GoClient", Client)
-    assert mp.classify_comment(body)["action"] == "answer_question"
-    assert body in seen[0] and "Chinese, English" in seen[0]
 
 
 def test_semantic_issue_prompt_does_not_depend_on_rule_matches(monkeypatch, tmp_path):
@@ -157,14 +121,6 @@ def test_semantic_issue_prompt_does_not_depend_on_rule_matches(monkeypatch, tmp_
     assert "coordination" in MULTILINGUAL_REVIEW_RULES and "requested_change must be false" in MULTILINGUAL_REVIEW_RULES
 
 
-def test_user_hold_prevents_dispatch_and_drafting_before_external_calls(monkeypatch, tmp_path):
-    (tmp_path / "configs").mkdir()
-    (tmp_path / "configs/pr_automation_holds.yaml").write_text("agentscope-ai/agentscope-java#4163: user hold\n")
-    monkeypatch.setattr(mp, "DATA_ROOT", tmp_path)
-    monkeypatch.setattr(mp, "_dispatch_pr_fix", lambda *a, **kw: pytest.fail("held PR must not dispatch"))
-    assert "paused" in mp.dispatch_pr_fix("agentscope-ai/agentscope-java", 4163, kind="followup")["reason"]
-    assert "paused" in mp.dispatch_pr_fix("agentscope-ai/agentscope-java", 4163, kind="ci")["reason"]
-    assert "paused" in mp.draft_reply("agentscope-ai/agentscope-java", 4163, force=True)["reason"]
 
 
 def test_legacy_semantic_scorer_does_not_turn_missing_hint_into_no(monkeypatch):

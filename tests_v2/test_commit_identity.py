@@ -45,30 +45,3 @@ def test_commit_overrides_cli_environment_and_repository_identity(repo_with_cli_
     git(repo, "add", "source.txt")
     commit_as_owner(repo, "fix: regression").check_returncode()
     assert_owner(repo)
-
-
-def test_followup_workflow_uses_same_owner_for_the_approval_bundle(
-        repo_with_cli_identity, tmp_path, monkeypatch):
-    repo = repo_with_cli_identity
-    head = git(repo, "rev-parse", "HEAD")
-    (repo / "source.txt").write_text("fixed\n", encoding="utf-8")
-    git(repo, "add", "source.txt")
-    tree = git(repo, "write-tree")
-    (tmp_path / "prfix.json").write_text("##OSSCOUT_PRFIX##" + json.dumps(
-        {"fixed": True, "tested_tree": tree, "test_result": "passed"}), encoding="utf-8")
-    (tmp_path / "fix.json").write_text(json.dumps({"pr_number": 123}), encoding="utf-8")
-    root = Path(__file__).resolve().parents[1]
-    workflow = yaml.safe_load((root / ".github/workflows/oss-scout-pr-fix.yml").read_text(encoding="utf-8"))
-    step = next(step for step in workflow["jobs"]["prfix"]["steps"]
-                if step.get("name") == "Save tested commit without pushing")
-    script = step["run"].split("python3 - <<'PY'\n", 1)[1].rsplit("\nPY", 1)[0]
-    monkeypatch.setenv("RUNNER_TEMP", str(tmp_path))
-    monkeypatch.setenv("HEAD_SHA", head)
-    monkeypatch.setenv("GITHUB_WORKSPACE", str(root.parent))
-    monkeypatch.setenv("GITHUB_OUTPUT", str(tmp_path / "output"))
-    monkeypatch.chdir(repo)
-    exec(compile(script, "followup-stage", "exec"), {})
-    assert_owner(repo)
-    assert git(repo, "rev-parse", "HEAD^") == head
-    assert git(repo, "rev-parse", "HEAD^{tree}") == tree
-    assert (tmp_path / "pr-fix.bundle").is_file()

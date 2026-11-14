@@ -30,6 +30,15 @@ def main():
         assert "?table=tbl" in exc.headers["Location"]
     else:
         raise AssertionError("PR table redirect is missing")
+    for route in ("/feishu/callback", "/api/ingest/pr-comments"):
+        request = urllib.request.Request(base_url + route, data=b"{}", headers={"Content-Type": "application/json"})
+        try:
+            urllib.request.urlopen(request, timeout=10)
+        except urllib.error.HTTPError as exc:
+            assert exc.code == 404, f"Retired PR endpoint still responds: {route} {exc.code}"
+        else:
+            raise AssertionError(f"Retired PR endpoint is still active: {route}")
+    assert not (Path(__file__).resolve().parents[1] / "scout_v2/pr_approval.py").exists()
     candidates = json.loads((root / "queue/candidates.json").read_text(encoding="utf-8"))
     staged = staged_candidate_count(candidates)
     limit = runtime_limit(root, "candidate_pool_size", STAGED_CANDIDATE_LIMIT)
@@ -42,7 +51,8 @@ def main():
             except Exception:
                 raise RuntimeError("Unable to read Feishu model settings") from None
             expected = fm.PROVIDERS.keys()
-            if (expected == records.keys() and all(records[key]["fields"].get("模型名")
+            if (fb.load_binding(root).get("model_table_layout") == 6
+                    and expected == records.keys() and all(records[key]["fields"].get("模型名")
                     for key, columns in fm.PROVIDERS.items() if "模型名" in columns)
                     and records["OpenCode"]["fields"].get("Base URL")
                     and all(records["运行设置"]["fields"].get(column)
@@ -51,6 +61,9 @@ def main():
         time.sleep(5)
     else:
         raise AssertionError("Feishu model settings table is not ready")
+    table_url = f"https://open.feishu.cn/open-apis/bitable/v1/apps/{fb._binding_app_token(root)}/tables/{table_id}"
+    columns = fm._table_request(table_url, "GET", "fields?page_size=100")
+    assert not {"PR 评论触发", "回复模型"} & {f["field_name"] for f in columns.get("items", [])}
     models = effective_models(root)
     base = fm._field_value(records["OpenCode"]["fields"].get("Base URL"), "opencode_base")
     assert base == models["opencode_base"], "OpenCode Base URL has not synchronized"
@@ -67,7 +80,7 @@ def main():
                       "credentials_present": keys_present, "opencode_base_synced": True}))
     print(json.dumps({"controller": "verified", "staged_candidates": staged,
                       "candidate_pool_size": limit, "daily_pr_quota": int(models["daily_pr_quota"]),
-                      "pr_table_redirect": True}))
+                      "pr_table_redirect": True, "pr_followup_removed": True, "retired_settings_removed": True}))
 
 
 if __name__ == "__main__":

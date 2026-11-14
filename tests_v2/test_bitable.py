@@ -53,10 +53,8 @@ class TestBuildRows:
         rows = mp.build_pr_rows(tmp_path)
         assert len(rows) == 1
         r = rows[0]
-        assert r["action"] == "address_review"
-        assert r["reply_status"] == "已发送"
-        assert r["fix_state"] == "已推送"
-        assert "go test rc=0" in r["note"]
+        assert not {"action", "reply_status", "fix_state", "note"} & r.keys()
+        assert r["state"] == "merged"
 
     def test_rows_survive_when_github_returns_empty(self, tmp_path, monkeypatch):
         monkeypatch.setattr(mp, "all_my_prs", lambda limit=100: [])
@@ -82,8 +80,8 @@ class TestBuildRows:
     def test_state_files_missing_is_fine(self, tmp_path, monkeypatch):
         monkeypatch.setattr(mp, "all_my_prs", lambda limit=100: [_row()])
         rows = mp.build_pr_rows(tmp_path)
-        assert rows[0]["action"] == "unknown"
-        assert rows[0]["reply_status"] == ""
+        assert rows[0]["state"] == "merged"
+        assert "reply_status" not in rows[0]
 
     def test_all_my_prs_dedupes_open_and_closed(self, monkeypatch):
         raw = {
@@ -432,7 +430,7 @@ def test_feishu_model_settings_migrates_and_applies_two_provider_rows(tmp_path, 
     from scout_v2.workers.issue_scorer import GoClient, load_scorer_config
     from scout_v2.workers.openjev import OpenJevClient
 
-    write_models(tmp_path, {"repair_model": "opencode-go/repair", "reply_model": "reply",
+    write_models(tmp_path, {"repair_model": "opencode-go/repair", "reply_model": "reply", "pr_comment_trigger": "off",
                            "codiv_model": "openjev-latest", "codiv_base": "https://api.codiv.ai",
                            "codiv_key": "old-codiv-test", "opencode_key": "old-opencode-test"})
     records = {
@@ -463,13 +461,19 @@ def test_feishu_model_settings_migrates_and_applies_two_provider_rows(tmp_path, 
             for key, row in list(records.items()):
                 if row["record_id"] in payload["records"]:
                     del records[key]
+        if url.endswith("fields?page_size=100"):
+            return {"code": 0, "data": {"items": [
+                {"field_name": "PR 评论触发", "field_id": "old-comment-switch"},
+                {"field_name": "回复模型", "field_id": "old-reply-model"}]}}
         return {"code": 0, "data": {"items": []}}
 
     monkeypatch.setattr(fm.feishu_app, "_request", request)
     lock = Lock()
     assert fm.sync_model_settings(tmp_path, lock).endswith("?table=tblExample")
     assert set(records) == {"运行设置", "OpenCode", "Codex", "Codiv"}
-    assert binding["model_table_layout"] == 5
+    assert binding["model_table_layout"] == 6
+    assert any(method == "DELETE" and url.endswith("/old-comment-switch") for method, url in requests)
+    assert any(method == "DELETE" and url.endswith("/old-reply-model") for method, url in requests)
     opencode, codiv = (records[label]["fields"] for label in ("OpenCode", "Codiv"))
     assert codiv["模型名"] == "openjev-0.1"
     assert codiv["API 密钥"] == "old-codiv-test"
@@ -502,13 +506,9 @@ def test_feishu_model_settings_migrates_and_applies_two_provider_rows(tmp_path, 
     assert "候选池大小：" in running["应用状态"]
     assert "每日 PR 额度：" in running["应用状态"]
     running.update({"候选池大小": 10, "每日 PR 额度": 5})
-    assert running["PR 评论触发"] == "开启"
-    running["PR 评论触发"] = "关闭"
-    fm.sync_model_settings(tmp_path, lock)
-    assert read_models(tmp_path)["pr_comment_trigger"] == "off"
-    running["PR 评论触发"] = "开启"
-    fm.sync_model_settings(tmp_path, lock)
-    assert read_models(tmp_path)["pr_comment_trigger"] == "on"
+    assert "PR 评论触发" not in running
+    assert "回复模型" not in opencode
+    assert "pr_comment_trigger" not in read_models(tmp_path)
     assert "待登录" in records["Codex"]["fields"]["应用状态"]
     records["运行设置"]["fields"]["修复工具"] = "Codex"
     records["Codex"]["fields"].update({"模型名": "example-codex-model", "思考强度": "high"})

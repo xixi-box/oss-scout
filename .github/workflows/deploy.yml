@@ -148,7 +148,7 @@ jobs:
     name: Deploy to ${{ github.event.inputs.target_env }} (self-hosted)
     needs: build
     runs-on: [self-hosted, "${{ github.event.inputs.target_env }}"]
-    timeout-minutes: 18
+    timeout-minutes: 50
     concurrency:
       group: atomic-${{ github.repository }}-${{ github.event.inputs.target_env }}
       cancel-in-progress: false
@@ -285,8 +285,8 @@ jobs:
           from pathlib import Path
 
           root = Path("/opt/oss-scout-data")
-          for attempt in range(120):
-              lock = sqlite3.connect(root / "state/dispatcher.sqlite3", timeout=0, isolation_level=None)
+          for attempt in range(240):
+              lock = sqlite3.connect(root / "state/dispatcher.sqlite3", timeout=1, isolation_level=None)
               try:
                   lock.execute("BEGIN IMMEDIATE")
                   queue = json.loads((root / "queue/candidates.json").read_text())

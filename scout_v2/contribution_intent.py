@@ -1,8 +1,6 @@
 """Conservative multilingual evidence; no match never proves absence of intent."""
 import re
-from pathlib import Path
 
-import yaml
 
 
 MULTILINGUAL_REVIEW_RULES = (
@@ -71,9 +69,3 @@ def self_fix_evidence(text: str) -> list[str]:
 
 def coordination_evidence(text: str) -> bool:
     return any(_COORDINATION.search(part) for part in prose_clauses(text))
-
-
-def pr_automation_hold(root: Path, repo: str, number: int) -> bool:
-    path = root / "configs/pr_automation_holds.yaml"
-    holds = yaml.safe_load(path.read_text(encoding="utf-8")) if path.exists() else {}
-    return f"{repo}#{number}".lower() in {str(key).lower() for key in (holds or {})}

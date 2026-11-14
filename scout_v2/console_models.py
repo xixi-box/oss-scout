@@ -20,8 +20,6 @@ def model_setting_error(key: str, value: str) -> str:
         return "输入超过 512 字符。"
     if key == "repair_agent":
         return "" if value in ("opencode", "codex") else "请选择 OpenCode 或 Codex。"
-    if key == "pr_comment_trigger":
-        return "" if value in ("on", "off") else "请选择开启或关闭。"
     if key in {"candidate_pool_size", "daily_pr_quota"}:
         return "" if re.fullmatch(r"[1-9][0-9]*", value) else "请填写大于 0 的整数。"
     if key == "codex_variant":
@@ -60,7 +58,6 @@ def effective_models(root: Path) -> dict:
     values = read_models(root)
     return {
         "repair_agent": values.get("repair_agent") or "opencode",
-        "pr_comment_trigger": values.get("pr_comment_trigger") or "on",
         "candidate_pool_size": str(runtime_limit(root, "candidate_pool_size", 10)),
         "daily_pr_quota": str(daily_pr_quota(root)),
         "codex_model": values.get("codex_model") or "",
@@ -140,8 +137,6 @@ def daily_pr_quota(root: Path) -> int:
     return runtime_limit(root, "daily_pr_quota", default)
 
 
-def pr_comment_trigger_enabled(root: Path) -> bool:
-    return read_models(root).get("pr_comment_trigger", "on") != "off"
 
 
 def write_models(root: Path, values: dict) -> None:

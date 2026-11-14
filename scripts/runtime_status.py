@@ -55,15 +55,13 @@ def inspect(root: Path) -> dict:
               "automatic_repositories": sum(policy.repo_lane(repo) == "open" for repo in repos),
               "daily_cap": policy.max_claims_per_day,
               "queue": dict(collections.Counter(e.get("status") for e in queue.values()))}
-    from scout_v2.console_models import pr_comment_trigger_enabled, runtime_limit
+    from scout_v2.console_models import runtime_limit
     from scout_v2.feishu_bitable import load_binding
     from scout_v2.state_store import staged_candidate_count
     result["waiting_candidates"] = staged_candidate_count(queue)
     result["candidate_pool_size"] = runtime_limit(root, "candidate_pool_size", 10)
-    result["pr_comment_trigger_enabled"] = pr_comment_trigger_enabled(root)
+    result["pr_followup_enabled"] = False
     result["model_settings_layout"] = load_binding(root).get("model_table_layout")
-    holds = root / "configs/pr_automation_holds.yaml"
-    result["pr_automation_holds"] = sorted(yaml.safe_load(holds.read_text(encoding="utf-8")) or {}) if holds.exists() else []
     for filename, key, query, args in [
         ("scout_v2.sqlite3", "starts_today", "SELECT COUNT(*) FROM claim_days WHERE day=?", (now.date().isoformat(),)),
         ("scout_v2.sqlite3", "published_today", "SELECT COUNT(*) FROM publications WHERE day=?", (now.date().isoformat(),)),

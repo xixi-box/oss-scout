@@ -45,10 +45,12 @@ def test_machine_routes_keep_independent_authentication(client, monkeypatch):
     assert client.post("/api/ingest/issues", json={"issues": []}).status_code == 403
     headers = {"X-Ingest-Token": "worker-token"}
     assert client.post("/api/ingest/issues", headers=headers, json={"issues": []}).status_code == 200
-    assert client.post("/api/pr/reply/fix-result", headers=headers, json={}).status_code == 400
-    assert client.post("/feishu/callback", json={}).status_code == 403
+    assert client.post("/api/ingest/pr-comments", headers=headers, json={"events": []}).status_code == 404
+    assert client.post("/login", json={"password": "pw-secret"}).status_code == 200
+    assert client.post("/api/pr/reply/fix-result", headers=headers, json={}).status_code == 404
+    assert client.post("/feishu/callback", json={"event": {"action": {"value": {"do": "approve_pr_followup"}}}}).status_code == 404
     reply = client.post("/feishu/callback", json={"type": "url_verification", "challenge": "test"})
-    assert reply.json() == {"challenge": "test"}
+    assert reply.status_code == 404
 
 
 def test_controller_opens_sqlite_read_only(tmp_path):

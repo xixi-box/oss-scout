@@ -79,5 +79,5 @@ jobs:
           assert {r.lower() for r in tracked} - {r.lower() for r in repos} == {"clickhouse/clickhouse"}
           schedules = [item["cron"] for item in read("/schedules")["schedules"]]
           assert schedules == ["* * * * *"], "live schedule mismatch"
-          print("Live Worker: exact 57-repository issue scan, 58-repository PR tracking, every minute")
+          print("Live Worker: exact 57-repository issue scan every minute; PR comment polling removed (58 tracked repositories)")
           PY
