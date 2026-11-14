@@ -257,7 +257,7 @@ def test_slot_taken_during_fine_screen_does_not_overfill_queue(queue_root, monke
 def test_full_queue_has_no_direct_bypass_without_known_free_budget(queue_root, monkeypatch, pending):
     write_queue(queue_root, {f"a/b#{i}": {"status": "staged"} for i in range(10, 20)})
     ledger = ClaimLedger(queue_root / "state/scout_v2.sqlite3")
-    for n in range(2 if pending else 5):
+    for n in range(1 if pending else 5):
         assert ledger.reserve_publication("Asia/Shanghai", 5, f"job-{n}", "a/b", "head", "x/y")
         if not pending:
             ledger.finish_publication(f"job-{n}", day="2026-11-12", url=f"https://github.com/a/b/pull/{n}")

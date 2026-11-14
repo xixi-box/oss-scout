@@ -20,14 +20,14 @@ def entry(n):
             "ai_verdict": {"usable": True}}
 
 
-@pytest.mark.parametrize("remaining,limit", [(0,0),(1,1),(2,1),(3,1),(4,2),(5,2),(10,5),(20,10)])
-def test_half_remaining_budget_has_no_fixed_cap(tmp_path, remaining, limit):
+@pytest.mark.parametrize("remaining,limit", [(0,0),(1,1),(2,1),(3,1),(4,1),(5,1),(10,1),(20,1),(30,1)])
+def test_daily_quota_never_increases_serial_execution_limit(tmp_path, remaining, limit):
     ledger = ClaimLedger(tmp_path / "quota.sqlite3")
     day = state.business_now().date().isoformat()
-    for n in range(20 - remaining):
-        assert ledger.reserve_publication(TZ, 20, f"done-{n}", "a/b", f"head-{n}", "x/y")
+    for n in range(30 - remaining):
+        assert ledger.reserve_publication(TZ, 30, f"done-{n}", "a/b", f"head-{n}", "x/y")
         ledger.finish_publication(f"done-{n}", day=day, url=f"https://github.com/a/b/pull/{n+1}")
-    capacity = ledger.dispatch_capacity(TZ, 20)
+    capacity = ledger.dispatch_capacity(TZ, 30)
     assert (capacity["remaining"], capacity["limit"], capacity["available"]) == (remaining, limit, limit)
     ledger.close()
 
@@ -41,16 +41,15 @@ def _competing_reservation(arguments):
         ledger.close()
 
 
-def test_competing_preparations_reserve_exactly_half_the_budget(tmp_path):
+def test_competing_preparations_reserve_only_one_execution_slot(tmp_path):
     db = tmp_path / "quota.sqlite3"
     with ThreadPoolExecutor(max_workers=16) as workers:
         winners = list(workers.map(_competing_reservation, [(db,n,f"a/b#{n}") for n in range(16)]))
-    assert sum(winners) == 5
+    assert sum(winners) == 1
     ledger = ClaimLedger(db)
-    assert ledger.dispatch_capacity(TZ, 10)["active"] == 5
+    assert ledger.dispatch_capacity(TZ, 10)["active"] == 1
     assert ledger.dispatch_capacity(TZ, 10)["available"] == 0
-    # Halving happens before subtracting in-flight reservations, never twice.
-    assert ledger.dispatch_capacity(TZ, 10)["limit"] == 5
+    assert ledger.dispatch_capacity(TZ, 10)["limit"] == 1
     ledger.close()
 
 
@@ -61,20 +60,23 @@ def test_same_candidate_case_variants_cannot_both_be_reserved(tmp_path):
     assert sum(winners) == 1
 
 
-def test_success_shrinks_limit_and_failure_refunds_only_its_slot(tmp_path):
+def test_existing_parallel_writers_drain_before_serial_dispatch_resumes(tmp_path):
     ledger = ClaimLedger(tmp_path / "quota.sqlite3")
-    for n in range(5):
-        assert ledger.reserve_dispatch(TZ, 10, f"job-{n}", "a/b", f"a/b#{n}")
-    assert ledger.reserve_publication(TZ, 10, "job-0", "a/b", "fork:fix/issue-0-a-b", "x/y")
-    ledger.finish_publication("job-0", day=state.business_now().date().isoformat(), url="https://github.com/a/b/pull/10")
-    capacity = ledger.dispatch_capacity(TZ, 10)
-    assert (capacity["remaining"], capacity["limit"], capacity["active"], capacity["available"]) == (9,4,4,0)
-    ledger.release_preparation("job-1")
-    assert ledger.dispatch_capacity(TZ,10)["available"] == 1
-    assert ledger.reserve_dispatch(TZ,10,"replacement","a/b","a/b#99")
-    # Lowering the daily quota never deletes reservations or stops their owners.
-    assert ledger.dispatch_capacity(TZ,2)["available"] == 0
-    assert ledger.dispatch_capacity(TZ,2)["active"] == 4
+    ledger.dispatch_capacity(TZ,30)
+    # These writers were admitted by the previous parallel version.
+    for n in range(3):
+        ledger._conn.execute("INSERT INTO publications(job_id,repo,head,runner_repo,candidate_id,phase) VALUES (?,?,?,?,?,'dispatching')",
+            (f"job-{n}","a/b",f"owner:fix/issue-{n}-abcdef0-12345678","x/y",f"a/b#{n}"))
+    assert ledger.dispatch_capacity(TZ,30)['active']==3
+    for n in range(3):
+        assert not ledger.reserve_dispatch(TZ,30,'replacement','a/b','a/b#99')
+        assert ledger.dispatch_capacity(TZ,30)['available']==0
+        ledger.finish_publication(f'job-{n}')
+    assert ledger.reserve_dispatch(TZ,30,'replacement','a/b','a/b#99')
+    assert ledger.dispatch_capacity(TZ,30)['active']==1
+    assert ledger.dispatch_capacity(TZ,1)['available']==0
+    ledger.release_preparation('replacement')
+    assert ledger.dispatch_capacity(TZ,30)['available']==1
     ledger.close()
 
 
@@ -88,13 +90,13 @@ def test_old_pending_writer_is_preserved_and_counted_after_schema_migration(tmp_
     assert ledger.pending_publication()[4] == "42"
     assert ledger.reserved_candidates() == ["a/b#1"]
     assert not ledger.reserve_dispatch(TZ,20,"duplicate","a/b","a/b#1")
-    assert ledger.reserve_dispatch(TZ,5,"other","a/b","a/b#2")
+    assert not ledger.reserve_dispatch(TZ,5,"other","a/b","a/b#2")
     assert ledger.pending_publication()[0] == "old"
-    assert ledger.dispatch_capacity(TZ,5)["active"] == 2
+    assert ledger.dispatch_capacity(TZ,5)["active"] == 1
     ledger.close()
 
 
-def test_two_pipelines_execute_together_and_duplicate_stays_out(tmp_path, monkeypatch):
+def test_second_pipeline_waits_until_the_first_releases_its_execution_slot(tmp_path, monkeypatch):
     (tmp_path / "queue").mkdir()
     queue = tmp_path / "queue/candidates.json"
     queue.write_text(json.dumps({f"a/b#{n}":entry(n) for n in range(1,4)}))
@@ -114,15 +116,17 @@ def test_two_pipelines_execute_together_and_duplicate_stays_out(tmp_path, monkey
         assert entered[0].wait(5)
         second = workers.submit(pipeline.candidate_pipeline,tmp_path,entry(2))
         try:
-            assert entered[1].wait(5), "global repair lock still serializes execution"
+            assert second.result(timeout=5)["abort"] == "dispatcher busy"
+            assert not entered[1].is_set()
             assert pipeline.candidate_pipeline(tmp_path,entry(1))["abort"] == "dispatcher busy"
             assert pipeline.candidate_pipeline(tmp_path,entry(3))["abort"] == "dispatcher busy"
             ledger=ClaimLedger(tmp_path / "state/scout_v2.sqlite3")
-            assert ledger.dispatch_capacity(TZ,5)["active"] == 2
+            assert ledger.dispatch_capacity(TZ,5)["active"] == 1
             ledger.close()
         finally:
             release.set()
-        assert first.result()["completed"] and second.result()["completed"]
+        assert first.result()["completed"]
+    assert pipeline.candidate_pipeline(tmp_path,entry(2))["completed"]
     assert sorted(seen) == ["a/b#1","a/b#2"]
     ledger=ClaimLedger(tmp_path / "state/scout_v2.sqlite3")
     assert ledger.dispatch_capacity(TZ,5)["active"] == 0
@@ -134,7 +138,9 @@ def test_recovery_checks_all_writers_and_skips_live_owner(tmp_path,monkeypatch):
     (tmp_path/"queue/candidates.json").write_text(json.dumps({f"a/b#{n}":entry(n) for n in (1,2,3)}))
     ledger=ClaimLedger(tmp_path/"state/scout_v2.sqlite3")
     for n in (1,2,3):
-        assert ledger.reserve_publication(TZ,10,f"job-{n}","a/b",f"owner:fix/issue-{n}-abcdef0-12345678","x/y")
+        ledger.dispatch_capacity(TZ,10)
+        ledger._conn.execute("INSERT INTO publications(job_id,repo,head,runner_repo,candidate_id) VALUES (?,?,?,?,?)",
+            (f"job-{n}","a/b",f"owner:fix/issue-{n}-abcdef0-12345678","x/y",f"a/b#{n}"))
         ledger.set_publication_run(f"job-{n}",str(n))
     reads=[]
     def github(args,**kw):
@@ -162,13 +168,13 @@ def test_processes_share_the_same_quota_reservations(tmp_path):
     db=tmp_path/"quota.sqlite3"
     with ProcessPoolExecutor(max_workers=6) as workers:
         results=list(workers.map(_competing_reservation,[(db,n,f"a/b#{n}") for n in range(12)]))
-    assert sum(results)==5
+    assert sum(results)==1
     ledger=ClaimLedger(db)
     assert ledger.dispatch_capacity(TZ,10)["available"]==0
     ledger.close()
 
 
-def test_controller_can_launch_ten_repairs_when_twenty_slots_remain(tmp_path,monkeypatch):
+def test_controller_only_launches_one_repair_even_with_large_daily_quota(tmp_path,monkeypatch):
     import inspect
     import threading
     monkeypatch.setenv("OSSCOUT_DISABLE_AUTO_REPAIR","1")
@@ -190,8 +196,8 @@ def test_controller_can_launch_ten_repairs_when_twenty_slots_remain(tmp_path,mon
     monkeypatch.delenv("OSSCOUT_DISABLE_AUTO_REPAIR")
     endpoint=next(r.endpoint for r in app.routes if r.path=="/api/pipeline/run")
     dispatch=inspect.getclosurevars(endpoint).nonlocals["_dispatch"]
-    assert len(dispatch(rescreen=True))==10
-    assert len(set(launches))==10
+    assert len(dispatch(rescreen=True))==1
+    assert len(set(launches))==1
     assert dispatch(rescreen=True)==[]
 
 

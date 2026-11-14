@@ -473,6 +473,11 @@ def create_app(root: Path | None = None, gh_runner=None,
             for key, entry in q.items():
                 if key.lower() in protected:
                     continue  # remote/preparing writer still owns its durable reservation
+                if (entry.get("status") == "staged" and not entry.get("dispatch_job_id")
+                        and not entry.get("dispatch_started_at") and entry.get("direct_start_reserved_at")):
+                    with candidate_execution_lock(root, key) as owned:
+                        if owned:
+                            entry.pop("direct_start_reserved_at", None)
                 safe_retry = _authorized_retry(entry) and key.lower() not in active_claims
                 if entry.get("status") == "running" or (key in previously_started and not safe_retry and entry.get("status") in (
                         "new", "recheck_failed", "staged")):

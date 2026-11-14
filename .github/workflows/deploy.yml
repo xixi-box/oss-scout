@@ -148,7 +148,7 @@ jobs:
     name: Deploy to ${{ github.event.inputs.target_env }} (self-hosted)
     needs: build
     runs-on: [self-hosted, "${{ github.event.inputs.target_env }}"]
-    timeout-minutes: 50
+    timeout-minutes: 120
     concurrency:
       group: atomic-${{ github.repository }}-${{ github.event.inputs.target_env }}
       cancel-in-progress: false
@@ -285,27 +285,31 @@ jobs:
           from pathlib import Path
 
           root = Path("/opt/oss-scout-data")
-          for attempt in range(240):
-              lock = sqlite3.connect(root / "state/dispatcher.sqlite3", timeout=1, isolation_level=None)
-              try:
-                  lock.execute("BEGIN IMMEDIATE")
-                  queue = json.loads((root / "queue/candidates.json").read_text())
-                  with sqlite3.connect(f"file:{root}/state/scout_v2.sqlite3?mode=ro", uri=True) as db:
-                      pending = db.execute("SELECT COUNT(*) FROM publications WHERE day IS NULL").fetchone()[0]
-                  if pending or any(e.get("status") == "running" for e in queue.values()):
-                      print("Active repair or pending publication; leaving it untouched", flush=True)
-                  else:
-                      subprocess.run(["docker", "compose", "-f", sys.argv[1], "up", "-d", "--remove-orphans"], check=True)
-                      break
-              except sqlite3.OperationalError as exc:
-                  if "locked" not in str(exc).lower():
-                      raise
-                  print("Repair owns dispatcher; waiting without interrupting it", flush=True)
-              finally:
-                  lock.close()
-              time.sleep(10)
-          else:
-              raise SystemExit("Deployment postponed: repair did not become idle")
+          lock = sqlite3.connect(root / "state/dispatcher.sqlite3", timeout=1, isolation_level=None)
+          try:
+              for attempt in range(660):
+                  try:
+                      if not lock.in_transaction:
+                          lock.execute("BEGIN IMMEDIATE")
+                      # Retain admission ownership while existing jobs finish.
+                      # This blocks new dispatches without cancelling remote jobs.
+                      queue = json.loads((root / "queue/candidates.json").read_text())
+                      with sqlite3.connect(f"file:{root}/state/scout_v2.sqlite3?mode=ro", uri=True) as db:
+                          pending = db.execute("SELECT COUNT(*) FROM publications WHERE day IS NULL").fetchone()[0]
+                      if pending or any(e.get("status") == "running" for e in queue.values()):
+                          print("Active repair or pending publication; admission paused until reconciliation", flush=True)
+                      else:
+                          subprocess.run(["docker", "compose", "-f", sys.argv[1], "up", "-d", "--remove-orphans"], check=True)
+                          break
+                  except sqlite3.OperationalError as exc:
+                      if "locked" not in str(exc).lower():
+                          raise
+                      print("Repair owns dispatcher; waiting without interrupting it", flush=True)
+                  time.sleep(10)
+              else:
+                  raise SystemExit("Deployment postponed: repair did not become idle")
+          finally:
+              lock.close()
           PY
           # 清理同仓库旧镜像（保留本次 SHA 与 latest）。
           # 只清 dangling 不够：带 tag 的历史版本会永久堆积（2026-10-27 磁盘打满事故）

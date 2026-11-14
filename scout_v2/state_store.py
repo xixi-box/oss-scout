@@ -471,12 +471,12 @@ class ClaimLedger:
             "state TEXT NOT NULL, closed_day TEXT)")
 
     def dispatch_capacity(self, tz_name: str, cap: int) -> dict:
-        """Half the unspent confirmed budget; all potential writers reserve a seat."""
+        """One repair at a time; pending remote writers keep the sole seat."""
         self._publication_table()
         day = business_now(tz_name).date().isoformat()
         used = self.quota_used(day)
         remaining = max(0, cap - used)
-        limit = max(1, remaining // 2) if remaining else 0
+        limit = 1 if remaining else 0
         active = self._conn.execute("SELECT COUNT(*) FROM publications WHERE day IS NULL").fetchone()[0]
         return {"used": used, "remaining": remaining, "limit": limit, "active": active,
                 "available": max(0, min(limit - active, remaining - active))}
