@@ -7,7 +7,7 @@ import pytest
 
 from dashboard import data
 from scout_v2 import git_host
-from scout_v2.contribution_intent import claim_evidence, self_fix_evidence, MULTILINGUAL_REVIEW_RULES
+from scout_v2.contribution_intent import claim_evidence, self_fix_evidence, coordination_evidence, MULTILINGUAL_REVIEW_RULES
 from scout_v2.workers.openjev import OpenJevClient
 from scripts import monitor_prs as mp
 
@@ -109,6 +109,12 @@ def test_chinese_bot_claim_is_not_discarded_as_routine_noise():
     assert not mp._is_noise_bot("github-actions[bot]", body)
     assert mp._classify_by_rules(body, {"author": {"login": "github-actions[bot]"}})[0] == "assignment_note"
     assert mp._is_noise_bot("github-actions[bot]", "流水线已完成，构建产物可下载。")
+
+
+@pytest.mark.parametrize("body", ["请修改查询以避免返回重复数据。", "Please change this query to avoid duplicate rows."])
+def test_duplicate_data_is_a_code_request_not_ownership_coordination(body):
+    assert not coordination_evidence(body)
+    assert mp._classify_by_rules(body, {"author": {"login": "reviewer"}})[0] == "address_review"
 
 
 @pytest.mark.parametrize(("body", "action"), [

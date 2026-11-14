@@ -46,9 +46,9 @@ _NEGATED = re.compile(
     r"|(?:我|我们)(?:目前|现在)?(?:不打算|不准备|不愿意|不会|无法|不能|不再)[^。！？]{0,15}(?:修复|处理|提交|跟进)"
     r"|(?:提供(?:一些|相关|测试)?(?:日志|截图|堆栈)|\bprovide\s+(?:(?:some|the)\s+)?(?:logs|screenshots|tracebacks)\b)", re.I)
 _COORDINATION = re.compile(
-    r"避免[^。！？\n]{0,15}重复|不(?:另|再)[^。！？\n]{0,30}(?:推进|跟进|处理)"
+    r"避免[^。！？\n]{0,15}重复(?:投入|劳动|工作|开发|修复)|不(?:另|再)[^。！？\n]{0,30}(?:推进|跟进|处理)"
     r"|(?:已经|已)[^。！？\n]{0,60}(?:提交|实现|修复)[^。！？\n]{0,40}#\d+"
-    r"|\bavoid\b[^.!?\n]{0,50}\bduplicat\w*|\b(?:my|our|own)\b[^.!?\n]{0,60}\b(?:fix|implementation|PR)\b[^.!?\n]{0,40}#\d+"
+    r"|\bavoid\b[^.!?\n]{0,30}\bduplicat\w*\s+(?:work|effort)\b|\b(?:my|our|own)\b[^.!?\n]{0,60}\b(?:fix|implementation|PR)\b[^.!?\n]{0,40}#\d+"
     r"|\b(?:continue|focus|discuss)\b[^.!?\n]{0,40}#\d+", re.I)
 
 
