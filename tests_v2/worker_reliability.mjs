@@ -125,6 +125,40 @@ test('fifty repositories use five batched GitHub requests', async t => {
   assert.equal(Object.keys(JSON.parse(env.stored.get('watermarks'))).length, 50);
 });
 
+test('57 repositories fit in six GitHub requests within the existing budget', async t => {
+  t.after(() => mock.restoreAll());
+  const env = setup();
+  env.REPOS = Array.from({ length: 57 }, (_, i) => `a/repo${i}`).join(',');
+  let calls = 0;
+  mock.method(globalThis, 'fetch', async (url, options) => {
+    assert.equal(url, 'https://api.github.com/graphql');
+    calls++;
+    const aliases = [...JSON.parse(options.body).query.matchAll(/(r\d+): repository/g)];
+    return response({ data: Object.fromEntries(aliases.map(m => [m[1], gqlPage()])) });
+  });
+  await worker.pollOnce(env);
+  assert.equal(calls, 6);
+  assert.equal(JSON.parse(env.stored.get('diag')).ok_repos, 57);
+});
+
+test('paused discovery still tracks PR comments and migrated repository aliases', async t => {
+  t.after(() => mock.restoreAll());
+  const env = setup({ prs: JSON.stringify(['ClickHouse/ClickHouse#9', 'jlowin/fastmcp#10', 'removed/repo#11']) });
+  env.REPOS = 'PrefectHQ/fastmcp';
+  env.TRACKED_REPOS = 'PrefectHQ/fastmcp,clickhouse/clickhouse';
+  const delivered = [];
+  mock.method(globalThis, 'fetch', async (url, options) => {
+    if (String(url).includes('/api/ingest/')) {
+      delivered.push(...JSON.parse(options.body).events);
+      return response({});
+    }
+    assert.doesNotMatch(String(url), /removed\/repo/);
+    return response([{ id: 3, user: { login: 'maintainer' }, body: 'Please fix' }]);
+  });
+  await worker.notifyPrComments(env, new RealDate(NOW));
+  assert.deepEqual(delivered.map(e => e.repo).sort(), ['ClickHouse/ClickHouse', 'jlowin/fastmcp']);
+});
+
 test('overlapping cron invocations share the same in-flight scan', async t => {
   t.after(() => mock.restoreAll());
   const env = setup();

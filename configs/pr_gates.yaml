@@ -29,53 +29,61 @@ cla:
   # gemini-cli（Google CLA，cla.developers.google.com）。签一次终身有效
 
 repositories:
+  kgateway-dev/kgateway: {requires_invite: false}
+  NVIDIA/NeMo-Agent-Toolkit: {requires_invite: false, claim_comment: true}
+  punkpeye/fastmcp: {requires_invite: false}
+  bytedance/deer-flow: {requires_invite: false}
+  infiniflow/ragflow: {requires_invite: false}
+  obot-platform/obot: {requires_invite: false}
+  The-PR-Agent/pr-agent: {requires_invite: false}
+  kubernetes-sigs/agent-sandbox: {requires_invite: false}
+  google/adk-go: {requires_invite: false}
+  modelcontextprotocol/ruby-sdk: {requires_invite: false}
+  opensandbox-group/OpenSandbox: {requires_invite: false}
+  milvus-io/milvus: {requires_invite: false}
+  modelcontextprotocol/php-sdk: {requires_invite: false}
+  NousResearch/hermes-agent: {requires_invite: false}
+  HKUDS/LightRAG: {requires_invite: false}
+  volcengine/OpenViking: {requires_invite: false}
+  Tencent/WeKnora: {requires_invite: false}
+  Unstructured-IO/unstructured: {requires_invite: false}
+  docling-project/docling: {requires_invite: false}
+  Mintplex-Labs/anything-llm: {requires_invite: false}
+  oceanbase/powercontext: {requires_invite: false}
+  HKUDS/RAG-Anything: {requires_invite: false}
+  pydantic/logfire: {requires_invite: false}
+  langgenius/dify: {requires_invite: false}
+  lancedb/lancedb: {requires_invite: false}
+  pydantic/monty: {requires_invite: false}
+  QwenLM/qwen-code: {requires_invite: false}
+  AgentClientProtocol/agent-client-protocol: {requires_invite: false}
+  firecracker-microvm/firecracker: {requires_invite: false}
+  webdriverio/webdriverio: {requires_invite: false}
+  puppeteer/puppeteer: {requires_invite: false}
+  pydantic/pydantic: {requires_invite: false}
+  traefik/traefik: {requires_invite: false}
+  istio/istio: {requires_invite: false}
+  pypa/virtualenv: {requires_invite: false}
+  tox-dev/tox: {requires_invite: false}
+  prettier/prettier: {requires_invite: false}
+  pypa/pipx: {requires_invite: false}
+  redis/redis-py: {requires_invite: false}
+  woodpecker-ci/woodpecker: {requires_invite: false}
+  dapr/dapr: {requires_invite: false}
+  nestjs/nest: {requires_invite: false}
+  python/typeshed: {requires_invite: false}
+  psf/black: {requires_invite: false}
+  rollup/rollup: {requires_invite: false}
+  agronholm/anyio: {requires_invite: false}
+  prometheus/alertmanager: {requires_invite: false}
+  rancher/rancher: {requires_invite: false}
+  prometheus/prometheus: {requires_invite: false, claim_comment: true}
+  redis/go-redis: {requires_invite: false}
   agentgateway/agentgateway: {requires_invite: false}
+  bytecodealliance/wasm-tools: {requires_invite: false}
+  bytecodealliance/wasmtime: {requires_invite: false}
   clickhouse/clickhouse: {requires_invite: false}
   modelcontextprotocol/rust-sdk: {requires_invite: false}
+  PrefectHQ/fastmcp: {requires_invite: false, requires_assignment: true, assignment_exempt_labels: [prs welcome]}
   qdrant/qdrant: {requires_invite: false, base_branch: dev}
   ruvnet/RuVector: {requires_invite: false}
-  bytecodealliance/wasmtime: {requires_invite: false}
-  apache/rocketmq: {requires_invite: false}
-  agentscope-ai/agentscope-java: {requires_invite: false}
-  kgateway-dev/kgateway: {requires_invite: false}
-  spring-projects/spring-boot: {requires_invite: false}
-  rancher/rancher: {requires_invite: false}
-  python/typeshed: {requires_invite: false}
-  PyO3/pyo3: {requires_invite: false}
-  redis/redis-py: {requires_invite: false}
-  bytecodealliance/wasm-tools: {requires_invite: false}
-  bytecodealliance/jco: {requires_invite: false}
-  infiniflow/ragflow: {requires_invite: false}
-  bytedance/deer-flow: {requires_invite: false}
-  NVIDIA/NeMo-Agent-Toolkit: {requires_invite: false, claim_comment: true}
-  psf/black: {requires_invite: false}
-  istio/istio: {requires_invite: false}
-  pypa/pipx: {requires_invite: false}
-  tox-dev/tox: {requires_invite: false}
-  caddyserver/caddy: {requires_invite: false}
-  dapr/dapr: {requires_invite: false}
-  moby/buildkit: {requires_invite: false}
-  docker/compose: {requires_invite: false}
-  firecracker-microvm/firecracker: {requires_invite: false}
-  milvus-io/milvus: {requires_invite: false}
-  envoyproxy/envoy: {requires_invite: false}
-  volcengine/OpenViking: {requires_invite: false}
-  traefik/traefik: {requires_invite: false}
-  pypa/virtualenv: {requires_invite: false}
-  docling-project/docling: {requires_invite: false}
-  Unstructured-IO/unstructured: {requires_invite: false}
-  apache/dubbo-go: {requires_invite: false, commit_issue_reference: true}
-  oceanbase/powercontext: {requires_invite: false}
-  prettier/prettier: {requires_invite: false}
-  pydantic/monty: {requires_invite: false}
-  oras-project/oras: {requires_invite: false}
-  python-poetry/poetry: {requires_invite: false}
-  pypa/pip: {requires_invite: false}
-  redis/go-redis: {requires_invite: false}
-  valkey-io/valkey: {requires_invite: false}
-  pydantic/logfire: {requires_invite: false}
-  rclone/rclone: {requires_invite: false}
-  prometheus/prometheus: {requires_invite: false, claim_comment: true}
-  django/django: {requires_invite: false}
-  HKUDS/RAG-Anything: {requires_invite: false}
-  dagger/dagger: {requires_invite: false}

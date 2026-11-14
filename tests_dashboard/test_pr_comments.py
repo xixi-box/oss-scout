@@ -49,7 +49,7 @@ def client(tmp_path: Path, monkeypatch) -> TestClient:
                         "ingest_token": TOKEN}), encoding="utf-8")
     (tmp_path / "configs" / "repositories.yaml").write_text(
         yaml.safe_dump({"defaults": {"requires_invite": False},
-                        "repositories": {"docker/compose": {"lane": "open"}}}),
+                        "repositories": {"traefik/traefik": {"lane": "open"}}}),
         encoding="utf-8")
     (tmp_path / "configs" / "pr_gates.yaml").write_text(
         yaml.safe_dump({"defaults": {"requires_invite": True}, "repositories": {}}),
@@ -87,7 +87,7 @@ def test_comment_switch_disables_instant_trigger_but_keeps_receipt_and_dedup(cli
 
     monkeypatch.setattr(threading, "Thread", Thread)
     write_models(tmp_path, {"pr_comment_trigger": "off"})
-    event = {"repo": "docker/compose", "number": 7, "comment_id": 9898,
+    event = {"repo": "traefik/traefik", "number": 7, "comment_id": 9898,
              "author": "maintainer", "body": "Please fix this"}
     assert _post(client, {"events": [event]}).json()["new"] == 1
     assert _post(client, {"events": [event]}).json()["new"] == 0
@@ -119,7 +119,7 @@ class TestClassification:
 
     def test_review_comment_is_recorded(self, client, tmp_path):
         r = _post(client, {"events": [{
-            "repo": "docker/compose", "number": 7, "comment_id": 1001,
+            "repo": "traefik/traefik", "number": 7, "comment_id": 1001,
             "author": "maintainer",
             "body": "please add a test for the empty case"}]})
         assert r.status_code == 200
@@ -127,11 +127,11 @@ class TestClassification:
         rows = [json.loads(l) for l in
                 (tmp_path / "state" / "pr_watch.jsonl").read_text(encoding="utf-8").splitlines()]
         assert rows[-1]["action"] == "address_review"
-        assert rows[-1]["repo"] == "docker/compose"
+        assert rows[-1]["repo"] == "traefik/traefik"
         assert rows[-1]["number"] == 7
 
     def test_duplicate_comment_is_dropped(self, client):
-        body = {"events": [{"repo": "docker/compose", "number": 7, "comment_id": 2002,
+        body = {"events": [{"repo": "traefik/traefik", "number": 7, "comment_id": 2002,
                             "author": "m", "body": "please fix"}]}
         assert _post(client, body).json()["new"] == 1
         # Worker 的窗口有 10 分钟重叠，同一条会被推多次
@@ -139,7 +139,7 @@ class TestClassification:
 
     def test_ci_style_comment_stays_wait(self, client, tmp_path):
         _post(client, {"events": [{
-            "repo": "docker/compose", "number": 8, "comment_id": 3003,
+            "repo": "traefik/traefik", "number": 8, "comment_id": 3003,
             "author": "changeset-bot[bot]",
             "body": "No changeset found in this PR"}]})
         rows = [json.loads(l) for l in
@@ -150,7 +150,7 @@ class TestClassification:
         r = _post(client, {"events": [
             {"repo": "", "number": 0, "comment_id": ""},   # 缺字段
             "not-a-dict",
-            {"repo": "docker/compose", "number": 9, "comment_id": 4004,
+            {"repo": "traefik/traefik", "number": 9, "comment_id": 4004,
              "author": "m", "body": "please change this"},
         ]})
         assert r.status_code == 200

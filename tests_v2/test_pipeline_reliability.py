@@ -248,12 +248,12 @@ def test_openjev_receives_actor_time_and_linked_pr_evidence(intake, monkeypatch)
     ({"screening_source": ({"state": "open", "assignees": [{"login": "someone"}]}, [], [])},
      "已有指派给其他人"),
     ({"is_duplicate": True}, "confirmed_duplicate"),
-    ({"open_pr_hits": ["docker/compose#3"]}, "已有修复 PR · docker/compose#3"),
+    ({"open_pr_hits": ["traefik/traefik#3"]}, "已有修复 PR · traefik/traefik#3"),
 ])
 def test_prestart_coarse_blocker_stops_before_claim(tmp_path, monkeypatch, check_overrides, reason):
     (tmp_path / "queue").mkdir()
     (tmp_path / "state").mkdir()
-    entry = {"id": "docker/compose#1", "repo": "docker/compose", "number": 1, "status": "staged", "eligible_at": "2000-01-01T00:00:00+08:00", "screened_at": queue_now().isoformat()}
+    entry = {"id": "traefik/traefik#1", "repo": "traefik/traefik", "number": 1, "status": "staged", "eligible_at": "2000-01-01T00:00:00+08:00", "screened_at": queue_now().isoformat()}
     queue = tmp_path / "queue/candidates.json"
     queue.write_text(json.dumps({entry["id"]: entry}))
     monkeypatch.setattr(p.PolicyEngine, "load", lambda _: (
@@ -276,7 +276,7 @@ def test_queue_rescreen_input_limit_is_terminal(tmp_path, monkeypatch):
 
     (tmp_path / "queue").mkdir()
     (tmp_path / "state").mkdir()
-    repo, key = "docker/compose", "docker/compose#1"
+    repo, key = "traefik/traefik", "traefik/traefik#1"
     entry = {"id": key, "repo": repo, "number": 1, "status": "staged", "eligible_at": "2000-01-01T00:00:00+08:00", "screened_at": queue_now().isoformat(), "ai_verdict": {"usable": True}}
     queue = tmp_path / "queue/candidates.json"
     queue.write_text(json.dumps({key: entry}), encoding="utf-8")
@@ -466,7 +466,7 @@ def test_unconsumed_backlog_waits_for_next_four_am(tmp_path, monkeypatch):
 def test_failed_repair_does_not_spend_publication_quota(tmp_path, monkeypatch, mode):
     (tmp_path / "queue").mkdir()
     (tmp_path / "state").mkdir()
-    entries = {f"docker/compose#{i}": {"id": f"docker/compose#{i}", "repo": "docker/compose", "number": i,
+    entries = {f"traefik/traefik#{i}": {"id": f"traefik/traefik#{i}", "repo": "traefik/traefik", "number": i,
                             "title": "Parser bug", "status": "staged", "eligible_at": "2000-01-01T00:00:00+08:00", "screened_at": queue_now().isoformat(), "context_complete": True,
                             "ai_verdict": {"usable": True, "provider": "codiv"}}
                for i in range(1, 8)}
@@ -474,7 +474,7 @@ def test_failed_repair_does_not_spend_publication_quota(tmp_path, monkeypatch, m
         from scout_v2.state_store import business_now
         now = business_now()
         for i in (4, 5, 6):
-            entries[f"docker/compose#{i}"].update(
+            entries[f"traefik/traefik#{i}"].update(
                 status="staged", staged_at=(now - dt.timedelta(days=2)).isoformat(),
                 screened_at=(now - dt.timedelta(days=2)).isoformat(),
                 eligible_at=dt.datetime.combine(now.date() - dt.timedelta(days=1),
@@ -482,7 +482,7 @@ def test_failed_repair_does_not_spend_publication_quota(tmp_path, monkeypatch, m
     (tmp_path / "queue/candidates.json").write_text(json.dumps(entries))
     eng = SimpleNamespace(repo_lane=lambda _: "open", tz_name="Asia/Shanghai",
                           max_claims_per_day=5, snapshot_id=lambda: "test",
-                          repos_cfg={"repositories": {"docker/compose": {}}})
+                          repos_cfg={"repositories": {"traefik/traefik": {}}})
     monkeypatch.setattr(p.PolicyEngine, "load", lambda _: (eng, None))
     rechecked = []
 
@@ -521,7 +521,7 @@ def test_failed_repair_does_not_spend_publication_quota(tmp_path, monkeypatch, m
             return {"display_title": f"repair {job.job_id}", "status": "completed"}
         if len(submitted) == 1:
             return []
-        return [{"html_url": f"https://github.com/docker/compose/pull/{len(submitted)}",
+        return [{"html_url": f"https://github.com/traefik/traefik/pull/{len(submitted)}",
                  "body": job.publish["body"], "user": {"login": "xixi-box"},
                  "created_at": business_now().isoformat()}]
 
@@ -544,10 +544,10 @@ def test_failed_repair_does_not_spend_publication_quota(tmp_path, monkeypatch, m
                        "fresh_blocked": [], "staged_blocked": [5, 6]}[mode]
     q = json.loads((tmp_path / "queue/candidates.json").read_text())
     if mode.endswith("_blocked"):
-        assert q["docker/compose#4"]["blockers"] == ["excluded_label"]
-        assert q["docker/compose#7"]["status"] == "pr_open"
+        assert q["traefik/traefik#4"]["blockers"] == ["excluded_label"]
+        assert q["traefik/traefik#7"]["status"] == "pr_open"
     else:
-        assert q["docker/compose#7"]["status"] == "staged"
+        assert q["traefik/traefik#7"]["status"] == "staged"
 
 
 def test_publication_reconciled_on_github_creation_day(tmp_path, monkeypatch):
@@ -556,13 +556,13 @@ def test_publication_reconciled_on_github_creation_day(tmp_path, monkeypatch):
     tz = "Asia/Shanghai"
     monkeypatch.setattr(state_store, "business_now",
                         lambda _: dt.datetime.fromisoformat("2026-11-08T00:05:00+08:00"))
-    assert ledger.reserve_publication(tz, 5, "test", "docker/compose", "xixi-box:fix", "xixi-box/oss-scout")
-    assert not ledger.reserve_publication(tz, 5, "other", "docker/compose", "xixi-box:other", "xixi-box/oss-scout")
+    assert ledger.reserve_publication(tz, 5, "test", "traefik/traefik", "xixi-box:fix", "xixi-box/oss-scout")
+    assert not ledger.reserve_publication(tz, 5, "other", "traefik/traefik", "xixi-box:other", "xixi-box/oss-scout")
     ledger.set_publication_run("test", "1")
     responses = iter([
         {"status": "completed", "display_title": "repair test"},
         [{"body": "<!-- oss-scout-job:test -->", "created_at": "2026-11-07T16:01:00Z",
-          "user": {"login": "xixi-box"}, "html_url": "https://github.com/docker/compose/pull/1"}],
+          "user": {"login": "xixi-box"}, "html_url": "https://github.com/traefik/traefik/pull/1"}],
     ])
     monkeypatch.setattr(p, "gh_read", lambda args: next(responses))
     assert p._reconcile_publication(ledger, tz)
@@ -629,14 +629,14 @@ def test_controller_restart_recovers_candidate_and_feishu_status(tmp_path, monke
 @pytest.mark.parametrize("case", ["missing", "published", "transient", "no_access",
                                   "pr_lookup_failed", "expected_url", "unexpected_pr", "replacement_running"])
 def test_missing_actions_writer_is_reconciled_only_with_complete_evidence(tmp_path, monkeypatch, case):
-    key = "docker/compose#123"
+    key = "traefik/traefik#123"
     job = "job-missing-run"
-    url = "https://github.com/docker/compose/pull/456"
+    url = "https://github.com/traefik/traefik/pull/456"
     (tmp_path / "queue").mkdir()
     queue = tmp_path / "queue/candidates.json"
     queue.write_text(json.dumps({key: {"status": "escalated"}}))
     ledger = ClaimLedger(tmp_path / "state/scout_v2.sqlite3")
-    assert ledger.reserve_publication("Asia/Shanghai", 5, job, "docker/compose",
+    assert ledger.reserve_publication("Asia/Shanghai", 5, job, "traefik/traefik",
                                       "xixi-box:fix/issue-123-abcdef0", "xixi-box/oss-scout")
     ledger.set_publication_run(job, "deleted")
     if case == "expected_url":
@@ -695,7 +695,7 @@ def test_same_day_pr_closure_refills_one_slot_without_rewriting_queue(tmp_path, 
     monkeypatch.setattr(p.PolicyEngine, "load", lambda _: (
         SimpleNamespace(tz_name=tz, max_claims_per_day=2), None))
     ledger = ClaimLedger(tmp_path / "state/scout_v2.sqlite3")
-    repo = "docker/compose"
+    repo = "traefik/traefik"
     closed = f"https://github.com/{repo}/pull/101"
     merged = f"https://github.com/{repo}/pull/102"
     old = f"https://github.com/{repo}/pull/100"
@@ -831,11 +831,11 @@ def test_exact_roster_is_preserved():
     monitored = {k for k, v in repos["repositories"].items() if not v.get("internal")}
     worker = re.search(r'REPOS = "([^"]+)"', (root / "cloudflare/wrangler.toml").read_text(encoding="utf-8"))[1].split(",")
     gates = yaml.safe_load((root / "configs/pr_gates.yaml").read_text(encoding="utf-8"))
-    assert len(monitored) == len(worker) == 50
-    assert set(worker) == monitored
+    assert len(monitored) == 58 and len(worker) == 57
+    assert set(worker) == monitored - {"clickhouse/clickhouse"}
     assert set(gates["repositories"]) == monitored
-    assert all(repos["repositories"][repo]["lane"] == "open" for repo in monitored)
-    assert {"rancher/rancher", "bytecodealliance/jco", "dapr/dapr", "apache/rocketmq"} <= monitored
+    assert all(repos["repositories"][repo]["lane"] == "open" for repo in set(worker))
+    assert {"rancher/rancher", "langgenius/dify", "dapr/dapr", "PrefectHQ/fastmcp"} <= monitored
     assert "bytecodealliance/wasm-tools" in monitored
     assert {"nodejs/node", "jlowin/fastmcp", "pydantic/pydantic-ai-harness"}.isdisjoint(monitored)
     assert {"sqlfluff/sqlfluff", "delta-io/delta-rs", "strands-agents/harness-sdk",

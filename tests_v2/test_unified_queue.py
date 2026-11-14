@@ -113,22 +113,22 @@ def test_closure_allows_due_history_but_ordinary_new_day_quota_does_not(queue_ro
     history = {"status": "staged", "staged_at": "2026-11-11T01:00:00+08:00",
                "discovered_at": "2026-11-11T01:00:00+08:00",
                "eligible_at": "2026-11-13T04:00:00+08:00", "defer_reason": "daily_quota"}
-    write_queue(queue_root, {"docker/compose#1": {**history, "id": "docker/compose#1",
-                "repo": "docker/compose", "number": 1, "ai_verdict": {"usable": True}}})
+    write_queue(queue_root, {"traefik/traefik#1": {**history, "id": "traefik/traefik#1",
+                "repo": "traefik/traefik", "number": 1, "ai_verdict": {"usable": True}}})
     assert pipeline.drain_ai_graded(queue_root) == []
     ledger = ClaimLedger(queue_root / "state/scout_v2.sqlite3")
     # A same-day close releases a real slot even before all five were filled.
-    assert ledger.reserve_publication("Asia/Shanghai", 5, "job", "docker/compose", "head", "x/y")
-    url = "https://github.com/docker/compose/pull/2"
+    assert ledger.reserve_publication("Asia/Shanghai", 5, "job", "traefik/traefik", "head", "x/y")
+    url = "https://github.com/traefik/traefik/pull/2"
     ledger.finish_publication("job", day="2026-11-12", url=url)
     ledger.record_publication_status(url, "closed", "2026-11-12")
-    assert [row["id"] for row in pipeline.drain_ai_graded(queue_root)] == ["docker/compose#1"]
+    assert [row["id"] for row in pipeline.drain_ai_graded(queue_root)] == ["traefik/traefik#1"]
     ledger.close()
 
 
-@pytest.mark.parametrize("fresh,manual,expected", [(True, False, ["docker/compose#2"]),
+@pytest.mark.parametrize("fresh,manual,expected", [(True, False, ["traefik/traefik#2"]),
                                                  (False, False, []),
-                                                 (False, True, ["docker/compose#1"])])
+                                                 (False, True, ["traefik/traefik#1"])])
 def test_controller_dispatch_respects_the_selected_consumption_lane(
         queue_root, monkeypatch, fresh, manual, expected):
     import inspect
@@ -136,13 +136,13 @@ def test_controller_dispatch_respects_the_selected_consumption_lane(
     from dashboard.app import create_app
 
     monkeypatch.setenv("OSSCOUT_DISABLE_AUTO_REPAIR", "1")
-    old = {"id": "docker/compose#1", "repo": "docker/compose", "number": 1,
+    old = {"id": "traefik/traefik#1", "repo": "traefik/traefik", "number": 1,
            "status": "staged", "discovered_at": "2026-11-11T01:00:00+08:00",
            "staged_at": "2026-11-11T01:00:00+08:00",
            "eligible_at": "2026-11-11T04:00:00+08:00", "ai_verdict": {"usable": True}}
     entries = {old["id"]: old}
     if fresh:
-        entries["docker/compose#2"] = {**old, "id": "docker/compose#2", "number": 2,
+        entries["traefik/traefik#2"] = {**old, "id": "traefik/traefik#2", "number": 2,
             "discovered_at": "2026-11-12T01:00:00+08:00",
             "staged_at": "2026-11-12T01:00:00+08:00"}
     write_queue(queue_root, entries)

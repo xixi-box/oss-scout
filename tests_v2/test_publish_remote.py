@@ -74,6 +74,8 @@ class TestPublishFlow:
         assert gh[gh.index("--base") + 1] == "dev"
 
     def test_rclone_required_checks_block_push(self, tmp_path, monkeypatch):
+        # Exercise the additional-check gate independently of the rotating pool.
+        monkeypatch.setattr("scout_v2.roster.monitored_repo", lambda repo: repo == "rclone/rclone")
         (tmp_path / "test-report.json").write_text(
             json.dumps({"additional_checks": {"go build": 0, "make quicktest": 1}}), encoding="utf-8")
         def fail_publish(*args):

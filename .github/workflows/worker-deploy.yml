@@ -73,8 +73,11 @@ jobs:
 
           bindings = read("/settings")["bindings"]
           repos = next(b["text"] for b in bindings if b["name"] == "REPOS").split(",")
-          assert len(set(repos)) == 50 and repos == cfg["vars"]["REPOS"].split(","), "live roster mismatch"
+          assert len(set(repos)) == 57 and repos == cfg["vars"]["REPOS"].split(","), "live roster mismatch"
+          tracked = next(b["text"] for b in bindings if b["name"] == "TRACKED_REPOS").split(",")
+          assert len(set(tracked)) == 58 and tracked == cfg["vars"]["TRACKED_REPOS"].split(","), "live PR roster mismatch"
+          assert {r.lower() for r in tracked} - {r.lower() for r in repos} == {"clickhouse/clickhouse"}
           schedules = [item["cron"] for item in read("/schedules")["schedules"]]
           assert schedules == ["* * * * *"], "live schedule mismatch"
-          print("Live Worker: exact 50-repository roster, every minute")
+          print("Live Worker: exact 57-repository issue scan, 58-repository PR tracking, every minute")
           PY

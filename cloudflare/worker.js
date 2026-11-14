@@ -198,7 +198,7 @@ async function pollIssues(env, now, budget) {
   const rejected = [];
   const completed = [];
   const errors = [];
-  // Ten repositories per GraphQL call: fifty repositories normally cost five
+  // Ten repositories per GraphQL call: 57 repositories normally cost six
   // requests, leaving room for PR comments within the free Worker request cap.
   for (let start = 0; start < repos.length; start += 10) {
     const batch = await issueBatch(env, repos.slice(start, start + 10), marks, now, budget);
@@ -238,7 +238,8 @@ async function pollOnce(env) {
 }
 
 async function notifyPrComments(env, now, budget = { remaining: 30 }) {
-  const roster = new Set((env.REPOS || "").split(",").map(repo => repo.trim().toLowerCase()));
+  const normalize = repo => repo.trim().toLowerCase().replace(/^jlowin\/fastmcp$/, "prefecthq/fastmcp");
+  const roster = new Set((env.TRACKED_REPOS || env.REPOS || "").split(",").map(normalize));
   const stored = await env.SEEN.get("prs");
   const list = stored ? JSON.parse(stored)
     : (env.PRS || "").split(",").map(s => s.trim()).filter(Boolean);
@@ -263,7 +264,7 @@ async function notifyPrComments(env, now, budget = { remaining: 30 }) {
     if (budget.remaining <= Math.ceil(events.length / 100)) break;
     const [repo, numRaw] = item.split("#");
     const number = Number(numRaw);
-    const repoKey = repo?.toLowerCase() === "prefecthq/fastmcp" ? "jlowin/fastmcp" : repo?.toLowerCase();
+    const repoKey = repo ? normalize(repo) : "";
     if (!repoKey || !roster.has(repoKey) || !Number.isInteger(number) || number <= 0) continue;
     try {
       const since = overlap(marks[item] || legacy, now, 10);

@@ -22,14 +22,23 @@ def verify_feishu_repos(root: Path) -> dict:
     table_id = fb.load_binding(root).get("repo_table_id")
     if not table_id or not fb.configured(root):
         raise SystemExit("Feishu repository table binding is not ready")
-    expected = {row["repo"].lower() for row in build_repo_rows(root)}
-    labels = [fb._key_label((row.get("fields") or {}).get("键")).lower()
-              for row in fb.record_pages(fb._binding_app_token(root), table_id)]
+    rows = build_repo_rows(root)
+    expected = {row["repo"].lower(): fb.repo_row_to_fields(row) for row in rows}
+    records = list(fb.record_pages(fb._binding_app_token(root), table_id))
+    labels = [fb._key_label((row.get("fields") or {}).get("键")).lower() for row in records]
     actual = set(labels)
-    if len(expected) != 50 or len(labels) != 50 or actual != expected:
+    if len(expected) != 58 or len(labels) != 58 or actual != set(expected):
         raise SystemExit(f"Feishu repo mismatch: {len(labels)} rows, "
-                         f"missing={sorted(expected - actual)}, extra={sorted(actual - expected)}")
-    return {"rows": len(labels), "exact_match": True}
+                         f"missing={sorted(set(expected) - actual)}, extra={sorted(actual - set(expected))}")
+    for record, label in zip(records, labels):
+        fields = record.get("fields") or {}
+        for key in ("仓库类型", "参与状态"):
+            if fb._key_label(fields.get(key)) != expected[label][key]:
+                raise SystemExit(f"Feishu repository field mismatch: {label} {key}")
+    return {"rows": len(labels), "exact_match": True,
+            "formal": sum(r["pool"] == "formal" for r in rows),
+            "honor": sum(r["pool"] == "honor" for r in rows),
+            "issue_scanning": sum(r["issue_scan"] for r in rows)}
 
 
 def inspect(root: Path) -> dict:
@@ -41,6 +50,8 @@ def inspect(root: Path) -> dict:
     queue = json.loads((root / "queue/candidates.json").read_text(encoding="utf-8"))
     now = business_now()
     result = {"business_time": now.isoformat(), "repositories": len(repos),
+              "formal_repositories": sum(e.get("pool") == "formal" for e in repos.values()),
+              "honor_repositories": sum(e.get("pool") == "honor" for e in repos.values()),
               "automatic_repositories": sum(policy.repo_lane(repo) == "open" for repo in repos),
               "daily_cap": policy.max_claims_per_day,
               "queue": dict(collections.Counter(e.get("status") for e in queue.values()))}
@@ -123,10 +134,10 @@ def main() -> int:
                 payload = json.loads(response.read())
             result["worker_" + key] = len(payload) if key == "watermarks" else payload
     print(json.dumps(result, ensure_ascii=False, indent=2))
-    assert result["repositories"] == 50, "repository count changed"
+    assert (result["repositories"], result["formal_repositories"], result["honor_repositories"]) == (58, 50, 8), "repository count changed"
     assert result["daily_cap"] > 0, "invalid daily cap"
     if args.screening:
-        assert result["automatic_repositories"] == 50, "repository is not in the automatic lane"
+        assert result["automatic_repositories"] == 57, "active repository count changed"
         assert result["screening_probe"]["usable"] is not None, "OpenJev screening probe failed"
         assert all(probe.get("usable") is False for probe in result["intent_screening_probes"].values()), "self-fix intent screening failed"
     return 0

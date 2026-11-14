@@ -1,4 +1,4 @@
-# 生产监控名单与贡献车道。外部仓库须与 cloudflare/wrangler.toml 一致。
+# 50 正式＋8 荣誉；issue_scan=true 与 Worker REPOS 一致，完整名单与 TRACKED_REPOS 一致。
 
 defaults:
   unknown_repo_action: hold_for_review
@@ -12,56 +12,527 @@ defaults:
   allow_merge_upstream: false
 
 repositories:
-  agentgateway/agentgateway: {lane: open}
-  clickhouse/clickhouse: {lane: open}
-  modelcontextprotocol/rust-sdk: {lane: open}
-  qdrant/qdrant: {lane: open}
-  ruvnet/RuVector: {lane: open}
-  bytecodealliance/wasmtime: {lane: open}
-  apache/rocketmq: {lane: open}
-  agentscope-ai/agentscope-java: {lane: open}
-  kgateway-dev/kgateway: {lane: open}
-  spring-projects/spring-boot: {lane: open}
-  rancher/rancher: {lane: open}
-  python/typeshed: {lane: open}
-  PyO3/pyo3: {lane: open}
-  redis/redis-py: {lane: open}
-  bytecodealliance/wasm-tools: {lane: open}
-  bytecodealliance/jco: {lane: open}
-  infiniflow/ragflow: {lane: open}
-  bytedance/deer-flow: {lane: open}
-  NVIDIA/NeMo-Agent-Toolkit: {lane: open}
-  psf/black: {lane: open}
-  istio/istio: {lane: open}
-  pypa/pipx: {lane: open}
-  tox-dev/tox: {lane: open}
-  caddyserver/caddy: {lane: open}
-  dapr/dapr: {lane: open}
-  moby/buildkit: {lane: open}
-  docker/compose: {lane: open}
-  firecracker-microvm/firecracker: {lane: open}
-  milvus-io/milvus: {lane: open}
-  envoyproxy/envoy: {lane: open}
-  volcengine/OpenViking: {lane: open}
-  traefik/traefik: {lane: open}
-  pypa/virtualenv: {lane: open}
-  docling-project/docling: {lane: open}
-  Unstructured-IO/unstructured: {lane: open}
-  apache/dubbo-go: {lane: open}
-  oceanbase/powercontext: {lane: open}
-  prettier/prettier: {lane: open}
-  pydantic/monty: {lane: open}
-  oras-project/oras: {lane: open}
-  python-poetry/poetry: {lane: open}
-  pypa/pip: {lane: open}
-  redis/go-redis: {lane: open}
-  valkey-io/valkey: {lane: open}
-  pydantic/logfire: {lane: open}
-  rclone/rclone: {lane: open}
-  prometheus/prometheus: {lane: open}
-  django/django: {lane: open}
-  HKUDS/RAG-Anything: {lane: open}
-  dagger/dagger: {lane: open}
-
-  # 内部 fixture，不进 Worker 扫描名单。
-  xixi-box/oss-scout-v2-test: {lane: open, internal: true}
+  kgateway-dev/kgateway:
+    lane: open
+    pool: formal
+    issue_scan: true
+    purpose: 云原生 API 与 AI 网关
+    merged_by_us: 0
+    note: 已查常见贡献文档与候选工作流，未发现专门AI限制；不代表允许无人监督提交。
+    pr_rules:
+    - 已查常见贡献文档与候选工作流，未发现专门AI限制；不代表允许无人监督提交。
+  NVIDIA/NeMo-Agent-Toolkit:
+    lane: open
+    pool: formal
+    issue_scan: true
+    purpose: Agent 工作流连接、评估与优化工具
+    merged_by_us: 0
+    note: 已查常见贡献文档与候选工作流，未发现专门AI限制；不代表允许无人监督提交。
+    pr_rules:
+    - 已查常见贡献文档与候选工作流，未发现专门AI限制；不代表允许无人监督提交。
+  punkpeye/fastmcp:
+    lane: open
+    pool: formal
+    issue_scan: true
+    purpose: TypeScript MCP服务框架
+    merged_by_us: 0
+    note: 仓内未找到独立贡献/AI政策文档；README和全部两个workflow未见指派/AI自动关闭门槛。
+    pr_rules:
+    - 仓内未找到独立贡献/AI政策文档；README和全部两个workflow未见指派/AI自动关闭门槛。
+  bytedance/deer-flow:
+    lane: open
+    pool: formal
+    issue_scan: true
+    purpose: 研究、编程与长任务 Agent 框架
+    merged_by_us: 0
+    note: 每个PR必须填写AI工具、使用方式及人工阅读理解和承担责任的确认。纳入建议不豁免该要求，不自动代勾人审项。
+    pr_rules:
+    - 每个PR必须填写AI工具、使用方式及人工阅读理解和承担责任的确认。纳入建议不豁免该要求，不自动代勾人审项。
+  infiniflow/ragflow:
+    lane: open
+    pool: formal
+    issue_scan: true
+    purpose: RAG、文档检索与 Agent 上下文基础设施
+    merged_by_us: 0
+    note: 已查常见贡献文档与候选工作流，未发现专门AI限制；不代表允许无人监督提交。
+    pr_rules:
+    - 已查常见贡献文档与候选工作流，未发现专门AI限制；不代表允许无人监督提交。
+  obot-platform/obot:
+    lane: open
+    pool: formal
+    issue_scan: true
+    purpose: MCP托管、LLM网关与AI治理平台
+    merged_by_us: 0
+    note: 根目录提供Agent开发指南；所查未见强制指派或禁止自动PR。
+    pr_rules:
+    - 根目录提供Agent开发指南；所查未见强制指派或禁止自动PR。
+  The-PR-Agent/pr-agent:
+    lane: open
+    pool: formal
+    issue_scan: true
+    purpose: PR评审、描述与代码改进Agent
+    merged_by_us: 0
+    note: 原qodo-ai/pr-agent现迁至The-PR-Agent；有Agent指南，允许定向lint/test；未见必须先认领或AI身份关闭流程。
+    pr_rules:
+    - 原qodo-ai/pr-agent现迁至The-PR-Agent；有Agent指南，允许定向lint/test；未见必须先认领或AI身份关闭流程。
+  kubernetes-sigs/agent-sandbox:
+    lane: open
+    pool: formal
+    issue_scan: true
+    purpose: Kubernetes上的Agent有状态隔离运行环境
+    merged_by_us: 0
+    note: 提供Agent skills，使用CodeRabbit初审；CNCF CLA必需，不得让AI机器人成为co-author；未见按AI身份自动关PR。
+    pr_rules:
+    - 提供Agent skills，使用CodeRabbit初审；CNCF CLA必需，不得让AI机器人成为co-author；未见按AI身份自动关PR。
+  google/adk-go:
+    lane: open
+    pool: formal
+    issue_scan: true
+    purpose: Go Agent开发工具包
+    merged_by_us: 0
+    note: 指南提供Agent开发、自检技能；须关联issue和Conventional Commits；已有Google CLA签署记录可复用，提交时仍核查。
+    pr_rules:
+    - 指南提供Agent开发、自检技能；须关联issue和Conventional Commits；已有Google CLA签署记录可复用，提交时仍核查。
+  modelcontextprotocol/ruby-sdk:
+    lane: open
+    pool: formal
+    issue_scan: true
+    purpose: MCP官方Ruby SDK
+    merged_by_us: 0
+    note: 有Agent开发指南；未见强制指派后方可开PR、AI发布禁令或AI识别关闭流程。
+    pr_rules:
+    - 有Agent开发指南；未见强制指派后方可开PR、AI发布禁令或AI识别关闭流程。
+  opensandbox-group/OpenSandbox:
+    lane: open
+    pool: formal
+    issue_scan: true
+    purpose: Agent隔离执行与多语言沙箱SDK
+    merged_by_us: 0
+    note: 贡献指南采用DCO，代码提交需sign-off；未见强制先获分配或禁止Agent发布PR。
+    pr_rules:
+    - 贡献指南采用DCO，代码提交需sign-off；未见强制先获分配或禁止Agent发布PR。
+  milvus-io/milvus:
+    lane: open
+    pool: formal
+    issue_scan: true
+    purpose: 云原生向量数据库
+    merged_by_us: 0
+    note: AGENTS有AI协作提交示例，要求开发者最后sign-off；未见同文件明文授权无人监督发布。
+    pr_rules:
+    - AGENTS有AI协作提交示例，要求开发者最后sign-off；未见同文件明文授权无人监督发布。
+  modelcontextprotocol/php-sdk:
+    lane: open
+    pool: formal
+    issue_scan: true
+    purpose: MCP官方PHP SDK
+    merged_by_us: 0
+    note: PHP Foundation与Symfony协作的SDK，有Agent指南；已查未见本人撰写专有字段/强制指派/AI识别关闭。
+    pr_rules:
+    - PHP Foundation与Symfony协作的SDK，有Agent指南；已查未见本人撰写专有字段/强制指派/AI识别关闭。
+  NousResearch/hermes-agent:
+    lane: open
+    pool: formal
+    issue_scan: true
+    purpose: CLI、消息网关与插件化个人Agent
+    merged_by_us: 0
+    note: 提供完整Agent/测试规范；所查未见全面AI发布禁令；敏感核心路径仍需对应维护者审查。
+    pr_rules:
+    - 提供完整Agent/测试规范；所查未见全面AI发布禁令；敏感核心路径仍需对应维护者审查。
+  HKUDS/LightRAG:
+    lane: open
+    pool: formal
+    issue_scan: true
+    purpose: 知识图谱增强RAG与检索服务
+    merged_by_us: 0
+    note: 贡献指南允许常规fork/PR，有Agent指南；要求离线回归测试，未见AI发布禁令或强制指派。
+    pr_rules:
+    - 贡献指南允许常规fork/PR，有Agent指南；要求离线回归测试，未见AI发布禁令或强制指派。
+  volcengine/OpenViking:
+    lane: open
+    pool: formal
+    issue_scan: true
+    purpose: Agent 记忆、RAG 与技能的上下文数据库
+    merged_by_us: 0
+    note: 贡献指南不按工具区分责任；强调理解、解释和验证，优先审查小而完整的变更。
+    pr_rules:
+    - 贡献指南不按工具区分责任；强调理解、解释和验证，优先审查小而完整的变更。
+  Tencent/WeKnora:
+    lane: open
+    pool: formal
+    issue_scan: true
+    purpose: 文档理解、语义检索与Agent知识服务
+    merged_by_us: 0
+    note: 已查模板、根目录说明和所有GitHub workflow，未见AI身份检测/自动关PR或必须认领规则；cli/AGENTS是产品CLI规则，不当作贡献禁令。
+    pr_rules:
+    - 已查模板、根目录说明和所有GitHub workflow，未见AI身份检测/自动关PR或必须认领规则；cli/AGENTS是产品CLI规则，不当作贡献禁令。
+  Unstructured-IO/unstructured:
+    lane: open
+    pool: formal
+    issue_scan: true
+    purpose: 面向 LLM 的文档解析和 ETL
+    merged_by_us: 0
+    note: 已查常见贡献文档与候选工作流，未发现专门AI限制；不代表允许无人监督提交。
+    pr_rules:
+    - 已查常见贡献文档与候选工作流，未发现专门AI限制；不代表允许无人监督提交。
+  docling-project/docling:
+    lane: open
+    pool: formal
+    issue_scan: true
+    purpose: PDF、Office 等文档解析与结构化
+    merged_by_us: 0
+    note: 已查常见贡献文档与候选工作流，未发现专门AI限制；不代表允许无人监督提交。
+    pr_rules:
+    - 已查常见贡献文档与候选工作流，未发现专门AI限制；不代表允许无人监督提交。
+  Mintplex-Labs/anything-llm:
+    lane: open
+    pool: formal
+    issue_scan: true
+    purpose: 本地优先RAG、Agent与知识应用
+    merged_by_us: 0
+    note: 贡献指南明确bugfix只需关联issue；新功能须维护者先批准，权限系统重设计由内部维护，本版只推荐可确认的bug修复。
+    pr_rules:
+    - 贡献指南明确bugfix只需关联issue；新功能须维护者先批准，权限系统重设计由内部维护，本版只推荐可确认的bug修复。
+  oceanbase/powercontext:
+    lane: open
+    pool: formal
+    issue_scan: true
+    purpose: Agent 长期记忆和上下文交接
+    merged_by_us: 0
+    note: PR模板要求填写工具及尽可能提供模型，未使用填Not used。
+    pr_rules:
+    - PR模板要求填写工具及尽可能提供模型，未使用填Not used。
+  HKUDS/RAG-Anything:
+    lane: open
+    pool: formal
+    issue_scan: true
+    purpose: 多模态 RAG 框架
+    merged_by_us: 0
+    note: 已查常见贡献文档与候选工作流，未发现专门AI限制；不代表允许无人监督提交。
+    pr_rules:
+    - 已查常见贡献文档与候选工作流，未发现专门AI限制；不代表允许无人监督提交。
+  pydantic/logfire:
+    lane: open
+    pool: formal
+    issue_scan: true
+    purpose: LLM、Agent 与应用可观测性
+    merged_by_us: 0
+    note: 已查常见贡献文档与候选工作流，未发现专门AI限制；不代表允许无人监督提交。
+    pr_rules:
+    - 已查常见贡献文档与候选工作流，未发现专门AI限制；不代表允许无人监督提交。
+  langgenius/dify:
+    lane: open
+    pool: formal
+    issue_scan: true
+    purpose: Agent、RAG与LLM应用工作流平台
+    merged_by_us: 0
+    note: 贡献指南欢迎AI辅助，要求理解、验证、具体问题/方案/真实测试说明；普通流程需关联issue，未见禁止AI生成所有描述或强制先指派。
+    pr_rules:
+    - 贡献指南欢迎AI辅助，要求理解、验证、具体问题/方案/真实测试说明；普通流程需关联issue，未见禁止AI生成所有描述或强制先指派。
+  lancedb/lancedb:
+    lane: open
+    pool: formal
+    issue_scan: true
+    purpose: 嵌入式向量数据库及Python/TS SDK
+    merged_by_us: 0
+    note: 贡献指南要求开工留言协调，未要求等待指派；有Agent和分语言开发文档。
+    pr_rules:
+    - 贡献指南要求开工留言协调，未要求等待指派；有Agent和分语言开发文档。
+  pydantic/monty:
+    lane: open
+    pool: formal
+    issue_scan: true
+    purpose: 面向 AI 代码的安全 Python 沙箱
+    merged_by_us: 0
+    note: 已查常见贡献文档与候选工作流，未发现专门AI限制；不代表允许无人监督提交。
+    pr_rules:
+    - 已查常见贡献文档与候选工作流，未发现专门AI限制；不代表允许无人监督提交。
+  QwenLM/qwen-code:
+    lane: open
+    pool: formal
+    issue_scan: true
+    purpose: 开源终端编码Agent
+    merged_by_us: 0
+    note: bugfix关联已有bug issue即可；新功能须批准，新开issue须等反馈；未见必须维护者指派的全局要求或AI作者识别关闭。
+    pr_rules:
+    - bugfix关联已有bug issue即可；新功能须批准，新开issue须等反馈；未见必须维护者指派的全局要求或AI作者识别关闭。
+  AgentClientProtocol/agent-client-protocol:
+    lane: open
+    pool: formal
+    issue_scan: true
+    purpose: 编辑器与编码Agent交互协议及schema库
+    merged_by_us: 0
+    note: 明确不要求CLA，按普通PR流程；重大协议变更需RFD，不能当成普通修复自动做。
+    pr_rules:
+    - 明确不要求CLA，按普通PR流程；重大协议变更需RFD，不能当成普通修复自动做。
+  firecracker-microvm/firecracker:
+    lane: open
+    pool: formal
+    issue_scan: true
+    purpose: 轻量、安全的 microVM 虚拟化
+    merged_by_us: 0
+    note: 已查常见贡献文档与候选工作流，未发现专门AI限制；不代表允许无人监督提交。
+    pr_rules:
+    - 已查常见贡献文档与候选工作流，未发现专门AI限制；不代表允许无人监督提交。
+  webdriverio/webdriverio:
+    lane: open
+    pool: formal
+    issue_scan: true
+    purpose: 浏览器自动化与测试工具链
+    merged_by_us: 0
+    note: 有Agent指南；未分配issue须先留言说明工作，未要求等维护者指派后才可提交。
+    pr_rules:
+    - 有Agent指南；未分配issue须先留言说明工作，未要求等维护者指派后才可提交。
+  puppeteer/puppeteer:
+    lane: open
+    pool: formal
+    issue_scan: true
+    purpose: 浏览器控制与自动化库
+    merged_by_us: 0
+    note: 所查贡献指南未见AI发PR禁令或认领硬门槛；Google CLA可复用既有签署。
+    pr_rules:
+    - 所查贡献指南未见AI发PR禁令或认领硬门槛；Google CLA可复用既有签署。
+  pydantic/pydantic:
+    lane: open
+    pool: formal
+    issue_scan: true
+    purpose: Python数据校验与类型模型库
+    merged_by_us: 0
+    note: 明确欢迎AI，作者须理解代码；反对跨库spam和无意义AI描述，保留拒收权，不是pydantic-ai指派规则。
+    pr_rules:
+    - 明确欢迎AI，作者须理解代码；反对跨库spam和无意义AI描述，保留拒收权，不是pydantic-ai指派规则。
+  traefik/traefik:
+    lane: open
+    pool: formal
+    issue_scan: true
+    purpose: 云原生反向代理与负载均衡
+    merged_by_us: 0
+    note: 已查常见贡献文档与候选工作流，未发现专门AI限制；不代表允许无人监督提交。
+    pr_rules:
+    - 已查常见贡献文档与候选工作流，未发现专门AI限制；不代表允许无人监督提交。
+  istio/istio:
+    lane: open
+    pool: formal
+    issue_scan: true
+    purpose: 服务网格与流量、安全、可观测性
+    merged_by_us: 0
+    note: 已查常见贡献文档与候选工作流，未发现专门AI限制；不代表允许无人监督提交。
+    pr_rules:
+    - 已查常见贡献文档与候选工作流，未发现专门AI限制；不代表允许无人监督提交。
+  pypa/virtualenv:
+    lane: open
+    pool: formal
+    issue_scan: true
+    purpose: Python 虚拟环境创建工具
+    merged_by_us: 0
+    note: 已查常见贡献文档与候选工作流，未发现专门AI限制；不代表允许无人监督提交。
+    pr_rules:
+    - 已查常见贡献文档与候选工作流，未发现专门AI限制；不代表允许无人监督提交。
+  tox-dev/tox:
+    lane: open
+    pool: formal
+    issue_scan: true
+    purpose: Python 多环境测试与任务自动化
+    merged_by_us: 0
+    note: 已查常见贡献文档与候选工作流，未发现专门AI限制；不代表允许无人监督提交。
+    pr_rules:
+    - 已查常见贡献文档与候选工作流，未发现专门AI限制；不代表允许无人监督提交。
+  prettier/prettier:
+    lane: open
+    pool: formal
+    issue_scan: true
+    purpose: 多语言代码格式化工具
+    merged_by_us: 0
+    note: 只提交自己理解且已测试的代码；遵循模板，低质量AI内容可立即关闭。
+    pr_rules:
+    - 只提交自己理解且已测试的代码；遵循模板，低质量AI内容可立即关闭。
+  pypa/pipx:
+    lane: open
+    pool: formal
+    issue_scan: true
+    purpose: 隔离安装和运行 Python CLI 应用
+    merged_by_us: 0
+    note: 已查常见贡献文档与候选工作流，未发现专门AI限制；不代表允许无人监督提交。
+    pr_rules:
+    - 已查常见贡献文档与候选工作流，未发现专门AI限制；不代表允许无人监督提交。
+  redis/redis-py:
+    lane: open
+    pool: formal
+    issue_scan: true
+    purpose: Redis Python 客户端
+    merged_by_us: 0
+    note: 贡献指南提供agent skills；PR模板有AI disclosure，作者须理解每一行。
+    pr_rules:
+    - 贡献指南提供agent skills；PR模板有AI disclosure，作者须理解每一行。
+  woodpecker-ci/woodpecker:
+    lane: open
+    pool: formal
+    issue_scan: true
+    purpose: 开源自托管CI引擎
+    merged_by_us: 0
+    note: 模板与官网开发指南未见AI/指派硬门槛；要求不强推，新增提交跟进。
+    pr_rules:
+    - 模板与官网开发指南未见AI/指派硬门槛；要求不强推，新增提交跟进。
+  dapr/dapr:
+    lane: open
+    pool: formal
+    issue_scan: true
+    purpose: 分布式应用与工作流运行时
+    merged_by_us: 0
+    note: 已查常见贡献文档与候选工作流，未发现专门AI限制；不代表允许无人监督提交。
+    pr_rules:
+    - 已查常见贡献文档与候选工作流，未发现专门AI限制；不代表允许无人监督提交。
+  nestjs/nest:
+    lane: open
+    pool: formal
+    issue_scan: true
+    purpose: TypeScript后端框架
+    merged_by_us: 0
+    note: 所查指南未见AI禁令或强制指派；PR content guard检查恶意载荷，不是AI作者识别。
+    pr_rules:
+    - 所查指南未见AI禁令或强制指派；PR content guard检查恶意载荷，不是AI作者识别。
+  python/typeshed:
+    lane: open
+    pool: formal
+    issue_scan: true
+    purpose: Python 标准库和第三方库类型桩
+    merged_by_us: 0
+    note: 已查常见贡献文档与候选工作流，未发现专门AI限制；不代表允许无人监督提交。
+    pr_rules:
+    - 已查常见贡献文档与候选工作流，未发现专门AI限制；不代表允许无人监督提交。
+  psf/black:
+    lane: open
+    pool: formal
+    issue_scan: true
+    purpose: Python 代码格式化工具
+    merged_by_us: 0
+    note: 已查常见贡献文档与候选工作流，未发现专门AI限制；不代表允许无人监督提交。
+    pr_rules:
+    - 已查常见贡献文档与候选工作流，未发现专门AI限制；不代表允许无人监督提交。
+  rollup/rollup:
+    lane: open
+    pool: formal
+    issue_scan: true
+    purpose: JavaScript模块打包工具
+    merged_by_us: 0
+    note: 明确允许用AI创建PR；须允许maintainer edits，维护者可能自行改动，作者不能要求事先讨论。
+    pr_rules:
+    - 明确允许用AI创建PR；须允许maintainer edits，维护者可能自行改动，作者不能要求事先讨论。
+  agronholm/anyio:
+    lane: open
+    pool: formal
+    issue_scan: true
+    purpose: Python异步并发与网络兼容层
+    merged_by_us: 0
+    note: Agent指南允许按模板提交；严禁重复PR，要求回归测试在原版失败和news fragment。
+    pr_rules:
+    - Agent指南允许按模板提交；严禁重复PR，要求回归测试在原版失败和news fragment。
+  prometheus/alertmanager:
+    lane: open
+    pool: formal
+    issue_scan: true
+    purpose: 告警分组、抑制与通知服务
+    merged_by_us: 0
+    note: 有Agent指南；未见强制指派或AI发PR禁令；依规范与DCO提交。
+    pr_rules:
+    - 有Agent指南；未见强制指派或AI发PR禁令；依规范与DCO提交。
+  rancher/rancher:
+    lane: open
+    pool: formal
+    issue_scan: true
+    purpose: Kubernetes 集群管理平台
+    merged_by_us: 0
+    note: 已查常见贡献文档与候选工作流，未发现专门AI限制；不代表允许无人监督提交。
+    pr_rules:
+    - 已查常见贡献文档与候选工作流，未发现专门AI限制；不代表允许无人监督提交。
+  prometheus/prometheus:
+    lane: open
+    pool: formal
+    issue_scan: true
+    purpose: 监控与时序数据库
+    merged_by_us: 0
+    note: 优先个人账号或声明人类负责人；合并要求两双人眼，无人负责的机器人PR需两名维护者批准。
+    pr_rules:
+    - 优先个人账号或声明人类负责人；合并要求两双人眼，无人负责的机器人PR需两名维护者批准。
+  redis/go-redis:
+    lane: open
+    pool: formal
+    issue_scan: true
+    purpose: Redis Go 客户端
+    merged_by_us: 2
+    note: 已查常见贡献文档与候选工作流，未发现专门AI限制；不代表允许无人监督提交。
+    pr_rules:
+    - 已查常见贡献文档与候选工作流，未发现专门AI限制；不代表允许无人监督提交。
+  agentgateway/agentgateway:
+    lane: open
+    pool: honor
+    issue_scan: true
+    purpose: AI Agent、MCP 服务网关
+    merged_by_us: 2
+    note: 禁止Agent广泛扫描issue后提交 unsolicited fixes；描述、评论须人写。
+    pr_rules:
+    - 禁止Agent广泛扫描issue后提交 unsolicited fixes；描述、评论须人写。
+  bytecodealliance/wasm-tools:
+    lane: open
+    pool: honor
+    issue_scan: true
+    purpose: WebAssembly 分析、转换与测试工具
+    merged_by_us: 1
+    note: 组织政策要求human-in-the-loop；AGENTS明确PR、评论由人手动发布；禁止AI修good first issue。
+    pr_rules:
+    - 组织政策要求human-in-the-loop；AGENTS明确PR、评论由人手动发布；禁止AI修good first issue。
+  bytecodealliance/wasmtime:
+    lane: open
+    pool: honor
+    issue_scan: true
+    purpose: WebAssembly/WASI 运行时
+    merged_by_us: 2
+    note: 组织政策要求human-in-the-loop；AGENTS明确PR、评论由人手动发布；禁止AI修good first issue。
+    pr_rules:
+    - 组织政策要求human-in-the-loop；AGENTS明确PR、评论由人手动发布；禁止AI修good first issue。
+  clickhouse/clickhouse:
+    lane: observe
+    pool: honor
+    issue_scan: false
+    purpose: 实时分析列式数据库
+    merged_by_us: 1
+    note: 明确欢迎AI，披露非必需；仍要求过滤低质内容，按质量审查。
+    review_reason: ClickHouse 暂停新增扫描与修复，保留存量 PR 跟踪
+  modelcontextprotocol/rust-sdk:
+    lane: open
+    pool: honor
+    issue_scan: true
+    purpose: MCP 协议官方 Rust SDK
+    merged_by_us: 1
+    note: 已查常见贡献文档与候选工作流，未发现专门AI限制；不代表允许无人监督提交。
+    pr_rules:
+    - 已查常见贡献文档与候选工作流，未发现专门AI限制；不代表允许无人监督提交。
+  PrefectHQ/fastmcp:
+    lane: open
+    pool: honor
+    issue_scan: true
+    purpose: Python MCP框架（此前已移出主池）
+    merged_by_us: 1
+    note: 外部PR须关联issue且作者已指派，或带prs welcome豁免；不满足会自动关闭。
+    pr_rules:
+    - 外部PR须关联issue且作者已指派，或带prs welcome豁免；不满足会自动关闭。
+  qdrant/qdrant:
+    lane: open
+    pool: honor
+    issue_scan: true
+    purpose: 向量数据库与相似度搜索
+    merged_by_us: 2
+    note: 认可AI；PR motivation须外部贡献者自己写，其余描述可生成，作者须理解并负责。
+    pr_rules:
+    - 认可AI；PR motivation须外部贡献者自己写，其余描述可生成，作者须理解并负责。
+  ruvnet/RuVector:
+    lane: open
+    pool: honor
+    issue_scan: true
+    purpose: Rust 向量数据库、Agent 记忆与决策组件
+    merged_by_us: 2
+    note: 已查常见贡献文档与候选工作流，未发现专门AI限制；不代表允许无人监督提交。
+    pr_rules:
+    - 已查常见贡献文档与候选工作流，未发现专门AI限制；不代表允许无人监督提交。
+  xixi-box/oss-scout-v2-test:
+    lane: open
+    internal: true

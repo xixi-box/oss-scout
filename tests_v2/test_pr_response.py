@@ -91,9 +91,9 @@ class TestDispatchDedup:
         monkeypatch.setattr(mod, "_gh", fake_gh)
         monkeypatch.setattr(mod, "run_gh", fake_run_gh)
 
-        r1 = mod.dispatch_pr_fix("docker/compose", 7)
+        r1 = mod.dispatch_pr_fix("traefik/traefik", 7)
         assert r1["dispatched"] is True
-        r2 = mod.dispatch_pr_fix("docker/compose", 7)
+        r2 = mod.dispatch_pr_fix("traefik/traefik", 7)
         assert r2["dispatched"] is False and "already" in r2["reason"]
         assert len(dispatched) == 1
 
@@ -113,8 +113,8 @@ class TestDispatchDedup:
         monkeypatch.setattr(mod, "_gh", lambda args, timeout=90: "")
         monkeypatch.setattr(mod, "run_gh", lambda args, timeout=90: 0)
 
-        r1 = mod.dispatch_pr_fix("docker/compose", 7)
-        r2 = mod.dispatch_pr_fix("docker/compose", 7)
+        r1 = mod.dispatch_pr_fix("traefik/traefik", 7)
+        r2 = mod.dispatch_pr_fix("traefik/traefik", 7)
         assert r1["dispatched"] is True
         assert r2["dispatched"] is True, "new head sha must allow another attempt"
 
@@ -123,7 +123,7 @@ class TestDispatchDedup:
             "headRefName": "patch-1", "headRefOid": "c" * 40,
             "isCrossRepository": False,
             "headRepositoryOwner": {"login": "someone"}})
-        r = mod.dispatch_pr_fix("docker/compose", 7)
+        r = mod.dispatch_pr_fix("traefik/traefik", 7)
         assert r["dispatched"] is False
         assert "fork" in r["reason"]
 
@@ -135,7 +135,7 @@ class TestDispatchDedup:
             "headRepositoryOwner": {"login": "xixi-box"}})
         monkeypatch.setattr(mod, "failing_details", lambda r, n: [
             {"name": "check-issue-link", "excerpt": ""}])
-        r = mod.dispatch_pr_fix("docker/compose", 7)
+        r = mod.dispatch_pr_fix("traefik/traefik", 7)
         assert r["dispatched"] is False
         # 记录在案，同 sha 不再反复尝试
         assert len(mod._attempts()) == 1
@@ -169,7 +169,7 @@ class TestPayloadBuild:
         monkeypatch.setattr(mod, "_gh", fake_gh)
         monkeypatch.setattr(mod, "run_gh", fake_run_gh)
 
-        mod.dispatch_pr_fix("docker/compose", 7)
+        mod.dispatch_pr_fix("traefik/traefik", 7)
         assert any("changeset" in c.get("body", "").lower()
                    for c in captured["payload"].get("comments", []))
         assert captured["payload"]["fork_repo"] == "xixi-box/compose"

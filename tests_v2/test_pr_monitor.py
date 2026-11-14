@@ -325,7 +325,7 @@ class TestReviewDispatch:
             self, monkeypatch, tmp_path):
         """CI 全绿但维护者要求改代码时，仍然要派活。"""
         runs = self._setup(monkeypatch, tmp_path)
-        out = mp.dispatch_pr_fix("docker/compose", 7, kind="review",
+        out = mp.dispatch_pr_fix("traefik/traefik", 7, kind="review",
                                  review_comment="please add a regression test",
                                  review_author="maint")
         assert out["dispatched"] is True
@@ -336,8 +336,8 @@ class TestReviewDispatch:
         self._setup(monkeypatch, tmp_path)
         kw = dict(kind="review", review_comment="please add a test",
                   review_author="maint")
-        assert mp.dispatch_pr_fix("docker/compose", 7, **kw)["dispatched"] is True
-        second = mp.dispatch_pr_fix("docker/compose", 7, **kw)
+        assert mp.dispatch_pr_fix("traefik/traefik", 7, **kw)["dispatched"] is True
+        second = mp.dispatch_pr_fix("traefik/traefik", 7, **kw)
         assert second["dispatched"] is False
         assert "already attempted" in second["reason"]
 
@@ -354,8 +354,8 @@ class TestReviewDispatch:
                "body": "Review comment", "author": "maint", "created_at": now}
               for i in range(1, 6)),
         ])
-        assert mp.dispatch_pr_fix("docker/compose", 7, kind="followup")["dispatched"]
-        assert not mp.dispatch_pr_fix("docker/compose", 7, kind="followup",
+        assert mp.dispatch_pr_fix("traefik/traefik", 7, kind="followup")["dispatched"]
+        assert not mp.dispatch_pr_fix("traefik/traefik", 7, kind="followup",
                                       source_kind="inline", comment_id=5)["dispatched"]
         assert len(runs) == 1
         encoded = next(arg.split("=", 1)[1] for arg in runs[0] if arg.startswith("fix_b64="))
@@ -363,16 +363,16 @@ class TestReviewDispatch:
 
     def test_different_review_dispatches_again(self, monkeypatch, tmp_path):
         self._setup(monkeypatch, tmp_path)
-        mp.dispatch_pr_fix("docker/compose", 7, kind="review",
+        mp.dispatch_pr_fix("traefik/traefik", 7, kind="review",
                            review_comment="add a test", review_author="m")
-        out = mp.dispatch_pr_fix("docker/compose", 7, kind="review",
+        out = mp.dispatch_pr_fix("traefik/traefik", 7, kind="review",
                                  review_comment="also update the changelog",
                                  review_author="m")
         assert out["dispatched"] is True
 
     def test_empty_review_is_rejected(self, monkeypatch, tmp_path):
         self._setup(monkeypatch, tmp_path)
-        out = mp.dispatch_pr_fix("docker/compose", 7, kind="review",
+        out = mp.dispatch_pr_fix("traefik/traefik", 7, kind="review",
                                  review_comment="  ", review_author="m")
         assert out["dispatched"] is False
 
@@ -381,7 +381,7 @@ class TestReviewDispatch:
         self._setup(monkeypatch, tmp_path)
         monkeypatch.setattr(mp, "failure_is_ours",
                             lambda f: (False, "external check by name"))
-        out = mp.dispatch_pr_fix("docker/compose", 7, kind="ci")
+        out = mp.dispatch_pr_fix("traefik/traefik", 7, kind="ci")
         assert out["dispatched"] is False
         assert "external" in out["reason"]
 
@@ -391,7 +391,7 @@ class TestReviewDispatch:
             "isCrossRepository": False,
             "headRepositoryOwner": {"login": "docker"},
             "headRefName": "x", "headRefOid": "b" * 40})
-        out = mp.dispatch_pr_fix("docker/compose", 7, kind="review",
+        out = mp.dispatch_pr_fix("traefik/traefik", 7, kind="review",
                                  review_comment="change it")
         assert out["dispatched"] is False
         assert "fork" in out["reason"]
@@ -434,7 +434,7 @@ class TestReplyTargetIsExternal:
              "body": "Updated the test and added the regression case."},
         ])
         monkeypatch.setattr(mp, "_model", lambda: ("", ""))
-        out = mp.draft_reply("docker/compose", 14450, force=True)
+        out = mp.draft_reply("traefik/traefik", 14450, force=True)
         # 无模型 key 时会失败，但失败原因必须建立在"对方评论"上：
         # 落盘的 for_comment/作者都还没写，所以只看 reason 不含 own-words 误判
         assert out["drafted"] is False
@@ -445,7 +445,7 @@ class TestReplyTargetIsExternal:
         monkeypatch.setattr(mp, "_thread", lambda r, n, limit=10: [
             {"created_at": "2026-11-04T11:02:04Z", "author": "xixi-box",
              "body": "our own reply"}])
-        out = mp.draft_reply("docker/compose", 14450)
+        out = mp.draft_reply("traefik/traefik", 14450)
         assert out["drafted"] is False
         assert out["reason"] == "only our own comments"
 
@@ -456,14 +456,14 @@ class TestReplyTargetIsExternal:
             {"created_at": "t3", "author": "someone-else", "body": "me too"},
             {"created_at": "t4", "author": "xixi-box", "body": "our reply 2"},
         ])
-        got = mp.latest_external_comment("docker/compose", 14450)
+        got = mp.latest_external_comment("traefik/traefik", 14450)
         assert got["author"] == "someone-else"
         assert got["body"] == "me too"
 
     def test_latest_external_comment_none_when_all_ours(self, monkeypatch):
         monkeypatch.setattr(mp, "_thread", lambda r, n, limit=30: [
             {"created_at": "t1", "author": "xixi-box", "body": "ours"}])
-        assert mp.latest_external_comment("docker/compose", 14450) is None
+        assert mp.latest_external_comment("traefik/traefik", 14450) is None
 
 
 class TestInlineComments:
@@ -536,7 +536,7 @@ class TestAlreadyRepliedGate:
         monkeypatch.setattr(mp, "REPLIES_FILE",
                             tmp_path / "state" / "pr_replies.json")
         monkeypatch.setattr(mp, "_thread", lambda r, n, limit=10: self._thread())
-        out = mp.draft_reply("docker/compose", 14450)
+        out = mp.draft_reply("traefik/traefik", 14450)
         assert out["drafted"] is False
         assert out["reason"] == "already replied; waiting on them"
 
@@ -549,7 +549,7 @@ class TestAlreadyRepliedGate:
              "body": "one more thing"}]
         monkeypatch.setattr(mp, "_thread", lambda r, n, limit=10: thread)
         monkeypatch.setattr(mp, "_model", lambda: ("", ""))
-        out = mp.draft_reply("docker/compose", 14450)
+        out = mp.draft_reply("traefik/traefik", 14450)
         # 对方又说话了 → 应该尝试起草（无 key 时报 no model key）
         assert out["reason"] == "no model key"
 
@@ -559,7 +559,7 @@ class TestAlreadyRepliedGate:
                             tmp_path / "state" / "pr_replies.json")
         monkeypatch.setattr(mp, "_thread", lambda r, n, limit=10: self._thread())
         monkeypatch.setattr(mp, "_model", lambda: ("", ""))
-        out = mp.draft_reply("docker/compose", 14450, force=True)
+        out = mp.draft_reply("traefik/traefik", 14450, force=True)
         assert out["reason"] == "no model key"   # 走到了模型那步
 
 
@@ -609,9 +609,9 @@ class TestReplyTargetRouting:
                 return True, "Done."
 
         monkeypatch.setattr("scout_v2.workers.issue_scorer.GoClient", Fake)
-        mp.draft_reply("docker/compose", 1, force=True)
+        mp.draft_reply("traefik/traefik", 1, force=True)
         entry = json.loads(replies.read_text(encoding="utf-8")
-                           )["docker/compose#1"]
+                           )["traefik/traefik#1"]
         assert entry["source_kind"] == "issue"
         assert entry["source_comment_id"] == 777
 
@@ -622,7 +622,7 @@ def test_untrusted_review_does_not_dispatch(monkeypatch, tmp_path):
         {"author": "visitor", "association": "NONE", "body": "please change this",
          "source": "issue", "comment_id": 99},
     ])
-    out = mp.dispatch_pr_fix("docker/compose", 7, kind="review",
+    out = mp.dispatch_pr_fix("traefik/traefik", 7, kind="review",
                              review_author="visitor", review_comment="please change this")
     assert not out["dispatched"]
     assert not runs

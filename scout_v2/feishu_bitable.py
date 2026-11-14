@@ -118,7 +118,12 @@ def row_to_fields(row: dict) -> dict:
 
 
 def repo_row_to_fields(row: dict) -> dict:
-    return {"键": link_key(row["repo"], "repo")}
+    return {"键": link_key(row["repo"], "repo"),
+            "仓库类型": "荣誉仓库" if row.get("pool") == "honor" else "正式仓库",
+            "参与状态": "扫描与贡献" if row.get("issue_scan", True) else "仅跟踪存量 PR",
+            "用途": row.get("purpose") or None,
+            "已合并 PR": str(row.get("merged_by_us", 0)),
+            "备注": row.get("note") or None}
 
 
 def scan_row_to_fields(row: dict) -> dict:

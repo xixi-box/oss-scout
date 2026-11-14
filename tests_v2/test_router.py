@@ -116,14 +116,14 @@ class TestRepairLoopConcurrency:
         root = tmp_path
         (root / "queue").mkdir(parents=True)
         (root / "queue" / "candidates.json").write_text(_json.dumps({
-            "docker/compose#1": {"id": "docker/compose#1", "repo": "docker/compose", "number": 1,
+            "traefik/traefik#1": {"id": "traefik/traefik#1", "repo": "traefik/traefik", "number": 1,
                             "status": "staged", "eligible_at": "2000-01-01T00:00:00+08:00", "screened_at": queue_now().isoformat(), "blockers": [],
                             "discovered_at": queue_now().isoformat(),
                             "ai_verdict": {"usable": True, "reason": "clear bug"}},
         }), encoding="utf-8")
         ready = drain_ai_graded(root, limit=5, dry_run=True)
         assert len(ready) == 1
-        assert ready[0]["id"] == "docker/compose#1"
+        assert ready[0]["id"] == "traefik/traefik#1"
 
     def test_ai_no_is_not_drained(self, tmp_path):
         """AI 判定 NO 的候选不进 drain。"""
@@ -133,7 +133,7 @@ class TestRepairLoopConcurrency:
         root = tmp_path
         (root / "queue").mkdir(parents=True)
         (root / "queue" / "candidates.json").write_text(_json.dumps({
-            "docker/compose#2": {"id": "docker/compose#2", "repo": "docker/compose", "number": 2,
+            "traefik/traefik#2": {"id": "traefik/traefik#2", "repo": "traefik/traefik", "number": 2,
                             "status": "staged", "eligible_at": "2000-01-01T00:00:00+08:00", "screened_at": queue_now().isoformat(), "blockers": [],
                             "ai_verdict": {"usable": False, "reason": "needs design"}},
         }), encoding="utf-8")
@@ -147,7 +147,7 @@ class TestRepairLoopConcurrency:
         root = tmp_path
         (root / "queue").mkdir(parents=True)
         (root / "queue" / "candidates.json").write_text(_json.dumps({
-            "docker/compose#3": {"id": "docker/compose#3", "repo": "docker/compose", "number": 3,
+            "traefik/traefik#3": {"id": "traefik/traefik#3", "repo": "traefik/traefik", "number": 3,
                             "status": "staged", "eligible_at": "2000-01-01T00:00:00+08:00", "screened_at": queue_now().isoformat(), "blockers": ["docs_only"],
                             "ai_verdict": {"usable": True, "reason": "looks fine"}},
         }), encoding="utf-8")
@@ -214,11 +214,11 @@ class TestStagedCandidates:
         """Ordinary dispatch only consumes today's discoveries."""
         from scout_v2.workers.auto_pipeline import drain_ai_graded
         root = self._root(tmp_path, {
-            "docker/compose#2": {"id": "docker/compose#2", "repo": "docker/compose", "number": 2,
+            "traefik/traefik#2": {"id": "traefik/traefik#2", "repo": "traefik/traefik", "number": 2,
                           "status": "staged", "eligible_at": "2000-01-01T00:00:00+08:00", "screened_at": queue_now().isoformat(), "blockers": [],
                           "discovered_at": queue_now().isoformat(),
                           "ai_verdict": {"usable": True}},
-            "docker/compose#1": {"id": "docker/compose#1", "repo": "docker/compose", "number": 1,
+            "traefik/traefik#1": {"id": "traefik/traefik#1", "repo": "traefik/traefik", "number": 1,
                         "status": "staged", "blockers": [],
                         "staged_at": self._ts(1.0),
                         "eligible_at": self._ts(0.2),
@@ -226,13 +226,13 @@ class TestStagedCandidates:
                         "ai_verdict": {"usable": True}},
         })
         ready = drain_ai_graded(root, limit=1, dry_run=True)
-        assert [r["id"] for r in ready] == ["docker/compose#2"]
+        assert [r["id"] for r in ready] == ["traefik/traefik#2"]
 
     def test_batch_limit_does_not_spend_daily_quota(self, tmp_path):
         """额度只剩 1 条时，新扫到的其余候选标 staged 并记时间。"""
         from scout_v2.workers.auto_pipeline import drain_ai_graded
         entries = {
-            f"docker/compose#{i}": {"id": f"docker/compose#{i}", "repo": "docker/compose", "number": i,
+            f"traefik/traefik#{i}": {"id": f"traefik/traefik#{i}", "repo": "traefik/traefik", "number": i,
                          "status": "staged", "eligible_at": "2000-01-01T00:00:00+08:00", "screened_at": queue_now().isoformat(), "blockers": [],
                          "discovered_at": self._ts(0.05 * i),
                          "ai_verdict": {"usable": True}}
@@ -249,7 +249,7 @@ class TestStagedCandidates:
         """超过 3 天的暂存不再参与派发。"""
         from scout_v2.workers.auto_pipeline import drain_ai_graded
         root = self._root(tmp_path, {
-            "docker/compose#1": {"id": "docker/compose#1", "repo": "docker/compose", "number": 1,
+            "traefik/traefik#1": {"id": "traefik/traefik#1", "repo": "traefik/traefik", "number": 1,
                           "status": "staged", "blockers": [],
                           "staged_at": self._ts(5.0),
                           "ai_verdict": {"usable": True}},
@@ -260,18 +260,19 @@ class TestStagedCandidates:
         """已经在暂存里的不能被刷新 staged_at，否则永远不会过期。"""
         from scout_v2.workers.auto_pipeline import drain_ai_graded
         root = self._root(tmp_path, {
-            "docker/compose#1": {"id": "docker/compose#1", "repo": "docker/compose", "number": 1,
+            "traefik/traefik#1": {"id": "traefik/traefik#1", "repo": "traefik/traefik", "number": 1,
                          "status": "staged", "blockers": [],
                          "staged_at": self._ts(1.5),
                          "ai_verdict": {"usable": True}},
-            "docker/compose#2": {"id": "docker/compose#2", "repo": "docker/compose", "number": 2,
+            "traefik/traefik#2": {"id": "traefik/traefik#2", "repo": "traefik/traefik", "number": 2,
                         "status": "staged", "eligible_at": "2000-01-01T00:00:00+08:00", "screened_at": queue_now().isoformat(), "blockers": [],
                         "discovered_at": self._ts(0.02),
                         "ai_verdict": {"usable": True}},
         })
+        original_staged_at = self._read(root)["traefik/traefik#1"]["staged_at"]
         drain_ai_graded(root, limit=1, dry_run=False)
         q = self._read(root)
-        assert q["docker/compose#1"]["staged_at"] == self._ts(1.5)
+        assert q["traefik/traefik#1"]["staged_at"] == original_staged_at
 
 
 class TestInternalRepoExcluded:

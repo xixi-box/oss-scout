@@ -274,7 +274,39 @@ jobs:
           mkdir -p /opt/oss-scout-data/{state/runs,queue,artifacts,configs}
           chown -R 1000:1000 /opt/oss-scout-data 2>/dev/null || true
           docker compose -f "$DEPLOY_DIR/compose.yaml" pull
-          docker compose -f "$DEPLOY_DIR/compose.yaml" up -d --remove-orphans
+          # Hold the same dispatcher lock during replacement. Never interrupt a
+          # pipeline or a remote publication still awaiting reconciliation.
+          python3 - "$DEPLOY_DIR/compose.yaml" <<'PY'
+          import json
+          import sqlite3
+          import subprocess
+          import sys
+          import time
+          from pathlib import Path
+
+          root = Path("/opt/oss-scout-data")
+          for attempt in range(120):
+              lock = sqlite3.connect(root / "state/dispatcher.sqlite3", timeout=0, isolation_level=None)
+              try:
+                  lock.execute("BEGIN IMMEDIATE")
+                  queue = json.loads((root / "queue/candidates.json").read_text())
+                  with sqlite3.connect(f"file:{root}/state/scout_v2.sqlite3?mode=ro", uri=True) as db:
+                      pending = db.execute("SELECT COUNT(*) FROM publications WHERE day IS NULL").fetchone()[0]
+                  if pending or any(e.get("status") == "running" for e in queue.values()):
+                      print("Active repair or pending publication; leaving it untouched", flush=True)
+                  else:
+                      subprocess.run(["docker", "compose", "-f", sys.argv[1], "up", "-d", "--remove-orphans"], check=True)
+                      break
+              except sqlite3.OperationalError as exc:
+                  if "locked" not in str(exc).lower():
+                      raise
+                  print("Repair owns dispatcher; waiting without interrupting it", flush=True)
+              finally:
+                  lock.close()
+              time.sleep(10)
+          else:
+              raise SystemExit("Deployment postponed: repair did not become idle")
+          PY
           # 清理同仓库旧镜像（保留本次 SHA 与 latest）。
           # 只清 dangling 不够：带 tag 的历史版本会永久堆积（2026-10-27 磁盘打满事故）
           KEEP_SHA="${{ github.sha }}"

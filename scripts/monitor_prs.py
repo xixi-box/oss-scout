@@ -1086,10 +1086,14 @@ def build_repo_rows(root) -> list[dict]:
             "repo": repo,
             "lane": spec.get("lane") or "open",
             "internal": bool(spec.get("internal")),
+            "pool": spec.get("pool") or "formal",
+            "issue_scan": spec.get("issue_scan", True),
+            "purpose": spec.get("purpose") or "",
+            "merged_by_us": spec.get("merged_by_us", 0),
             "lang": a.get("lang") or "",
             "stars": a.get("stars"),
             "pushed": a.get("pushed") or "",
-            "note": "；".join(str(x) for x in (a.get("gate_workflows") or []))[:400],
+            "note": spec.get("note") or "；".join(str(x) for x in (a.get("gate_workflows") or []))[:400],
         })
     return rows
 
