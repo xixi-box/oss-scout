@@ -57,6 +57,8 @@ def main():
             ok,reply=CodexClient(timeout_seconds=180,workdir=root).run(
                 args.model,"Reply with exactly OSS_SCOUT_OK. Do not run commands, modify files, or access other directories.")
             intervals.append((start,time.monotonic()))
+            if not ok or "OSS_SCOUT_OK" not in reply:
+                print(json.dumps({"cli_probe_ok":ok,"detail":reply[:2000]}),flush=True)
             return ok and "OSS_SCOUT_OK" in reply
         with ThreadPoolExecutor(max_workers=2) as workers:
             results=list(workers.map(probe,roots))
