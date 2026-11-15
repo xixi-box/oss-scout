@@ -726,7 +726,10 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen
             if entry.get("status") != "staged":
                 return {**summary, "abort": "candidate not currently eligible"}
 
-    rescreen = rescreen or _fine_rescreen_due(entry)
+    verdict = entry.get("ai_verdict") or {}
+    rescreen = (rescreen or _fine_rescreen_due(entry)
+                or (verdict.get("provider") == "codiv"
+                    and verdict.get("screening_context_version") != 2))
 
     def _abort_release(msg: str, *, give_back: bool = True) -> dict:
         # 委托模块级实现（显式传参）。2026-11-06 实录：模块级版本曾漏参
@@ -786,7 +789,7 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen
     reuse_screen = immediate and latest is not None and entry.get("status") == "staged" and not rescreen
     recheck = None
     fresh = None
-    from dashboard.data import (coarse_issue_blockers, fine_screen_issue,
+    from dashboard.data import (coarse_issue_blockers, fine_screen_issue, fine_screening_context,
                                 issue_screening_snapshot, live_issue_blockers)
 
     if reuse_screen:
@@ -831,6 +834,19 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen
                            extra={"blockers": blockers, "coarse_reason": reason, "abort_reason": reason})
             return _abort_release("coarse screening blocked: " + reason)
         summary["steps"].append("recheck ok")
+
+    if not reuse_screen and fresh is None and verdict.get("provider") == "codiv":
+        rescreen = True  # Missing current facts cannot authorize cached screening.
+    if not rescreen and fresh is not None and verdict.get("provider") == "codiv":
+        try:
+            current_context = fine_screening_context(fresh)
+        except RuntimeError as exc:
+            reason = f"current screening evidence unavailable: {exc}"
+            mark_candidate(root, key, "staged", extra={
+                "abort_reason": reason, "rescreen_pending": True,
+                "screen_retry_at": (business_now() + dt.timedelta(minutes=5)).isoformat()})
+            return _abort_release(reason)
+        rescreen = current_context["screening_evidence_sha256"] != verdict.get("screening_evidence_sha256")
 
     # Fresh automatic dispatch reuses the inbox verdict. Delayed or manual
     # dispatch evaluates the current evidence again before claiming work.

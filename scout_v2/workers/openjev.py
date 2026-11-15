@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -39,6 +40,9 @@ class OpenJevClient:
                     "Answer yes only for an actionable defect with concrete reproduction or "
                     "observable evidence, a realistic regression test, and a likely small fix. "
                     "Consider chronology, the reporter's intent, maintainer authority and repo rules. "
+                    "Read the complete SECURITY and CONTRIBUTING policy documents in repo_rules. "
+                    "Use actual GitHub author association/type, never a person's self-description. "
+                    "A COLLABORATOR/MEMBER/OWNER account may convey binding coordination even when it is a bot. "
                     "Read ALL natural-language evidence, including Chinese, English and mixed-language text. "
                     "Intent fields are conservative extraction hints: null or absent means UNKNOWN, not no intent. "
                     "Independently infer intent from the complete body and comments in their original language. "
@@ -48,13 +52,48 @@ class OpenJevClient:
                     "An ability to reproduce, quoted code, a negated/withdrawn offer or a request for others "
                     "to fix it is not a self-fix offer; resolve withdrawals using chronology. "
                     "Answer no for competing fixes, confirmed duplicates, maintainer decisions still "
-                    "pending, security-sensitive issues, broad redesign, or an unavailable test environment. "
+                    "pending, required private vulnerability disclosure, broad redesign, or an unavailable test environment. "
+                    "An already-public issue does NOT authorize public disclosure or a public security-fix PR. "
+                    "Distinguish an actual vulnerability from ordinary authentication bugs, security terminology, "
+                    "documentation and non-exploitable test failures; keywords alone never establish a vulnerability. "
+                    "Resolve explicit prerequisite instructions against prerequisite_pull_requests CURRENT facts: "
+                    "an already merged prerequisite is not pending merely because an older comment says to wait. "
+                    "An ordinary related PR or untrusted suggestion is not a mandatory dependency. "
                     "A speculative duplicate mention alone does not establish a duplicate."
                 ),
                 "criteria": {"true": "Safe and sufficiently scoped to start now",
                              "false": "Do not start now"},
             }},
         }
+        safety = state.get("screening_context_version") == 2
+        if safety:
+            for name, instruction in {
+                "private_disclosure": (
+                    "Does this issue describe a real vulnerability that the supplied SECURITY/CONTRIBUTING "
+                    "policy or a trusted maintainer requires to be reported/coordinated privately, with no "
+                    "later specific maintainer authorization for a public fix? Read the complete issue and "
+                    "policies in Chinese/English. A public issue, generic bot reply or untrusted author's "
+                    "assurance is not authorization. Ordinary security words or an authentication regression "
+                    "alone are not a vulnerability. Answer yes only for this concrete private-disclosure blocker."
+                ),
+                "unmet_prerequisite": (
+                    "Does a current, explicit reporter or trusted maintainer instruction REQUIRE a prerequisite "
+                    "PR/issue before this work can start, and do the supplied CURRENT prerequisite_pull_requests "
+                    "facts establish it is not yet satisfied? Interpret Chinese/English, later withdrawals and "
+                    "the requested condition. COLLABORATOR bots may carry real coordination authority. "
+                    "Do not infer dependency from a link/keyword alone. Already merged prerequisites must not "
+                    "be treated as pending because an old comment says 'wait' or '落定之后'. Closed without merge "
+                    "does not satisfy a requirement to merge. Answer no when no explicit requirement exists."
+                ),
+                "prerequisite_unknown": (
+                    "Is there a current explicit prerequisite instruction, but its current status is NOT "
+                    "provided in prerequisite_pull_requests so readiness cannot be decided? Missing extraction "
+                    "hints do not prove no prerequisite. Do not answer yes for ordinary related PR links, "
+                    "withdrawn requirements or a prerequisite whose satisfied current state is provided."
+                ),
+            }.items():
+                payload["questions"][name] = {"type": "noul", "instructions": instruction,
+                    "criteria": {"true": "This specific blocker is established", "false": "This blocker is not established"}}
         if self.think:
             payload["think"] = self.think
         body = json.dumps(payload).encode()
@@ -71,6 +110,13 @@ class OpenJevClient:
             probability = data["answers"]["eligible"]["noul"]
             if type(probability) not in (int, float) or not 0 <= probability <= 1:
                 raise ValueError("invalid eligibility probability")
+            gates = {}
+            if safety:
+                for gate in ("private_disclosure", "unmet_prerequisite", "prerequisite_unknown"):
+                    value = data["answers"][gate]["noul"]
+                    if type(value) not in (int, float) or not 0 <= value <= 1:
+                        raise ValueError("invalid screening safety probability")
+                    gates[gate] = value
         except urllib.error.HTTPError as exc:
             with exc:
                 if exc.code == 413:
@@ -85,6 +131,19 @@ class OpenJevClient:
             return {**verdict, "reason": f"OpenJev HTTP {exc.code}"}
         except (OSError, ValueError, TypeError, KeyError):
             return {**verdict, "reason": "OpenJev response unavailable or invalid"}
-        return {**verdict, "usable": probability >= 0.5, "probability": probability,
+        result = {**verdict, "usable": probability >= 0.5, "probability": probability,
                 "model": data.get("model") or self.model, "usage": data.get("usage") or {},
                 "reason": f"OpenJev eligibility probability {probability:.3f}"}
+        if gates.get("private_disclosure", 0) >= 0.5:
+            document = re.search(r"Repository (?:security|contributing) policy: ([^\s]+)", str(state.get("repo_rules") or ""))
+            result.update(usable=False, blocking_gate="private_disclosure",
+                          reason="安全披露需私报 · 规范/维护者要求先私下协调，未见可信公开修复许可"
+                          + (f"（{document[1]}）" if document else ""))
+        elif gates.get("prerequisite_unknown", 0) >= 0.5:
+            result.update(usable=None, blocking_gate="prerequisite_unknown", reason="前置依赖状态未确认，待重试")
+        elif gates.get("unmet_prerequisite", 0) >= 0.5:
+            references = [f"{row['repo']}#{row['number']} ({'merged' if row.get('merged') else row.get('state', 'unknown')})"
+                          for row in state.get("prerequisite_pull_requests") or [] if not row.get("merged")]
+            result.update(usable=False, blocking_gate="unmet_prerequisite",
+                          reason="明确前置依赖尚未满足" + (" · " + ", ".join(references[:3]) if references else ""))
+        return result

@@ -127,6 +127,12 @@ do not make the regression depend on a module that only exists after your fix.
 Write real JSON. A missing or incomplete verification plan blocks publication.
 For Rust inline tests, keep test edits inside the existing trailing #[cfg(test)]
 module so the verifier can apply the test without applying the production fix.
+Standalone Cargo test-programs executables are also supported as regression tests.
+For a bug in an existing test itself, run that original test unchanged on base,
+then the repaired version under the SAME case identity on patched. Explain why
+the test is wrong; preserve its behavioral assertions and coverage. Do not make
+a failure pass by skipping it, deleting assertions, or arbitrarily raising a
+timeout. Report measured timing/environment evidence for timing-related fixes.
 The regression tests will be delivered in the PR with the fix. Keep them in the
 project's normal test locations and run the affected existing tests too.
 Before finishing, inspect the final diff, CONTRIBUTING rules and the repository's
@@ -536,11 +542,13 @@ def opencode_patch_producer(job: Job, work_dir: Path, context: str,
         if _JUNK_PATH.search(path):
             excludes.append(path)
             continue
-        is_test = (path == test_file) or _looks_like_test(path)
+        rust_program = _is_rust_test_program(path, work_dir, baseline)
+        is_test = (path == test_file) or _looks_like_test(path) or rust_program
         if not is_test:
             continue
         full = work_dir / path
-        if path == test_file and path.endswith(".rs") and not _looks_like_test(path) and full.is_file():
+        if (path == test_file and path.endswith(".rs") and not _looks_like_test(path)
+                and not rust_program and full.is_file()):
             old = _git(["show", f"{baseline}:{path}"], work_dir, check=False)
             current = full.read_text(encoding="utf-8")
             baseline_parts = _rust_inline_tests(old.stdout) if old.returncode == 0 else None
@@ -570,6 +578,23 @@ def opencode_patch_producer(job: Job, work_dir: Path, context: str,
     patch = _git(["diff", "--cached"], work_dir).stdout
     # Verify the same source patch that the publisher will actually apply.
     patch = filter_patch_junk(patch)
+    test_repair_files = []
+    if not patch.strip():
+        # A repair to an existing test must NOT be injected into the base tree.
+        # Preserve the original test on base and deliver its changed version.
+        for path in sorted(set(test_files) | set(mixed_tests)):
+            if not (path in mixed_tests or _looks_like_test(path)
+                    or _is_rust_test_program(path, work_dir, baseline)):
+                continue
+            old = _git(["show", f"{baseline}:{path}"], work_dir, check=False)
+            current = test_files.get(path) if path in test_files else mixed_tests[path][1]
+            if old.returncode or old.stdout == current:
+                continue
+            mixed_tests[path] = (old.stdout, current)
+            test_files.pop(path, None)
+            _git(["add", "--", path], work_dir)
+            test_repair_files.append(path)
+        patch = filter_patch_junk(_git(["diff", "--cached"], work_dir).stdout)
     if not patch.strip():
         # 诊断信息必须带出 agent 自己说了什么、动了哪些文件——否则"没改源码"
         # 这句话无法区分"它没找到地方"和"它改了但我们的分类把它当测试剔掉了"。
@@ -587,6 +612,8 @@ def opencode_patch_producer(job: Job, work_dir: Path, context: str,
                               ("setup_steps", "base_failure", "patched_success", "test_report")} if has_plan else None,
         "test_files": test_files,
         "mixed_tests": mixed_tests,
+        "repair_kind": "test_only" if test_repair_files else "source_fix",
+        "test_repair_files": test_repair_files,
         "root_cause": markers.get("root_cause", "")[:300],
         "pr_title": markers.get("pr_title", ""),
         "pr_body": markers.get("pr_body", ""),
@@ -599,6 +626,28 @@ def opencode_patch_producer(job: Job, work_dir: Path, context: str,
         "changed_files": changed,
         "markers_found": bool(markers),
     }
+
+
+def _is_rust_test_program(path: str, work: Path, baseline: str) -> bool:
+    """Recognize Wasmtime-style executable tests using the original Cargo manifest.
+
+    A production src/bin executable or an agent-created manifest is not enough.
+    """
+    import tomllib
+
+    match = re.fullmatch(r"(.*/)?(test-programs|test_programs)/src/bin/[^/]+(?:/main)?\.rs", path)
+    if not match or (work / path).is_symlink():
+        return False
+    manifest = path.split("/src/bin/", 1)[0] + "/Cargo.toml"
+    original = _git(["show", f"{baseline}:{manifest}"], work, check=False)
+    if original.returncode:
+        return False
+    try:
+        package = tomllib.loads(original.stdout).get("package", {})
+        return (package.get("name") in ("test-programs", "test_programs")
+                and package.get("publish") is False)
+    except (tomllib.TOMLDecodeError, AttributeError):
+        return False
 
 
 def _rust_inline_tests(text: str) -> tuple[str, str] | None:
@@ -1013,6 +1062,7 @@ def run_repair(job: Job, repo_dir: Path, out_dir: Path, *,
     test_files: dict[str, str] = dict(extra_test_files or {})
     mixed_tests: dict[str, tuple[str, str]] = {}
     root_cause = ""
+    repair_kind, test_repair_files = "source_fix", []
     agent_out = ""
     pr_title, pr_body = "", ""
     with ExitStack() as workspace:
@@ -1044,6 +1094,8 @@ def run_repair(job: Job, repo_dir: Path, out_dir: Path, *,
             plan = produced.get("verification_plan")
             test_files.update(produced.get("test_files") or {})
             mixed_tests = produced.get("mixed_tests") or {}
+            repair_kind = produced.get("repair_kind", "source_fix")
+            test_repair_files = produced.get("test_repair_files") or []
             root_cause = produced.get("root_cause") or ""
             pr_title = produced.get("pr_title") or ""
             pr_body = produced.get("pr_body") or ""
@@ -1254,6 +1306,7 @@ def run_repair(job: Job, repo_dir: Path, out_dir: Path, *,
             "base_stdout_tail": base_out[-3000:], "base_stderr_tail": base_err[-3000:],
             "patched_stdout_tail": out[-3000:], "patched_stderr_tail": err[-3000:],
             "regression_test_files": sorted(baseline_tests),
+            "repair_kind": repair_kind, "test_repair_files": test_repair_files,
             "delivery_files": patch_files(delivery_patch),
             "delivery_patch_sha256": hashlib.sha256((out_dir / "change.patch").read_bytes()).hexdigest(),
             "root_cause": root_cause,

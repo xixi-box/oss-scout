@@ -150,7 +150,7 @@ def cloudflare_cfg(ds) -> dict:
 # "you can fix this and I can try to review"。Worker 事件只有 body 没有
 # 评论列表，先把 body 里命中的句子喂给评分层。
 def repo_rules_text(repo: str) -> str:
-    """该仓库的 PR 规矩摘要（configs/repo_rules.yaml），供细筛 prompt 注入。"""
+    """Recorded rules plus complete current contribution/security policies."""
     candidates = [Path(os.environ.get("OSSCOUT_DASHBOARD_ROOT", "/data")) / "configs/repo_rules.yaml",
                   Path(__file__).resolve().parents[1] / "configs/repo_rules.yaml",
                   Path(__file__).resolve().parents[1] / "configs.seed/repo_rules.yaml"]
@@ -161,7 +161,8 @@ def repo_rules_text(repo: str) -> str:
             rule = (rules.get("rules") or {}).get(repo) or {}
             break
     note = str(rule.get("note") or "").strip()
-    return note if note else "none recorded"
+    from scout_v2.screening_evidence import render_repository_policy
+    return "Recorded repository rules:\n" + (note or "none recorded") + "\n\n" + render_repository_policy(repo)
 
 
 _RE_CLAIMISH = re.compile(
@@ -230,12 +231,14 @@ def issue_screening_snapshot(item: dict, issue: dict, comments: list, timeline=(
             "created_at": issue.get("created_at"), "state_reason": issue.get("state_reason"),
             "reporter": (issue.get("user") or {}).get("login"),
             "reporter_association": issue.get("author_association"),
+            "reporter_type": (issue.get("user") or {}).get("type"),
             "reactions": (issue.get("reactions") or {}).get("total_count", 0),
             "updated_at": issue.get("updated_at") or "", "state": issue.get("state"),
             "pull_request": bool(issue.get("pull_request")), "assignees": issue.get("assignees") or [],
             "labels": [l["name"] for l in issue.get("labels") or []],
             "comments": len(comments), "context_complete": True, "related_prs": list(related_prs.values()),
             "issue_comments": [{"author": (c.get("user") or {}).get("login", "?"),
+                                "author_type": (c.get("user") or {}).get("type"),
                                 "association": c.get("author_association", ""),
                                 "url": c.get("html_url"),
                                 "created_at": c.get("created_at"), "updated_at": c.get("updated_at"),
@@ -351,6 +354,11 @@ def screen_issue(eng, it: dict, *, lane: str, live_blockers=(),
     return [], fine_screen_issue(eng, it, lane=lane, linked_prs=linked_fix_prs(timeline, number))
 
 
+def fine_screening_context(it: dict) -> dict:
+    from scout_v2.screening_evidence import build_screening_context
+    return build_screening_context(it, repo_rules_text(str(it["repo"])))
+
+
 def fine_screen_issue(eng, it: dict, *, lane: str, linked_prs: list | None = None) -> dict:
     """Evaluate a snapshot that has already passed the mechanical gate."""
     from scout_v2.git_host import own_issue_claim
@@ -361,7 +369,9 @@ def fine_screen_issue(eng, it: dict, *, lane: str, linked_prs: list | None = Non
     title, body = str(it.get("title") or ""), str(it.get("body_excerpt") or "")
     labels = [str(label) for label in it.get("labels") or []]
     claim_sents = _claimish_sentences(body)
+    context = {}
     try:
+        context = fine_screening_context(it)
         reporter = it.get("reporter")
         offers = self_fix_evidence(body)
         for comment in it.get("issue_comments") or []:
@@ -373,6 +383,7 @@ def fine_screen_issue(eng, it: dict, *, lane: str, linked_prs: list | None = Non
             "state": it.get("state"), "state_reason": it.get("state_reason"),
             "created_at": it.get("created_at"), "updated_at": it.get("updated_at"),
             "reporter": reporter, "reporter_association": it.get("reporter_association"),
+            "reporter_type": it.get("reporter_type"),
             "assignees": [a.get("login") for a in it.get("assignees") or []],
             **issue_assignment(eng, it),
             "reactions": it.get("reactions", 0), "lane": lane,
@@ -386,9 +397,10 @@ def fine_screen_issue(eng, it: dict, *, lane: str, linked_prs: list | None = Non
             "reporter_offered_fix": True if offers else None,
             "reporter_offer_evidence": offers[:5],
             "claimish_signal": True if claim_sents else None,
-            "repo_rules": repo_rules_text(repo)})
+            **context})
     except Exception as ex:
         verdict = {"usable": None, "reason": f"scorer error: {ex}"[:200]}
+    verdict.update({key: context[key] for key in ("screening_context_version", "screening_evidence_sha256") if key in context})
     outcome = ("已跳过" if verdict.get("skipped") else
                {True: "通过", False: "拒绝", None: "待重试"}[verdict.get("usable")])
     record_issue_screen(eng, it, "fine_screen", f"{outcome} · {verdict.get('reason', '')}")

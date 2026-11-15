@@ -233,7 +233,10 @@ def test_openjev_receives_actor_time_and_linked_pr_evidence(intake, monkeypatch)
     calls = []
     def request(req, timeout):
         calls.append(json.loads(req.data))
-        return io.BytesIO(b'{"model":"openjev-0.1","answers":{"eligible":{"noul":0.8}}}')
+        return io.BytesIO(json.dumps({"model": "openjev-0.1", "answers": {
+            "eligible": {"noul": 0.8}, "private_disclosure": {"noul": 0.0},
+            "unmet_prerequisite": {"noul": 0.0}, "prerequisite_unknown": {"noul": 0.0},
+        }}).encode())
     monkeypatch.setattr("scout_v2.workers.openjev.urllib.request.urlopen", request)
     assert d.ingest_cloudflare_issues(ds, [issue])[0] == 1
     assert d.ingest_cloudflare_issues(ds, [issue])[0] == 0
@@ -463,13 +466,16 @@ def test_unconsumed_backlog_waits_for_next_four_am(tmp_path, monkeypatch):
     assert entry["staged_at"] == "2026-11-06T20:00:00+08:00"
 
 
-@pytest.mark.parametrize("mode", ["fresh", "immediate", "staged", "manual", "fresh_blocked", "staged_blocked"])
+@pytest.mark.parametrize("mode", ["fresh", "immediate", "staged", "manual", "fresh_blocked", "staged_blocked",
+                                  "legacy", "evidence_changed", "evidence_unavailable"])
 def test_failed_repair_does_not_spend_publication_quota(tmp_path, monkeypatch, mode):
     (tmp_path / "queue").mkdir()
     (tmp_path / "state").mkdir()
     entries = {f"traefik/traefik#{i}": {"id": f"traefik/traefik#{i}", "repo": "traefik/traefik", "number": i,
                             "title": "Parser bug", "status": "staged", "eligible_at": "2000-01-01T00:00:00+08:00", "screened_at": queue_now().isoformat(), "context_complete": True,
-                            "ai_verdict": {"usable": True, "provider": "codiv"}}
+                            "ai_verdict": {"usable": True, "provider": "codiv",
+                                           "screening_context_version": 1 if mode == "legacy" else 2,
+                                           "screening_evidence_sha256": "original"}}
                for i in range(1, 8)}
     if mode.startswith("staged"):
         from scout_v2.state_store import business_now
@@ -485,6 +491,12 @@ def test_failed_repair_does_not_spend_publication_quota(tmp_path, monkeypatch, m
                           max_claims_per_day=5, snapshot_id=lambda: "test",
                           repos_cfg={"repositories": {"traefik/traefik": {}}})
     monkeypatch.setattr(p.PolicyEngine, "load", lambda _: (eng, None))
+    def screening_context(_):
+        if mode == "evidence_unavailable":
+            raise RuntimeError("dependency status unavailable")
+        return {"screening_context_version": 2,
+                "screening_evidence_sha256": "changed" if mode == "evidence_changed" else "original"}
+    monkeypatch.setattr(d, "fine_screening_context", screening_context)
     rechecked = []
 
     def recheck(repo, number, **kwargs):
@@ -534,6 +546,11 @@ def test_failed_repair_does_not_spend_publication_quota(tmp_path, monkeypatch, m
     for entry in entries.values():
         p.candidate_pipeline(tmp_path, entry, rescreen=mode == "manual",
                              immediate=mode == "immediate" and entry["number"] == 1)
+    if mode == "evidence_unavailable":
+        assert not submitted and not screens
+        q = json.loads((tmp_path / "queue/candidates.json").read_text())
+        assert all(e["status"] == "staged" and e.get("screen_retry_at") for e in q.values())
+        return
     if mode in {"fresh", "immediate"}:
         assert rechecked == (list(range(2, 7)) if mode == "immediate" else list(range(1, 7)))
     led = ClaimLedger(tmp_path / "state/scout_v2.sqlite3")
@@ -542,7 +559,8 @@ def test_failed_repair_does_not_spend_publication_quota(tmp_path, monkeypatch, m
     led.close()
     assert len(submitted) == 6
     assert screens == {"fresh": [], "immediate": [], "staged": [4, 5, 6], "manual": [1, 2, 3, 4, 5, 6],
-                       "fresh_blocked": [], "staged_blocked": [5, 6]}[mode]
+                       "fresh_blocked": [], "staged_blocked": [5, 6],
+                       "legacy": [1, 2, 3, 4, 5, 6], "evidence_changed": [1, 2, 3, 4, 5, 6]}[mode]
     q = json.loads((tmp_path / "queue/candidates.json").read_text())
     if mode.endswith("_blocked"):
         assert q["traefik/traefik#4"]["blockers"] == ["excluded_label"]

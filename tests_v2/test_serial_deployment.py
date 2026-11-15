@@ -87,12 +87,16 @@ def test_runtime_smoke_reports_variable_ai_classification_without_blocking_deplo
     from scout_v2.workers.openjev import OpenJevClient
     monkeypatch.setattr(sys,'argv',['runtime_status','--root',str(tmp_path),'--screening'])
     monkeypatch.setattr(runtime_status,'inspect',lambda root:{'repositories':58,'formal_repositories':50,'honor_repositories':8,'daily_cap':30,'automatic_repositories':57})
-    results=iter(({'usable':True},{'usable':True,'probability':0.651},{'usable':False,'probability':0.315}))
+    results=iter(({'usable':True},{'usable':True,'probability':0.651},{'usable':False,'probability':0.315},
+                  {'usable':False,'blocking_gate':'private_disclosure'},
+                  {'usable':False,'blocking_gate':'unmet_prerequisite'}, {'usable':True}))
     monkeypatch.setattr(OpenJevClient,'score_issue',lambda *a:next(results))
     assert runtime_status.main()==0
     report=json.loads(capsys.readouterr().out)
     assert report['intent_screening_warning']
     assert report['intent_screening_probes']['zh']['probability']==0.651
+    assert report['policy_screening_probes']['prerequisite_open']['blocking_gate']=='unmet_prerequisite'
+    assert 'policy_screening_warning' not in report
 
 
 def test_runtime_smoke_still_fails_when_screening_service_unavailable(tmp_path,monkeypatch):
@@ -102,6 +106,8 @@ def test_runtime_smoke_still_fails_when_screening_service_unavailable(tmp_path,m
     from scout_v2.workers.openjev import OpenJevClient
     monkeypatch.setattr(sys,'argv',['runtime_status','--root',str(tmp_path),'--screening'])
     monkeypatch.setattr(runtime_status,'inspect',lambda root:{'repositories':58,'formal_repositories':50,'honor_repositories':8,'daily_cap':30,'automatic_repositories':57})
-    results=iter(({'usable':True},{'usable':None,'reason':'HTTP 503'},{'usable':False}))
+    results=iter(({'usable':True},{'usable':None,'reason':'HTTP 503'},{'usable':False},
+                  {'usable':False,'blocking_gate':'private_disclosure'},
+                  {'usable':False,'blocking_gate':'unmet_prerequisite'}, {'usable':True}))
     monkeypatch.setattr(OpenJevClient,'score_issue',lambda *a:next(results))
     with pytest.raises(AssertionError,match='service unavailable'):runtime_status.main()

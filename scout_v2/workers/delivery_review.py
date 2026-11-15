@@ -77,6 +77,10 @@ def review_delivery(job: dict, repo_dir: Path, out_dir: Path, evidence: dict, *,
                 "(not mocks/source-text or a missing helper), boundary cases, existing behavior, "
                 "hardcoded examples, unrelated scope, and the LATEST maintainer intent, including "
                 "Chinese and English comments and repository contribution requirements. "
+                "For test_only repairs, base ran the original test and patched ran its repair. "
+                "Check that the test defect is justified, the same behavioral assertions and "
+                "coverage remain, and timing changes have measured rationale. Reject skipped, "
+                "deleted or weakened assertions and arbitrary timeout increases. "
                 "Do not approve a direction a maintainer rejected or assert human review happened. "
                 "Report only actionable correctness/acceptance blockers, not style preferences. "
                 'Return ONLY JSON: {"verdict":"approve|changes_requested|blocked",'

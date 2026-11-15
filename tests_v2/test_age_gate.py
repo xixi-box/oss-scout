@@ -14,9 +14,16 @@ import datetime as dt
 from pathlib import Path
 
 import yaml
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import dashboard.data as D  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def repository_policy_without_network(monkeypatch):
+    """These intent tests use a synthetic repository, not live GitHub policy."""
+    monkeypatch.setattr(D, "repo_rules_text", lambda repo: "test repository policy")
 
 
 def opts_cy(spy_cls):

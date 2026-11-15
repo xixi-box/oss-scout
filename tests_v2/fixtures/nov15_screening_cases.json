@@ -1,0 +1,34 @@
+{
+  "dify_private_disclosure": {
+    "number": 46447,
+    "title": "Missing TOOL_MANAGE Permission Check on Remote API Schema Fetch Endpoint",
+    "author_association": "NONE",
+    "repo": "langgenius/dify",
+    "reporter": "yibaoable",
+    "reporter_type": "User",
+    "source_run": 43694944871,
+    "body": "**Issue Description**\n\nThe remote API schema preparation endpoint allows an authenticated workspace member without `TOOL_MANAGE` permission to trigger a server-side HTTP request and retrieve a remote OpenAPI schema.\n\nUnlike the adjacent API Tool creation endpoint, this endpoint does not enforce the `TOOL_MANAGE` permission.",
+    "comments": [],
+    "security_policy": "# Security Policy\n\n## Reporting a Vulnerability\n\nIf you believe you have found a security vulnerability in Dify, please report it privately through GitHub Security Advisories:\n\nhttps://github.com/langgenius/dify/security/advisories/new\n\nPlease do not report security vulnerabilities through public GitHub issues, discussions, or pull requests.\n\nWhen submitting a report, include as much relevant information as you can safely provide, such as:\n\n- A description of the vulnerability\n- Steps to reproduce, if safe to share privately\n- Affected components, versions, or configurations\n- Potential impact\n- Any suggested mitigation or fix, if available\n\nThe maintainers will review reports submitted through GitHub Security Advisories and coordinate follow-up there.\n\n## Public Disclosure\n\nPlease avoid publicly disclosing details of a vulnerability until it has been reviewed and, where appropriate, a fix or mitigation has been made available.\n\n## Security Updates\n\nSecurity fixes may be released through normal project releases or other appropriate channels. Users are encouraged to keep Dify deployments up to date.\n",
+    "contribution_excerpt": "For security vulnerabilities, follow our [security policy](./SECURITY.md) and report privately instead of opening a public issue."
+  },
+  "qwen_prerequisite": {
+    "number": 17337,
+    "title": "fix(core): key persisted-output stub detection on ToolOutputRecovery.persistedOutputFiles",
+    "author_association": "CONTRIBUTOR",
+    "repo": "QwenLM/qwen-code",
+    "reporter": "2SinceJuly",
+    "reporter_type": "User",
+    "source_run": 43691665392,
+    "body": "Follow-up from #16598 (R1-1). That PR taught `isPersistedOutputStub` to recognise the tag and path line shapes, so microcompaction no longer clears a persisted-output stub in the two common formats.\n\nTwo producers still match neither branch:\n\n- the finalizer's `Persisted tool-output artifact: <path>` header\n- `web_fetch`'s `Full extracted text saved to: <path>` note, behind its metadata header\n\nWidening the positional read one spelling at a time finds one more producer each round. The class is *the saved path is not at offset 0*.\n",
+    "comments": [
+      {
+        "author": "qwen-code-review-bot",
+        "author_type": "User",
+        "association": "COLLABORATOR",
+        "body": "- **Next**: confirm the recovery handle is actually present on the parts microcompaction inspects, then sequence the change behind #16598.\n#16598 is **still open**, so `isPersistedOutputStub` and `PERSISTED_OUTPUT_STUB_PREFIX` do not exist on `main` yet and this cannot land ahead of it. A maintainer call is worth having on whether to widen #16598 in place — same predicate, same defect class, and the fix reportedly originated in that review — or keep this separate; a separate PR means the string-fallback branch gets written twice.\n#16598 **仍处于 open 状态**，因此 `isPersistedOutputStub` 和 `PERSISTED_OUTPUT_STUB_PREFIX` 目前还不存在于 `main`，本改动无法先于它落地。值得由维护者决定：是就地扩展 #16598（判据相同、缺陷类别相同，且该修复据说正是源自那次评审），还是保持独立 —— 保持独立意味着字符串兜底那个分支要写两遍。\n#16598 落定之后，欢迎社区提交 PR。相关：#16596（父缺陷）、#16585（以落盘掩码替代清理，若落地将涵盖整个这一类问题）。",
+        "url": "https://github.com/QwenLM/qwen-code/issues/17337#issuecomment-6891397071"
+      }
+    ]
+  }
+}

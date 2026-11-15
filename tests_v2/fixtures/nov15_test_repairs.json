@@ -1,0 +1,97 @@
+[
+  {
+    "source_run": "https://github.com/xixi-box/oss-scout/actions/runs/43703751196",
+    "test_file": "crates/test-programs/src/bin/p1_file_read_write.rs",
+    "test_cmd": "CARGO_PROFILE_DEV_DEBUG=0 CARGO_BUILD_JOBS=2 cargo test -p wasmtime-wasi --test all p1_file_read_write -- --nocapture",
+    "setup_steps": [
+      {
+        "kind": "setup",
+        "command": "rustup target add wasm32-wasip1 wasm32-unknown-unknown"
+      }
+    ],
+    "base_failure": [
+      "p2::sync::p1_file_read_write",
+      "assertion `left == right` failed: read after write must use the shared offset",
+      "left: [65]",
+      "right: [99]"
+    ],
+    "patched_success": [
+      "test p2::sync::p1_file_read_write ... ok",
+      "test p2::async_::p1_file_read_write ... ok",
+      "test p1::p1_file_read_write ... ok",
+      "test result: ok. 3 passed; 0 failed;"
+    ],
+    "test_report": null
+  },
+  {
+    "source_run": "https://github.com/xixi-box/oss-scout/actions/runs/43704687592",
+    "test_file": "crates/test-programs/src/bin/p1_fd_readdir.rs",
+    "test_cmd": "mkdir -p target && CARGO_PROFILE_DEV_DEBUG=0 RUSTC_BOOTSTRAP=1 cargo test -p wasmtime-wasi --test all p1_fd_readdir -- -Z unstable-options --format junit > target/osscout-readdir.xml",
+    "setup_steps": [
+      {
+        "kind": "setup",
+        "command": "rustup target add wasm32-wasip1 wasm32-unknown-unknown"
+      },
+      {
+        "kind": "build",
+        "command": "CARGO_PROFILE_DEV_DEBUG=0 RUSTC_BOOTSTRAP=1 cargo test -p wasmtime-wasi --test all --no-run"
+      }
+    ],
+    "base_failure": [],
+    "patched_success": [],
+    "test_report": {
+      "format": "junit",
+      "path": "target/osscout-readdir.xml",
+      "case": "p2::sync::p1_fd_readdir"
+    }
+  },
+  {
+    "source_run": "https://github.com/xixi-box/oss-scout/actions/runs/43697476032",
+    "test_file": "packages/core/src/code-mode/code-mode.test.ts",
+    "test_cmd": "bash -c 'pids=()\ntrap '\"'\"'kill \"${pids[@]}\" 2>/dev/null; wait 2>/dev/null'\"'\"' EXIT\nfor i in {1..12}; do\n  taskset -c 0 sh -c '\"'\"'while :; do :; done'\"'\"' &\n  pids+=($!)\ndone\ncd packages/core && taskset -c 0 npx vitest run src/code-mode/code-mode.test.ts -t '\"'\"'does not keep exec alive for an unawaited timer'\"'\"' --coverage.enabled=false --testTimeout=60000 --reporter=verbose --reporter=junit --outputFile.junit=../../osscout-regression.xml'",
+    "setup_steps": [
+      {
+        "kind": "setup",
+        "command": "corepack pnpm install --frozen-lockfile"
+      }
+    ],
+    "base_failure": [
+      "isolated code mode host > does not keep exec alive for an unawaited timer",
+      "CodeModeExecutionError: interrupted"
+    ],
+    "patched_success": [],
+    "test_report": {
+      "format": "junit",
+      "path": "osscout-regression.xml",
+      "case": "isolated code mode host > does not keep exec alive for an unawaited timer"
+    }
+  },
+  {
+    "source_run": "https://github.com/xixi-box/oss-scout/actions/runs/43694375812",
+    "test_file": "integrations/external-context-mem0/src/delete.integration.test.ts",
+    "test_cmd": "cd integrations/external-context-mem0 && npx vitest run src/delete.integration.test.ts --reporter=verbose --reporter=junit --outputFile.junit=../../osscout-junit.xml",
+    "setup_steps": [
+      {
+        "kind": "setup",
+        "command": "npm install --prefix integrations/external-context-mem0 --workspaces=false --ignore-scripts --package-lock=false"
+      },
+      {
+        "kind": "build",
+        "command": "npm run build --workspace=@qwen-code/external-context-mem0"
+      }
+    ],
+    "base_failure": [
+      "packaged deletion MCP through real HTTP > bounds the cumulative operation after a cold connection",
+      "AssertionError: expected [ 'GET', 'DELETE' ] to deeply equal [ 'GET', 'DELETE', 'GET' ]"
+    ],
+    "patched_success": [
+      "✓ src/delete.integration.test.ts > packaged deletion MCP through real HTTP > bounds the cumulative operation after a cold connection",
+      "Tests  9 passed (9)"
+    ],
+    "test_report": {
+      "format": "junit",
+      "path": "osscout-junit.xml",
+      "case": "packaged deletion MCP through real HTTP > bounds the cumulative operation after a cold connection"
+    }
+  }
+]
