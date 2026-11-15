@@ -211,3 +211,9 @@ gh workflow run worker-deploy.yml --ref main
 审计记录保存在 `state/worklog.jsonl`。队列 JSON 为兼容飞书与控制器保留，所有运行时
 读改写通过 `queue_transaction` 跨线程、跨进程串行化。重启后的远程任务先核对再继续，
 不重复派发可能仍在执行的写操作。更多约定见 [AGENTS.md](AGENTS.md)。
+
+2026-11-15 仓库池调整：Kagent、Camel Quarkus 替换 Pydantic、Qwen Code，仍为
+50 个正式＋8 个荣誉仓库，其中 57 个参与新增 issue 扫描。Kagent 仅自动处理不足
+100 行（含回归测试）的小 bugfix；需要事前讨论的大改动、新功能和重构不自动开工。
+Camel Quarkus 优先局部 JVM 修复，依赖原生镜像、外部服务或凭据的缺陷必须能完成
+相应真实验证，否则在筛选阶段停止。细筛与修复代理均读取这些规则；配置调整不取消在途任务。

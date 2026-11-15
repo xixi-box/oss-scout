@@ -246,15 +246,18 @@ repositories:
     note: 已查常见贡献文档与候选工作流，未发现专门AI限制；不代表允许无人监督提交。
     pr_rules:
     - 已查常见贡献文档与候选工作流，未发现专门AI限制；不代表允许无人监督提交。
-  QwenLM/qwen-code:
+  kagent-dev/kagent:
     lane: open
     pool: formal
     issue_scan: true
-    purpose: 开源终端编码Agent
+    purpose: Kubernetes 原生 Agent 控制平台，集成 MCP、A2A 和 Agent 运行管理
     merged_by_us: 0
-    note: bugfix关联已有bug issue即可；新功能须批准，新开issue须等反馈；未见必须维护者指派的全局要求或AI作者识别关闭。
+    note: 仅自动处理不足100行的小bugfix（含测试）；小改动指南允许直接PR。大改动、新功能、重构须先讨论方案，不自动开工；遵守已有指派、认领和完整讨论。每个提交须DCO签署；涉及集群或生命周期须真实E2E，无法验证则停止。
     pr_rules:
-    - bugfix关联已有bug issue即可；新功能须批准，新开issue须等反馈；未见必须维护者指派的全局要求或AI作者识别关闭。
+    - Only automate small bug fixes with fewer than 100 changed lines including regression tests. Stop if the final diff reaches 100 lines; do not split a larger change into PRs to bypass the rule.
+    - Small bug fixes may use the direct PR workflow. Large changes, features and refactors require prior discussion and an agreed plan; do not automate those. Respect existing assignments, claims and maintainer intent.
+    - Sign off every commit, use a Conventional Commit PR title, and target main. Read CONTRIBUTING.md, AGENTS.md and applicable nested guidance.
+    - Add real E2E coverage for public APIs, persistence, runtime lifecycle and Kubernetes behavior when required. Stop if required cluster or service validation cannot be completed; do not substitute mocks for required E2E.
   AgentClientProtocol/agent-client-protocol:
     lane: open
     pool: formal
@@ -291,15 +294,18 @@ repositories:
     note: 所查贡献指南未见AI发PR禁令或认领硬门槛；Google CLA可复用既有签署。
     pr_rules:
     - 所查贡献指南未见AI发PR禁令或认领硬门槛；Google CLA可复用既有签署。
-  pydantic/pydantic:
+  apache/camel-quarkus:
     lane: open
     pool: formal
     issue_scan: true
-    purpose: Python数据校验与类型模型库
+    purpose: Quarkus 上的 Camel 集成扩展，覆盖 MCP、AI 和后端服务连接
     merged_by_us: 0
-    note: 明确欢迎AI，作者须理解代码；反对跨库spam和无意义AI描述，保留拒收权，不是pydantic-ai指派规则。
+    note: 关联已有GitHub issue，遵守PR模板与Apache来源/许可规则。优先可在目标模块独立复现的JVM修复；原生镜像、外部服务或凭据依赖问题须能真实验证，否则筛除。不以JVM通过冒充native通过，不擅自升级依赖。
     pr_rules:
-    - 明确欢迎AI，作者须理解代码；反对跨库spam和无意义AI描述，保留拒收权，不是pydantic-ai指派规则。
+    - Link the existing GitHub issue and follow the PR template, AGENTS.md and docs/modules/ROOT/pages/contributor-guide. Keep one focused fix and its regression tests together.
+    - Prefer independently reproducible JVM module fixes. If the bug requires GraalVM native-image, external services or credentials, establish that real validation is available before implementation; otherwise stop. JVM success is not native-image evidence.
+    - Run the affected module tests and required formatting checks with the Maven wrapper. Do not upgrade dependencies or change CI to make the environment work.
+    - Follow Apache generative-tooling guidance on provenance and compatible licenses; disclose material tool use truthfully when required. Do not claim human review or checks that did not happen.
   traefik/traefik:
     lane: open
     pool: formal

@@ -47,6 +47,27 @@ def test_fastmcp_assignment_or_explicit_exemption():
     assert assignment_facts({"assignees": [{"login": "xixi-box"}]}, rule)["assigned_to_me"]
 
 
+@pytest.mark.parametrize("repo,scope", [
+    ("kagent-dev/kagent", "100"),
+    ("apache/camel-quarkus", "GraalVM"),
+])
+def test_replacement_rules_reach_screening_repair_and_feishu(monkeypatch, repo, scope):
+    from dashboard.data import repo_rules_text
+    from scout_v2 import screening_evidence
+    from scout_v2.workers.repair import repo_rules_block
+
+    monkeypatch.setenv("OSSCOUT_DASHBOARD_ROOT", str(ROOT))
+    monkeypatch.setattr(screening_evidence, "render_repository_policy", lambda _: "live policy")
+    screening = repo_rules_text(repo)
+    repair = repo_rules_block(repo, ROOT)
+    assert scope in screening and scope in repair
+    assert "live policy" in screening
+    rows = {row["repo"]: row for row in build_repo_rows(ROOT)}
+    assert rows[repo]["pool"] == "formal" and rows[repo]["issue_scan"]
+    for removed in ("pydantic/pydantic", "QwenLM/qwen-code"):
+        assert removed not in rows and not monitored_repo(removed)
+
+
 def test_feishu_verifies_membership_and_paused_state(monkeypatch, tmp_path):
     rows = build_repo_rows(ROOT)
     records = [{"fields": fb.repo_row_to_fields(row)} for row in rows]

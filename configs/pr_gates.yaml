@@ -55,12 +55,12 @@ repositories:
   langgenius/dify: {requires_invite: false}
   lancedb/lancedb: {requires_invite: false}
   pydantic/monty: {requires_invite: false}
-  QwenLM/qwen-code: {requires_invite: false}
+  kagent-dev/kagent: {requires_invite: false}
   AgentClientProtocol/agent-client-protocol: {requires_invite: false}
   firecracker-microvm/firecracker: {requires_invite: false}
   webdriverio/webdriverio: {requires_invite: false}
   puppeteer/puppeteer: {requires_invite: false}
-  pydantic/pydantic: {requires_invite: false}
+  apache/camel-quarkus: {requires_invite: false}
   traefik/traefik: {requires_invite: false}
   istio/istio: {requires_invite: false}
   pypa/virtualenv: {requires_invite: false}

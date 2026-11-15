@@ -1,6 +1,10 @@
 _meta:
-  updated: '2026-11-09'
+  updated: '2026-11-15'
 rules:
+  kagent-dev/kagent:
+    note: Only automate small bug fixes with fewer than 100 changed lines including regression tests, using the direct small-change PR workflow. Large changes, features and refactors require prior discussion and an agreed plan and must be rejected from automatic repair. Respect existing assignments and claims. Every commit needs DCO sign-off. API, persistence, lifecycle or Kubernetes behavior needs the repository-required real E2E coverage; if it cannot be verified, reject the candidate. Do not split large changes to bypass these limits.
+  apache/camel-quarkus:
+    note: Link an existing GitHub issue and follow the PR template and current contributor guide. Prefer focused JVM module fixes with a real reproducible regression. Establish availability of required GraalVM native-image, external services or credentials before accepting bugs that depend on them; reject if required validation is unavailable. JVM-only tests cannot prove native-image fixes. Run affected module tests and required formatting; no dependency upgrades or CI changes. Follow Apache provenance and licensing guidance and disclose material tool use when required without claiming human review that did not occur.
   agentgateway/agentgateway:
     note: ''
   clickhouse/clickhouse:
