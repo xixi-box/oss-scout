@@ -34,6 +34,8 @@ class Reviewer:
         assert inputs["verified_patch"] == GOOD_PATCH
         assert "Chinese and English" in prompt
         assert "test_only repairs" in prompt and "weakened assertions" in prompt
+        assert "verification.coverage" in prompt and "coverage declarations alone are not proof" in prompt
+        assert "getHistoryShallow" in prompt and "nest component outputs" in prompt
         assert "return a / b" in (self.workdir / "calc.py").read_text()
         if self.mutate:
             (self.workdir / "calc.py").write_text("modified by reviewer")

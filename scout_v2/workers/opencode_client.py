@@ -12,6 +12,7 @@ import json
 import os
 import re
 import subprocess
+import time
 from pathlib import Path
 
 # 需要原样透传给 model_fallback 的 HTTP 状态码（会出现在 error 事件里）
@@ -129,10 +130,14 @@ class OpenCodeClient:
             child_env["OPENCODE_CONFIG_CONTENT"] = json.dumps({"permission": {
                 "edit": "deny", "bash": "deny", "webfetch": "deny", "external_directory": "deny"}})
         last: tuple[bool, str] = (False, "")
+        deadline = time.monotonic() + self.timeout
         for attempt in range(1 if self.read_only else 3):
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return False, f"agent timed out after {self.timeout}s; retry budget exhausted; last output: {last[1][-800:]}"
             try:
                 p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
-                                   errors="replace", timeout=self.timeout,
+                                   errors="replace", timeout=remaining,
                                    cwd=str(self.workdir) if self.workdir else None,
                                    stdin=subprocess.DEVNULL,
                                    env=child_env)

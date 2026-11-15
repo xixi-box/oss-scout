@@ -60,6 +60,10 @@ Do this, in order:
    Check sibling call paths and run the relevant existing tests before changing
    behavior. Budget time for reproduction, repair, related checks and reporting;
    do not spend the whole task on a broad build or unrelated full-repository suite.
+   Trace the REAL entrypoint through parsing, copying/serialization, adapters and
+   sibling consumers to the faulty behavior. For example, metadata attached to
+   an ideal intermediate object is not coverage of a real shallow copy that
+   drops that metadata. Do not assume a field exists on actual runtime inputs.
 
 2. WRITE A REGRESSION TEST in the repo's OWN style and location, following its
    existing conventions. It must fail on the current code for the reason described
@@ -120,11 +124,23 @@ will establish whether the identical case failed and then passed.
 If the runner cannot produce JUnit, retain the observed log evidence contract.
 Update OSSCOUT_RESULT.json after reproduction and again after patched testing;
 save findings as you go so interruption does not lose completed evidence.
+Save actual command output to OSSCOUT_BASE.log and OSSCOUT_PATCHED.log as you run
+it (preserving the command's real exit status). These diagnostic logs are not
+part of the patch. Leave enough time to complete and check the handoff below.
 The base failure must demonstrate the reported wrong behavior, not a missing
 new helper module, import error, setup error, or compilation failure. When
 extracting a helper, first reproduce the bug through the existing base behavior;
 do not make the regression depend on a module that only exists after your fix.
 Write real JSON. A missing or incomplete verification plan blocks publication.
+Include a "coverage" object with:
+{{"entrypoint": {{"path":"<real source path>","symbol":"<entry function>"}},
+  "call_chain": [{{"path":"<source path>","symbol":"<function along the actual path>"}}],
+  "regression_case":"<test_report.case, or base_failure's first entry>",
+  "scenarios":["<actual failing path and related boundary/sibling scenarios exercised>"],
+  "limitations":["<paths/checks not exercised; empty only when none>"]}}.
+Include the entrypoint in call_chain. References must be real existing source
+files, not guessed names. This is evidence for the reviewer, not an approval:
+the reviewer will check the actual source and whether the test follows this path.
 For Rust inline tests, keep test edits inside the existing trailing #[cfg(test)]
 module so the verifier can apply the test without applying the production fix.
 Standalone Cargo test-programs executables are also supported as regression tests.
@@ -377,7 +393,7 @@ def _read_result_file(work_dir: Path) -> dict:
         rc = data.get("root_cause") or data.get("cause")
         if isinstance(rc, str) and rc.strip():
             out["root_cause"] = rc.strip()[:300]
-        for key in ("setup_steps", "base_failure", "patched_success", "test_report"):
+        for key in ("setup_steps", "base_failure", "patched_success", "test_report", "coverage"):
             if key in data:
                 out[key] = data[key]
         return out
@@ -456,6 +472,9 @@ def opencode_patch_producer(job: Job, work_dir: Path, context: str,
     出口做结果验证（干净 base 上失败 → 打补丁后通过）。
     """
     ai_test_paths = list(ai_test_paths or [])
+    managed_client = client is None
+    delivery_deadline = time.monotonic() + 2400
+    completion = {}
     cfg_path = work_dir / "opencode.json"
     original_cfg = cfg_path.read_bytes() if cfg_path.exists() else None
     baseline = _git(["rev-parse", "HEAD"], work_dir).stdout.strip()
@@ -470,17 +489,18 @@ def opencode_patch_producer(job: Job, work_dir: Path, context: str,
     detail = ""
     try:
         # 1200s：agent 现在要装依赖、跑测试、迭代，比只改文件慢得多。
-        # 2400s (40 分钟)：pulumi 这类 Go 大仓库，agent 先要摸清 workspace 布局
+        # 40 分钟总预算：35 分钟实现，最多预留 5 分钟补齐真实交付材料。
+        # pulumi 这类 Go 大仓库，agent 先要摸清 workspace 布局
         # 再装工具链、跑 go test。2026-10-30 实测 1200s 正好在"还没开始改"时被
         # 掐断。workflow 本身有 90 分钟预算，这里给 40 分钟留给 agent，剩下
         # 50 分钟够两轮测试跑完。
         if client is None:
             if job.repair_agent == "codex":
                 from .codex_client import CodexClient
-                client = CodexClient(timeout_seconds=2400, workdir=work_dir,
+                client = CodexClient(timeout_seconds=2100, workdir=work_dir,
                                      diagnostics_dir=diagnostics_dir)
             else:
-                client = OpenCodeClient(timeout_seconds=2400, workdir=work_dir)
+                client = OpenCodeClient(timeout_seconds=2100, workdir=work_dir)
         model = model or (job.model or "").strip()
         if not model and job.repair_agent == "opencode":
             model = resolve_model()
@@ -501,6 +521,11 @@ def opencode_patch_producer(job: Job, work_dir: Path, context: str,
             notes.append("agent replied with a progress line and exited; retrying once")
             nudge = (RUN_TASK_MSG + " You already said you would start - actually do it "
                      "now. No narration.")
+            if managed_client:
+                remaining = delivery_deadline - 300 - time.monotonic()
+                if remaining <= 0:
+                    raise RuntimeError("agent repair budget exhausted before handoff")
+                client.timeout = max(1, min(2100, int(remaining)))
             ok, detail = client.run(model, nudge)
             detail = _mask_opencode_key(detail or "")
             if not ok and detail.startswith(CODEX_COMMUNICATION_RETRY_PREFIX):
@@ -508,13 +533,55 @@ def opencode_patch_producer(job: Job, work_dir: Path, context: str,
             diff_early = _git(["diff"], work_dir).stdout
         if not ok and not diff_early.strip():
             raise RuntimeError(f"{job.repair_agent} repair run failed: {detail[:300]}")
+        if ok and managed_client:
+            from .delivery_materials import COMPLETION_TASK, material_issues
+            markers = _read_result_file(work_dir)
+            issues = material_issues(markers, work_dir)
+            completion = {"initial_issues": issues, "attempts": 0}
+            if issues and time.monotonic() < delivery_deadline:
+                check_file = work_dir / "OSSCOUT_DELIVERY_CHECK.json"
+                check_file.write_text(json.dumps({"missing_or_invalid": issues,
+                    "cli_events": str(diagnostics_dir / "codex-events.jsonl")
+                        if job.repair_agent == "codex" and diagnostics_dir else None}, ensure_ascii=False), encoding="utf-8")
+                from .delivery_materials import redact_log
+                (work_dir / "OSSCOUT_AGENT_INITIAL.log").write_text(redact_log(detail), encoding="utf-8")
+                # Keep the same task budget and reserve at most five minutes for
+                # one material-completion pass. No credential/protocol changes.
+                client.timeout = max(1, min(300, int(delivery_deadline - time.monotonic())))
+                completion["attempts"] = 1
+                completion_ok, completion_detail = client.run(model, COMPLETION_TASK)
+                detail = _mask_opencode_key(completion_detail or "")
+                if not completion_ok and detail.startswith(CODEX_COMMUNICATION_RETRY_PREFIX):
+                    raise RuntimeError(detail[:1000])
+                ok = completion_ok
+                completion["completion_ok"] = completion_ok
+                markers = _read_result_file(work_dir)
+            completion["remaining_issues"] = material_issues(markers, work_dir)
+            if diagnostics_dir:
+                diagnostics_dir.mkdir(parents=True, exist_ok=True)
+                (diagnostics_dir / "delivery-preflight.json").write_text(
+                    json.dumps(completion, ensure_ascii=False, indent=1), encoding="utf-8")
+            if completion["remaining_issues"]:
+                raise RuntimeError("delivery_materials_incomplete: " + "; ".join(completion["remaining_issues"])[:900])
         notes.append(f"model({model}) said: {detail[:200]}")
     finally:
+        if diagnostics_dir:
+            from .delivery_materials import _source_file, redact_log
+            for name in ("OSSCOUT_BASE.log", "OSSCOUT_PATCHED.log", "OSSCOUT_AGENT_INITIAL.log"):
+                try:
+                    source = work_dir / name
+                    if _source_file(work_dir, name) and source.stat().st_size <= 5_000_000:
+                        diagnostics_dir.mkdir(parents=True, exist_ok=True)
+                        (diagnostics_dir / name).write_text(redact_log(
+                            source.read_text(encoding="utf-8", errors="replace")), encoding="utf-8")
+                except OSError:
+                    pass  # Diagnostic persistence must not replace the real result.
         if original_cfg is None:
             cfg_path.unlink(missing_ok=True)
         else:
             cfg_path.write_bytes(original_cfg)
         (work_dir / TASK_FILE).unlink(missing_ok=True)
+        (work_dir / "OSSCOUT_DELIVERY_CHECK.json").unlink(missing_ok=True)
 
     # 优先读 agent 落盘的结果文件，读不到再退回解析 stdout
     markers = _read_result_file(work_dir) or _parse_markers(detail)
@@ -614,6 +681,8 @@ def opencode_patch_producer(job: Job, work_dir: Path, context: str,
         "mixed_tests": mixed_tests,
         "repair_kind": "test_only" if test_repair_files else "source_fix",
         "test_repair_files": test_repair_files,
+        "coverage": markers.get("coverage") or {},
+        "delivery_preflight": completion,
         "root_cause": markers.get("root_cause", "")[:300],
         "pr_title": markers.get("pr_title", ""),
         "pr_body": markers.get("pr_body", ""),
@@ -622,7 +691,7 @@ def opencode_patch_producer(job: Job, work_dir: Path, context: str,
         # 保留 agent 的收尾输出与它改动过的文件清单：失败时这是唯一能判断
         # "它到底理解到哪一步"的线索
         "agent_output": (detail or "")[:4000],
-        "agent_failure": (detail or "")[:400] if not ok else "",
+        "agent_failure": (detail or f"{job.repair_agent} did not complete successfully")[:400] if not ok else "",
         "changed_files": changed,
         "markers_found": bool(markers),
     }
@@ -1063,6 +1132,7 @@ def run_repair(job: Job, repo_dir: Path, out_dir: Path, *,
     mixed_tests: dict[str, tuple[str, str]] = {}
     root_cause = ""
     repair_kind, test_repair_files = "source_fix", []
+    coverage, delivery_preflight = {}, {}
     agent_out = ""
     pr_title, pr_body = "", ""
     with ExitStack() as workspace:
@@ -1096,6 +1166,8 @@ def run_repair(job: Job, repo_dir: Path, out_dir: Path, *,
             mixed_tests = produced.get("mixed_tests") or {}
             repair_kind = produced.get("repair_kind", "source_fix")
             test_repair_files = produced.get("test_repair_files") or []
+            coverage = produced.get("coverage") or {}
+            delivery_preflight = produced.get("delivery_preflight") or {}
             root_cause = produced.get("root_cause") or ""
             pr_title = produced.get("pr_title") or ""
             pr_body = produced.get("pr_body") or ""
@@ -1109,7 +1181,8 @@ def run_repair(job: Job, repo_dir: Path, out_dir: Path, *,
                 (out_dir / "agent-changed.json").write_text(
                     json.dumps({"changed": produced.get("changed_files"),
                                 "tests": sorted(produced.get("test_files") or {}),
-                                "markers_found": produced.get("markers_found")},
+                                "markers_found": produced.get("markers_found"),
+                                "coverage": coverage, "delivery_preflight": delivery_preflight},
                                ensure_ascii=False, indent=1), encoding="utf-8")
             # A provisional report may exist when the CLI is interrupted. Keep
             # the original error (including legacy communication errors) ahead
@@ -1307,6 +1380,7 @@ def run_repair(job: Job, repo_dir: Path, out_dir: Path, *,
             "patched_stdout_tail": out[-3000:], "patched_stderr_tail": err[-3000:],
             "regression_test_files": sorted(baseline_tests),
             "repair_kind": repair_kind, "test_repair_files": test_repair_files,
+            "coverage": coverage, "delivery_preflight": delivery_preflight,
             "delivery_files": patch_files(delivery_patch),
             "delivery_patch_sha256": hashlib.sha256((out_dir / "change.patch").read_bytes()).hexdigest(),
             "root_cause": root_cause,

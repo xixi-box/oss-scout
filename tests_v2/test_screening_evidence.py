@@ -212,3 +212,37 @@ def test_semantic_questions_reject_keyword_shortcuts_and_public_issue_authorizat
     assert "public issue" in instructions and "not authorization" in instructions
     assert "COLLABORATOR" in instructions and "Already merged" in instructions
     assert "Chinese/English" in instructions and "keywords alone" in instructions
+
+
+def test_feasibility_screening_requires_evidence_not_environment_or_language_shortcuts(monkeypatch):
+    calls = model_response(monkeypatch)
+    OpenJevClient().score_issue({"screening_context_version": 2})
+    questions = calls[0]["questions"]
+    assert set(questions) == {"eligible", "private_disclosure", "unmet_prerequisite", "prerequisite_unknown"}
+    instructions = questions["eligible"]["instructions"]
+    assert "Reject feasibility only when concrete evidence establishes" in instructions
+    assert "service cannot be obtained" in instructions and "broad architectural change" in instructions
+    assert "not repository name" in instructions and "programming language" in instructions
+    assert "normal dependency installation and code investigation belong to repair" in instructions
+    assert "Do not demand a completed code investigation" in instructions
+    assert "or an unavailable test environment" not in instructions
+
+
+def test_original_qwen_path_evidence_reaches_feasibility_question_without_rewriting(monkeypatch):
+    candidate = item("qwen_prerequisite")
+    # The real final review found getHistoryShallow copying Part objects; idealized
+    # direct metadata attachment did not exercise loss along that actual path.
+    candidate["issue_comments"].append({
+        "author": "reviewer", "association": "COLLABORATOR", "author_type": "User",
+        "body": "getHistoryShallow copies Part objects with spread. Non-enumerable recovery handles "
+                "are lost here. 直接给中间对象加元数据不会覆盖真实入口的复制路径。",
+    })
+    policy_reads(monkeypatch, candidate["repo"], merged=True)
+    calls = model_response(monkeypatch)
+    result = data.fine_screen_issue(SimpleNamespace(), candidate, lane="open")
+    assert result["usable"] is True  # Test transport, not a mocked claim of model reasoning.
+    assert calls[0]["state"]["comments"][-1]["body"] == candidate["issue_comments"][-1]["body"]
+    instructions = calls[0]["questions"]["eligible"]["instructions"]
+    assert "real user-facing entry point" in instructions
+    assert "idealized intermediate object" in instructions
+    assert "parsing, serialization, copying or adapters" in instructions
