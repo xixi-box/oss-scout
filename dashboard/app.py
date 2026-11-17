@@ -11,6 +11,7 @@ import hmac
 import json
 import os
 import secrets
+import sqlite3
 import threading
 import time
 from pathlib import Path
@@ -820,6 +821,11 @@ def create_app(root: Path | None = None, gh_runner=None,
             response, status = await asyncio.to_thread(exchange, root, body)
         except ValueError:
             return JSONResponse({"detail": "invalid request"}, status_code=400)
+        except sqlite3.OperationalError as exc:
+            if not any(word in str(exc).lower() for word in ("busy", "locked")):
+                raise
+            return JSONResponse({"detail": "credential broker busy; retry"}, status_code=503,
+                                headers={"Retry-After": "2", "Cache-Control": "no-store"})
         return JSONResponse(response, status_code=status, headers={"Cache-Control": "no-store"})
 
 

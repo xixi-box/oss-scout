@@ -15,6 +15,7 @@ import tempfile
 import time
 import urllib.error
 import urllib.request
+import uuid
 from pathlib import Path
 
 from .opencode_client import resolve_binary
@@ -43,10 +44,12 @@ class CodexClient:
         token = os.environ.get("CF_INGEST_TOKEN", "")
         if not base.startswith("https://") or not token:
             raise RuntimeError("Codex credential broker is not configured")
+        values.setdefault("request_id", uuid.uuid4().hex)
         request = urllib.request.Request(
             base + "/api/ingest/codex-auth", method="POST",
             data=json.dumps({"operation": operation, **values}).encode(),
-            headers={"Content-Type": "application/json", "X-Ingest-Token": token})
+            headers={"Content-Type": "application/json", "X-Ingest-Token": token,
+                     "X-Request-ID": values["request_id"]})
         started = time.monotonic()
         try:
             timeout = request_timeout if request_timeout is not None else 15
@@ -55,6 +58,13 @@ class CodexClient:
         except urllib.error.HTTPError as exc:
             if operation == "acquire" and exc.code == 409:
                 return {"busy": True}
+            if exc.code == 503:
+                try:
+                    body = json.loads(exc.read(2048))
+                except (OSError, ValueError):
+                    body = {}
+                if isinstance(body, dict) and body.get("retryable") is False:
+                    raise RuntimeError("Codex broker requires explicit credential recovery or login") from None
             if exc.code in (408, 409, 429, 500, 502, 503, 504):
                 raise CodexCommunicationError(
                     f"operation={operation}; HTTP {exc.code}; elapsed_seconds={time.monotonic()-started:.2f}",
@@ -63,6 +73,40 @@ class CodexClient:
         except (OSError, ValueError) as exc:
             raise CodexCommunicationError(
                 f"operation={operation}; kind={type(exc).__name__}; elapsed_seconds={time.monotonic()-started:.2f}") from None
+
+    def _lease_request(self, operation, *, budget, attempts, record, **values):
+        """Retry only idempotent lease operations; never replay an OAuth rotation."""
+        if operation not in ("acquire", "release"):
+            raise ValueError("Only acquisition and release may use lease retries")
+        request_id = uuid.uuid4().hex
+        deadline = time.monotonic() + max(0, budget)
+        error = CodexCommunicationError(f"operation={operation}; request budget exhausted")
+        for attempt in range(1, attempts + 1):
+            sent_at = time.monotonic()
+            remaining = deadline - sent_at
+            if remaining <= 0:
+                break
+            try:
+                response = self._exchange(operation, request_id=request_id,
+                    request_timeout=min(45 if operation == "acquire" else 10, remaining), **values)
+                if response.get("busy"):
+                    raise CodexCommunicationError(f"operation={operation}; broker busy")
+                if time.monotonic() >= deadline:
+                    raise CodexCommunicationError(f"operation={operation}; request budget exhausted")
+                record(f"auth.{operation}_ok", request_id=request_id, attempt=attempt,
+                       request_seconds=round(time.monotonic() - sent_at, 3))
+                return response, sent_at
+            except CodexCommunicationError as exc:
+                error = exc
+                record(f"auth.{operation}_retry", request_id=request_id, attempt=attempt,
+                       request_seconds=round(time.monotonic() - sent_at, 3),
+                       retryable=exc.retryable)
+                if not exc.retryable or attempt == attempts:
+                    raise
+                delay = min(2 ** attempt, max(0, deadline - time.monotonic()))
+                if delay:
+                    time.sleep(delay)
+        raise error
 
     def refresh_credentials(self, credentials, recover=False):
         """Rotate once on the hosted runner, then persist using the broker's ticket.
@@ -155,14 +199,9 @@ class CodexClient:
             auth = home / "auth.json"
             detail, ok = "Codex did not start", False
             try:
-                acquired_at = time.monotonic()
-                credentials = self._exchange("acquire", protocol=2)
-                while credentials.get("busy"):
-                    if time.monotonic() - started >= self.timeout:
-                        raise RuntimeError("Codex login is busy; timed out waiting for the active task")
-                    time.sleep(10)
-                    acquired_at = time.monotonic()
-                    credentials = self._exchange("acquire", protocol=2)
+                credentials, acquired_at = self._lease_request("acquire", protocol=2,
+                    budget=min(90, self.timeout - (time.monotonic() - started)),
+                    attempts=3, record=record)
                 lease = credentials["lease"]
                 # Start before the request, so a slow response cannot extend our
                 # estimate beyond the server's actual lease. Keep five seconds spare.
@@ -306,8 +345,9 @@ class CodexClient:
                     try:
                         latest_auth = json.loads(auth.read_text())
                         secrets_from(latest_auth)
-                        self._exchange("release", lease=lease, protocol=credentials.get("protocol", 1),
-                                       **({} if refresh_proxy else {"auth": latest_auth}))
+                        self._lease_request("release", lease=lease,
+                            protocol=credentials.get("protocol", 1), budget=25, attempts=2, record=record,
+                            **({} if refresh_proxy else {"auth": latest_auth}))
                         released = True
                     except (OSError, ValueError, RuntimeError):
                         record("auth.release_failed")

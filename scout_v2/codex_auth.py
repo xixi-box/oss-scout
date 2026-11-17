@@ -24,7 +24,7 @@ LEASE_TTL_SECONDS = 120
 
 
 @contextmanager
-def _broker_phase(operation: str, phase: str):
+def _broker_phase(operation: str, phase: str, request_id: str = "-"):
     """Only fixed phase/operation names are logged; never request data or tokens."""
     started = time.monotonic()
     try:
@@ -33,8 +33,8 @@ def _broker_phase(operation: str, phase: str):
         elapsed = time.monotonic() - started
         if elapsed >= 1:
             logging.getLogger(__name__).warning(
-                "Codex broker slow operation=%s phase=%s elapsed_seconds=%.3f",
-                operation, phase, elapsed)
+                "Codex broker slow operation=%s phase=%s elapsed_seconds=%.3f request_id=%s",
+                operation, phase, elapsed, request_id)
 
 
 def auth_path(root: Path) -> Path:
@@ -65,18 +65,18 @@ def _identity(value: dict) -> tuple:
 
 
 @contextmanager
-def _broker_lock(root: Path, operation: str = "administration"):
+def _broker_lock(root: Path, operation: str = "administration", request_id: str = "-"):
     # OAuth can take seconds. Never hold the queue/dispatcher locks over network I/O.
     directory = auth_path(root).parent
     directory.mkdir(parents=True, exist_ok=True)
     directory.chmod(0o700)
     path = directory / "broker-lock.sqlite3"
-    connection = sqlite3.connect(path, timeout=30, isolation_level=None)
+    connection = sqlite3.connect(path, timeout=5, isolation_level=None)
     path.chmod(0o600)
     try:
-        with _broker_phase(operation, "lock_wait"):
+        with _broker_phase(operation, "lock_wait", request_id):
             connection.execute("BEGIN IMMEDIATE")
-        with _broker_phase(operation, "lock_hold"):
+        with _broker_phase(operation, "lock_hold", request_id):
             yield
     finally:
         if connection.in_transaction:
@@ -156,12 +156,17 @@ def exchange(root: Path, body: dict) -> tuple[dict, int]:
     operation_label = operation if isinstance(operation, str) and operation in {
         "acquire", "sync", "release", "refresh", "refresh_begin", "refresh_commit", "refresh_abort"
     } else "invalid"
-    with _broker_lock(root, operation_label):
-        value = _load(auth_path(root))
+    request_id = body.get("request_id")
+    if request_id is not None and (not isinstance(request_id, str) or not re.fullmatch(r"[0-9a-f]{32}", request_id)):
+        return {"detail": "Invalid broker request ID"}, 400
+    with _broker_phase(operation_label, "total", request_id or "-"), _broker_lock(root, operation_label, request_id or "-"):
+        with _broker_phase(operation_label, "read_auth", request_id or "-"):
+            value = _load(auth_path(root))
         if not valid_auth(value):
             return {"detail": "Codex 尚未登录 ChatGPT"}, 401
         now = time.time()
-        leases = _active_leases(root, now)
+        with _broker_phase(operation_label, "read_leases", request_id or "-"):
+            leases = _active_leases(root, now)
         lease_id = body.get("lease")
         if lease_id is not None and not isinstance(lease_id, str):
             return {"detail": "Invalid Codex login lease"}, 400
@@ -174,7 +179,7 @@ def exchange(root: Path, body: dict) -> tuple[dict, int]:
                     or lease.get("identity") != list(_identity(value))):
                 return {"detail": "Codex login lease expired or identity changed"}, 409
             lease["expires"] = time.time() + LEASE_TTL_SECONDS
-            with _broker_phase("sync", "lease_persist"):
+            with _broker_phase("sync", "lease_persist", request_id or "-"):
                 # Atomic fsync and readback remain; an old lease backup is never
                 # a valid recovery source and adds avoidable reads/writes.
                 atomic_json_write(leases_path, leases, backup=False)
@@ -201,11 +206,23 @@ def exchange(root: Path, body: dict) -> tuple[dict, int]:
                     return {"detail": "Codex account identity is missing; log in again"}, 401
                 if quarantined and not (recovering and (not blocked.get("recovery_attempted")
                         or (ticket_pending and ticket.get("expires", 0) > now))):
-                    return {"detail": "Codex refresh outcome is uncertain; explicit recovery or login required"}, 503
-                lease_id = uuid.uuid4().hex
-                leases[lease_id] = {"expires": now + LEASE_TTL_SECONDS, "identity": list(_identity(value)),
-                                    "recover": recovering}
+                    return {"detail": "Codex refresh outcome is uncertain; explicit recovery or login required", "retryable": False}, 503
+                prior = next(((key, lease) for key, lease in leases.items()
+                              if request_id and lease.get("request_id") == request_id), None)
+                if prior:
+                    lease_id, lease = prior
+                    if lease.get("identity") != list(_identity(value)):
+                        return {"detail": "Codex acquisition identity changed"}, 409
+                    lease["expires"] = now + LEASE_TTL_SECONDS
+                else:
+                    lease_id = uuid.uuid4().hex
+                    leases[lease_id] = {"expires": now + LEASE_TTL_SECONDS, "identity": list(_identity(value)),
+                                        "recover": recovering}
+                    if request_id:
+                        leases[lease_id]["request_id"] = request_id
             elif operation in ("sync", "release", "refresh", "refresh_begin", "refresh_commit", "refresh_abort"):
+                if operation == "release" and lease_id and lease_id not in leases:
+                    return {"ok": True}, 200
                 lease = leases.get(lease_id)
                 owns_ticket = (ticket.get("id") and ticket.get("id") == body.get("ticket")
                                and ticket.get("lease") == lease_id
@@ -255,14 +272,14 @@ def exchange(root: Path, body: dict) -> tuple[dict, int]:
                     elif operation == "refresh":
                         # Compatibility with already executing older protocol-2 workers:
                         # never make a VPS OAuth request or leak an unexecuted ticket to them.
-                        return {"detail": "Codex refresh requires the delegated runner protocol"}, 503
+                        return {"detail": "Codex refresh requires the delegated runner protocol", "retryable": False}, 503
                     elif ticket_pending and ticket.get("expires", 0) > now:
                         leases[lease_id]["expires"] = now + LEASE_TTL_SECONDS
                         atomic_json_write(leases_path, leases)
                         return {"protocol": 2, "pending": True, "retry_after": 0.25}, 200
                     elif quarantined and not (recovering and lease.get("recover")
                                                and not blocked.get("recovery_attempted")):
-                        return {"detail": "Codex refresh outcome is uncertain; explicit recovery or login required"}, 503
+                        return {"detail": "Codex refresh outcome is uncertain; explicit recovery or login required", "retryable": False}, 503
                     else:
                         ticket = {"id": uuid.uuid4().hex, "lease": lease_id,
                                   "identity": list(_identity(value)), "generation": generation,
@@ -282,7 +299,8 @@ def exchange(root: Path, body: dict) -> tuple[dict, int]:
                     leases[lease_id]["expires"] = now + LEASE_TTL_SECONDS
             else:
                 return {"detail": "Invalid Codex credential operation"}, 400
-            atomic_json_write(leases_path, leases)
+            with _broker_phase(operation_label, "lease_persist", request_id or "-"):
+                atomic_json_write(leases_path, leases, backup=False)
             if operation in ("acquire", "refresh", "refresh_begin", "refresh_commit"):
                 return {"protocol": 2, "lease": lease_id, "generation": _generation(value),
                         "auth": _snapshot(value, lease_id)}, 200
@@ -290,7 +308,7 @@ def exchange(root: Path, body: dict) -> tuple[dict, int]:
 
         if operation == "acquire":
             if _load(directory / "refresh-blocked.json").get("generation") == _generation(value):
-                return {"detail": "Codex refresh outcome is uncertain; log in again"}, 503
+                return {"detail": "Codex refresh outcome is uncertain; log in again", "retryable": False}, 503
             if legacy.get("expires", 0) > now or leases:
                 return {"detail": "Codex 正在被另一任务使用"}, 409
             legacy = {"id": uuid.uuid4().hex, "expires": now + LEASE_TTL_SECONDS}

@@ -49,7 +49,8 @@ raise SystemExit(7)
     assert completed["item"]["exit_code"] == 2
     assert "missing dependency" in completed["item"]["aggregated_output"]
     assert completed["command_elapsed_seconds"] >= .01
-    assert rows[0]["model"] == "gpt-6.1-sol" and rows[0]["reasoning_effort"] == "medium"
+    started = next(row for row in rows if row["type"] == "agent.started")
+    assert started["model"] == "gpt-6.1-sol" and started["reasoning_effort"] == "medium"
     assert rows[-1]["returncode"] == 7 and rows[-1]["ok"] is False
     visible = text + detail + capsys.readouterr().out
     for secret in ("private-access-token", "private-refresh-token", "secret-provider-key", "private-lease"):
