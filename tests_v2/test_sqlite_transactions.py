@@ -63,3 +63,25 @@ def test_busy_log_names_database_operation_and_wait(tmp_path):
     finally:
         first.close()
         second.close()
+
+
+def test_queue_compares_nested_changes_without_serializing_noop_snapshots(tmp_path, monkeypatch):
+    from scout_v2 import state_store
+    (tmp_path / "queue").mkdir()
+    path = tmp_path / "queue/candidates.json"
+    path.write_text('{"a/b#1": {"status": "staged", "checks": [{"ok": false}]}}')
+    def unexpected_dump(*args, **kwargs):
+        raise AssertionError("unchanged queue must not serialize a full snapshot")
+
+    with monkeypatch.context() as patcher:
+        patcher.setattr(state_store.json, "dumps", unexpected_dump)
+        with queue_transaction(tmp_path):
+            pass
+    assert not path.with_suffix(".json.bak").exists()
+    with queue_transaction(tmp_path) as queue:
+        queue["a/b#1"]["checks"][0]["ok"] = True
+    assert json.loads(path.read_text())["a/b#1"]["checks"][0]["ok"] is True
+    assert json.loads(path.with_suffix(".json.bak").read_text())["a/b#1"]["checks"][0]["ok"] is False
+    with queue_transaction(tmp_path) as queue:
+        queue["a/b#1"]["checks"][0]["ok"] = 1
+    assert type(json.loads(path.read_text())["a/b#1"]["checks"][0]["ok"]) is int

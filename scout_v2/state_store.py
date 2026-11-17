@@ -6,6 +6,7 @@ ClaimLedger retains every started repair for its Asia/Shanghai business day.
 from __future__ import annotations
 
 import datetime as dt
+import copy
 import json
 import os
 import sqlite3
@@ -202,6 +203,18 @@ def _write_transaction(conn, db_path: Path, operation: str):
                 pass
 
 
+def _same_json(left, right):
+    if left is right:
+        return True
+    if type(left) is not type(right):
+        return False
+    if isinstance(left, dict):
+        return left.keys() == right.keys() and all(_same_json(value, right[key]) for key, value in left.items())
+    if isinstance(left, list):
+        return len(left) == len(right) and all(_same_json(a, b) for a, b in zip(left, right))
+    return left == right
+
+
 @contextmanager
 def queue_transaction(root: Path, *, path: Path | None = None, backup: bool = True):
     """Serialize queue read/modify/write across threads and processes.
@@ -220,10 +233,12 @@ def queue_transaction(root: Path, *, path: Path | None = None, backup: bool = Tr
             with timed_operation(root, "queue.read_decode"):
                 queue = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
             with timed_operation(root, "queue.compare_snapshot"):
-                original = json.dumps(queue, ensure_ascii=False, sort_keys=True)
+                # Copy containers, sharing immutable strings. Serializing both
+                # snapshots allocates two large strings under the queue lock.
+                original = copy.deepcopy(queue)
             yield queue
             with timed_operation(root, "queue.compare_changes"):
-                changed = original != json.dumps(queue, ensure_ascii=False, sort_keys=True)
+                changed = not _same_json(original, queue)
             if changed:
                 with timed_operation(root, "queue.atomic_persist"):
                     atomic_json_write(path, queue, backup=backup)
