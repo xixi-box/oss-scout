@@ -65,9 +65,17 @@ def main():
     columns = fm._table_request(table_url, "GET", "fields?page_size=100")
     assert not {"PR 评论触发", "回复模型"} & {f["field_name"] for f in columns.get("items", [])}
     assert fb.PR_RECORD_SYNC_SECONDS == 30 and fb.FULL_TABLE_SYNC_SECONDS == 900
-    from scout_v2.codex_auth import auth_ready, exchange
+    from scout_v2.codex_auth import auth_ready, auth_transport, exchange, github_auth_state
     concurrent_auth = False
-    if auth_ready(root):
+    transport = auth_transport(root)
+    guard_state = None
+    if transport == "github_secrets":
+        guard_state = github_auth_state(root)
+        assert guard_state in ("ready", "in_use"), "Codex GitHub credential guard is not healthy"
+        assert exchange(root, {"operation": "acquire"})[1] == 410
+    elif transport != "broker":
+        raise AssertionError("Codex credential transport is invalid")
+    elif auth_ready(root):
         leases = []
         try:
             for _ in range(2):
@@ -97,7 +105,8 @@ def main():
     print(json.dumps({"controller": "verified", "staged_candidates": staged,
                       "candidate_pool_size": limit, "daily_pr_quota": int(models["daily_pr_quota"]),
                       "pr_table_redirect": True, "pr_followup_removed": True, "retired_settings_removed": True, "pr_record_sync_seconds": fb.PR_RECORD_SYNC_SECONDS,
-                      "codex_concurrent_leases_verified": concurrent_auth}))
+                      "codex_concurrent_leases_verified": concurrent_auth,
+                      "codex_auth_transport": transport, "codex_auth_guard_state": guard_state}))
 
 
 if __name__ == "__main__":

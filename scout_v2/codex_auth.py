@@ -21,6 +21,47 @@ from .state_store import atomic_json_write
 CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann"
 TOKEN_URL = "https://auth.openai.com/oauth/token"
 LEASE_TTL_SECONDS = 120
+_GITHUB_STATE_CACHE = {}
+
+
+def auth_transport(root: Path) -> str:
+    """Missing marker keeps legacy tasks compatible; malformed markers fail closed."""
+    marker = root / "state/codex_auth_transport.json"
+    try:
+        value = json.loads(marker.read_text(encoding="utf-8"))
+        return "github_secrets" if value.get("mode") == "github_secrets" else "unavailable"
+    except FileNotFoundError:
+        return "broker"
+    except (OSError, ValueError, AttributeError):
+        return "unavailable"
+
+
+def github_auth_state(root: Path) -> str:
+    """Read only the non-sensitive environment guard; never retrieve a Secret."""
+    if auth_transport(root) != "github_secrets":
+        return "unavailable"
+    token = os.environ.get("GH_TOKEN", "")
+    if not token:
+        return "unavailable"
+    key = (str(root.resolve()), hashlib.sha256(token.encode()).digest())
+    cached = _GITHUB_STATE_CACHE.get(key)
+    if cached and time.monotonic() - cached[0] < 5:
+        return cached[1]
+    state = "unavailable"
+    request = urllib.request.Request(
+        "https://api.github.com/repos/xixi-box/oss-scout/environments/codex-auth/variables/CODEX_AUTH_STATE",
+        headers={"Authorization": "Bearer " + token, "Accept": "application/vnd.github+json",
+                 "X-GitHub-Api-Version": "2022-11-28"})
+    try:
+        with urllib.request.urlopen(request, timeout=8) as response:
+            value = json.loads(response.read(16384))
+        guard = json.loads(value["value"])
+        if isinstance(guard, dict) and guard.get("state") in ("ready", "in_use", "blocked"):
+            state = guard["state"]
+    except (OSError, ValueError, KeyError, TypeError):
+        pass  # Bodies and exception messages can contain credentials; do not log.
+    _GITHUB_STATE_CACHE[key] = (time.monotonic(), state)
+    return state
 
 
 @contextmanager
@@ -85,6 +126,9 @@ def _broker_lock(root: Path, operation: str = "administration", request_id: str 
 
 
 def auth_ready(root: Path) -> bool:
+    transport = auth_transport(root)
+    if transport != "broker":
+        return transport == "github_secrets" and github_auth_state(root) == "ready"
     try:
         value = _load(auth_path(root))
         blocked = _load(auth_path(root).parent / "refresh-blocked.json")
@@ -107,6 +151,8 @@ def _active_leases(root: Path, now: float) -> dict:
 
 
 def install_auth(root: Path, value: dict) -> None:
+    if auth_transport(root) != "broker":
+        raise RuntimeError("Server Codex credential installation is disabled for this transport")
     if not valid_auth(value):
         raise ValueError("Expected ChatGPT subscription login credentials")
     with _broker_lock(root):
@@ -149,6 +195,8 @@ def exchange(root: Path, body: dict) -> tuple[dict, int]:
 
     The old exclusive protocol remains valid for already executing old workers.
     """
+    if auth_transport(root) != "broker":
+        return {"detail": "Server Codex credential broker is retired"}, 410
     operation = body.get("operation")
     directory = auth_path(root).parent
     lease_path = directory / "lease.json"

@@ -32,6 +32,10 @@ permissions:
 
 jobs:
   repair:
+    environment: codex-auth
+    concurrency:
+      group: codex-account-session
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     # 90 分钟：agent 最多 20 分钟 + base/patched 两轮测试各最多 30 分钟，
     # 再加装依赖与编译（Rust 项目首次 cargo build 就 10 分钟以上）。
@@ -211,14 +215,22 @@ jobs:
           npm install -g @openai/codex@0.167.1
           codex --version
 
+      - name: Restore Codex subscription credentials
+        id: codex_auth
+        if: steps.preflight.outputs.can_repair == 'true' && steps.job.outputs.repair_agent == 'codex'
+        env:
+          CODEX_AUTH_JSON: ${{ secrets.CODEX_AUTH_JSON }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: python3 "$GITHUB_WORKSPACE/worker/scripts/codex_secret_session.py" restore
+
       - name: Run worker
         if: steps.preflight.outputs.can_repair == 'true'
         shell: bash
         env:
           OSSCOUT_VERIFIED_DELIVERY_DIR: ${{ runner.temp }}/verified-input
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
-          CF_INGEST_TOKEN: ${{ secrets.CF_INGEST_TOKEN }}
-          DASHBOARD_URL: ${{ secrets.DASHBOARD_PUBLIC_URL }}
+          OSSCOUT_CODEX_AUTH_MODE: github_secrets
+          OSSCOUT_CODEX_AUTH_FILE: ${{ runner.temp }}/oss-codex-auth/auth.json
         run: |
           set -euo pipefail
           cd "$GITHUB_WORKSPACE/worker"
@@ -250,8 +262,8 @@ jobs:
         # Never expose GitHub write credentials to the reviewing model.
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
-          CF_INGEST_TOKEN: ${{ secrets.CF_INGEST_TOKEN }}
-          DASHBOARD_URL: ${{ secrets.DASHBOARD_PUBLIC_URL }}
+          OSSCOUT_CODEX_AUTH_MODE: github_secrets
+          OSSCOUT_CODEX_AUTH_FILE: ${{ runner.temp }}/oss-codex-auth/auth.json
         run: |
           cd "$GITHUB_WORKSPACE/worker"
           python3 - <<'PY'
@@ -264,6 +276,12 @@ jobs:
               report = review_delivery(job, tmp / 'repo', tmp / 'artifacts', json.loads(evidence.read_text()))
               print('read-only review:', report['verdict'], 'findings:', len(report['findings']))
           PY
+
+      - name: Persist refreshed Codex subscription credentials
+        if: always() && steps.codex_auth.outputs.ready == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: python3 "$GITHUB_WORKSPACE/worker/scripts/codex_secret_session.py" persist
 
       - name: Publish (push branch + open PR)
         # 只有 job payload 里显式带了 publish 配置才执行，且必须在 worker 自证
@@ -357,3 +375,7 @@ jobs:
           path: ${{ runner.temp }}/artifacts/
           retention-days: 1
           if-no-files-found: warn
+
+      - name: Remove private Codex login files
+        if: always()
+        run: python3 "$GITHUB_WORKSPACE/worker/scripts/codex_secret_session.py" cleanup

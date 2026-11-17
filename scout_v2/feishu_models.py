@@ -106,9 +106,12 @@ def sync_model_settings(root: Path, model_lock) -> str:
                         entered = "0"
                     error = model_setting_error(key, entered)
                     if not error and key == "repair_agent" and entered == "codex":
-                        from .codex_auth import auth_ready
-                        if not auth_ready(root):
-                            error = "Codex 待登录 ChatGPT"
+                        from .codex_auth import auth_ready, auth_transport, github_auth_state
+                        configured = (github_auth_state(root) in ("ready", "in_use")
+                                      if auth_transport(root) == "github_secrets" else auth_ready(root))
+                        if not configured:
+                            error = ("Codex GitHub Secrets 暂不可用" if auth_transport(root) != "broker"
+                                     else "Codex 待登录 ChatGPT")
                     if not error and key == "codiv_think" and int(entered) and not str(
                             values.get("codiv_model") or effective["codiv_model"]).startswith(("openjev-", "jev-")):
                         error = "思考预算适用于 OpenJev 模型。"
@@ -138,9 +141,14 @@ def sync_model_settings(root: Path, model_lock) -> str:
                 next_last[key] = _digest(current)
             desired["应用状态"] = "；".join(errors) if errors else "已同步"
             if label == "Codex":
-                from .codex_auth import auth_ready
-                desired["应用状态"] = ("；".join(errors) if errors else "已同步") + (
-                    " · ChatGPT 已登录" if auth_ready(root) else " · 待登录 ChatGPT")
+                from .codex_auth import auth_ready, auth_transport, github_auth_state
+                if auth_transport(root) != "broker":
+                    state = github_auth_state(root)
+                    status = {"ready": " · GitHub Secrets 已配置", "in_use": " · GitHub Secrets 使用中"}.get(
+                        state, " · GitHub Secrets 暂不可用")
+                else:
+                    status = " · ChatGPT 已登录" if auth_ready(root) else " · 待登录 ChatGPT"
+                desired["应用状态"] = ("；".join(errors) if errors else "已同步") + status
             if existing:
                 changed = {key: value for key, value in desired.items() if remote.get(key) != value}
                 if changed:

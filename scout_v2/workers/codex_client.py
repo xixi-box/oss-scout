@@ -1,8 +1,9 @@
-"""Run Codex CLI with concurrent ChatGPT access and broker-owned refresh."""
+"""Run Codex CLI with private task credentials or legacy broker-owned refresh."""
 from __future__ import annotations
 
 import json
 import hmac
+import hashlib
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import re
 import sys
@@ -10,6 +11,7 @@ import threading
 from collections import deque
 import os
 import signal
+import stat
 import subprocess
 import tempfile
 import time
@@ -20,7 +22,7 @@ from pathlib import Path
 
 from .opencode_client import resolve_binary
 from .reproduce import sanitized_env
-from ..codex_auth import LEASE_TTL_SECONDS
+from ..codex_auth import LEASE_TTL_SECONDS, valid_auth
 
 CODEX_COMMUNICATION_RETRY_PREFIX = "Codex temporary communication failure:"
 
@@ -152,6 +154,7 @@ class CodexClient:
 
     def run(self, model: str, prompt: str) -> tuple[bool, str]:
         lease, process, reader = None, None, None
+        local_auth = None
         refresh_proxy = None
         released, rc = False, None
         started = time.monotonic()
@@ -196,16 +199,20 @@ class CodexClient:
         with tempfile.TemporaryDirectory(prefix="oss-codex-", dir=os.environ.get("RUNNER_TEMP"),
                                          ignore_cleanup_errors=True) as directory:
             home = Path(directory)
+            home.chmod(0o700)
             auth = home / "auth.json"
             detail, ok = "Codex did not start", False
             try:
-                credentials, acquired_at = self._lease_request("acquire", protocol=2,
-                    budget=min(90, self.timeout - (time.monotonic() - started)),
-                    attempts=3, record=record)
-                lease = credentials["lease"]
-                # Start before the request, so a slow response cannot extend our
-                # estimate beyond the server's actual lease. Keep five seconds spare.
-                lease_valid_until = acquired_at + LEASE_TTL_SECONDS - 5
+                if os.environ.get("OSSCOUT_CODEX_AUTH_MODE") == "github_secrets":
+                    local_auth = _LocalAuth(self.workdir, self.diagnostics_dir)
+                    credentials = {"auth": local_auth.value}
+                else:
+                    credentials, acquired_at = self._lease_request("acquire", protocol=2,
+                        budget=min(90, self.timeout - (time.monotonic() - started)),
+                        attempts=3, record=record)
+                    lease = credentials["lease"]
+                    # A slow response must not extend the server's lease deadline.
+                    lease_valid_until = acquired_at + LEASE_TTL_SECONDS - 5
                 secrets_from(credentials)
                 auth.write_text(json.dumps(credentials["auth"]), encoding="utf-8")
                 auth.chmod(0o600)
@@ -224,6 +231,9 @@ class CodexClient:
                     command.extend(["-c", f'model_reasoning_effort="{effort}"'])
                 command.append("-")
                 env = sanitized_env()
+                for key in ("OSSCOUT_CODEX_AUTH_MODE", "OSSCOUT_CODEX_AUTH_FILE",
+                            "CODEX_REFRESH_TOKEN_URL_OVERRIDE"):
+                    env.pop(key, None)
                 env["CODEX_HOME"] = str(home)
                 if refresh_proxy:
                     env["CODEX_REFRESH_TOKEN_URL_OVERRIDE"] = refresh_proxy.url
@@ -238,8 +248,9 @@ class CodexClient:
                         for line in process.stdout:
                             # Tokens may have been refreshed since the last broker sync.
                             try:
-                                secrets_from(json.loads(auth.read_text(encoding="utf-8")))
-                            except (OSError, ValueError):
+                                secrets_from(_read_private_auth(auth) if local_auth else
+                                             json.loads(auth.read_text(encoding="utf-8")))
+                            except (OSError, ValueError, RuntimeError):
                                 pass
                             line = clean(line.strip())
                             try:
@@ -288,6 +299,8 @@ class CodexClient:
                             print(f"[codex] elapsed={elapsed}s; active_commands={list(commands)}", flush=True)
                             if elapsed >= self.timeout:
                                 raise RuntimeError(f"Codex timed out after {self.timeout}s")
+                            if local_auth:
+                                continue  # Diagnostic heartbeat only; CLI refreshes its own file.
                             attempt = 0
                             while True:
                                 now = time.monotonic()
@@ -341,6 +354,18 @@ class CodexClient:
                     reader.join(timeout=5)
                     if not reader.is_alive():
                         process.stdout.close()
+                if local_auth:
+                    try:
+                        latest_auth = _read_private_auth(auth)
+                        secrets_from(latest_auth)
+                        local_auth.persist(latest_auth)
+                        record("auth.local_saved")
+                    except (OSError, ValueError, RuntimeError):
+                        local_auth.block()
+                        ok, detail = False, "Codex local credential persistence failed; recovery required"
+                        record("auth.local_save_failed")
+                    finally:
+                        local_auth.close()
                 if lease and not released:
                     try:
                         latest_auth = json.loads(auth.read_text())
@@ -364,6 +389,105 @@ class CodexClient:
                     events.close()
                 _restore_subreaper(subreaper)
         return ok, detail[:8000]
+
+
+def _private_parent(path):
+    if not path.is_absolute() or any(part.is_symlink() for part in (path, *path.parents)):
+        raise RuntimeError("Codex local credentials require a private regular path")
+    parent = path.parent.stat()
+    if os.name != "nt" and (parent.st_mode & 0o077 or parent.st_uid != os.getuid()):
+        raise RuntimeError("Codex local credential directory is not private")
+    return parent.st_dev, parent.st_ino
+
+
+def _read_private_auth(path):
+    _private_parent(path)
+    descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+    with os.fdopen(descriptor, "r", encoding="utf-8") as source:
+        info = os.fstat(source.fileno())
+        if (not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_size > 1024 * 1024
+                or (os.name != "nt" and (info.st_mode & 0o077 or info.st_uid != os.getuid()))):
+            raise RuntimeError("Codex local credential file is not private")
+        value = json.load(source)
+    if (not valid_auth(value) or any(not isinstance(value["tokens"].get(key), str)
+                                    for key in ("access_token", "refresh_token"))):
+        raise RuntimeError("Codex local credential file is invalid")
+    return value
+
+
+class _LocalAuth:
+    """Hold an OS lock through CLI execution; compare before replacing shared auth."""
+    def __init__(self, workdir, diagnostics_dir):
+        self.path = Path(os.environ.get("OSSCOUT_CODEX_AUTH_FILE", ""))
+        self.parent_identity = _private_parent(self.path)
+        if self.path.with_name("writeback-blocked").exists():
+            raise RuntimeError("Codex local credentials require recovery before reuse")
+        for forbidden in (workdir, diagnostics_dir):
+            if forbidden and self.path.resolve().is_relative_to(Path(forbidden).resolve()):
+                raise RuntimeError("Codex local credentials must be outside task and artifact directories")
+        self.lock = None
+        lock_path = self.path.with_name("auth.lock")
+        _private_parent(lock_path)
+        descriptor = os.open(lock_path, os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
+        try:
+            self.lock = os.fdopen(descriptor, "r+b")
+            info = os.fstat(self.lock.fileno())
+            if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+                raise RuntimeError("Codex local credential lock is unsafe")
+            if os.name == "nt":
+                import msvcrt
+                if info.st_size == 0:
+                    self.lock.write(b"0")
+                    self.lock.flush()
+                self.lock.seek(0)
+                msvcrt.locking(self.lock.fileno(), msvcrt.LK_NBLCK, 1)
+            else:
+                import fcntl
+                fcntl.flock(self.lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            self.value = _read_private_auth(self.path)
+            self.baseline = self._fingerprint(self.value)
+        except (OSError, ValueError, RuntimeError):
+            self.close()
+            raise RuntimeError("Codex local credentials unavailable, invalid or busy") from None
+
+    @staticmethod
+    def _fingerprint(value):
+        return hashlib.sha256(json.dumps(value, sort_keys=True).encode()).digest()
+
+    def _write(self, path, value):
+        if _private_parent(path) != self.parent_identity:
+            raise RuntimeError("Codex local credential directory changed")
+        descriptor, temporary = tempfile.mkstemp(prefix=".auth-", dir=path.parent)
+        try:
+            with os.fdopen(descriptor, "w", encoding="utf-8") as destination:
+                json.dump(value, destination)
+                destination.flush()
+                os.fsync(destination.fileno())
+            if _private_parent(path) != self.parent_identity:
+                raise RuntimeError("Codex local credential directory changed")
+            os.replace(temporary, path)
+        finally:
+            Path(temporary).unlink(missing_ok=True)
+
+    def persist(self, value):
+        if any(value["tokens"].get(key) != self.value["tokens"].get(key)
+               for key in ("account_id", "login_owner_id")):
+            raise RuntimeError("Codex local credential identity changed")
+        if self._fingerprint(_read_private_auth(self.path)) != self.baseline:
+            self._write(self.path.with_name("recovery-auth.json"), value)
+            raise RuntimeError("Codex local credentials changed during execution")
+        self._write(self.path, value)
+
+    def block(self):
+        try:
+            self._write(self.path.with_name("writeback-blocked"), "Credential recovery required")
+        except (OSError, ValueError, RuntimeError):
+            pass  # Never follow an unsafe directory just to record a marker.
+
+    def close(self):
+        if self.lock:
+            self.lock.close()
+            self.lock = None
 
 
 class _RefreshProxy:

@@ -1,50 +1,57 @@
-name: Codex concurrency check
+name: Codex serialized session check
 on:
   workflow_dispatch:
     inputs:
       model:
-        description: Model and reasoning effort for two small self-test requests
+        description: Model and effort for two serialized self-test requests
         type: string
         default: gpt-6.1-sol#medium
       refresh:
-        description: Verify one broker-owned OAuth refresh shared by two concurrent callers
-        type: boolean
-        default: true
-      recover:
-        description: Allow one explicit recovery attempt after an uncertain refresh
+        description: Exercise a native CLI refresh once, with serialized writeback
         type: boolean
         default: false
 permissions:
   contents: read
 jobs:
   check:
+    environment: codex-auth
+    concurrency:
+      group: codex-account-session
+      cancel-in-progress: false
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - name: Install self-test dependencies
+      - name: Install dependencies
         run: |
           pip install -r requirements.txt
           npm install -g @openai/codex@0.167.1
-          codex --version
-      - name: Check concurrent refresh and CLI execution
+      - name: Restore Codex subscription credentials
+        id: codex_auth
         env:
-          CF_INGEST_TOKEN: ${{ secrets.CF_INGEST_TOKEN }}
-          DASHBOARD_URL: ${{ secrets.DASHBOARD_PUBLIC_URL }}
+          CODEX_AUTH_JSON: ${{ secrets.CODEX_AUTH_JSON }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: python scripts/codex_secret_session.py restore
+      - name: Verify repair and review share the native login
+        env:
           CHECK_MODEL: ${{ inputs.model }}
           CHECK_REFRESH: ${{ inputs.refresh }}
-          CHECK_RECOVER: ${{ inputs.recover }}
-        run: |
-          python - <<'PY'
-          import os,subprocess
-          command=['python','scripts/verify_codex_concurrency.py','--model',os.environ['CHECK_MODEL']]
-          if os.environ['CHECK_REFRESH']=='true': command.append('--refresh')
-          if os.environ['CHECK_RECOVER']=='true': command.append('--recover')
-          subprocess.run(command,check=True)
-          PY
+          OSSCOUT_CODEX_AUTH_MODE: github_secrets
+          OSSCOUT_CODEX_AUTH_FILE: ${{ runner.temp }}/oss-codex-auth/auth.json
+        run: python scripts/verify_codex_session.py
+      - name: Persist refreshed Codex subscription credentials
+        if: always() && steps.codex_auth.outputs.ready == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: python scripts/codex_secret_session.py persist
+      - name: Remove private Codex login files
+        if: always()
+        run: python scripts/codex_secret_session.py cleanup
