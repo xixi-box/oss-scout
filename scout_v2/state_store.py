@@ -310,6 +310,8 @@ def atomic_json_write(path: Path, data, verify: bool = True, backup: bool = True
             # 10-22 0x00 事故：NTFS 预分配 + 中断可在 replace 后留下填零文件，
             # 落地后必须回读校验最终文件本身
             json.loads(path.read_text(encoding="utf-8"))
+        from .table_sync import notify_path
+        notify_path(path)
     finally:
         if os.path.exists(tmp_name):
             os.unlink(tmp_name)
@@ -575,12 +577,16 @@ class ClaimLedger:
             (day,)).fetchall()
 
     def record_publication_status(self, url: str, state: str, closed_day: str | None) -> bool:
-        return bool(self._conn.execute(
+        changed = bool(self._conn.execute(
             "INSERT INTO publication_status(url,state,closed_day) VALUES (?,?,?) "
             "ON CONFLICT(url) DO UPDATE SET state=excluded.state,closed_day=excluded.closed_day "
             "WHERE publication_status.state!=excluded.state "
             "OR publication_status.closed_day IS NOT excluded.closed_day",
             (url, state, closed_day)).rowcount)
+        if changed:
+            from .table_sync import notify
+            notify(self.db_path.parent.parent, {"pr", "scan", "candidates"})
+        return changed
 
     def pending_publications(self) -> list[tuple]:
         self._publication_table()
@@ -628,10 +634,14 @@ class ClaimLedger:
         self._conn.execute("UPDATE publications SET expected_url=? WHERE job_id=?", (url, job_id))
 
     def finish_publication(self, job_id: str, *, day: str = "", url: str = "") -> None:
+        changed = False
         if day and url:
-            self._conn.execute("UPDATE OR IGNORE publications SET day=?,url=?,phase='published' WHERE job_id=?",
-                               (day, url, job_id))
-        self._conn.execute("DELETE FROM publications WHERE job_id=? AND day IS NULL", (job_id,))
+            changed = self._conn.execute("UPDATE OR IGNORE publications SET day=?,url=?,phase='published' WHERE job_id=?",
+                                        (day, url, job_id)).rowcount > 0
+        changed |= self._conn.execute("DELETE FROM publications WHERE job_id=? AND day IS NULL", (job_id,)).rowcount > 0
+        if changed:
+            from .table_sync import notify
+            notify(self.db_path.parent.parent, {"pr", "scan", "candidates"})
 
     def reconcile_legacy_starts(self, worklog: Path, tz_name: str) -> None:
         """One-time migration: failures refunded by the old code still count today."""

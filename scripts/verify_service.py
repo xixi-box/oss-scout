@@ -64,7 +64,7 @@ def main():
     table_url = f"https://open.feishu.cn/open-apis/bitable/v1/apps/{fb._binding_app_token(root)}/tables/{table_id}"
     columns = fm._table_request(table_url, "GET", "fields?page_size=100")
     assert not {"PR 评论触发", "回复模型"} & {f["field_name"] for f in columns.get("items", [])}
-    assert fb.PR_RECORD_SYNC_SECONDS == 300 and fb.FULL_TABLE_SYNC_SECONDS == 900
+    assert fb.PR_RECORD_SYNC_SECONDS == 30 and fb.FULL_TABLE_SYNC_SECONDS == 900
     from scout_v2.codex_auth import auth_ready, exchange
     concurrent_auth = False
     if auth_ready(root):

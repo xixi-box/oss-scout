@@ -252,6 +252,19 @@ class TestSyncDiff:
         assert fake.records["r1"]["键"] == fb.row_to_fields(_row())["键"]
         assert fb.sync_rows(tmp_path, [_row()])["skipped"] == 1
 
+    def test_multiple_rows_only_changed_record_is_written_and_remote_edit_is_reconciled(self, fake, tmp_path):
+        rows = [_row(state="open"), _row(repo="example/backend", number=2)]
+        fb.sync_rows(tmp_path, rows)
+        fake.created.clear()
+        changed = [_row(state="merged"), rows[1]]
+        result = fb.sync_rows(tmp_path, changed)
+        assert result["updated"] == 1 and result["skipped"] == 1
+        assert fake.updated == ["r1"] and fake.created == [] and fake.deleted == []
+        fake.updated.clear()
+        fake.records["r1"]["标题"] = "manually overwritten"
+        assert fb.sync_rows(tmp_path, changed)["updated"] == 1
+        assert fake.updated == ["r1"]
+
     def test_binding_is_cached(self, fake, tmp_path):
         """table_id 按表名各存一份（base 里有多张表，互相不覆盖）。"""
         fb.sync_rows(tmp_path, [_row()])

@@ -94,10 +94,11 @@ def _staged_flush_once(root: Path, cfg: dict) -> dict:
     return {"processed": len(results), "results": results}
 
 
-_BITABLE_SYNC_LOCK = threading.Lock()
+_BITABLE_SYNC_LOCKS = {name: threading.Lock() for name in ("pr", "repos", "scan", "candidates")}
 
 
-def _sync_bitables(root: Path, *, ds=None, activity_only=False, activity_cache=None, table_names=None) -> dict:
+def _sync_bitables(root: Path, *, ds=None, activity_only=False, activity_cache=None, table_names=None,
+                   full_reconcile=True) -> dict:
     """Independent table snapshots; a failed source cannot clear remote data."""
     from scout_v2 import feishu_bitable as fb
     from .console_activity import candidate_activity
@@ -122,7 +123,7 @@ def _sync_bitables(root: Path, *, ds=None, activity_only=False, activity_cache=N
         if activity_only and not tracks_activity:
             continue
         try:
-            with _BITABLE_SYNC_LOCK:
+            with _BITABLE_SYNC_LOCKS[name]:
                 # Builders tolerate corrupt/missing files by returning []; validate first.
                 if source:
                     raw = source.read_text(encoding="utf-8")
@@ -132,17 +133,16 @@ def _sync_bitables(root: Path, *, ds=None, activity_only=False, activity_cache=N
                         activity = candidate_activity(ds if ds is not None else D.DataSource(root))
                     running, published, pr_states = activity
                     rows = build(root, running, published, pr_states) if name == "scan" else build(root, running)
-                    if activity_only and activity_cache is not None and rows == activity_cache.get(name):
-                        continue
                 else:
                     rows = build(root)
-                if name == "pr" and not rows:
-                    results[name] = {"skipped": "no complete GitHub snapshot"}
+                if (not full_reconcile and activity_cache is not None
+                        and rows == activity_cache.get(name)):
+                    results[name] = {"unchanged": True}
                     continue
                 results[name] = fb.sync_table(root, rows, table_name=table, fields=fields,
                                               to_fields=convert, binding_key=binding,
-                                              allow_empty=source is not None)
-                if tracks_activity and activity_cache is not None:
+                                              allow_empty=source is not None or name == "pr")
+                if activity_cache is not None:
                     activity_cache[name] = rows
                 _audit(root, "bitable_sync_" + name, table, json.dumps(results[name]))
         except Exception as ex:
@@ -177,7 +177,10 @@ def create_app(root: Path | None = None, gh_runner=None,
     import threading as _thr
     _inflight: dict[str, object] = {}
     _inflight_lock = _thr.Lock()
-    _bitable_wake = _thr.Event()
+    from scout_v2.table_sync import subscribe
+    table_changes = subscribe(root)
+    app.state.table_changes = table_changes
+    _bitable_wake = table_changes.wake
     _intake_handoff: set[str] = set()
     model_lock = _thr.Lock()
     # Durable quota reservations determine dynamic concurrency across processes.
@@ -390,25 +393,23 @@ def create_app(root: Path | None = None, gh_runner=None,
         def _loop():
             if os.environ.get("OSSCOUT_DISABLE_AUTO_REPAIR") == "1":
                 return
-            time.sleep(10)
-            full_sync_at = 0.0
-            pr_sync_at = 0.0
+            from concurrent.futures import ThreadPoolExecutor
+            from scout_v2.table_sync import TableSyncSchedule
             activity_cache = {}
-            while True:
-                _bitable_wake.clear()
-                full = time.monotonic() >= full_sync_at
-                pr_due = time.monotonic() >= pr_sync_at
-                names = None if full else {"pr", "scan", "candidates"} if pr_due else {"scan", "candidates"}
-                try:
-                    _sync_bitables(root, ds=ds, activity_only=not (full or pr_due),
-                                   activity_cache=activity_cache, table_names=names)
-                    if full:
-                        full_sync_at = time.monotonic() + FULL_TABLE_SYNC_SECONDS
-                    if full or pr_due:
-                        pr_sync_at = time.monotonic() + PR_RECORD_SYNC_SECONDS
-                except Exception as ex:
-                    _audit(root, "bitable_sync_error", "-", str(ex)[:200])
-                _bitable_wake.wait(max(1, min(30, pr_sync_at - time.monotonic(), full_sync_at - time.monotonic())))
+            def sync(name, full):
+                result = _sync_bitables(root, ds=ds, activity_cache=activity_cache,
+                                        table_names={name}, full_reconcile=full)
+                return result.get(name, {"skipped": "Feishu not configured"})
+
+            with ThreadPoolExecutor(max_workers=4, thread_name_prefix="feishu-table") as executor:
+                schedule = TableSyncSchedule(table_changes, executor, sync,
+                    full_interval=FULL_TABLE_SYNC_SECONDS, pr_interval=PR_RECORD_SYNC_SECONDS)
+                while True:
+                    try:
+                        schedule.tick(time.monotonic())
+                    except Exception as ex:
+                        _audit(root, "bitable_sync_error", "-", str(ex)[:200])
+                    _bitable_wake.wait(1)
         _thr.Thread(target=_loop, daemon=True, name="bitable-sync").start()
 
     def _model_settings_loop():
@@ -420,7 +421,7 @@ def create_app(root: Path | None = None, gh_runner=None,
                     sync_model_settings(root, model_lock)
                 except Exception as exc:
                     _audit(root, "bitable_model_settings_error", "models", type(exc).__name__)
-                time.sleep(30)
+                time.sleep(5)
 
         _thr.Thread(target=_loop, daemon=True, name="bitable-model-settings").start()
 

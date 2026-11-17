@@ -67,6 +67,10 @@ def log(root: Path, action: str, target: str, result: str) -> None:
         (root / "state").mkdir(parents=True, exist_ok=True)
         with (root / "state" / "worklog.jsonl").open("a", encoding="utf-8") as f:
             f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+        if action in {"coarse_screen", "prestart_coarse_screen", "fine_screen", "abort",
+                      "pr_open", "reconciled", "publication_status"}:
+            from ..table_sync import notify
+            notify(root, {"scan"})
     except OSError:
         pass
 

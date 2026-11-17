@@ -14,7 +14,7 @@ from . import feishu_app
 
 TABLE_NAME = "PR 记录"
 REPO_TABLE_NAME = "仓库池"
-PR_RECORD_SYNC_SECONDS = 300
+PR_RECORD_SYNC_SECONDS = 30
 FULL_TABLE_SYNC_SECONDS = 900
 STATE_FILE = "feishu_bitable.json"
 _BINDING_LOCK = threading.RLock()

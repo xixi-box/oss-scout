@@ -201,44 +201,6 @@ def test_controller_only_launches_one_repair_even_with_large_daily_quota(tmp_pat
     assert dispatch(rescreen=True)==[]
 
 
-def test_pr_table_refreshes_every_five_minutes_and_other_tables_keep_fifteen(tmp_path,monkeypatch):
-    import threading
-    monkeypatch.setenv("OSSCOUT_DISABLE_AUTO_REPAIR","1")
-    import dashboard.app as module
-    (tmp_path/"queue").mkdir()
-    (tmp_path/"configs").mkdir()
-    (tmp_path/"queue/candidates.json").write_text("{}")
-    (tmp_path/"AGENTS.md").write_text("Test policy")
-    (tmp_path/"configs/repositories.yaml").write_text("repositories: {}")
-    clock=[0.0]
-    calls=[]
-    loops={}
-    class Stop(BaseException):pass
-    class Wake:
-        def clear(self):pass
-        def set(self):pass
-        def wait(self,seconds):
-            clock[0]+=seconds
-            if clock[0]>=930:raise Stop()
-    class Thread:
-        def __init__(self,*,target,name=None,**kw):self.target=target;self.name=name
-        def start(self):loops[self.name]=self.target
-    monkeypatch.setattr(threading,"Thread",Thread)
-    monkeypatch.setattr(threading,"Event",Wake)
-    monkeypatch.setattr(module.time,"sleep",lambda _:None)
-    monkeypatch.setattr(module.time,"monotonic",lambda:clock[0])
-    monkeypatch.setattr(module,"_sync_bitables",lambda root,**kw:calls.append((clock[0],kw["table_names"],kw["activity_only"])))
-    monkeypatch.delenv("OSSCOUT_DISABLE_AUTO_REPAIR")
-    module.create_app(tmp_path,auth_enabled=False,password="test")
-    with pytest.raises(Stop):loops["bitable-sync"]()
-    schedule={moment:(names,activity) for moment,names,activity in calls}
-    assert schedule[0]==(None,False)
-    assert schedule[300]==({"pr","scan","candidates"},False)
-    assert schedule[600]==({"pr","scan","candidates"},False)
-    assert schedule[900]==(None,False)
-    assert schedule[30]==({"scan","candidates"},True)
-
-
 def test_actions_lookup_paginates_without_confusing_other_jobs(tmp_path):
     from scout_v2.adapters.actions_backend import ActionsBackend
     calls=[]

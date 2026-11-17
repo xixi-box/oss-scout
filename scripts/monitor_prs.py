@@ -81,8 +81,6 @@ def build_pr_rows(root) -> list[dict]:
     只是增强列为空。
     """
     rows = all_my_prs()
-    if not rows:
-        return []
 
     seen = {}
     queue = {}
@@ -106,6 +104,39 @@ def build_pr_rows(root) -> list[dict]:
                 raise
         finally:
             conn.close()
+        # Search indexing can lag behind a successful create/close. Overlay only
+        # GitHub-confirmed ledger states, and fetch missing new PRs directly.
+        from contextlib import closing
+        from scout_v2.state_store import business_now
+        with closing(sqlite3.connect(db.resolve().as_uri() + "?mode=ro", uri=True)) as conn:
+            try:
+                confirmed = conn.execute(
+                    "SELECT p.repo,p.url,p.day,s.state FROM publications p "
+                    "LEFT JOIN publication_status s ON s.url=p.url WHERE p.day IS NOT NULL AND p.url IS NOT NULL").fetchall()
+            except sqlite3.OperationalError as exc:
+                if "no such table" not in str(exc):
+                    raise
+                confirmed = []
+        by_url = {r["url"].lower(): r for r in rows}
+        today = business_now().date().isoformat()
+        for repo, url, day, state in confirmed:
+            row = by_url.get(url.lower())
+            if row is None and day == today and state != "closed":
+                number = url.rsplit("/", 1)[-1]
+                if not number.isascii() or not number.isdecimal():
+                    raise RuntimeError("invalid confirmed PR URL")
+                raw = _gh(["api", f"repos/{repo}/pulls/{number}"])
+                item = json.loads(raw) if raw else {}
+                if item.get("html_url", "").lower() != url.lower() or item.get("state") not in ("open", "closed"):
+                    raise RuntimeError("new confirmed PR snapshot unavailable")
+                row = {"repo": repo, "number": int(number), "url": url, "title": item["title"],
+                       "state": "merged" if item.get("merged_at") else item["state"],
+                       "created_at": item.get("created_at"), "updated_at": item.get("updated_at"),
+                       "closed_at": item.get("closed_at")}
+                rows.append(row)
+                by_url[url.lower()] = row
+            if row is not None and day == today and state in ("merged", "closed"):
+                row["state"] = state
     discovered = {key.lower(): entry.get("discovered_at") for key, entry in queue.items()}
     discovered.update({key.lower(): entry["first_seen"] for key, entry in seen.items() if entry.get("first_seen")})
 
