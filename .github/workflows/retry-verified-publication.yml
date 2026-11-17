@@ -1,0 +1,29 @@
+name: Recover a verified unpublished repair
+on:
+  workflow_dispatch:
+    inputs:
+      job_id:
+        description: Exact completed rate-limited repair job ID
+        type: string
+        required: true
+      apply:
+        description: Authorize a new queued recovery after safety checks
+        type: boolean
+        default: false
+permissions:
+  contents: read
+jobs:
+  recover:
+    runs-on: [self-hosted, aliyun]
+    timeout-minutes: 5
+    env:
+      RECOVERY_JOB_ID: ${{ inputs.job_id }}
+      APPLY_RECOVERY: ${{ inputs.apply }}
+    steps:
+      - name: Check retained repair and optionally authorize normal recovery
+        shell: bash
+        run: |
+          set -euo pipefail
+          args=(--root /data --job "$RECOVERY_JOB_ID")
+          if [ "$APPLY_RECOVERY" = true ]; then args+=(--apply); fi
+          docker exec oss-scout python /app/scripts/retry_verified_publication.py "${args[@]}"

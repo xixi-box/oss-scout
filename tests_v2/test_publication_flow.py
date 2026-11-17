@@ -43,7 +43,8 @@ def test_publication_never_bypasses_fresh_evidence_or_review(delivered, monkeypa
     monkeypatch.setattr(publish_remote, "publish", lambda *_: pytest.fail("must not attempt a GitHub write"))
     result = publish_remote.publish_from_env(payload, repo, out)
     assert result["ok"] is False
-    assert result["failure_kind"] == ("publication_open_pr_cap" if block == "cap_full" else "code_review_required")
+    expected = {"cap_full": "publication_open_pr_cap", "changed_discussion": "review_evidence_changed"}
+    assert result["failure_kind"] == expected.get(block, "code_review_required")
     assert (out / "verified-delivery/change.patch").exists()
 
 

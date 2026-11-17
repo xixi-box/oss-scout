@@ -5,6 +5,7 @@ from scout_v2.roster import monitored_repo as modifiable_repo
 from scout_v2.feishu_bitable import PR_RECORD_SYNC_SECONDS, FULL_TABLE_SYNC_SECONDS
 
 import base64
+import asyncio
 import hashlib
 import hmac
 import json
@@ -218,7 +219,9 @@ def create_app(root: Path | None = None, gh_runner=None,
             from scout_v2.repo_policy import PolicyEngine
             from scout_v2.state_store import publication_quota_remaining, repair_dispatch_capacity
             from scout_v2.workers.auto_pipeline import expire_staged, open_scheduled_batch, expire_direct_starts
-            expire_direct_starts(root)
+            with _inflight_lock:
+                active_handoffs = set(_inflight)
+            expire_direct_starts(root, protected=active_handoffs)
             expire_staged(root)
             open_scheduled_batch(root)
             eng, err = PolicyEngine.load(root)
@@ -473,6 +476,12 @@ def create_app(root: Path | None = None, gh_runner=None,
             for key, entry in q.items():
                 if key.lower() in protected:
                     continue  # remote/preparing writer still owns its durable reservation
+                if (entry.get("status") == "staged" and entry.get("dispatch_job_id")
+                        and not entry.get("dispatch_started_at") and entry.get("direct_start_reserved_at")):
+                    # The poller checks whether this handoff ever reached Actions.
+                    # Do not do network I/O before the HTTP service starts, and
+                    # do not erase its marker or grant a retry on restart alone.
+                    continue
                 if (entry.get("status") == "staged" and not entry.get("dispatch_job_id")
                         and not entry.get("dispatch_started_at") and entry.get("direct_start_reserved_at")):
                     with candidate_execution_lock(root, key) as owned:
@@ -520,7 +529,7 @@ def create_app(root: Path | None = None, gh_runner=None,
         return JSONResponse({"detail": "unauthenticated"}, status_code=401)
 
     @app.get("/healthz")
-    def health():
+    async def health():
         return {"ok": True}
 
     @app.post("/login")
@@ -646,6 +655,8 @@ def create_app(root: Path | None = None, gh_runner=None,
 
 
     # ---------------- Cloudflare Worker 直推入口（KV 免费额度不够时的主通道） ----------------
+    inbox_slots = asyncio.Semaphore(2)
+
     @app.post("/api/ingest/issues")
     async def api_ingest_issues(request: Request):
         """Worker 直接回传 issue（免 KV 写额度）。
@@ -709,11 +720,26 @@ def create_app(root: Path | None = None, gh_runner=None,
                 "body_excerpt": str(it.get("body_excerpt", ""))[:65536],
             })
         from scout_v2.state_store import IssueInbox
-        inbox = IssueInbox(root)
+        import sqlite3
+
+        def store():
+            # SQLite connections must be created and closed in the same thread.
+            # Busy ingestion must never stall the HTTP event loop/lease heartbeats.
+            inbox = IssueInbox(root)
+            try:
+                return inbox.put(clean)
+            finally:
+                inbox.close()
+
         try:
-            stored = inbox.put(clean)
-        finally:
-            inbox.close()
+            async with inbox_slots:
+                stored = await asyncio.to_thread(store)
+        except sqlite3.OperationalError as exc:
+            if "locked" not in str(exc).lower() and "busy" not in str(exc).lower():
+                raise
+            _audit(root, "ingest_busy", "issue_inbox.sqlite3", "SQLite busy; Worker must retry")
+            return JSONResponse({"detail": "issue inbox busy; retry"}, status_code=503,
+                                headers={"Retry-After": "5"})
         _audit(root, "ingest_issues", f"{len(clean)} items", f"durably stored={stored}")
         return JSONResponse({"queued": stored, "received": len(clean), "dispatched": [], "stored": stored})
 

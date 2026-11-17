@@ -159,6 +159,44 @@ def business_now(tz_name: str = "Asia/Shanghai") -> dt.datetime:
 
 
 @contextmanager
+def _write_transaction(conn, db_path: Path, operation: str):
+    """Always release a failed write; record which lock waited and for how long."""
+    import threading
+    import time
+    started = time.monotonic()
+    acquired = None
+    error = None
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        acquired = time.monotonic()
+        yield
+        conn.execute("COMMIT")
+    except BaseException as exc:
+        if conn.in_transaction:
+            conn.rollback()
+        if isinstance(exc, sqlite3.OperationalError) and any(word in str(exc).lower() for word in ("locked", "busy")):
+            error = str(exc)
+            raise sqlite3.OperationalError(
+                f"{exc}; database={db_path.name}; operation={operation}; "
+                f"elapsed_seconds={time.monotonic() - started:.3f}") from exc
+        raise
+    finally:
+        elapsed = time.monotonic() - started
+        if error or elapsed >= 2:
+            record = {"ts": now_local_iso(), "action": "sqlite_busy" if error else "sqlite_slow_transaction",
+                      "target": db_path.name, "source": "controller",
+                      "result": {"operation": operation, "thread": threading.current_thread().name,
+                                 "elapsed_seconds": round(elapsed, 3),
+                                 "wait_seconds": round((acquired or time.monotonic()) - started, 3),
+                                 "hold_seconds": round(time.monotonic() - acquired, 3) if acquired else 0}}
+            try:
+                with (db_path.parent / "worklog.jsonl").open("a", encoding="utf-8") as stream:
+                    stream.write(json.dumps(record, ensure_ascii=False) + "\n")
+            except OSError:
+                pass
+
+
+@contextmanager
 def queue_transaction(root: Path, *, path: Path | None = None, backup: bool = True):
     """Serialize queue read/modify/write across threads and processes.
 
@@ -170,18 +208,13 @@ def queue_transaction(root: Path, *, path: Path | None = None, backup: bool = Tr
     conn = sqlite3.connect(str(root / "state/queue_lock.sqlite3"), timeout=60,
                            isolation_level=None)
     try:
-        conn.execute("BEGIN IMMEDIATE")
-        path = path or root / "queue/candidates.json"
-        queue = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
-        original = json.dumps(queue, ensure_ascii=False, sort_keys=True)
-        yield queue
-        if original != json.dumps(queue, ensure_ascii=False, sort_keys=True):
-            atomic_json_write(path, queue, backup=backup)
-        conn.execute("COMMIT")
-    except BaseException:
-        if conn.in_transaction:
-            conn.execute("ROLLBACK")
-        raise
+        with _write_transaction(conn, root / "state/queue_lock.sqlite3", "queue read/modify/write"):
+            path = path or root / "queue/candidates.json"
+            queue = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+            original = json.dumps(queue, ensure_ascii=False, sort_keys=True)
+            yield queue
+            if original != json.dumps(queue, ensure_ascii=False, sort_keys=True):
+                atomic_json_write(path, queue, backup=backup)
     finally:
         conn.close()
 
@@ -194,25 +227,28 @@ class IssueInbox:
         (self.root / "state").mkdir(parents=True, exist_ok=True)
         self.conn = sqlite3.connect(str(self.root / "state/issue_inbox.sqlite3"),
                                     timeout=30, isolation_level=None)
-        self.conn.execute("PRAGMA journal_mode=WAL")
-        self.conn.execute("CREATE TABLE IF NOT EXISTS inbox ("
-                          "key TEXT PRIMARY KEY, payload TEXT NOT NULL, version INTEGER NOT NULL DEFAULT 1,"
-                          "ready REAL NOT NULL DEFAULT 0, lease_until REAL NOT NULL DEFAULT 0,"
-                          "attempts INTEGER NOT NULL DEFAULT 0, error TEXT NOT NULL DEFAULT '')")
-        if "done_version" not in {r[1] for r in self.conn.execute("PRAGMA table_info(inbox)")}:
-            try:
-                self.conn.execute("ALTER TABLE inbox ADD COLUMN done_version INTEGER NOT NULL DEFAULT 0")
-            except sqlite3.OperationalError:
-                if "done_version" not in {r[1] for r in self.conn.execute("PRAGMA table_info(inbox)")}:
-                    raise
+        try:
+            self.conn.execute("PRAGMA journal_mode=WAL")
+            self.conn.execute("CREATE TABLE IF NOT EXISTS inbox ("
+                              "key TEXT PRIMARY KEY, payload TEXT NOT NULL, version INTEGER NOT NULL DEFAULT 1,"
+                              "ready REAL NOT NULL DEFAULT 0, lease_until REAL NOT NULL DEFAULT 0,"
+                              "attempts INTEGER NOT NULL DEFAULT 0, error TEXT NOT NULL DEFAULT '')")
+            if "done_version" not in {r[1] for r in self.conn.execute("PRAGMA table_info(inbox)")}:
+                try:
+                    self.conn.execute("ALTER TABLE inbox ADD COLUMN done_version INTEGER NOT NULL DEFAULT 0")
+                except sqlite3.OperationalError:
+                    if "done_version" not in {r[1] for r in self.conn.execute("PRAGMA table_info(inbox)")}:
+                        raise
+        except BaseException:
+            self.conn.close()
+            raise
 
 
     def close(self):
         self.conn.close()
 
     def put(self, issues: list[dict]) -> int:
-        self.conn.execute("BEGIN IMMEDIATE")
-        try:
+        with _write_transaction(self.conn, self.root / "state/issue_inbox.sqlite3", "inbox.put"):
             for issue in issues:
                 key = f"{issue['repo']}#{issue['number']}"
                 payload = json.dumps(issue, ensure_ascii=False)
@@ -220,26 +256,17 @@ class IssueInbox:
                                   "ON CONFLICT(key) DO UPDATE SET payload=excluded.payload, "
                                   "version=inbox.version+1,ready=0,error='' WHERE inbox.payload<>excluded.payload",
                                   (key, payload))
-            self.conn.execute("COMMIT")
-        except BaseException:
-            self.conn.execute("ROLLBACK")
-            raise
         return len(issues)
 
     def take(self):
         import time
         now = time.time()
-        self.conn.execute("BEGIN IMMEDIATE")
-        try:
+        with _write_transaction(self.conn, self.root / "state/issue_inbox.sqlite3", "inbox.take"):
             row = self.conn.execute("SELECT key,payload,version,attempts FROM inbox "
                                     "WHERE done_version<version AND ready<=? AND lease_until<=? ORDER BY rowid LIMIT 1",
                                     (now, now)).fetchone()
             if row:
                 self.conn.execute("UPDATE inbox SET lease_until=? WHERE key=?", (now + 900, row[0]))
-            self.conn.execute("COMMIT")
-        except BaseException:
-            self.conn.execute("ROLLBACK")
-            raise
         return row
 
     def finish(self, key, version, error="", attempts=0):
@@ -370,7 +397,11 @@ class ClaimLedger:
                     self._conn.close()
                     raise
                 time.sleep(min(0.05 * (attempt + 1), 0.2))
-        self._migrate()
+        try:
+            self._migrate()
+        except BaseException:
+            self._conn.close()
+            raise
 
     def _migrate(self) -> None:
         """把旧的 day 单主键表升级成 (day, candidate_id) 复合主键。

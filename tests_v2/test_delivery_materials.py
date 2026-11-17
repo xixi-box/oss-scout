@@ -6,7 +6,7 @@ import sys
 import pytest
 
 from scout_v2.workers import repair
-from scout_v2.workers.delivery_materials import coverage_issues, material_issues
+from scout_v2.workers.delivery_materials import coverage_issues, material_issues, reported_blocker
 from test_p5_repair import make_repo, job
 
 
@@ -200,3 +200,54 @@ def test_opencode_transient_retries_share_one_timeout_budget(tmp_path, monkeypat
     ok, detail = opencode_client.OpenCodeClient(timeout_seconds=10, workdir=tmp_path).run("fixture", "task")
     assert not ok and "retry budget exhausted" in detail
     assert timeouts == [10, 2]
+
+
+@pytest.mark.parametrize("agent", ["opencode", "codex"])
+def test_explicit_inaccessible_reproducer_blocker_is_not_rewritten_as_missing_material(tmp_path, monkeypatch, agent):
+    # Docling #1473 reported a Box sign-in wall, not a forgotten test command.
+    repo, sha = make_repo(tmp_path)
+    task = job(sha)
+    task.repair_agent = agent
+    calls = []
+
+    class Client:
+        def __init__(self, **kwargs):
+            self.workdir = kwargs["workdir"]
+        def run(self, *_):
+            calls.append(1)
+            (self.workdir / repair.RESULT_FILE).write_text(json.dumps({
+                "status": "blocked", "publication_ready": False,
+                "blocker": "Named PDF input redirects to Box | Login; expected table grid unavailable.",
+                "base_failure": [], "patched_success": []}))
+            return True, "Blocked: inaccessible reproducer"
+
+    monkeypatch.setattr(repair, "OpenCodeClient", Client)
+    monkeypatch.setattr("scout_v2.workers.codex_client.CodexClient", Client)
+    out = tmp_path / "out"
+    result = repair.run_repair(task, repo, out)
+    assert len(calls) == 1
+    assert "agent_reported_blocker:" in result.unverified_items[0]
+    assert "Box | Login" in result.unverified_items[0]
+    assert "delivery_materials_incomplete" not in result.unverified_items[0]
+    assert json.loads((out / "agent-handoff.json").read_text())["publication_ready"] is False
+    assert not (out / "change.patch").exists()
+
+
+@pytest.mark.parametrize("handoff", [
+    {"status": "blocked", "publication_ready": False,
+     "blocker": "Named PDF input redirects to Box | Login; expected grid unavailable."},
+    {"status": "blocked_no_target_reproduction", "publication_allowed": False,
+     "blockers": ["Both original and final CSV characterization runs pass; no target assertion observed."]},
+    {"status": "blocked", "publication_ready": False,
+     "blockers": ["Unchanged HTTP 404 regression already passes; issue discussion reports the fix."]},
+    {"status": "blocked_no_reproduced_target_failure", "publication_ready": False,
+     "blocker": "Unchanged attachment retains images and chart data; no target failure reproduced."},
+])
+def test_nov17_actual_blocker_report_shapes_survive_the_reader(tmp_path, handoff):
+    (tmp_path / repair.RESULT_FILE).write_text(json.dumps(handoff))
+    assert reported_blocker(repair._read_result_file(tmp_path))
+
+
+def test_missing_material_without_an_explicit_blocker_still_gets_completion():
+    assert not reported_blocker({"base_failure": [], "test_cmd": ""})
+    assert not reported_blocker({"status": "blocked", "publication_ready": False})

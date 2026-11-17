@@ -78,6 +78,22 @@ def material_issues(markers: dict, work: Path) -> list[str]:
     return issues
 
 
+def reported_blocker(markers: dict) -> str:
+    """An explicit inability to reproduce is a blocker, not a missing handoff.
+
+    Do not infer blockers from free text or a missing field. This only preserves
+    the agent's explicit structured refusal, and never makes a delivery pass.
+    """
+    status = markers.get("status")
+    if (not isinstance(status, str) or not re.fullmatch(r"blocked(?:_[a-z_]+)?|infeasible", status)
+            or not (markers.get("publication_ready") is False or markers.get("publication_allowed") is False)):
+        return ""
+    reason = markers.get("blocker") or markers.get("blocked_reason") or markers.get("blockers")
+    if isinstance(reason, list) and reason and all(isinstance(item, str) for item in reason):
+        reason = "; ".join(reason[:20])
+    return reason.strip()[:1500] if isinstance(reason, str) else ""
+
+
 COMPLETION_TASK = """Finish the existing repair handoff in OSSCOUT_RESULT.json.
 Read OSSCOUT_TASK.md and OSSCOUT_DELIVERY_CHECK.json first. Keep all existing
 publication and verification requirements. This is one bounded completion pass,
@@ -100,4 +116,9 @@ For test-only repairs, keep behavioral assertions and justify fixture/timing edi
 Write complete coverage references and test observations into OSSCOUT_RESULT.json.
 If a prerequisite, private disclosure rule, unavailable dependency or irreducible
 scope prevents a truthful handoff, report that blocker; do not claim completion.
+Preserve the existing JSON object and update its fields in place. Keep the schema
+in OSSCOUT_TASK.md: setup_steps/test_cmd/test_file/base_failure/patched_success/
+test_report/coverage/pr_title/pr_body are top-level fields, not a nested report.
+If the task is genuinely blocked, use status="blocked", publication_ready=false,
+and a concrete blocker with observed evidence; do not invent the missing fields.
 """

@@ -179,9 +179,13 @@ def _find_repair_run(runner_repo: str, job_id: str) -> tuple[dict | None, bool]:
 
 def _retryable_codex_communication(details: list) -> bool:
     from .codex_client import CODEX_COMMUNICATION_RETRY_PREFIX
+    from .opencode_client import MODEL_COMMUNICATION_RETRY_PREFIX
     # An older worker may finish after the controller has been upgraded.
     legacy = r"Codex start/result error: (?:TimeoutError|URLError)\b|Codex login broker returned (?:408|429|5\d\d)\b"
-    return any(CODEX_COMMUNICATION_RETRY_PREFIX in str(detail) or re.search(legacy, str(detail))
+    return any(CODEX_COMMUNICATION_RETRY_PREFIX in str(detail)
+               or MODEL_COMMUNICATION_RETRY_PREFIX in str(detail)
+               or "controller communication unavailable: issue snapshot download" in str(detail)
+               or re.search(legacy, str(detail))
                for detail in details)
 
 
@@ -269,7 +273,8 @@ def _reconcile_publication(ledger: ClaimLedger, tz_name: str, *, root: Path | No
                 retained = retain_collected_delivery(root, {
                     "job_id": job_id, "repo": repo, "base_sha": result.get("base_sha"),
                     "source_run": remote_id, "runner_repo": runner_repo,
-                    "publish": {"upstream": repo, "branch": head.split(":", 1)[-1]},
+                    "publish": {"upstream": repo, "branch": head.split(":", 1)[-1],
+                                "issue_number": int(issue[1])},
                 }, result)
                 if retained.get("ok"):
                     log(root, "verified_delivery_saved", key, retained["path"])
@@ -321,6 +326,15 @@ def _reconcile_publication(ledger: ClaimLedger, tz_name: str, *, root: Path | No
             if candidate is not None:
                 if communication_retry:
                     extra.update(_communication_retry_fields(candidate, job_id, reason, tz_name))
+                elif not pr and result.get("outcome") == "succeeded":
+                    from .delivery_recovery import publication_retry_fields
+                    retry_fields = publication_retry_fields(root, candidate, publication,
+                        job_id=job_id, repo=repo, issue_number=int(issue[1]),
+                        run_id=str(remote_id), repository=runner_repo, now=business_now(tz_name))
+                    if retry_fields:
+                        ledger.release_claim(key, tz_name)
+                        status = "staged"
+                        extra.update(retry_fields)
                 candidate.update(status=status, updated_at=business_now().isoformat(timespec="seconds"),
                                  repair_job_id=job_id, repair_run_id=str(remote_id),
                                  workflow_conclusion=run.get("conclusion"), **extra)
@@ -336,6 +350,18 @@ def _reconcile_publication(ledger: ClaimLedger, tz_name: str, *, root: Path | No
         ledger.finish_publication(job_id, day=business_day(created, tz_name), url=pr["html_url"])
     else:
         ledger.finish_publication(job_id)
+    if root is not None and not pr and issue:
+        # The completed writer no longer needs protection. Rotate after finishing
+        # its ledger row so the oldest restored waiter can itself be evicted.
+        from ..state_store import rotate_staged_queue
+        evicted = []
+        with queue_transaction(root) as queue:
+            candidate = queue.get(actual_key) or {}
+            if candidate.get("status") == "staged" and candidate.get("repair_job_id") == job_id:
+                evicted = [(old, queue[old].get("abort_reason", ""))
+                           for old in rotate_staged_queue(root, queue)]
+        for old, reason in evicted:
+            log(root, "queue_evicted", old, reason)
     if root is not None:
         try:
             (root / "artifacts" / "issue-context" / f"{job_id}.json").unlink(missing_ok=True)
@@ -607,13 +633,13 @@ def candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen:
         with candidate_execution_lock(root, key) as owned:
             if not owned:
                 return {"id": key, "abort": "dispatcher busy"}
-            eng, err = PolicyEngine.load(root)
-            if err:
-                return {"id": key, "abort": f"policy fail-closed: {err}"}
             ledger = ClaimLedger(root / "state/scout_v2.sqlite3")
             job_id = f"job-{uuid.uuid4()}"
             reserved = False
             try:
+                eng, err = PolicyEngine.load(root)
+                if err:
+                    return {"id": key, "abort": f"policy fail-closed: {err}"}
                 with queue_transaction(root) as queue:
                     latest = queue.get(key)
                     if latest is not None and latest.get("status") != "staged":
@@ -650,14 +676,33 @@ def candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen:
                     log(root, "crash", key, str(exc)[:200])
                     raise
             finally:
-                ledger.release_preparation(job_id)
-                pending = ledger.pending_publication(job_id)
-                if reserved and pending is None:
-                    with queue_transaction(root) as queue:
-                        if queue.get(key, {}).get("dispatch_job_id") == job_id:
-                            queue[key].pop("dispatch_job_id", None)
-                    release_direct_start(root, key)
-                ledger.close()
+                try:
+                    ledger.release_preparation(job_id)
+                    pending = ledger.pending_publication(job_id)
+                    if reserved and pending is None:
+                        with queue_transaction(root) as queue:
+                            if queue.get(key, {}).get("dispatch_job_id") == job_id:
+                                queue[key].pop("dispatch_job_id", None)
+                        release_direct_start(root, key)
+                    elif not reserved and pending is None:
+                        # This thread owns both admission and the candidate lock.
+                        # A pre-reservation policy/capacity error must not leave
+                        # its direct handoff occupying the slot for the whole day.
+                        backed = {candidate.lower() for candidate in ledger.reserved_candidates()}
+                        evicted = []
+                        with queue_transaction(root) as queue:
+                            current = queue.get(key) or {}
+                            if (key.lower() not in backed and current.get("status") == "staged"
+                                    and not current.get("dispatch_job_id")
+                                    and not current.get("dispatch_started_at")):
+                                current.pop("direct_start_reserved_at", None)
+                                from ..state_store import rotate_staged_queue
+                                evicted = [(old, queue[old].get("abort_reason", ""))
+                                           for old in rotate_staged_queue(root, queue)]
+                        for old, reason in evicted:
+                            log(root, "queue_evicted", old, reason)
+                finally:
+                    ledger.close()  # A failed cleanup must not retain the SQLite connection.
     finally:
         if admission is not None:
             admission.close()
@@ -671,40 +716,14 @@ def release_direct_start(root: Path, key: str) -> None:
             return
         if entry.get("status") == "staged" and not entry.get("dispatch_started_at"):
             from scout_v2.state_store import rotate_staged_queue
-            for old in rotate_staged_queue(root, queue, keep=(key,), replacement=key):
-                log(root, "queue_evicted", old, f"replaced by {key} after direct handoff")
+            for old in rotate_staged_queue(root, queue):
+                log(root, "queue_evicted", old, queue[old].get("abort_reason", ""))
 
 
-def expire_direct_starts(root: Path) -> None:
-    """An unstarted handoff cannot reserve today's slot after a day rollover."""
-    import sqlite3
-    (root / "state").mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(root / "state/dispatcher.sqlite3"), timeout=0, isolation_level=None)
-    try:
-        try:
-            conn.execute("BEGIN IMMEDIATE")
-        except sqlite3.OperationalError as exc:
-            if "locked" in str(exc).lower():
-                return  # a pipeline owns the slot; never touch that reservation
-            raise
-        path = root / "queue/candidates.json"
-        queue = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
-        now = business_now()
-        ledger = ClaimLedger(root / "state/scout_v2.sqlite3")
-        try:
-            protected = {key.lower() for key in ledger.reserved_candidates()}
-        finally:
-            ledger.close()
-        for key, entry in queue.items():
-            if key.lower() in protected:
-                continue
-            stamp = entry.get("direct_start_reserved_at")
-            if not stamp or entry.get("status") != "staged" or entry.get("dispatch_started_at"):
-                continue
-            if business_day(dt.datetime.fromisoformat(stamp), "Asia/Shanghai") != now.date().isoformat():
-                release_direct_start(root, key)
-    finally:
-        conn.close()
+def expire_direct_starts(root: Path, *, protected=()) -> None:
+    """Release only demonstrably unowned/unsubmitted handoffs, including today."""
+    from ..dispatch_recovery import recover_abandoned_handoffs
+    recover_abandoned_handoffs(root, protected=protected)
 
 
 def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen: bool = False,
@@ -972,6 +991,19 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen
               execution_scope="project_contribution",
               policy_snapshot_id=eng.snapshot_id(),
               max_estimated_compute_usd=0.5)
+    source = (current or entry).get("verified_delivery_source") or {}
+    if source and source.get("base_sha") == base_sha:
+        from .delivery_recovery import load_bundle
+        try:
+            load_bundle(root / "artifacts/verified-deliveries" / source["job_id"], source,
+                        repo=repo, base_sha=base_sha, issue_number=number)
+        except (OSError, ValueError, TypeError, KeyError) as exc:
+            return _abort_release(f"retained delivery unavailable: {type(exc).__name__}")
+        job.verified_delivery_source = source
+        summary["steps"].append("retained repair selected for fresh independent replay")
+    elif source:
+        mark_candidate(root, key, "staged", extra={"verified_delivery_source": None})
+        log(root, "verified_delivery_base_changed", key, "base changed; new repair required")
     if dispatch_job_id:
         job.job_id = dispatch_job_id
     # 测试框架由 agent 现场判断（2026-10-28）：控制器不再预设 pytest。
@@ -1056,11 +1088,26 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen
                     base_sha=base_sha, unverified_items=["no result from backend"])
     if res.backend in ("", None):
         res.backend = backend
+    if not receipt:
+        candidate = json.loads(qpath.read_text(encoding="utf-8")).get(key, {})
+        if candidate.get("status") == "queue_evicted" and candidate.get("repair_job_id") == job.job_id:
+            ledger.close()
+            summary.update(abort=candidate.get("abort_reason"), queue_evicted=True)
+            return summary
     if not receipt and _retryable_codex_communication(res.unverified_items):
         ledger.close()
         summary.update(abort="temporary Codex communication failure; staged for retry", retry=True)
         log(root, "communication_retry", key, res.unverified_items[0][:300])
         return summary
+    if not receipt:
+        candidate = json.loads(qpath.read_text(encoding="utf-8")).get(key, {})
+        if (candidate.get("status") == "staged"
+                and candidate.get("repair_outcome") == "verified_publication_retry"
+                and candidate.get("repair_job_id") == job.job_id):
+            ledger.close()
+            summary.update(abort=candidate.get("abort_reason"), retry=True)
+            log(root, "publication_recovery_staged", key, str(summary["abort"])[:300])
+            return summary
     patch_file = _stage_patch_from_backend(root, out_dir, collected)
 
     # ---- 质量闸 ----

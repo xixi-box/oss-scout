@@ -314,9 +314,29 @@ def publish_from_env(job_dict: dict, repo_dir: Path, out_dir: Path) -> dict | No
     elif not review_approved(job_dict, out_dir, evidence):
         result = {"ok": False, "error": "read-only review missing, rejected, or latest discussion changed",
                   "failure_kind": "code_review_required"}
+        try:
+            review = json.loads((out_dir / "code-review.json").read_text(encoding="utf-8"))
+            if (review.get("failure_kind") == "review_communication_unavailable"
+                    and review.get("job_id") == job_dict.get("job_id")
+                    and review.get("base_sha") == job_dict.get("base_sha")):
+                result.update(failure_kind="review_communication_unavailable",
+                              error="read-only review temporarily unavailable; verified repair retained")
+            elif (review.get("verdict") == "approve" and review.get("findings") == []
+                  and review.get("job_id") == job_dict.get("job_id")
+                  and review.get("base_sha") == job_dict.get("base_sha")
+                  and review.get("patch_sha256") == digest):
+                result.update(failure_kind="review_evidence_changed",
+                              error="latest discussion changed after review; fresh review required")
+        except (OSError, ValueError, AttributeError):
+            pass
     else:
         result = publish(repo_dir, patch, cfg)
-        if not result.get("ok") and re.search(r"(?i)permission|forbidden|createpullrequest", str(result.get("error"))):
+        if (not result.get("ok") and re.search(r"(?i)rate limit.*exceeded|secondary rate limit|too many requests",
+                                               str(result.get("error")))):
+            # Never repeat a write in this run. A later reserved job must check
+            # the target head, replay tests and obtain a fresh read-only review.
+            result.update(failure_kind="publication_rate_limited", retry_after_seconds=3600)
+        elif not result.get("ok") and re.search(r"(?i)permission|forbidden|createpullrequest", str(result.get("error"))):
             result["failure_kind"] = "publication_permission_denied"
     (out_dir / "publish.json").write_text(json.dumps(result, ensure_ascii=False, indent=1),
                                           encoding="utf-8")

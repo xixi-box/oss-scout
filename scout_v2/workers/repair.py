@@ -81,6 +81,10 @@ Do this, in order:
    one. If an existing test asserts the behaviour you are changing, STOP and
    reconsider: either the fix belongs at a different layer, or that test is part of
    what this change is meant to update. Report which one in "root_cause".
+   Check the concrete before/after values for adjacent and already-valid inputs.
+   For joining/normalization, preserve meaningful separators and existing text;
+   for mutation/copying, test the actual producer's aliasing and repeated calls,
+   rather than supplying cleaner independent objects only in the regression.
 
    Read every comment on the issue before choosing a fix. If someone -- a
    maintainer or a bot -- has already diagnosed it, follow that diagnosis or pick a
@@ -164,6 +168,11 @@ invent checks, mark unverified checklist items as complete, or claim CI is green
 Do not add generic AI-assistance or oss-scout promotional text. If a repository
 requires a disclosure or attestation that cannot be satisfied, report the blocker
 instead of claiming it was satisfied. Keep the description focused on this diff.
+If a real prerequisite or unavailable reproducer prevents a truthful repair,
+set status="blocked", publication_ready=false and blocker="<observed reason>"
+in OSSCOUT_RESULT.json. Do not manufacture a test or success report. Otherwise
+preserve and complete the top-level JSON fields above; do not replace them with
+a prose summary or nest them inside a separate result/verification object.
 Restore incidental dependency-installation changes before finishing. Do not
 change lockfiles or CI workflows for these automatic bug fixes. If the task
 requires dependency or CI changes, report that blocker instead of broadening it.
@@ -178,8 +187,9 @@ RUN_TASK_MSG = (
     "acknowledgement, or a progress statement - start calling tools immediately "
     "(read files, run commands, edit code) and keep working until the fix is "
     "implemented and your regression test passes. Only when you are completely "
-    "finished, print the OSSCOUT_TEST_CMD / OSSCOUT_TEST_FILE / "
-    "OSSCOUT_ROOT_CAUSE lines.")
+    "finished, complete OSSCOUT_RESULT.json with the top-level handoff schema "
+    "in the task file, including observed test evidence, coverage and PR fields. "
+    "Report genuine blockers using the structured blocked handoff.")
 
 
 def _git(args: list[str], cwd: Path, check: bool = True) -> subprocess.CompletedProcess:
@@ -396,6 +406,9 @@ def _read_result_file(work_dir: Path) -> dict:
         for key in ("setup_steps", "base_failure", "patched_success", "test_report", "coverage"):
             if key in data:
                 out[key] = data[key]
+        for key in ("status", "publication_ready", "publication_allowed", "blocker", "blocked_reason", "blockers"):
+            if key in data:
+                out[key] = data[key]
         return out
     return {}
 
@@ -511,7 +524,9 @@ def opencode_patch_producer(job: Job, work_dir: Path, context: str,
         ok, detail = client.run(model, RUN_TASK_MSG)
         detail = _mask_opencode_key(detail or "")
         from .codex_client import CODEX_COMMUNICATION_RETRY_PREFIX
-        if not ok and detail.startswith(CODEX_COMMUNICATION_RETRY_PREFIX):
+        from .opencode_client import MODEL_COMMUNICATION_RETRY_PREFIX
+        communication_prefixes = (CODEX_COMMUNICATION_RETRY_PREFIX, MODEL_COMMUNICATION_RETRY_PREFIX)
+        if not ok and detail.startswith(communication_prefixes):
             raise RuntimeError(detail[:1000])
         diff_early = _git(["diff"], work_dir).stdout
         # 2026-10-29 实测：模型有时只回一句"I'll start by reading the task file"
@@ -528,14 +543,17 @@ def opencode_patch_producer(job: Job, work_dir: Path, context: str,
                 client.timeout = max(1, min(2100, int(remaining)))
             ok, detail = client.run(model, nudge)
             detail = _mask_opencode_key(detail or "")
-            if not ok and detail.startswith(CODEX_COMMUNICATION_RETRY_PREFIX):
+            if not ok and detail.startswith(communication_prefixes):
                 raise RuntimeError(detail[:1000])
             diff_early = _git(["diff"], work_dir).stdout
         if not ok and not diff_early.strip():
             raise RuntimeError(f"{job.repair_agent} repair run failed: {detail[:300]}")
         if ok and managed_client:
-            from .delivery_materials import COMPLETION_TASK, material_issues
+            from .delivery_materials import COMPLETION_TASK, material_issues, reported_blocker
             markers = _read_result_file(work_dir)
+            blocker = reported_blocker(markers)
+            if blocker:
+                raise RuntimeError("agent_reported_blocker: " + blocker)
             issues = material_issues(markers, work_dir)
             completion = {"initial_issues": issues, "attempts": 0}
             if issues and time.monotonic() < delivery_deadline:
@@ -551,11 +569,14 @@ def opencode_patch_producer(job: Job, work_dir: Path, context: str,
                 completion["attempts"] = 1
                 completion_ok, completion_detail = client.run(model, COMPLETION_TASK)
                 detail = _mask_opencode_key(completion_detail or "")
-                if not completion_ok and detail.startswith(CODEX_COMMUNICATION_RETRY_PREFIX):
+                if not completion_ok and detail.startswith(communication_prefixes):
                     raise RuntimeError(detail[:1000])
                 ok = completion_ok
                 completion["completion_ok"] = completion_ok
                 markers = _read_result_file(work_dir)
+                blocker = reported_blocker(markers)
+                if blocker:
+                    raise RuntimeError("agent_reported_blocker: " + blocker)
             completion["remaining_issues"] = material_issues(markers, work_dir)
             if diagnostics_dir:
                 diagnostics_dir.mkdir(parents=True, exist_ok=True)
@@ -567,12 +588,13 @@ def opencode_patch_producer(job: Job, work_dir: Path, context: str,
     finally:
         if diagnostics_dir:
             from .delivery_materials import _source_file, redact_log
-            for name in ("OSSCOUT_BASE.log", "OSSCOUT_PATCHED.log", "OSSCOUT_AGENT_INITIAL.log"):
+            for name in ("OSSCOUT_BASE.log", "OSSCOUT_PATCHED.log", "OSSCOUT_AGENT_INITIAL.log", RESULT_FILE):
                 try:
                     source = work_dir / name
                     if _source_file(work_dir, name) and source.stat().st_size <= 5_000_000:
                         diagnostics_dir.mkdir(parents=True, exist_ok=True)
-                        (diagnostics_dir / name).write_text(redact_log(
+                        destination = "agent-handoff.json" if name == RESULT_FILE else name
+                        (diagnostics_dir / destination).write_text(redact_log(
                             source.read_text(encoding="utf-8", errors="replace")), encoding="utf-8")
                 except OSError:
                     pass  # Diagnostic persistence must not replace the real result.

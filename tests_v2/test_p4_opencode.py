@@ -196,7 +196,7 @@ class TestPolicyConfig:
         assert p.allow_paid_api is True          # 用户批准的订阅通道
         assert p.paid_fallback_enabled is False  # 无第二付费兜底
 
-    def test_binary_resolved_via_which(self):
+    def test_binary_resolved_via_which(self, monkeypatch, tmp_path):
         """Windows .cmd shim：binary 必须经 shutil.which 解析成可执行全路径。
 
         这条只对 Windows 有意义——名字里就写着 .cmd shim。Linux 上
@@ -209,5 +209,16 @@ class TestPolicyConfig:
 
         if os.name != "nt":
             _pytest.skip("cmd shim resolution only applies on Windows")
+        import shutil
+        shim = str(tmp_path / "opencode.cmd")
+        native = tmp_path / "opencode.exe"
+        native.touch()
+        (tmp_path / "opencode.cmd").write_text(f'"{native}" %*\n', encoding="utf-8")
+        calls = []
+        def which(name):
+            calls.append(name)
+            return shim
+        monkeypatch.setattr(shutil, "which", which)
         c = OpenCodeClient()
-        assert c.binary.lower().endswith((".cmd", ".exe", ".bat")) or "/" in c.binary or "\\" in c.binary
+        assert calls == ["opencode"]
+        assert c.binary == str(native)

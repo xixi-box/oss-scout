@@ -65,3 +65,68 @@ def test_controller_opens_sqlite_read_only(tmp_path):
             conn.execute("INSERT INTO sample VALUES ('value')")
     finally:
         conn.close()
+
+
+def test_inbox_lock_wait_does_not_block_http_event_loop(tmp_path, monkeypatch):
+    import asyncio
+    import threading
+    import time
+    import httpx
+    from scout_v2.state_store import IssueInbox
+
+    monkeypatch.setenv("CF_INGEST_TOKEN", "worker-token")
+    release = threading.Event()
+    entered = threading.Event()
+
+    def blocked_put(self, issues):
+        entered.set()
+        assert release.wait(3)
+        return len(issues)
+
+    monkeypatch.setattr(IssueInbox, "put", blocked_put)
+    app = create_app(tmp_path, password="pw-secret")
+
+    async def check():
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app), base_url="http://test") as client:
+            task = asyncio.create_task(client.post("/api/ingest/issues",
+                headers={"X-Ingest-Token": "worker-token"},
+                json={"issues": [{"repo": "a/b", "number": 1}]}))
+            watchdog = threading.Timer(1, release.set)
+            watchdog.start()
+            try:
+                started = time.monotonic()
+                assert await asyncio.to_thread(entered.wait, 2)
+                assert (await client.get("/healthz")).json() == {"ok": True}
+                assert time.monotonic() - started < 0.6
+            finally:
+                release.set()
+                watchdog.cancel()
+                response = await task
+            assert response.status_code == 200
+            assert response.json()["stored"] == 1
+
+    asyncio.run(check())
+
+
+def test_inbox_busy_returns_retryable_status_and_closes_connection(tmp_path, monkeypatch):
+    from scout_v2.state_store import IssueInbox
+
+    monkeypatch.setenv("CF_INGEST_TOKEN", "worker-token")
+    closed = []
+    real_close = IssueInbox.close
+
+    def busy(self, issues):
+        raise sqlite3.OperationalError("database is locked")
+
+    def close(self):
+        closed.append(True)
+        real_close(self)
+
+    monkeypatch.setattr(IssueInbox, "put", busy)
+    monkeypatch.setattr(IssueInbox, "close", close)
+    with TestClient(create_app(tmp_path, password="pw-secret")) as client:
+        response = client.post("/api/ingest/issues", headers={"X-Ingest-Token": "worker-token"},
+                               json={"issues": [{"repo": "a/b", "number": 1}]})
+    assert response.status_code == 503
+    assert response.headers["Retry-After"] == "5"
+    assert closed == [True]

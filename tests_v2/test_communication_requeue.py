@@ -155,6 +155,32 @@ def test_code_failures_and_total_runtime_timeout_are_not_reclassified(tmp_path,m
     ledger.close()
 
 
+def test_communication_restore_obeys_full_pool_capacity_and_can_evict_itself(tmp_path, monkeypatch):
+    from scout_v2.console_models import write_models
+    key, ledger = writer(tmp_path)
+    write_models(tmp_path, {"candidate_pool_size": "1"})
+    path = tmp_path / "queue/candidates.json"
+    queue = json.loads(path.read_text())
+    original = (business_now() - dt.timedelta(hours=2)).isoformat()
+    queue[key]["staged_at"] = original
+    queue["traefik/traefik#2"] = {"id": "traefik/traefik#2", "status": "staged",
+                                   "staged_at": business_now().isoformat()}
+    path.write_text(json.dumps(queue))
+    monkeypatch.setattr(pipeline, "gh_read", lambda args:
+        {"display_title": "repair job-one", "status": "completed", "conclusion": "success"}
+        if "/actions/runs/" in args[0] else [])
+    try:
+        pipeline._reconcile_publication(ledger, TZ, root=tmp_path, job_id="job-one",
+            worker_result={"job_id": "job-one", "outcome": "failed", "unverified_items": [FAILURE]})
+        current = json.loads(path.read_text(encoding="utf-8"))
+        assert current[key]["status"] == "queue_evicted" and current[key]["staged_at"] == original
+        assert current["traefik/traefik#2"]["status"] == "staged"
+        assert sum(entry["status"] == "staged" for entry in current.values()) == 1
+        assert ledger.pending_publication() is None
+    finally:
+        ledger.close()
+
+
 def test_controller_restart_preserves_confirmed_retry_but_protects_unknown_claims(tmp_path,monkeypatch):
     import threading
     monkeypatch.setenv('OSSCOUT_DISABLE_AUTO_REPAIR','1')

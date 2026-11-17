@@ -99,6 +99,11 @@ def review_delivery(job: dict, repo_dir: Path, out_dir: Path, evidence: dict, *,
             if _source_digest(work) != before:
                 raise ValueError("read-only reviewer changed the review snapshot")
             if not ok:
+                from .codex_client import CODEX_COMMUNICATION_RETRY_PREFIX
+                from .opencode_client import MODEL_COMMUNICATION_RETRY_PREFIX
+                if any(marker in str(text) for marker in (
+                        CODEX_COMMUNICATION_RETRY_PREFIX, MODEL_COMMUNICATION_RETRY_PREFIX)):
+                    result["failure_kind"] = "review_communication_unavailable"
                 raise ValueError("review tool failed: " + str(text)[:300])
             text = text.strip()
             if text.startswith("```json") and text.endswith("```"):

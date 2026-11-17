@@ -86,6 +86,8 @@ class Job:
     #    "branch": "fix/issue-123-abc1234", "issue_number": 123,
     #    "title": "fix: ...", "body": "..."}
     publish: dict[str, Any] = field(default_factory=dict)
+    # Optional exact retained source; always replayed and reviewed under this new job.
+    verified_delivery_source: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return dataclasses.asdict(self)

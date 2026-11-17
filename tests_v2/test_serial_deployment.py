@@ -61,9 +61,11 @@ def test_restart_clears_only_unowned_unstarted_handoffs(tmp_path,monkeypatch):
     from dashboard import app as dashboard
     from scout_v2.workers import auto_pipeline
     (tmp_path/'queue').mkdir()
-    queue={f'a/b#{n}':{'id':f'a/b#{n}','repo':'a/b','status':'staged','direct_start_reserved_at':'2026-11-14T12:00:00+08:00'} for n in (1,2,3)}
+    queue={f'a/b#{n}':{'id':f'a/b#{n}','repo':'a/b','status':'staged','direct_start_reserved_at':'2026-11-14T12:00:00+08:00'} for n in (1,2,3,4)}
+    queue['a/b#4']['dispatch_job_id']='job-unconfirmed-handoff'
     (tmp_path/'queue/candidates.json').write_text(json.dumps(queue))
     ledger=ClaimLedger(tmp_path/'state/scout_v2.sqlite3')
+    assert ledger.try_claim('Asia/Shanghai','a/b#4')[0]
     assert ledger.reserve_dispatch('Asia/Shanghai',30,'job-live','a/b','a/b#2')
     monkeypatch.setattr(auto_pipeline.PolicyEngine,'load',lambda _: (SimpleNamespace(repo_entry=lambda _:{},tz_name='Asia/Shanghai',max_claims_per_day=30),None))
     monkeypatch.setattr(dashboard,'modifiable_repo',lambda _:True)
@@ -77,6 +79,9 @@ def test_restart_clears_only_unowned_unstarted_handoffs(tmp_path,monkeypatch):
     assert not result['a/b#1'].get('direct_start_reserved_at')
     assert result['a/b#2']['direct_start_reserved_at']
     assert result['a/b#3']['direct_start_reserved_at']
+    assert result['a/b#4']['status']=='staged'
+    assert result['a/b#4']['dispatch_job_id']=='job-unconfirmed-handoff'
+    assert result['a/b#4']['direct_start_reserved_at']
     assert ledger.preparations()==[('job-live','a/b#2')]
     ledger.close()
 

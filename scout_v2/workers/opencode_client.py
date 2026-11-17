@@ -23,6 +23,7 @@ _SHIM_EXE_RE = re.compile(r'"([^"]+\.exe)"', re.IGNORECASE)
 
 # CLI 文本模式会输出 ANSI 颜色；转成日志/detail 前清掉
 _ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[a-zA-Z]")
+MODEL_COMMUNICATION_RETRY_PREFIX = "Agent temporary communication failure:"
 
 
 def _strip_ansi(text: str) -> str:
@@ -170,7 +171,7 @@ class OpenCodeClient:
                              "temporarily unavailable"))
             if not transient or "401" in detail or "403" in detail:
                 return last
-        return last
+        return False, MODEL_COMMUNICATION_RETRY_PREFIX + " " + last[1]
 
     # ---- 内部 ----
 
