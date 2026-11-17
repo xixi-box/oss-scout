@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import tempfile
 import sys
+import subprocess
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -24,12 +25,14 @@ def main():
         auth.write_text(json.dumps(value))
     with tempfile.TemporaryDirectory() as directory:
         work = Path(directory)
+        subprocess.run(["git", "init", "-q"], cwd=work, check=True)
         for read_only in (False, True):
             ok, output = CodexClient(timeout_seconds=180, workdir=work, read_only=read_only).run(
                 model + "#" + effort,
                 "This is an authentication smoke check. Do not edit files or run commands. Reply exactly OSS_SCOUT_OK.")
             if not ok or "OSS_SCOUT_OK" not in output:
-                raise RuntimeError("Codex session smoke did not return the expected marker")
+                # CodexClient already redacts the private login and rotated tokens.
+                raise RuntimeError("Codex session smoke failed: " + output)
             if not read_only and original_refresh is not None:
                 if json.loads(auth.read_text())["tokens"]["refresh_token"] == original_refresh:
                     raise RuntimeError("Native refresh was requested but rotation was not observed")
