@@ -266,7 +266,7 @@ def build_scan_rows(root, running_keys=(), published=None, pr_states=None) -> li
                              activity.get((pr_url or "").lower()),
                              activity.get(f"{pr_key[1]}#{pr_key[2]}".lower()) if pr_key else None),
                             key=lambda stamp: _timestamp(stamp) or 0)
-        result = candidate_activity_state(key, candidate_status, running_keys)
+        result = candidate_activity_state(key, candidate_status, running_keys, candidate)
         reason = candidate.get("abort_reason")
         coarse = candidate.get("coarse_reason")
         if not coarse and candidate_status in {
@@ -388,10 +388,14 @@ _SCAN_OTHER_OUTCOMES = {
 }
 
 
-def candidate_activity_state(key: str, status: str, running_keys) -> str:
+def candidate_activity_state(key: str, status: str, running_keys, entry=None) -> str:
     if key.lower() in running_keys and status in {"staged", "running", "escalated"}:
-        return "执行中"
-    if status in {"staged", "running"}:
+        return running_keys[key.lower()] if isinstance(running_keys, dict) else "执行中"
+    if status == "running":
+        return "状态核查中"
+    if status == "staged":
+        if (entry or {}).get("dispatch_job_id") or (entry or {}).get("direct_start_reserved_at"):
+            return "准备中"
         return "暂存"
     return ""
 
@@ -405,7 +409,7 @@ def build_candidate_rows(root, running_keys=()) -> list[dict]:
         return []
     rows = []
     for key, entry in sorted(queue.items()):
-        display = candidate_activity_state(key, entry.get("status"), running_keys)
+        display = candidate_activity_state(key, entry.get("status"), running_keys, entry)
         if not display:
             continue
         rows.append({

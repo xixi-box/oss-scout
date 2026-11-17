@@ -24,14 +24,14 @@ def test_feishu_uses_started_runs_and_verified_publications(tmp_path):
         assert args[-1].endswith("/123")
         return json.dumps(issue_run)
 
-    assert candidate_activity(DataSource(tmp_path, gh_runner=gh)) == (set(), {}, {})
+    assert candidate_activity(DataSource(tmp_path, gh_runner=gh)) == ({"traefik/traefik#12": "等待运行"}, {}, {})
     now = business_now()
     issue_run.update(status="in_progress", run_started_at=now.isoformat())
-    assert candidate_activity(DataSource(tmp_path, gh_runner=gh)) == ({"traefik/traefik#12"}, {}, {})
+    assert candidate_activity(DataSource(tmp_path, gh_runner=gh)) == ({"traefik/traefik#12": "执行中"}, {}, {})
 
     url = "https://github.com/traefik/traefik/pull/13"
     db.finish_publication("job-1", day=now.date().isoformat(), url=url)
-    assert candidate_activity(DataSource(tmp_path, gh_runner=gh)) == (set(), {"traefik/traefik#12": url}, {})
+    assert candidate_activity(DataSource(tmp_path, gh_runner=gh)) == ({}, {"traefik/traefik#12": url}, {})
     db.close()
 
 
@@ -73,3 +73,30 @@ def test_console_model_save_keeps_secrets_out_of_api(tmp_path, monkeypatch):
     assert client.post("/api/console/models", json={
         **values, "codiv_base": "https://127.0.0.1/"
     }).status_code == 400
+
+
+def test_reserved_preparation_is_visible_before_github_dispatch(tmp_path):
+    db = ClaimLedger(tmp_path / "state/scout_v2.sqlite3")
+    try:
+        assert db.reserve_dispatch("Asia/Shanghai", 10, "job-1", "traefik/traefik", "traefik/traefik#12")
+        def unexpected(_):
+            raise AssertionError("Preparation has no remote task to query")
+        assert candidate_activity(DataSource(tmp_path, gh_runner=unexpected))[0] == {"traefik/traefik#12": "准备中"}
+    finally:
+        db.close()
+
+
+def test_failed_remote_read_preserves_occupied_state_and_completed_run_awaits_reconciliation(tmp_path):
+    from dashboard.data import GhError
+    db = ClaimLedger(tmp_path / "state/scout_v2.sqlite3")
+    try:
+        assert db.reserve_publication("Asia/Shanghai", 5, "job-1", "traefik/traefik",
+                                      "xixi-box:fix/issue-12-1234567-12345678", "xixi-box/oss-scout")
+        db.set_publication_run("job-1", "123")
+        def unavailable(_):
+            raise GhError("temporary network timeout")
+        assert candidate_activity(DataSource(tmp_path, gh_runner=unavailable))[0] == {"traefik/traefik#12": "状态核查中"}
+        complete = lambda _: json.dumps({"display_title": "repair job-1", "status": "completed"})
+        assert candidate_activity(DataSource(tmp_path, gh_runner=complete))[0] == {"traefik/traefik#12": "待对账"}
+    finally:
+        db.close()

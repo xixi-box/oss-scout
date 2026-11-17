@@ -20,10 +20,16 @@ def _github(ds, path):
 
 
 def _running_candidates(ds, pending):
-    running = set()
-    for job_id, repo, head, runner_repo, run_id in pending:
+    running = {}
+    for row in pending:
+        job_id, repo, head, runner_repo, run_id = row[:5]
+        phase, candidate = row[5:] if len(row) == 7 else ("dispatching", None)
         issue = re.fullmatch(r"[^:]+:fix/issue-(\d+)-[0-9a-f]+-[0-9a-f]+", head)
-        if not issue or not monitored_repo(repo):
+        key = str(candidate or (f"{repo}#{int(issue[1])}" if issue else "")).lower()
+        if not key or not monitored_repo(repo):
+            continue
+        if phase == "preparing":
+            running[key] = "准备中"
             continue
         if run_id:
             run = _github(ds, f"repos/{runner_repo}/actions/runs/{run_id}")
@@ -33,7 +39,12 @@ def _running_candidates(ds, pending):
                         if r.get("display_title") == f"repair {job_id}"), None)
         if (run and run.get("display_title") == f"repair {job_id}"
                 and run.get("status") == "in_progress" and run.get("run_started_at")):
-            running.add(f"{repo.lower()}#{int(issue[1])}")
+            running[key] = "执行中"
+        elif run and run.get("display_title") == f"repair {job_id}":
+            running[key] = "待对账" if run.get("status") == "completed" else "等待运行"
+        else:
+            # Failed GitHub reads cannot turn an occupied execution slot into a waiter.
+            running[key] = "状态核查中"
     return running
 
 
@@ -44,8 +55,10 @@ def candidate_activity(ds):
     conn = ds._open_ro()
     if conn is not None:
         try:
+            columns = {r[1] for r in conn.execute("PRAGMA table_info(publications)")}
+            extra = ",phase,candidate_id" if {"phase", "candidate_id"} <= columns else ""
             pending = conn.execute(
-                "SELECT job_id,repo,head,runner_repo,remote_id FROM publications WHERE day IS NULL"
+                "SELECT job_id,repo,head,runner_repo,remote_id" + extra + " FROM publications WHERE day IS NULL"
             ).fetchall()
             for repo, head, url in conn.execute(
                 "SELECT repo,head,url FROM publications WHERE day IS NOT NULL AND url IS NOT NULL ORDER BY day,rowid"

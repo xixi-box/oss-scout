@@ -130,3 +130,119 @@ def test_inbox_busy_returns_retryable_status_and_closes_connection(tmp_path, mon
     assert response.status_code == 503
     assert response.headers["Retry-After"] == "5"
     assert closed == [True]
+
+
+@pytest.mark.parametrize("slow_path", ["configuration", "telemetry", "audit"])
+def test_slow_machine_disk_io_keeps_health_and_heartbeat_responsive(tmp_path, monkeypatch, slow_path):
+    import asyncio
+    import threading
+    import httpx
+    import time
+    from pathlib import Path
+    from dashboard import app as service
+    from scout_v2 import codex_auth
+    from scout_v2.state_store import business_now
+
+    monkeypatch.setenv("CF_INGEST_TOKEN", "worker-token")
+    app = create_app(tmp_path, password="pw-secret")
+    entered, release = threading.Event(), threading.Event()
+    main_thread = threading.get_ident()
+
+    def block():
+        assert threading.get_ident() != main_thread, "disk IO must leave the HTTP event loop"
+        entered.set()
+        assert release.wait(3)
+
+    if slow_path == "configuration":
+        monkeypatch.delenv("CF_INGEST_TOKEN")
+        first = [True]
+
+        def slow(ds):
+            if first[0]:
+                first[0] = False
+                block()
+            return {"ingest_token": "worker-token"}
+
+        monkeypatch.setattr(service.D, "cloudflare_cfg", slow)
+    elif slow_path == "telemetry":
+        real = Path.open
+
+        def slow(self, *args, **kwargs):
+            if self == tmp_path / "state/worklog.jsonl" and args and args[0] == "a":
+                block()
+            return real(self, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "open", slow)
+    else:
+        real = service._audit
+
+        def slow(*args, **kwargs):
+            block()
+            return real(*args, **kwargs)
+
+        monkeypatch.setattr(service, "_audit", slow)
+    monkeypatch.setattr(codex_auth, "exchange", lambda *args: ({"ok": True}, 200))
+    body = {"issues": []}
+    if slow_path == "telemetry":
+        body.update(coarse_completed_at=business_now().isoformat(), coarse_rejected=[
+            {"repo": "milvus-io/milvus", "number": 55613, "reason": "not_open_unassigned_issue"}])
+
+    async def check():
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app), base_url="http://test") as client:
+            task = asyncio.create_task(client.post("/api/ingest/issues", json=body,
+                                                   headers={"X-Ingest-Token": "worker-token"}))
+            watchdog = threading.Timer(2, release.set)
+            watchdog.start()
+            try:
+                assert await asyncio.to_thread(entered.wait, 1)
+                start = time.monotonic()
+                assert (await client.get("/healthz")).json() == {"ok": True}
+                heartbeat = await client.post("/api/ingest/codex-auth", json={"operation": "sync"},
+                                               headers={"X-Ingest-Token": "worker-token"})
+                assert heartbeat.status_code == 200
+                assert time.monotonic() - start < 0.5
+            finally:
+                release.set()
+                watchdog.cancel()
+                response = await task
+            assert response.status_code == 200
+    asyncio.run(check())
+
+
+def test_return_to_staged_immediately_dispatches_the_next_candidate(tmp_path, monkeypatch):
+    import json
+    import threading
+    from types import SimpleNamespace
+    from scout_v2.workers import auto_pipeline as pipeline
+    from scout_v2 import state_store
+
+    app = create_app(tmp_path, auth_enabled=False, password="test")
+    (tmp_path / "queue").mkdir(exist_ok=True)
+    queue_path = tmp_path / "queue/candidates.json"
+    queue_path.write_text(json.dumps({key: {"id": key, "status": "staged"} for key in ("a/b#1", "a/b#2")}))
+    monkeypatch.delenv("OSSCOUT_DISABLE_AUTO_REPAIR", raising=False)
+    monkeypatch.setattr(pipeline.PolicyEngine, "load", lambda _: (SimpleNamespace(
+        tz_name="Asia/Shanghai", max_claims_per_day=10), None))
+    monkeypatch.setattr(state_store, "publication_quota_remaining", lambda *args: 5)
+    monkeypatch.setattr(state_store, "repair_dispatch_capacity", lambda *args: {"limit": 1, "available": 1})
+    monkeypatch.setattr(pipeline, "expire_staged", lambda *args: None)
+    monkeypatch.setattr(pipeline, "open_scheduled_batch", lambda *args: None)
+    monkeypatch.setattr(pipeline, "expire_direct_starts", lambda *args, **kwargs: None)
+    picks = iter(([{"id": "a/b#1"}], [{"id": "a/b#2"}]))
+    monkeypatch.setattr(pipeline, "drain_ai_graded", lambda *args, **kwargs: next(picks))
+    monkeypatch.setattr(pipeline, "candidate_pipeline", lambda *args, **kwargs: {"abort": "temporary communication failure"})
+    started = []
+    real_start = threading.Thread.start
+
+    def capture(thread):
+        if thread.name.startswith("repair-"):
+            started.append(thread)
+        else:
+            real_start(thread)
+
+    monkeypatch.setattr(threading.Thread, "start", capture)
+    with TestClient(app) as client:
+        assert client.post("/api/pipeline/run").json() == {"dispatched": ["a/b#1"]}
+    # Execute only the captured callback; no background polling or network is involved.
+    started[0]._target(*started[0]._args, **started[0]._kwargs)
+    assert [thread.name for thread in started] == ["repair-a/b#1", "repair-a/b#2"]

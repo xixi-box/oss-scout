@@ -124,26 +124,54 @@ def _sync_bitables(root: Path, *, ds=None, activity_only=False, activity_cache=N
             continue
         try:
             with _BITABLE_SYNC_LOCKS[name]:
-                # Builders tolerate corrupt/missing files by returning []; validate first.
-                if source:
-                    raw = source.read_text(encoding="utf-8")
-                    yaml.safe_load(raw) if source.suffix == ".yaml" else json.loads(raw)
-                if tracks_activity:
-                    if activity is None:
-                        activity = candidate_activity(ds if ds is not None else D.DataSource(root))
-                    running, published, pr_states = activity
-                    rows = build(root, running, published, pr_states) if name == "scan" else build(root, running)
-                else:
-                    rows = build(root)
+                if tracks_activity and activity is None:
+                    activity = candidate_activity(ds if ds is not None else D.DataSource(root))
+                files = {
+                    "candidates": ("queue/candidates.json",),
+                    "scan": ("queue/candidates.json", "state/seen.json"),
+                    "repos": ("configs/repositories.yaml", "configs/lane_overrides.yaml", "state/pool_audit.json"),
+                }.get(name, ())
+                stamps = []
+                for file in files:
+                    try:
+                        stat = (root / file).stat()
+                        stamps.append((stat.st_mtime_ns, stat.st_size, stat.st_ino))
+                    except FileNotFoundError:
+                        stamps.append(None)
+                from scout_v2.table_sync import subscribe
+                signature = (tuple(stamps), activity if tracks_activity else None,
+                             subscribe(root).version(name))
+                signature_key = "source:" + name
+                if (files and not full_reconcile and activity_cache is not None
+                        and signature == activity_cache.get(signature_key)):
+                    results[name] = {"unchanged": True}
+                    continue
+                # Never rebuild multi-megabyte snapshots just to compare identical rows.
+                from scout_v2.controller_metrics import timed_operation
+                with timed_operation(root, "table." + name + ".build"):
+                    # Builders tolerate corrupt/missing files by returning []; validate first.
+                    if source:
+                        raw = source.read_text(encoding="utf-8")
+                        yaml.safe_load(raw) if source.suffix == ".yaml" else json.loads(raw)
+                        del raw
+                    if tracks_activity:
+                        running, published, pr_states = activity
+                        rows = build(root, running, published, pr_states) if name == "scan" else build(root, running)
+                    else:
+                        rows = build(root)
                 if (not full_reconcile and activity_cache is not None
                         and rows == activity_cache.get(name)):
+                    activity_cache[signature_key] = signature
                     results[name] = {"unchanged": True}
                     continue
                 results[name] = fb.sync_table(root, rows, table_name=table, fields=fields,
                                               to_fields=convert, binding_key=binding,
                                               allow_empty=source is not None or name == "pr")
-                if activity_cache is not None:
+                successful = (not results[name].get("error")
+                              and not isinstance(results[name].get("skipped"), str))
+                if activity_cache is not None and successful:
                     activity_cache[name] = rows
+                    activity_cache[signature_key] = signature
                 _audit(root, "bitable_sync_" + name, table, json.dumps(results[name]))
         except Exception as ex:
             results[name] = {"error": str(ex)[:200]}
@@ -200,9 +228,9 @@ def create_app(root: Path | None = None, gh_runner=None,
         finally:
             with _inflight_lock:
                 _inflight.pop(key, None)
-            current = _load_candidate(root, key) or {}
-            if out.get("abort") != "dispatcher busy" and current.get("status") != "staged":
-                _bitable_wake.set()
+            _bitable_wake.set()
+            if out.get("abort") != "dispatcher busy":
+                # A retryable failure may return to staged; other eligible issues need not wait a poll.
                 _dispatch()
 
 
@@ -665,8 +693,10 @@ def create_app(root: Path | None = None, gh_runner=None,
         安全：X-Ingest-Token 对比 configs/cloudflare.yaml:ingest_token；
         请求体是 Worker 自己的 JSON（不可信），只取白名单字段，评分走本地规则 + AI。
         """
-        cfg = D.cloudflare_cfg(ds)
-        expect = (cfg.get("ingest_token") or "").strip()
+        expect = (os.environ.get("CF_INGEST_TOKEN") or "").strip()
+        if not expect:
+            cfg = await asyncio.to_thread(D.cloudflare_cfg, ds)
+            expect = (cfg.get("ingest_token") or "").strip()
         got = request.headers.get("X-Ingest-Token", "").strip()
         if not expect:
             return JSONResponse({"detail": "ingest_token not configured"}, status_code=503)
@@ -692,14 +722,22 @@ def create_app(root: Path | None = None, gh_runner=None,
                 return JSONResponse({"detail": "invalid coarse_completed_at"}, status_code=400)
             worklog = Worklog(root / "state/worklog.jsonl")
             reasons = {"excluded_label", "not_open_unassigned_issue"}
+            records = []
             for event in coarse[:2000]:
                 if not isinstance(event, dict):
                     continue
                 repo, number, reason = (event.get(k) for k in ("repo", "number", "reason"))
                 if (isinstance(repo, str) and type(number) is int and number > 0
                         and isinstance(reason, str) and reason in reasons and modifiable_repo(repo)):
-                    worklog.append({"ts": stamp.isoformat(), "action": "pipeline_coarse_screen",
+                    records.append({"ts": stamp.isoformat(), "action": "pipeline_coarse_screen",
                                     "target": f"{repo}#{number}", "result": reason})
+            def store_telemetry():
+                # Batch disk writes off the event loop; heartbeats share this server.
+                with worklog.path.open("a", encoding="utf-8") as stream:
+                    stream.write("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in records))
+            if records:
+                async with inbox_slots:
+                    await asyncio.to_thread(store_telemetry)
             if not items:
                 return JSONResponse({"stored": 0})
         # 字段收敛：只保留白名单，防注入超大/异常结构
@@ -738,10 +776,10 @@ def create_app(root: Path | None = None, gh_runner=None,
         except sqlite3.OperationalError as exc:
             if "locked" not in str(exc).lower() and "busy" not in str(exc).lower():
                 raise
-            _audit(root, "ingest_busy", "issue_inbox.sqlite3", "SQLite busy; Worker must retry")
+            await asyncio.to_thread(_audit, root, "ingest_busy", "issue_inbox.sqlite3", "SQLite busy; Worker must retry")
             return JSONResponse({"detail": "issue inbox busy; retry"}, status_code=503,
                                 headers={"Retry-After": "5"})
-        _audit(root, "ingest_issues", f"{len(clean)} items", f"durably stored={stored}")
+        await asyncio.to_thread(_audit, root, "ingest_issues", f"{len(clean)} items", f"durably stored={stored}")
         return JSONResponse({"queued": stored, "received": len(clean), "dispatched": [], "stored": stored})
 
     @app.get("/api/ingest/issue-context/{job_id}")
@@ -761,7 +799,10 @@ def create_app(root: Path | None = None, gh_runner=None,
     @app.post("/api/ingest/codex-auth")
     async def api_codex_auth(request: Request):
         from scout_v2.codex_auth import exchange
-        expect = (D.cloudflare_cfg(ds).get("ingest_token") or "").strip()
+        expect = (os.environ.get("CF_INGEST_TOKEN") or "").strip()
+        if not expect:
+            cfg = await asyncio.to_thread(D.cloudflare_cfg, ds)
+            expect = (cfg.get("ingest_token") or "").strip()
         if not expect or not hmac.compare_digest(request.headers.get("X-Ingest-Token", ""), expect):
             return JSONResponse({"detail": "forbidden"}, status_code=403)
         raw = await request.body()
@@ -771,7 +812,6 @@ def create_app(root: Path | None = None, gh_runner=None,
             body = json.loads(raw)
             if not isinstance(body, dict):
                 raise ValueError()
-            import asyncio
             response, status = await asyncio.to_thread(exchange, root, body)
         except ValueError:
             return JSONResponse({"detail": "invalid request"}, status_code=400)

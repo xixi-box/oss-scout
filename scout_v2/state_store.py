@@ -164,13 +164,17 @@ def _write_transaction(conn, db_path: Path, operation: str):
     import threading
     import time
     started = time.monotonic()
+    cpu_started = time.thread_time()
+    commit_seconds = 0
     acquired = None
     error = None
     try:
         conn.execute("BEGIN IMMEDIATE")
         acquired = time.monotonic()
         yield
+        commit_started = time.monotonic()
         conn.execute("COMMIT")
+        commit_seconds = time.monotonic() - commit_started
     except BaseException as exc:
         if conn.in_transaction:
             conn.rollback()
@@ -187,6 +191,8 @@ def _write_transaction(conn, db_path: Path, operation: str):
                       "target": db_path.name, "source": "controller",
                       "result": {"operation": operation, "thread": threading.current_thread().name,
                                  "elapsed_seconds": round(elapsed, 3),
+                                 "cpu_seconds": round(time.thread_time() - cpu_started, 3),
+                                 "commit_seconds": round(commit_seconds, 3),
                                  "wait_seconds": round((acquired or time.monotonic()) - started, 3),
                                  "hold_seconds": round(time.monotonic() - acquired, 3) if acquired else 0}}
             try:
@@ -210,11 +216,17 @@ def queue_transaction(root: Path, *, path: Path | None = None, backup: bool = Tr
     try:
         with _write_transaction(conn, root / "state/queue_lock.sqlite3", "queue read/modify/write"):
             path = path or root / "queue/candidates.json"
-            queue = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
-            original = json.dumps(queue, ensure_ascii=False, sort_keys=True)
+            from .controller_metrics import timed_operation
+            with timed_operation(root, "queue.read_decode"):
+                queue = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+            with timed_operation(root, "queue.compare_snapshot"):
+                original = json.dumps(queue, ensure_ascii=False, sort_keys=True)
             yield queue
-            if original != json.dumps(queue, ensure_ascii=False, sort_keys=True):
-                atomic_json_write(path, queue, backup=backup)
+            with timed_operation(root, "queue.compare_changes"):
+                changed = original != json.dumps(queue, ensure_ascii=False, sort_keys=True)
+            if changed:
+                with timed_operation(root, "queue.atomic_persist"):
+                    atomic_json_write(path, queue, backup=backup)
     finally:
         conn.close()
 

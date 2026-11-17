@@ -233,3 +233,39 @@ def test_complete_empty_pr_snapshot_can_clear_but_failed_fetch_cannot(tmp_path, 
     monkeypatch.setattr(subprocess, "run", lambda *_, **kw: SimpleNamespace(returncode=1, stdout=""))
     assert "error" in _sync_bitables(tmp_path, table_names={"pr"})["pr"]
     assert len(calls) == 1
+
+
+def test_unchanged_local_snapshot_skips_builder_but_retries_failed_sync(tmp_path, monkeypatch):
+    from dashboard import app as service
+    from scout_v2 import feishu_bitable as fb
+    from pathlib import Path
+    (tmp_path / "queue").mkdir()
+    (tmp_path / "state").mkdir()
+    path = tmp_path / "queue/candidates.json"
+    path.write_text(json.dumps({"a/b#1": {"status": "staged"}}))
+    monkeypatch.setattr(fb, "configured", lambda _: True)
+    import dashboard.console_activity as activity
+    monkeypatch.setattr(activity, "candidate_activity", lambda _: ({}, {}, {}))
+    calls = []
+    monkeypatch.setattr(fb, "sync_table", lambda *args, **kw: calls.append(True) or {"updated": 1})
+    cache = {}
+    sync = lambda full=False: service._sync_bitables(tmp_path, activity_cache=cache,
+                                                    table_names={"candidates"}, full_reconcile=full)
+    assert sync()["candidates"]["updated"] == 1
+    real_read = Path.read_text
+    def no_queue_read(self, *args, **kwargs):
+        if self == path:
+            raise AssertionError("unchanged queue was parsed again")
+        return real_read(self, *args, **kwargs)
+    with monkeypatch.context() as patcher:
+        patcher.setattr(Path, "read_text", no_queue_read)
+        assert sync()["candidates"]["unchanged"]
+    # Full reconciliation bypasses signatures; failed writes do not cache a new signature.
+    assert sync(True)["candidates"]["updated"] == 1
+    path.write_text(json.dumps({"a/b#2": {"status": "staged"}}))
+    previous = dict(cache)
+    monkeypatch.setattr(fb, "sync_table", lambda *args, **kw: {"error": "unavailable"})
+    assert "error" in sync()["candidates"]
+    assert cache == previous
+    monkeypatch.setattr(fb, "sync_table", lambda *args, **kw: {"updated": 1})
+    assert sync()["candidates"]["updated"] == 1

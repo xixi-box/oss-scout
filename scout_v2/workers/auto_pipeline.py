@@ -554,19 +554,18 @@ def _todays_claim_count(root: Path, key: str) -> int:
     today = business_now().date().isoformat()
     n = 0
     try:
-        wl = (root / "state" / "worklog.jsonl").read_text(
-            encoding="utf-8", errors="replace")
-        for line in wl.splitlines():
-            if f'"target": "{key}"' not in line or '"claim"' not in line:
-                continue
-            try:
-                rec = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            if (str(rec.get("action")) == "claim"
-                    and str(rec.get("target")) == key
-                    and str(rec.get("ts", "")).startswith(today)):
-                n += 1
+        with (root / "state/worklog.jsonl").open(encoding="utf-8", errors="replace") as worklog:
+            for line in worklog:
+                if f'"target": "{key}"' not in line or '"claim"' not in line:
+                    continue
+                try:
+                    rec = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if (str(rec.get("action")) == "claim"
+                        and str(rec.get("target")) == key
+                        and str(rec.get("ts", "")).startswith(today)):
+                    n += 1
     except OSError:
         return 0
     return n

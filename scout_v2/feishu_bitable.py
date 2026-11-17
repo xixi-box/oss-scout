@@ -62,7 +62,9 @@ def save_binding(root: Path, binding: dict) -> None:
         if (previous.get("app_token") and binding.get("app_token")
                 and previous["app_token"] != binding["app_token"]):
             previous = {}
-        atomic_json_write(_state_path(root), {**previous, **binding})
+        updated = {**previous, **binding}
+        if updated != previous:
+            atomic_json_write(_state_path(root), updated)
 
 
 def _binding_app_token(root: Path) -> str:

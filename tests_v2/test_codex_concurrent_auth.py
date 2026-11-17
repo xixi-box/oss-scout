@@ -98,6 +98,54 @@ def test_live_legacy_worker_is_preserved_until_it_releases(tmp_path):
     assert acquire(tmp_path)["auth"]["tokens"]["access_token"] == "legacy-updated"
 
 
+def test_heartbeat_reads_only_identity_and_live_lease_and_persists_without_backup(tmp_path, monkeypatch):
+    auth.install_auth(tmp_path, credentials())
+    lease = acquire(tmp_path)
+    read, writes = [], []
+    load, write = auth._load, auth.atomic_json_write
+    def tracked_load(path, *args, **kwargs):
+        read.append(path.name)
+        return load(path, *args, **kwargs)
+    def tracked_write(path, value, **kwargs):
+        writes.append((path.name, kwargs))
+        return write(path, value, **kwargs)
+    monkeypatch.setattr(auth, "_load", tracked_load)
+    monkeypatch.setattr(auth, "atomic_json_write", tracked_write)
+    body = {"operation": "sync", "protocol": 2, "lease": lease["lease"], "auth": credentials("stale")}
+    assert auth.exchange(tmp_path, body) == ({"ok": True}, 200)
+    assert read == ["auth.json", "leases.json"]
+    assert writes == [("leases.json", {"backup": False})]
+    assert json.loads(auth.auth_path(tmp_path).read_text()) == credentials()
+
+
+def test_slow_heartbeat_persistence_has_safe_phase_diagnostics(tmp_path, monkeypatch, caplog):
+    auth.install_auth(tmp_path, credentials())
+    lease = acquire(tmp_path)
+    clock = [0.0]
+    monkeypatch.setattr(auth.time, "monotonic", lambda: clock[0])
+    write = auth.atomic_json_write
+    def slow_write(path, value, **kwargs):
+        clock[0] += 35
+        return write(path, value, **kwargs)
+    monkeypatch.setattr(auth, "atomic_json_write", slow_write)
+    assert auth.exchange(tmp_path, {"operation": "sync", "protocol": 2,
+                                   "lease": lease["lease"]})[1] == 200
+    assert "operation=sync phase=lease_persist elapsed_seconds=35.000" in caplog.text
+    assert "phase=lock_hold elapsed_seconds=35.000" in caplog.text
+    assert lease["lease"] not in caplog.text
+    assert "real-rotating-refresh" not in caplog.text and "access-0" not in caplog.text
+
+
+def test_heartbeat_does_not_clear_refresh_quarantine(tmp_path):
+    auth.install_auth(tmp_path, credentials())
+    lease = acquire(tmp_path)
+    blocked = auth.auth_path(tmp_path).parent / "refresh-blocked.json"
+    auth.atomic_json_write(blocked, {"generation": lease["generation"], "reason": "refresh uncertain"})
+    assert auth.exchange(tmp_path, {"operation": "sync", "protocol": 2,
+                                   "lease": lease["lease"]})[1] == 200
+    assert blocked.exists() and not auth.auth_ready(tmp_path)
+
+
 def test_refresh_is_serialized_across_broker_processes(tmp_path):
     auth.install_auth(tmp_path, credentials())
     first, second = acquire(tmp_path), acquire(tmp_path)

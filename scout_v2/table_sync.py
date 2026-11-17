@@ -29,11 +29,19 @@ class TableChanges:
         self._lock = threading.Lock()
         self._dirty = set()
         self._stamps = {}
+        self._versions = {}
 
     def mark(self, names):
         with self._lock:
-            self._dirty.update(set(names) & TABLES)
+            names = set(names) & TABLES
+            self._dirty.update(names)
+            for name in names:
+                self._versions[name] = self._versions.get(name, 0) + 1
             self.wake.set()
+
+    def version(self, name):
+        with self._lock:
+            return self._versions.get(name, 0)
 
     def take(self):
         with self._lock:

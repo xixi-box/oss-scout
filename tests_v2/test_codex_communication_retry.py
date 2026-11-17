@@ -97,7 +97,7 @@ def test_one_heartbeat_timeout_recovers_without_stopping_the_cli(tmp_path, monke
     assert calls == ["acquire", "sync", "sync", "release"]
     assert cleanup == [True]
     rows = [json.loads(line) for line in (tmp_path / "artifacts/codex-events.jsonl").read_text().splitlines()]
-    assert next(row for row in rows if row['type']=='auth.heartbeat_retry')['request_seconds'] == 15
+    assert next(row for row in rows if row['type']=='auth.heartbeat_retry')['request_seconds'] == 45
     assert next(row for row in rows if row['type']=='auth.heartbeat_ok')['attempt'] == 2
     assert "private" not in (tmp_path / "artifacts/codex-events.jsonl").read_text()
 
@@ -117,3 +117,34 @@ def test_cli_completed_during_a_lost_heartbeat_can_keep_its_result(tmp_path, mon
     ok, detail = client.run("test", "fix")
     assert ok and detail == "fixed with regression"
     assert calls.count("sync") == 1 and cleanup == [True]
+
+
+def test_slow_but_live_broker_can_acknowledge_without_futile_retries(tmp_path, monkeypatch):
+    client, calls, clock, cleanup = heartbeat_client(tmp_path, monkeypatch, 0)
+    exchange = client._exchange
+    def slow_broker(operation, **values):
+        if operation == "sync":
+            # Real controller transactions took 30+ seconds. A 15-second
+            # request deadline loses the successful renewal acknowledgement.
+            assert values["request_timeout"] >= 35
+            clock[0] += 35
+        return exchange(operation, **values)
+    monkeypatch.setattr(client, "_exchange", slow_broker)
+    assert client.run("test", "fix") == (True, "fixed with regression")
+    assert calls == ["acquire", "sync", "release"] and cleanup == [True]
+
+
+def test_late_success_cannot_extend_a_locally_expired_lease(tmp_path, monkeypatch):
+    client, calls, clock, cleanup = heartbeat_client(tmp_path, monkeypatch, 0)
+    exchange = client._exchange
+    def late_broker(operation, **values):
+        result = exchange(operation, **values)
+        if operation == "sync":
+            # Socket timeouts alone are not a wall-clock deadline (a slowly
+            # streamed response can outlast them).
+            clock[0] = 116
+        return result
+    monkeypatch.setattr(client, "_exchange", late_broker)
+    ok, detail = client.run("test", "fix")
+    assert not ok and detail.startswith(CODEX_COMMUNICATION_RETRY_PREFIX)
+    assert "lease renewal deadline" in detail and cleanup == [False]

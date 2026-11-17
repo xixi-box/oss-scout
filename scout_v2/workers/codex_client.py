@@ -262,9 +262,14 @@ class CodexClient:
                                 try:
                                     renewed_at = time.monotonic()
                                     self._exchange("sync", lease=lease, protocol=credentials.get("protocol", 1),
-                                                   request_timeout=min(15, lease_valid_until-now,
+                                                   # A slow durable renewal can exceed 15s under
+                                                   # controller I/O pressure. Wait for its receipt,
+                                                   # always bounded by the existing lease deadline.
+                                                   request_timeout=min(45, lease_valid_until-now,
                                                                        started+self.timeout-now),
                                                    **({} if refresh_proxy else {"auth": json.loads(auth.read_text())}))
+                                    if time.monotonic() >= lease_valid_until:
+                                        raise CodexCommunicationError("operation=sync; lease renewal deadline exceeded")
                                     lease_valid_until = renewed_at + LEASE_TTL_SECONDS - 5
                                     record("auth.heartbeat_ok", attempt=attempt,
                                            request_seconds=round(time.monotonic()-renewed_at, 3))

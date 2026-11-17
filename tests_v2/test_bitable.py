@@ -350,7 +350,7 @@ class TestCandidateRows:
         fields = {r["key"]: fb.cand_row_to_fields(r) for r in rows}
         assert {k: f["处理状态"] for k, f in fields.items()} == {
             "a/b#1": "暂存", "a/b#6": "暂存",
-            "a/b#7": "暂存", "A/B#8": "执行中",
+            "a/b#7": "状态核查中", "A/B#8": "执行中",
         }
         assert fields["a/b#6"]["入队时间"] == fb._timestamp("2026-11-05T04:00:00+08:00")
 
@@ -412,7 +412,7 @@ def test_scan_outcomes_follow_candidate_and_publication_state(tmp_path):
     rows = mp.build_scan_rows(tmp_path, {"a/b#3"}, {"a/b#8": "https://github.com/a/b/pull/18"})
     fields = {row["key"]: fb.scan_row_to_fields(row) for row in rows}
     assert [fields[f"a/b#{i}"]["最终结果"] for i in (1, 2, 3, 4, 5, 6, 9)] == [
-        "暂存", "暂存", "执行中", "暂存", "修复失败 · 缺少复现证据",
+        "暂存", "暂存", "执行中", "状态核查中", "修复失败 · 缺少复现证据",
         "粗筛淘汰 · 人工签署", None,
     ]
     assert fields["a/b#7"]["最终结果"][0]["link"] == "https://github.com/a/b/pull/17"
@@ -578,3 +578,23 @@ def test_feishu_model_settings_migrates_and_applies_two_provider_rows(tmp_path, 
     write_models(tmp_path, {**read_models(tmp_path), "codiv_model": "openjev-latest"})
     fm.sync_model_settings(tmp_path, lock)
     assert codiv["模型名"] == "openjev-latest"
+
+
+def test_candidate_and_scan_tables_show_preparation_consistently(tmp_path):
+    (tmp_path / "queue").mkdir()
+    (tmp_path / "state").mkdir()
+    q = {"a/b#1": {"status": "staged", "direct_start_reserved_at": "2026-11-17T21:12:15+08:00"},
+         "a/b#2": {"status": "staged"}}
+    (tmp_path / "queue/candidates.json").write_text(json.dumps(q))
+    (tmp_path / "state/seen.json").write_text(json.dumps({key: {"status": "queued"} for key in q}))
+    assert {r["key"]: r["queue_state"] for r in mp.build_candidate_rows(tmp_path)} == {"a/b#1": "准备中", "a/b#2": "暂存"}
+    assert {r["key"]: r["final_result"] for r in mp.build_scan_rows(tmp_path)} == {"a/b#1": "准备中", "a/b#2": "暂存"}
+
+
+def test_binding_is_not_rewritten_when_table_ids_are_unchanged(tmp_path, monkeypatch):
+    from scout_v2 import state_store
+    fb.save_binding(tmp_path, {"app_token": "base", "cand_table_id": "tbl1"})
+    def unexpected(*args, **kwargs):
+        raise AssertionError("unchanged binding must not fsync")
+    monkeypatch.setattr(state_store, "atomic_json_write", unexpected)
+    fb.save_binding(tmp_path, {"app_token": "base", "cand_table_id": "tbl1"})

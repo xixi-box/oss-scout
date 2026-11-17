@@ -6,6 +6,7 @@ import copy
 import datetime as dt
 import hashlib
 import json
+import logging
 import os
 import re
 import sqlite3
@@ -20,6 +21,20 @@ from .state_store import atomic_json_write
 CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann"
 TOKEN_URL = "https://auth.openai.com/oauth/token"
 LEASE_TTL_SECONDS = 120
+
+
+@contextmanager
+def _broker_phase(operation: str, phase: str):
+    """Only fixed phase/operation names are logged; never request data or tokens."""
+    started = time.monotonic()
+    try:
+        yield
+    finally:
+        elapsed = time.monotonic() - started
+        if elapsed >= 1:
+            logging.getLogger(__name__).warning(
+                "Codex broker slow operation=%s phase=%s elapsed_seconds=%.3f",
+                operation, phase, elapsed)
 
 
 def auth_path(root: Path) -> Path:
@@ -50,7 +65,7 @@ def _identity(value: dict) -> tuple:
 
 
 @contextmanager
-def _broker_lock(root: Path):
+def _broker_lock(root: Path, operation: str = "administration"):
     # OAuth can take seconds. Never hold the queue/dispatcher locks over network I/O.
     directory = auth_path(root).parent
     directory.mkdir(parents=True, exist_ok=True)
@@ -59,8 +74,10 @@ def _broker_lock(root: Path):
     connection = sqlite3.connect(path, timeout=30, isolation_level=None)
     path.chmod(0o600)
     try:
-        connection.execute("BEGIN IMMEDIATE")
-        yield
+        with _broker_phase(operation, "lock_wait"):
+            connection.execute("BEGIN IMMEDIATE")
+        with _broker_phase(operation, "lock_hold"):
+            yield
     finally:
         if connection.in_transaction:
             connection.rollback()
@@ -136,16 +153,33 @@ def exchange(root: Path, body: dict) -> tuple[dict, int]:
     directory = auth_path(root).parent
     lease_path = directory / "lease.json"
     leases_path = directory / "leases.json"
-    with _broker_lock(root):
+    operation_label = operation if isinstance(operation, str) and operation in {
+        "acquire", "sync", "release", "refresh", "refresh_begin", "refresh_commit", "refresh_abort"
+    } else "invalid"
+    with _broker_lock(root, operation_label):
         value = _load(auth_path(root))
         if not valid_auth(value):
             return {"detail": "Codex 尚未登录 ChatGPT"}, 401
         now = time.time()
-        legacy = _load(lease_path)
         leases = _active_leases(root, now)
         lease_id = body.get("lease")
         if lease_id is not None and not isinstance(lease_id, str):
             return {"detail": "Invalid Codex login lease"}, 400
+        if operation == "sync" and body.get("protocol") == 2:
+            # Heartbeats need the current identity and unexpired execution lease,
+            # not the OAuth ticket/quarantine files or legacy worker state. A
+            # heartbeat cannot rotate tokens or clear a refresh quarantine.
+            lease = leases.get(lease_id)
+            if (not lease or lease.get("expires", 0) <= time.time()
+                    or lease.get("identity") != list(_identity(value))):
+                return {"detail": "Codex login lease expired or identity changed"}, 409
+            lease["expires"] = time.time() + LEASE_TTL_SECONDS
+            with _broker_phase("sync", "lease_persist"):
+                # Atomic fsync and readback remain; an old lease backup is never
+                # a valid recovery source and adds avoidable reads/writes.
+                atomic_json_write(leases_path, leases, backup=False)
+            return {"ok": True}, 200
+        legacy = _load(lease_path)
         concurrent = body.get("protocol") == 2 or lease_id in leases
         if concurrent:
             generation = _generation(value)
