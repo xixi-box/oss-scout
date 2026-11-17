@@ -227,7 +227,8 @@ def test_return_to_staged_immediately_dispatches_the_next_candidate(tmp_path, mo
     monkeypatch.setattr(state_store, "repair_dispatch_capacity", lambda *args: {"limit": 1, "available": 1})
     monkeypatch.setattr(pipeline, "expire_staged", lambda *args: None)
     monkeypatch.setattr(pipeline, "open_scheduled_batch", lambda *args: None)
-    monkeypatch.setattr(pipeline, "expire_direct_starts", lambda *args, **kwargs: None)
+    maintenance = []
+    monkeypatch.setattr(pipeline, "expire_direct_starts", lambda *args, **kwargs: maintenance.append(True))
     picks = iter(([{"id": "a/b#1"}], [{"id": "a/b#2"}]))
     monkeypatch.setattr(pipeline, "drain_ai_graded", lambda *args, **kwargs: next(picks))
     monkeypatch.setattr(pipeline, "candidate_pipeline", lambda *args, **kwargs: {"abort": "temporary communication failure"})
@@ -243,6 +244,8 @@ def test_return_to_staged_immediately_dispatches_the_next_candidate(tmp_path, mo
     monkeypatch.setattr(threading.Thread, "start", capture)
     with TestClient(app) as client:
         assert client.post("/api/pipeline/run").json() == {"dispatched": ["a/b#1"]}
+        assert client.post("/api/pipeline/run").json() == {"dispatched": []}
+        assert len(maintenance) == 1
     # Execute only the captured callback; no background polling or network is involved.
     started[0]._target(*started[0]._args, **started[0]._kwargs)
     assert [thread.name for thread in started] == ["repair-a/b#1", "repair-a/b#2"]

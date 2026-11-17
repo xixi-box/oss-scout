@@ -246,6 +246,11 @@ def create_app(root: Path | None = None, gh_runner=None,
         started: list[str] = []
         if os.environ.get("OSSCOUT_DISABLE_AUTO_REPAIR") == "1":
             return started
+        with _inflight_lock:
+            if _inflight:
+                # Serial dispatch is already occupied. Avoid parsing/serializing
+                # the entire historical queue for every newly screened issue.
+                return started
         try:
             from scout_v2.repo_policy import PolicyEngine
             from scout_v2.state_store import publication_quota_remaining, repair_dispatch_capacity
