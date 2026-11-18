@@ -39,3 +39,16 @@ def test_oversized_generated_text_is_not_cut_mid_title_or_template(tmp_path):
     result = repair._read_result_file(tmp_path)
     assert "pr_title" not in result and "pr_body" not in result
     assert result["root_cause"] == "A real cause."
+
+
+def test_agent_reported_results_are_rendered_without_inventing_verification(tmp_path):
+    report = {"verification_mode": "agent", "test_cmd": ["pytest", "test_null.py"],
+              "agent_report": {"test_results": ["4 tests passed.", "No base comparison was run."]},
+              "pr_body": "## Tests\n{VERIFIED_TESTS}"}
+    (tmp_path / "test-report.json").write_text(json.dumps(report))
+    body = publish_remote._rewrite_body({"issue_number": 42}, tmp_path)
+    assert "Tests: `pytest test_null.py`." in body
+    assert "Result: 4 tests passed." in body
+    assert "Result: No base comparison was run." in body
+    assert "fails on base" not in body and "passes with this patch" not in body
+    assert "Agent-reported" not in body and "AI assistance" not in body and "oss-scout" not in body

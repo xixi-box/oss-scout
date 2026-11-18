@@ -1,6 +1,6 @@
-"""Recover a retained repair through a new reservation and fresh regression replay.
+"""Recover a retained agent repair through a new reservation and mechanical preflight.
 
-This module cannot publish. The ordinary worker, review and publication gates
+This module cannot publish. The ordinary worker and publication gates
 remain responsible for every recovered delivery.
 """
 from __future__ import annotations
@@ -65,14 +65,6 @@ def load_bundle(directory: Path, source: dict, *, repo: str, base_sha: str, issu
         files[name] = raw
     if _verified_patch_digest(old_job, files) != source["patch_sha256"]:
         raise ValueError("retained delivery patch differs")
-    from .quality_gate import check_patch_path
-    report = json.loads(files["test-report.json"])
-    regression = report.get("regression_test_files")
-    repaired = report.get("test_repair_files") or []
-    if (not isinstance(regression, list) or not regression or not isinstance(repaired, list)
-            or any(not isinstance(path, str) or check_patch_path(path) for path in [*regression, *repaired])
-            or not set(repaired) <= set(regression)):
-        raise ValueError("retained regression paths are invalid")
     return files, manifest
 
 
@@ -120,11 +112,7 @@ def publication_retry_fields(root: Path, entry: dict, publication: dict, *, job_
 
 
 def recovery_producer(job, work: Path, _context: str) -> dict:
-    """Reconstruct test separation; ordinary run_repair replays both fresh trees."""
-    from .repair import (_git, _looks_like_test, _is_rust_test_program,
-                         _rust_inline_tests, _verification_plan_valid)
-    from .delivery_materials import _source_file
-
+    """Reuse an exact retained patch; the agent owns tests and self-checks."""
     directory = os.environ.get("OSSCOUT_VERIFIED_DELIVERY_DIR", "")
     if not directory:
         raise RuntimeError("retained_delivery_unavailable: no imported verified bundle")
@@ -132,53 +120,15 @@ def recovery_producer(job, work: Path, _context: str) -> dict:
         files, manifest = load_bundle(Path(directory), job.verified_delivery_source,
             repo=job.repo, base_sha=job.base_sha, issue_number=job.publish.get("issue_number"))
         report = json.loads(files["test-report.json"])
-        plan = report.get("verification_plan")
-        if not isinstance(plan, dict) or not _verification_plan_valid(plan):
-            raise ValueError("retained delivery has no replayable verification plan")
-        patch = files["change.patch"].decode("utf-8")
-        applied = subprocess.run(["git", "apply", "--whitespace=nowarn", "-"],
-            input=patch, cwd=work, capture_output=True, text=True, encoding="utf-8", errors="replace")
-        if applied.returncode:
-            raise ValueError("retained patch no longer applies to the authorized base")
-        tests, mixed, excluded = {}, {}, []
-        kind = report.get("repair_kind") or "source_fix"
-        repaired_tests = set(report.get("test_repair_files") or [])
-        for path in report["regression_test_files"]:
-            full = work / path
-            if not _source_file(work, path):
-                raise ValueError("retained regression file missing")
-            current = full.read_text(encoding="utf-8")
-            original = _git(["show", f"{job.base_sha}:{path}"], work, check=False)
-            if kind == "test_only":
-                if path not in repaired_tests or original.returncode:
-                    raise ValueError("retained test-only repair lost original test")
-                mixed[path] = (original.stdout, current)
-            elif (path.endswith(".rs") and not _looks_like_test(path)
-                  and not _is_rust_test_program(path, work, job.base_sha)):
-                before = _rust_inline_tests(original.stdout) if not original.returncode else None
-                after = _rust_inline_tests(current)
-                if not before or not after or before[1] == after[1]:
-                    raise ValueError("retained Rust inline tests cannot be separated")
-                mixed[path] = (before[0] + after[1], current)
-                full.write_bytes((after[0] + before[1]).encode("utf-8"))
-            else:
-                tests[path] = current
-                excluded.append(path)
-        _git(["add", "-A"], work)
-        if excluded:
-            _git(["reset", "-q", "--", *excluded], work)
-        source_patch = _git(["diff", "--cached", "--binary"], work).stdout
-        if not source_patch.strip():
-            raise ValueError("retained delivery contains no repair change")
-        return {"patch": source_patch, "test_cmd": report["test_cmd"], "verification_plan": plan,
-                "test_files": tests, "mixed_tests": mixed, "repair_kind": kind,
-                "test_repair_files": sorted(repaired_tests), "root_cause": report["root_cause"],
+        return {"patch": files["change.patch"].decode("utf-8"), "verification_mode": "agent",
+                "agent_report": report.get("agent_report") or report,
+                "test_cmd": report.get("test_cmd"), "root_cause": report.get("root_cause") or "",
                 "coverage": report.get("coverage") or {}, "pr_title": report.get("pr_title") or "",
                 "pr_body": report.get("pr_body") or "", "notes": [
-                    "retained delivery independently replayed under a new controller reservation"],
+                    "retained agent delivery reused under a new controller reservation"],
                 "delivery_preflight": {"recovered_from": manifest["job"]["job_id"],
                                        "source_patch_sha256": manifest["patch_sha256"]}}
-    except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as exc:
+    except (OSError, ValueError, KeyError, TypeError) as exc:
         raise RuntimeError("retained_delivery_invalid: " + str(exc)[:300]) from None
 
 

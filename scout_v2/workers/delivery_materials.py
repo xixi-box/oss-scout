@@ -1,4 +1,4 @@
-"""Check agent handoff completeness, never substitute it for independent replay."""
+"""Collect truthful Agent handoff fields; tests and self-check belong to the Agent."""
 from __future__ import annotations
 
 from pathlib import Path, PurePosixPath
@@ -31,50 +31,14 @@ def _source_file(work: Path, value) -> bool:
         return False
 
 
-def coverage_issues(coverage, work: Path, markers: dict) -> list[str]:
-    if not isinstance(coverage, dict):
-        return ["coverage: missing real entrypoint, call_chain, regression_case, scenarios and limitations"]
-    errors = []
-    entry = coverage.get("entrypoint")
-    chain = coverage.get("call_chain")
-    if not isinstance(chain, list) or not 1 <= len(chain) <= 12:
-        errors.append("coverage.call_chain: provide 1-12 actual source path/symbol references")
-        chain = []
-    for ref in [entry, *chain]:
-        if (not isinstance(ref, dict) or not _source_file(work, ref.get("path"))
-                or not isinstance(ref.get("symbol"), str) or not ref["symbol"].strip()):
-            errors.append("coverage: each entrypoint/call_chain reference needs an existing safe source path and symbol")
-            break
-    if entry not in chain:
-        errors.append("coverage.call_chain: include the real entrypoint")
-    expected_case = ((markers.get("test_report") or {}).get("case")
-                     if isinstance(markers.get("test_report"), dict) else None)
-    failures = markers.get("base_failure")
-    expected_case = expected_case or (failures[0] if isinstance(failures, list) and failures else None)
-    if not expected_case or coverage.get("regression_case") != expected_case:
-        errors.append("coverage.regression_case: must match the declared regression case")
-    for field, minimum in (("scenarios", 1), ("limitations", 0)):
-        values = coverage.get(field)
-        if (not isinstance(values, list) or not minimum <= len(values) <= 20
-                or any(not isinstance(v, str) or not v.strip() for v in values)):
-            errors.append(f"coverage.{field}: provide a list of observed scenarios or explicitly untested paths")
-    return errors
-
-
 def material_issues(markers: dict, work: Path) -> list[str]:
-    from .repair import _verification_plan_valid
-
+    """Check handoff fields, without parsing or judging test-runner output."""
     issues = []
     for field in ("test_cmd", "root_cause", "pr_title", "pr_body"):
         if not isinstance(markers.get(field), str) or not markers[field].strip():
             issues.append(f"{field}: missing")
-    if not _source_file(work, markers.get("test_file")):
-        issues.append("test_file: must identify an existing safe regression file")
-    if not _verification_plan_valid(markers):
-        issues.append("verification_plan: need setup_steps, actual base failure case/assertion, patched success or valid JUnit specification")
     if str(markers.get("pr_body") or "").count("{VERIFIED_TESTS}") != 1:
         issues.append("pr_body: include exactly one {VERIFIED_TESTS} placeholder")
-    issues.extend(coverage_issues(markers.get("coverage"), work, markers))
     return issues
 
 
@@ -95,8 +59,8 @@ def reported_blocker(markers: dict) -> str:
 
 
 COMPLETION_TASK = """Finish the existing repair handoff in OSSCOUT_RESULT.json.
-Read OSSCOUT_TASK.md and OSSCOUT_DELIVERY_CHECK.json first. Keep all existing
-publication and verification requirements. This is one bounded completion pass,
+Read OSSCOUT_TASK.md and OSSCOUT_DELIVERY_CHECK.json first. Keep the testing and self-check responsibilities in the task file.
+No external test replay or extra AI review will follow. This is one bounded completion pass,
 not permission to invent evidence or weaken tests to get a PR opened.
 
 Inspect the existing real command logs, OSSCOUT_BASE.log, OSSCOUT_PATCHED.log and

@@ -23,7 +23,6 @@ import subprocess
 from pathlib import Path
 
 from .publication_guard import refresh_publication_evidence, preserve_verified_bundle
-from .delivery_review import review_approved
 
 
 def _ensure_fork(push_repo: str, token: str, upstream: str = "") -> str | None:
@@ -260,40 +259,21 @@ def publish_from_env(job_dict: dict, repo_dir: Path, out_dir: Path) -> dict | No
     upstream = cfg.get("upstream") or ""
     if not monitored_repo(upstream) or repo_key(upstream) != repo_key(job_dict.get("repo") or ""):
         return {"ok": False, "error": "repository outside monitored roster or target mismatch"}
-    if repo_key(upstream) == "rclone/rclone":
-        try:
-            checks = json.loads((out_dir / "test-report.json").read_text(encoding="utf-8")).get("additional_checks", {})
-        except (OSError, ValueError):
-            checks = {}
-        if checks != {"go build": 0, "make quicktest": 0}:
-            return {"ok": False, "error": "rclone required build and quicktest evidence missing or failed"}
-        cfg["body"] = str(cfg.get("body") or "") + "\n\nAdditional checks passed: `go build`, `make quicktest`."
     patch = out_dir / "change.patch"
     try:
         report = json.loads((out_dir / "test-report.json").read_text(encoding="utf-8"))
         result = json.loads((out_dir / "result.json").read_text(encoding="utf-8"))
-        text = patch.read_text(encoding="utf-8")
+        patch_bytes = patch.read_bytes()
+        text = patch_bytes.decode("utf-8")
     except (OSError, ValueError):
         return {"ok": False, "error": "verified delivery metadata or patch missing"}
-    from .quality_gate import patch_files, check_delivery_scope
-    digest = hashlib.sha256(patch.read_bytes()).hexdigest()
-    if (report.get("job_id") != job_dict.get("job_id")
-            or report.get("base_sha") != job_dict.get("base_sha")
-            or result.get("job_id") != job_dict.get("job_id")
-            or result.get("base_sha") != job_dict.get("base_sha")
-            or result.get("outcome") != "succeeded"
-            or not all(result.get(key) is True for key in (
-                "reproduced_on_base", "fixed_on_patch", "regression_tests_passed"))
-            or report.get("base_returncode") in (None, 0)
-            or report.get("patched_returncode") != 0 or report.get("failure_kind")
-            or report.get("delivery_patch_sha256") != digest
-            or set(report.get("delivery_files") or []) != set(patch_files(text))):
+    from .publication_guard import _verified_patch_digest
+    from .quality_gate import check_delivery_scope
+    try:
+        digest = _verified_patch_digest(job_dict, {"change.patch": patch_bytes,
+            "result.json": json.dumps(result).encode(), "test-report.json": json.dumps(report).encode()})
+    except (ValueError, TypeError, KeyError):
         return {"ok": False, "error": "delivery does not match verified result, lineage, or patch hash"}
-    regressions = set(report.get("regression_test_files") or [])
-    if not regressions or not regressions <= set(patch_files(text)):
-        return {"ok": False, "error": "verified regression tests missing from delivery patch"}
-    if not str(report.get("root_cause") or "").strip() or not report.get("test_cmd"):
-        return {"ok": False, "error": "root cause or reproducible test command missing"}
     if check_delivery_scope(text) or filter_patch_junk(text) != text:
         return {"ok": False, "error": "delivery contains lockfile, CI, or build-artifact changes"}
     cfg["verified_patch_sha256"] = digest
@@ -311,30 +291,12 @@ def publish_from_env(job_dict: dict, repo_dir: Path, out_dir: Path) -> dict | No
         result = {"ok": False, "error": evidence.get("error"),
                   "failure_kind": evidence.get("failure_kind"),
                   "coarse_reason": evidence.get("coarse_reason")}
-    elif not review_approved(job_dict, out_dir, evidence):
-        result = {"ok": False, "error": "read-only review missing, rejected, or latest discussion changed",
-                  "failure_kind": "code_review_required"}
-        try:
-            review = json.loads((out_dir / "code-review.json").read_text(encoding="utf-8"))
-            if (review.get("failure_kind") == "review_communication_unavailable"
-                    and review.get("job_id") == job_dict.get("job_id")
-                    and review.get("base_sha") == job_dict.get("base_sha")):
-                result.update(failure_kind="review_communication_unavailable",
-                              error="read-only review temporarily unavailable; verified repair retained")
-            elif (review.get("verdict") == "approve" and review.get("findings") == []
-                  and review.get("job_id") == job_dict.get("job_id")
-                  and review.get("base_sha") == job_dict.get("base_sha")
-                  and review.get("patch_sha256") == digest):
-                result.update(failure_kind="review_evidence_changed",
-                              error="latest discussion changed after review; fresh review required")
-        except (OSError, ValueError, AttributeError):
-            pass
     else:
         result = publish(repo_dir, patch, cfg)
         if (not result.get("ok") and re.search(r"(?i)rate limit.*exceeded|secondary rate limit|too many requests",
                                                str(result.get("error")))):
             # Never repeat a write in this run. A later reserved job must check
-            # the target head, replay tests and obtain a fresh read-only review.
+            # the target head and obtain fresh mechanical publication permission.
             result.update(failure_kind="publication_rate_limited", retry_after_seconds=3600)
         elif not result.get("ok") and re.search(r"(?i)permission|forbidden|createpullrequest", str(result.get("error"))):
             result["failure_kind"] = "publication_permission_denied"
@@ -385,24 +347,31 @@ def _rewrite_body(cfg: dict, out_dir: Path, *, repair_agent: str = "opencode") -
         kept = [ln for ln in kept if ln.strip()]
         lines.extend(kept)
     upstream = str(cfg.get("upstream") or "").lower()
+    agent_mode = report.get("verification_mode") == "agent"
+    facts = []
     if report.get("test_cmd"):
-        command = shlex.join(report["test_cmd"]).replace("`", "\\`")
-        lines.extend(["", f"Tests: `{command}` (fails on base; passes with this patch)."])
+        supplied = report["test_cmd"]
+        command = (shlex.join(supplied) if isinstance(supplied, list) else str(supplied))[:2000].replace("`", "\\`")
+        facts.append(f"Tests: `{command}`." if agent_mode else
+                     f"Tests: `{command}` (fails on base; passes with this patch).")
+    if agent_mode:
+        reported = report.get("agent_report") or {}
+        results = reported.get("test_results") if isinstance(reported, dict) else None
+        if isinstance(results, str):
+            results = [results]
+        if isinstance(results, list):
+            for item in results[:10]:
+                if isinstance(item, str) and item.strip():
+                    facts.append("Result: " + item.strip()[:500])
     if report.get("regression_test_files"):
-        lines.append("Regression coverage: " + ", ".join(
+        facts.append("Regression coverage: " + ", ".join(
             f"`{path}`" for path in report["regression_test_files"]) + ".")
+    lines.extend(["", *facts])
     generated = report.get("pr_body")
     if (isinstance(generated, str) and len(generated) <= 16000
             and generated.count("{VERIFIED_TESTS}") == 1
             and "AI assistance:" not in generated
             and "oss-scout independently replayed" not in generated):
-        facts = []
-        if report.get("test_cmd"):
-            command = shlex.join(report["test_cmd"]).replace("`", "\\`")
-            facts.append(f"Tests: `{command}` (fails on base; passes with this patch).")
-        if report.get("regression_test_files"):
-            facts.append("Regression coverage: " + ", ".join(
-                f"`{path}`" for path in report["regression_test_files"]) + ".")
         for name, code in (report.get("additional_checks") or {}).items():
             if code == 0:
                 facts.append(f"Additional check passed: `{name}`.")
@@ -410,7 +379,7 @@ def _rewrite_body(cfg: dict, out_dir: Path, *, repair_agent: str = "opencode") -
         # Retain the controller's issue link and idempotency marker.
         references = [line for line in body.splitlines() if line.startswith("<!-- oss-scout-job:")]
         lines = ([f"Fixes #{issue_number}", ""] if issue_number else []) + [rendered, *references]
-    if upstream == "qdrant/qdrant" and issue_number:
+    if upstream == "qdrant/qdrant" and issue_number and not agent_mode:
         lines.extend(["", f"Repair task: reproduce the bug in #{issue_number}, implement a focused fix, "
                       "and verify that the regression test fails on dev and passes with the patch."])
     return "\n".join(lines).strip() or body

@@ -128,6 +128,7 @@ class Result:
     model_used: str | None = None
     measured_cost_usd: float | None = None
     unverified_items: list[str] = field(default_factory=list)
+    verification_mode: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return dataclasses.asdict(self)

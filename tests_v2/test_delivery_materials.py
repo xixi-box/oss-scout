@@ -6,7 +6,7 @@ import sys
 import pytest
 
 from scout_v2.workers import repair
-from scout_v2.workers.delivery_materials import coverage_issues, material_issues, reported_blocker
+from scout_v2.workers.delivery_materials import material_issues, reported_blocker
 from test_p5_repair import make_repo, job
 
 
@@ -44,13 +44,13 @@ def install_client(monkeypatch, *, mode="recover", clock=None):
                 (self.workdir / "test_regression.py").write_text(
                     "from calc import div\ndef test_fractional():\n    assert div(7, 2) == 3.5\n")
                 if mode != "complete":
-                    report["base_failure"] = []  # Wasmtime #15297's real missing assertion shape.
+                    report.pop("test_cmd")  # Missing basic handoff is completed by the same Agent.
                     report.pop("coverage")
                 if clock is not None:
                     clock[0] += 2401
             elif mode == "recover":
                 check = json.loads((self.workdir / "OSSCOUT_DELIVERY_CHECK.json").read_text())
-                assert any("verification_plan" in reason for reason in check["missing_or_invalid"])
+                assert any("test_cmd" in reason for reason in check["missing_or_invalid"])
                 assert "Never label dependency/import/build/collection" in prompt
                 # Material was absent, so actually rerun the original and patched
                 # versions rather than fill assertion strings from a guess.
@@ -66,7 +66,7 @@ def install_client(monkeypatch, *, mode="recover", clock=None):
                 (self.workdir / "OSSCOUT_BASE.log").write_text(base.stdout)
                 (self.workdir / "OSSCOUT_PATCHED.log").write_text(fixed.stdout)
             elif mode != "completion_failed":
-                report["base_failure"] = []
+                report.pop("test_cmd")
                 report.pop("coverage")
             (self.workdir / repair.RESULT_FILE).write_text(json.dumps(report))
             if mode == "completion_failed" and len(self.calls) > 1:
@@ -82,7 +82,7 @@ def install_client(monkeypatch, *, mode="recover", clock=None):
 
 
 @pytest.mark.parametrize("agent", ["opencode", "codex"])
-def test_managed_completion_reruns_real_tests_and_still_independently_replays(tmp_path, monkeypatch, agent):
+def test_managed_completion_uses_agent_tests_without_independent_replay(tmp_path, monkeypatch, agent):
     repo, sha = make_repo(tmp_path)
     task = job(sha)
     task.repair_agent, task.model = agent, "fixture"
@@ -94,7 +94,10 @@ def test_managed_completion_reruns_real_tests_and_still_independently_replays(tm
     assert clients[0].calls[0][1] == 2100
     assert 0 < clients[0].calls[1][1] <= 300
     report = json.loads((out / "test-report.json").read_text())
-    assert report["base_returncode"] == 1 and report["patched_returncode"] == 0
+    assert report["verification_mode"] == "agent"
+    assert "base_returncode" not in report
+    assert not result.reproduced_on_base and not result.fixed_on_patch
+    assert not (out / "verification.log").exists()
     assert report["coverage"]["entrypoint"]["path"] == "calc.py"
     assert report["delivery_preflight"]["attempts"] == 1
     assert not report["delivery_preflight"]["remaining_issues"]
@@ -156,20 +159,12 @@ def test_failed_completion_cannot_be_promoted_by_a_complete_result_file(tmp_path
     assert len(clients[0].calls) == 2
 
 
-@pytest.mark.parametrize("field,value", [("entrypoint", {"path": "../secret", "symbol": "div"}),
-    ("call_chain", []), ("regression_case", "different_case"), ("scenarios", []), ("limitations", None)])
-def test_coverage_requires_safe_existing_references_and_declared_case(tmp_path, field, value):
+def test_runner_specific_markers_and_coverage_are_not_new_external_gates(tmp_path):
     repo, _ = make_repo(tmp_path)
     report = complete_report()
-    report["coverage"][field] = value
-    assert coverage_issues(report["coverage"], repo, report)
-
-
-def test_malformed_agent_material_is_reported_without_crashing(tmp_path):
-    repo, _ = make_repo(tmp_path)
-    report = complete_report()
-    report.update(base_failure=3, test_report=None)
-    assert material_issues(report, repo)
+    report.update(base_failure=3, test_report=None, coverage=None)
+    report["test_cmd"] = "repo-test-wrapper"
+    assert material_issues(report, repo) == []
 
 
 def test_new_diagnostic_logs_remove_known_credentials_and_bearer_tokens(monkeypatch):

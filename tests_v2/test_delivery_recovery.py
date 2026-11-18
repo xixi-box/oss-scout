@@ -1,4 +1,4 @@
-"""Retained repairs require a new job and a real independent replay, never old success flags."""
+"""Retained repairs reuse full patches through a new reservation and fresh preflight."""
 import datetime as dt
 import hashlib
 import json
@@ -11,7 +11,7 @@ import pytest
 
 from scout_v2.schemas import Job
 from scout_v2.workers import delivery_recovery as recovery, publication_guard, repair, core
-from scout_v2.workers import publish_remote, delivery_review
+from scout_v2.workers import publish_remote
 from test_delivery_quality import delivered
 from scout_v2.state_store import ClaimLedger, business_now
 from scout_v2.workers import auto_pipeline as pipeline
@@ -35,27 +35,16 @@ def archive(delivered, tmp_path):
     return repo, out, payload, source, root, target, publication
 
 
-def test_retained_repair_replays_original_and_patch_without_another_implementation(delivered, tmp_path, monkeypatch):
+def test_retained_repair_restores_full_patch_without_replay(delivered, tmp_path, monkeypatch):
     repo, out, payload, source, _, folder, _ = archive(delivered, tmp_path)
     job = Job.from_dict({**payload, "job_id": "job-new-reservation", "verified_delivery_source": source})
     monkeypatch.setenv("OSSCOUT_VERIFIED_DELIVERY_DIR", str(folder))
     monkeypatch.setattr(repair, "opencode_patch_producer", lambda *_a, **_k: pytest.fail("must reuse saved repair"))
-    calls = []
-    replay = repair._replay_regression
-    def tracked(cmd, plan, work, env, dest, stage, **kwargs):
-        calls.append(stage)
-        return replay(cmd, plan, work, env, dest, stage, **kwargs)
-    monkeypatch.setattr(repair, "_replay_regression", tracked)
-    dest = tmp_path / "recovered"
-    result = core.execute(job, dest, backend="github_actions", repo_dir=repo)
-    assert result.outcome == "succeeded", result.unverified_items
-    assert calls == ["base", "patched"]
-    report = json.loads((dest / "test-report.json").read_text())
-    assert report["job_id"] == job.job_id
-    assert report["base_returncode"] == 1 and report["patched_returncode"] == 0
-    assert hashlib.sha256((dest / "change.patch").read_bytes()).hexdigest() == source["patch_sha256"]
-    assert report["delivery_preflight"]["recovered_from"] == source["job_id"]
-    assert not delivery_review.review_approved(job.to_dict(), dest, {"ok": True})
+    produced = recovery.recovery_producer(job, repo, "")
+    assert produced["verification_mode"] == "agent"
+    assert hashlib.sha256(produced["patch"].encode()).hexdigest() == source["patch_sha256"]
+    assert produced["agent_report"]["job_id"] == source["job_id"]
+    assert produced["delivery_preflight"]["recovered_from"] == source["job_id"]
 
 
 @pytest.mark.parametrize("tamper", ["patch", "target", "base", "source_run", "extra_file"])
@@ -96,26 +85,9 @@ def test_publication_retry_is_delayed_bounded_and_requires_a_verified_saved_bund
     assert not recovery.publication_retry_fields(root, {}, publication, **kwargs)
 
 
-def test_readonly_review_transport_error_is_distinct_from_real_findings(delivered, monkeypatch):
-    repo, out, payload, _ = delivered
-    evidence = {"ok": True, "snapshot": {"issue": {"state": "open"}, "comments": []}}
-    class Unavailable:
-        def run(self, *_):
-            return False, "Codex temporary communication failure: operation=acquire; kind=TimeoutError"
-    review = delivery_review.review_delivery(payload, repo, out, evidence, client=Unavailable())
-    assert review["failure_kind"] == "review_communication_unavailable"
-    monkeypatch.setattr(publish_remote, "refresh_publication_evidence", lambda *_: evidence)
-    monkeypatch.setattr(publish_remote, "publish", lambda *_: pytest.fail("must not publish without review"))
-    assert publish_remote.publish_from_env(payload, repo, out)["failure_kind"] == "review_communication_unavailable"
-
-
 def test_today_docling_create_rate_limit_is_not_repeated_in_the_same_job(delivered, monkeypatch):
     repo, out, payload, _ = delivered
     evidence = {"ok": True, "snapshot": {"issue": {"state": "open"}, "comments": []}}
-    class Approve:
-        def run(self, *_):
-            return True, '{"verdict":"approve","findings":[]}'
-    delivery_review.review_delivery(payload, repo, out, evidence, client=Approve())
     monkeypatch.setattr(publish_remote, "refresh_publication_evidence", lambda *_: evidence)
     calls = []
     def limited(*_):

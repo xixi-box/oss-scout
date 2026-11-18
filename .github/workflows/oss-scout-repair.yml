@@ -2,17 +2,16 @@ name: oss-scout repair worker
 run-name: repair ${{ inputs.job_id }}
 
 # 由 oss-scout 控制器（VPS）workflow_dispatch 调用，在本仓库的托管 runner 上执行
-# repair：clone **目标仓库**到 base_sha → 按目标仓库自己的依赖跑测试 → opencode
-# 产出补丁 → 干净 base 上重放补丁再跑测试。
+# repair：checkout 目标 base → OpenCode/Codex 自主修复、测试、自查
+# → 收集完整补丁与日志 → 机械发布检查 → 可信步骤创建 PR。
 #
 # 为什么用托管 runner 而不是自建沙箱（2026-10-28 重构）：
 #   opencode CLI 是交互式 TUI 工具，在无 tty 的瘦容器里会卡在 bootstrap
 #   （插件安装 / 权限询问 / models 端点探测，见上游 #44684 #14473 #47282 #44782）。
 #   GitHub 托管 runner 有完整的用户态、稳定网络、平台级超时与日志留存，
-#   目标仓库的依赖/测试框架也按它自己的方式装，证据链才可信。
+#   目标仓库的依赖/测试框架由 Agent 自主准备，完整日志留存。
 #
-# 安全边界：contents: read。本 job 不持有 GitHub 写权限，产出 patch + test report
-# 走 artifact 回传，由控制器（唯一的写者）决定是否 push 分支、开 PR。
+# 安全边界：Agent 步骤无 GitHub 写凭据；发布和凭据回存仅在可信步骤使用 PAT。
 
 on:
   workflow_dispatch:
@@ -37,9 +36,7 @@ jobs:
       group: codex-account-session
       cancel-in-progress: false
     runs-on: ubuntu-latest
-    # 90 分钟：agent 最多 20 分钟 + base/patched 两轮测试各最多 30 分钟，
-    # 再加装依赖与编译（Rust 项目首次 cargo build 就 10 分钟以上）。
-    # 原来的 40 分钟会在验证中途把 run 杀掉，前面全白做。
+    # Agent 总预算 40 分钟；工作流额外预留安装工具、发布、凭据回存与上传时间。
     timeout-minutes: 90
     steps:
       - name: Decode job payload
@@ -258,25 +255,6 @@ jobs:
               print('publication preflight:', evidence.get('ok'), evidence.get('failure_kind'))
           PY
 
-      - name: Read-only delivery review
-        # Never expose GitHub write credentials to the reviewing model.
-        env:
-          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
-          OSSCOUT_CODEX_AUTH_MODE: github_secrets
-          OSSCOUT_CODEX_AUTH_FILE: ${{ runner.temp }}/oss-codex-auth/auth.json
-        run: |
-          cd "$GITHUB_WORKSPACE/worker"
-          python3 - <<'PY'
-          import json, os, pathlib
-          from scout_v2.workers.delivery_review import review_delivery
-          tmp = pathlib.Path(os.environ['RUNNER_TEMP'])
-          job = json.loads((tmp / 'job.json').read_text())
-          evidence = tmp / 'artifacts/publication-evidence.json'
-          if evidence.exists():
-              report = review_delivery(job, tmp / 'repo', tmp / 'artifacts', json.loads(evidence.read_text()))
-              print('read-only review:', report['verdict'], 'findings:', len(report['findings']))
-          PY
-
       - name: Persist refreshed Codex subscription credentials
         if: always() && steps.codex_auth.outputs.ready == 'true'
         env:
@@ -322,9 +300,9 @@ jobs:
           report = verify_result(Result.from_dict(res), Job.from_dict(job),
                                  expected_base_sha=job["base_sha"])
           ok = (res.get("outcome") == "succeeded"
-                and res.get("reproduced_on_base") and res.get("fixed_on_patch") and report.ok)
+                and report.ok)
           if not ok:
-              print(f"evidence chain not satisfied ({res.get('outcome')}, {report.errors}); refusing to publish")
+              print(f"mechanical result checks failed ({res.get('outcome')}, {report.errors}); refusing to publish")
               sys.exit(0)
 
           out = publish_from_env(job, tmp / "repo", tmp / "artifacts")

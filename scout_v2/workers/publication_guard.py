@@ -65,7 +65,7 @@ def refresh_publication_evidence(job_dict: dict, cfg: dict) -> dict:
     """Refresh full issue evidence without attempting any GitHub write.
 
     ``ok`` means necessary read-only checks passed, not that CreatePullRequest
-    permission is guaranteed. The complete snapshot is intended for code review.
+    permission is guaranteed. The snapshot records current mechanical admission.
     """
     repo = str(job_dict.get("repo") or "")
     upstream = str(cfg.get("upstream") or "")
@@ -186,24 +186,27 @@ def _verified_patch_digest(job: dict, files: dict) -> str:
         raise ValueError("delivery metadata is not an object")
     digest = hashlib.sha256(patch).hexdigest()
     paths = patch_files(patch.decode("utf-8"))
+    agent_mode = report.get("verification_mode") == "agent"
     if (not re.fullmatch(r"job-[\w-]+", str(job.get("job_id") or ""))
             or not _valid_repo(job.get("repo"))
             or not re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", str(job.get("base_sha") or ""))
             or any(data.get("job_id") != job["job_id"] or data.get("base_sha") != job["base_sha"]
                    for data in (result, report))
             or result.get("outcome") != "succeeded"
-            or not all(result.get(key) is True for key in (
+            or report.get("failure_kind") or report.get("delivery_patch_sha256") != digest
+            or not paths or set(report.get("delivery_files") or []) != set(paths)
+            or any(check_patch_path(path) for path in paths)
+            or check_delivery_scope(patch.decode("utf-8"))):
+        raise ValueError("delivery is not verified or lineage/hash/manifest differs")
+    if not agent_mode and (
+            not all(result.get(key) is True for key in (
                 "reproduced_on_base", "fixed_on_patch", "regression_tests_passed"))
             or type(report.get("base_returncode")) is not int or report["base_returncode"] in (0, 124)
             or type(report.get("patched_returncode")) is not int or report["patched_returncode"] != 0
-            or report.get("failure_kind") or report.get("delivery_patch_sha256") != digest
-            or not paths or set(report.get("delivery_files") or []) != set(paths)
             or not report.get("regression_test_files")
             or not set(report["regression_test_files"]) <= set(paths)
-            or any(check_patch_path(path) for path in paths)
-            or check_delivery_scope(patch.decode("utf-8"))
             or not report.get("test_cmd") or not str(report.get("root_cause") or "").strip()):
-        raise ValueError("delivery is not verified or lineage/hash/manifest differs")
+        raise ValueError("legacy delivery verification metadata differs")
     return digest
 
 
@@ -243,7 +246,7 @@ def preserve_verified_bundle(job_dict: dict, out_dir: Path, publish_result: dict
         report = json.loads(files["test-report.json"])
         if not isinstance(publish_result, dict):
             raise ValueError("delivery metadata is not an object")
-        for stage in ("base", "patched"):
+        for stage in (() if report.get("verification_mode") == "agent" else ("base", "patched")):
             name = f"{stage}-regression.junit.xml"
             evidence = report.get(f"{stage}_evidence") or {}
             if not isinstance(evidence, dict):
@@ -296,8 +299,8 @@ def preserve_verified_bundle(job_dict: dict, out_dir: Path, publish_result: dict
 def retain_collected_delivery(root: Path, job_dict: dict, collected: dict) -> dict:
     """Retain a confirmed repair even when log fallback lacks the original XML.
 
-    This is an archive, never an authorization to publish. Missing raw reports
-    require independent re-verification. Optional raw files must be provided as
+    This is an archive, never an authorization to publish. Legacy raw-report
+    provenance is retained; agent mode needs no independent reports. Files are
     bytes/text/JSON values under ``raw.artifact_files`` (or ``raw.files``), never
     as filesystem paths. Existing archives are verified and kept unchanged.
     """
@@ -319,7 +322,7 @@ def retain_collected_delivery(root: Path, job_dict: dict, collected: dict) -> di
             raise ValueError("collected patch is missing")
         # A flattened Actions result also carries patch/report/raw. Do not persist
         # those transport envelopes or any arbitrary credential-bearing fields.
-        result_fields = ("schema_version", "job_id", "backend", "outcome", "reproduced_on_base",
+        result_fields = ("schema_version", "job_id", "backend", "outcome", "verification_mode", "reproduced_on_base",
                          "fixed_on_patch", "regression_tests_passed", "patch_path", "test_report_path",
                          "logs_path", "base_sha", "model_used", "measured_cost_usd", "unverified_items")
         result = {key: result[key] for key in result_fields if key in result}
@@ -345,7 +348,7 @@ def retain_collected_delivery(root: Path, job_dict: dict, collected: dict) -> di
         if isinstance(publication, dict):
             files["publish.json"] = encode(publication)
         missing = False
-        for stage in ("base", "patched"):
+        for stage in (() if report.get("verification_mode") == "agent" else ("base", "patched")):
             name = f"{stage}-regression.junit.xml"
             evidence = report.get(f"{stage}_evidence") or {}
             if not isinstance(evidence, dict):
@@ -410,7 +413,7 @@ def retain_collected_delivery(root: Path, job_dict: dict, collected: dict) -> di
             _verified_patch_digest(job_dict, existing_files)
             existing_report = json.loads(existing_files["test-report.json"])
             missing = False
-            for stage in ("base", "patched"):
+            for stage in (() if existing_report.get("verification_mode") == "agent" else ("base", "patched")):
                 name = f"{stage}-regression.junit.xml"
                 evidence = existing_report.get(f"{stage}_evidence") or {}
                 if name not in existing_files:

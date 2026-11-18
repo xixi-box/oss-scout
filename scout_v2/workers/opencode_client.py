@@ -82,12 +82,14 @@ def _child_env() -> dict[str, str]:
 
 class OpenCodeClient:
     def __init__(self, binary: str = "opencode", timeout_seconds: int = 600,
-                 workdir: Path | None = None, json_events: bool = False, read_only: bool = False):
+                 workdir: Path | None = None, json_events: bool = False, read_only: bool = False,
+                 diagnostics_dir: Path | None = None):
         self.binary = resolve_binary(binary)
         self.timeout = timeout_seconds
         self.workdir = workdir
         self.json_events = json_events
         self.read_only = read_only
+        self.diagnostics_dir = diagnostics_dir
         if Path(self.binary).suffix.lower() in {".cmd", ".bat"}:
             raise RuntimeError(
                 f"{self.binary} is a shell shim with no native .exe beside it; "
@@ -136,6 +138,7 @@ class OpenCodeClient:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 return False, f"agent timed out after {self.timeout}s; retry budget exhausted; last output: {last[1][-800:]}"
+            started = time.time()
             try:
                 p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
                                    errors="replace", timeout=remaining,
@@ -145,6 +148,7 @@ class OpenCodeClient:
             except FileNotFoundError:
                 return False, "opencode binary not found"
             except subprocess.TimeoutExpired as exc:
+                self._save_diagnostics(cmd, exc.stdout, exc.stderr, None, started, timed_out=True)
                 # 超时也要把已经产生的输出带回去。2026-10-30 实测：pulumi 是 Go
                 # 大仓库，agent 跑了整 20 分钟（正好撞上 timeout）然后返回一句
                 # 固定字符串，完全看不出它卡在哪一步——是还在探索、还是在等权限。
@@ -160,6 +164,7 @@ class OpenCodeClient:
                 reason = (f"agent timed out after {self.timeout}s"
                           + (f"; last output: {tail}" if tail else "; no output captured"))
                 return False, reason
+            self._save_diagnostics(cmd, p.stdout, p.stderr, p.returncode, started)
             ok, detail = self._parse_events(p.stdout, p.stderr, p.returncode)
             if ok:
                 return True, detail
@@ -172,6 +177,28 @@ class OpenCodeClient:
             if not transient or "401" in detail or "403" in detail:
                 return last
         return False, MODEL_COMMUNICATION_RETRY_PREFIX + " " + last[1]
+
+    def _save_diagnostics(self, command, stdout, stderr, returncode, started, *, timed_out=False):
+        """Retain full redacted CLI output for every attempt, including timeouts."""
+        if self.diagnostics_dir is None:
+            return
+        from .delivery_materials import redact_log
+        def text(value):
+            return value.decode("utf-8", "replace") if isinstance(value, bytes) else str(value or "")
+        try:
+            folder = Path(self.diagnostics_dir)
+            folder.mkdir(parents=True, exist_ok=True)
+            stamp = str(time.time_ns())
+            for name, output in (("stdout", stdout), ("stderr", stderr)):
+                (folder / f"opencode-{stamp}.{name}.log").write_text(redact_log(text(output)), encoding="utf-8")
+            with (folder / "opencode-commands.jsonl").open("a", encoding="utf-8") as log:
+                log.write(json.dumps({"command": [redact_log(str(arg)) for arg in command],
+                    "returncode": returncode, "timed_out": timed_out,
+                    "started_at_epoch": started, "elapsed_seconds": round(time.time() - started, 3),
+                    "stdout_file": f"opencode-{stamp}.stdout.log",
+                    "stderr_file": f"opencode-{stamp}.stderr.log"}, ensure_ascii=False) + "\n")
+        except OSError:
+            pass  # A diagnostic write must not replace the real CLI result.
 
     # ---- 内部 ----
 

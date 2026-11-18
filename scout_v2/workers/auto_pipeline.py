@@ -1134,11 +1134,10 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen
 
     # ---- 质量闸 ----
     report = verify_result(res, job, artifact_dir=root)
-    if not (res.outcome == "succeeded" and res.reproduced_on_base
-            and res.fixed_on_patch and report.ok and patch_file) and not receipt:
+    if not (res.outcome == "succeeded" and report.ok and patch_file) and not receipt:
         _r = _abort_release(
-            f"evidence chain incomplete: {res.outcome} repro={res.reproduced_on_base} "
-            f"fixed={res.fixed_on_patch} gate={report.errors or 'PASS'} "
+            f"delivery checks incomplete: {res.outcome} mode={res.verification_mode or 'legacy'} "
+            f"gate={report.errors or 'PASS'} "
             f"patch={'yes' if patch_file else 'no'}",
             give_back=True)   # 无证据也算尝试失败：退坑让下一条候选顶上
         _r["repair"] = {"backend": backend, "outcome": res.outcome,

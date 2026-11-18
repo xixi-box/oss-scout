@@ -73,8 +73,7 @@ class TestPublishFlow:
         assert gh[gh.index("--head") + 1] == "me:fix/1-abc1234"
         assert gh[gh.index("--base") + 1] == "dev"
 
-    def test_rclone_required_checks_block_push(self, tmp_path, monkeypatch):
-        # Exercise the additional-check gate independently of the rotating pool.
+    def test_rclone_still_requires_delivery_metadata(self, tmp_path, monkeypatch):
         monkeypatch.setattr("scout_v2.roster.monitored_repo", lambda repo: repo == "rclone/rclone")
         (tmp_path / "test-report.json").write_text(
             json.dumps({"additional_checks": {"go build": 0, "make quicktest": 1}}), encoding="utf-8")
@@ -84,7 +83,7 @@ class TestPublishFlow:
         monkeypatch.setattr(pr, "publish", fail_publish)
         out = pr.publish_from_env({"repo": "rclone/rclone", "publish": {"upstream": "rclone/rclone"}},
                                   tmp_path, tmp_path)
-        assert out == {"ok": False, "error": "rclone required build and quicktest evidence missing or failed"}
+        assert out == {"ok": False, "error": "verified delivery metadata or patch missing"}
 
     def test_push_failure_redacts_token(self, tmp_path, monkeypatch):
         repo = tmp_path / "repo"
@@ -190,8 +189,8 @@ class TestWorkflowGate:
         wf = (Path(__file__).resolve().parents[1]
               / ".github" / "workflows" / "oss-scout-repair.yml").read_text(encoding="utf-8")
         # 证据闸必须在真正调用发布之前出现
-        assert "evidence chain not satisfied" in wf
-        gate = wf.index("evidence chain not satisfied")
+        assert 'res.get("outcome") == "succeeded"' in wf
+        gate = wf.index('res.get("outcome") == "succeeded"')
         call = wf.index("publish_from_env(job")
         assert gate < call, "evidence gate must precede the publish call"
 

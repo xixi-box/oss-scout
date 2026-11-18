@@ -118,8 +118,8 @@ def main() -> int:
     assert report.ok, report.errors
 
     # ---- 5. 外部写：分支 + PR（自仓库）----
-    if not (res.outcome == "succeeded" and res.fixed_on_patch and res.reproduced_on_base):
-        print("[drill] evidence chain incomplete → no PR (fail-closed)")
+    if not (res.outcome == "succeeded" and report.ok):
+        print("[drill] delivery incomplete → no PR (fail-closed)")
         return 2
     patch_file = out / "change.patch"
     branch = f"fix/p5-drill-div-{base_sha[:7]}"

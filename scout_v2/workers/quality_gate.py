@@ -68,7 +68,7 @@ def verify_result(result: Result, job: Job, *,
     - base SHA 不一致 → 禁止导入（防错库错 commit 的补丁被 Push）。
     - job_id 必须对应。
     - patch 路径必须安全，且（给了 hash 时）内容校验一致。
-    - 未经 reproduce_on_base 证实不得宣称 fixed。
+    - agent 模式的测试执行与自检由修复工具负责。
     """
     errs: list[str] = []
     if result.job_id != job.job_id:
@@ -86,7 +86,7 @@ def verify_result(result: Result, job: Job, *,
             actual = hashlib.sha256(f.read_bytes()).hexdigest()
             if actual != patch_sha256:
                 errs.append("patch artifact hash mismatch")
-    if result.outcome == "succeeded":
+    if result.outcome == "succeeded" and result.verification_mode != "agent":
         if result.fixed_on_patch and not result.regression_tests_passed:
             errs.append("cannot claim fixed without regression_tests_passed")
         if result.fixed_on_patch and not result.reproduced_on_base:

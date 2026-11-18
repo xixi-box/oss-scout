@@ -4,11 +4,12 @@
     python -m scout_v2.workers.core --job-b64 <b64> --out ... --emit-envelope   # Modal Sandbox 用
 
 本入口在本地/云端执行**同一份**模式逻辑；GitHub 写能力不存在于本文件，
-任何评论/Fork/Push/PR 由 VPS 可信控制器完成。
+发布由可信 runner／控制器完成。
 
 - scan：Semgrep 精选规则 → 可疑线索（inconclusive，非证据）。
 - reproduce：隔离脱敏环境跑最小失败测试（base 失败 → reproduced_on_base）。
-- repair/review/ci：P3 接入 OpenCode 与项目工作流，当前骨架。
+- repair：OpenCode/Codex 自测、自查后收集完整补丁；不独立复跑或额外 AI 复审。
+- review/ci：仅兼容历史模式的未实现声明，不是自动新 PR 流程。
 - --emit-envelope：stdout 单行信封（Modal Sandbox 无持久卷，结果走 stdout）。
 """
 from __future__ import annotations

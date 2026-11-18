@@ -44,10 +44,6 @@ def authorize_retry(root: Path, job_id: str, *, apply: bool = False) -> dict:
                              str(publication.get("error") or ""))):
         raise ValueError("original publication is not a confirmed rate-limit rejection")
     publication["failure_kind"] = "publication_rate_limited"
-    from scout_v2.workers.repair import _verification_plan_valid
-    report = json.loads(files["test-report.json"])
-    if not _verification_plan_valid(report.get("verification_plan") or {}):
-        raise ValueError("saved verification plan cannot be independently replayed")
     run = gh_read([f"repos/{repository}/actions/runs/{source['run_id']}"])
     if (not isinstance(run, dict) or run.get("status") != "completed"
             or run.get("display_title") != "repair " + job_id
@@ -88,7 +84,7 @@ def authorize_retry(root: Path, job_id: str, *, apply: bool = False) -> dict:
               "patch_sha256": source["patch_sha256"], "eligible_at": due, "applied": False,
               "candidate_status": entry["status"], "evicted": [],
               "remote_completed": True, "head_has_pr": False, "requires_new_reservation": True,
-              "requires_independent_replay": True, "requires_fresh_review": True}
+              "requires_publication_preflight": True, "verification_mode": "agent"}
     if apply:
         ledger = ClaimLedger(root / "state/scout_v2.sqlite3")
         try:

@@ -1,12 +1,4 @@
-"""repair 模式（计划 §9）：OpenCode 产补丁 → 隔离验证证据链 → Result。
-
-信任域（计划 §10）：
-- 域 B（Agent）：在补丁工作目录里读代码、改文件；**禁止**执行 bash/联网（由写入
-  work_dir 的 opencode.json 权限配置强制，若 CLI 版本不支持该键则记入 unverified）。
-- 域 C（测试）：补丁后的验证在脱敏环境运行（复用 reproduce.sanitized_env）。
-- 证据链（§16）：base 上测试失败 → reproduced_on_base；补丁后通过 → fixed_on_patch；
-  两者缺一不可宣称 fixed。
-"""
+"""Agent-owned repair, testing and self-check; mechanical delivery checks only."""
 
 from __future__ import annotations
 
@@ -22,7 +14,6 @@ from pathlib import Path
 
 from ..schemas import Job, Result
 from .opencode_client import OpenCodeClient
-from .reproduce import sanitized_env
 
 
 class _RepairWorkspace(tempfile.TemporaryDirectory):
@@ -105,27 +96,13 @@ repository root. Complete it using the output of the actual base and patched run
  "patched_success": ["<literal output showing the targeted test ran successfully>"],
  "root_cause": "<one sentence>"}}
 
-Use an empty setup_steps list only if the test runs directly from a fresh checkout.
-The verifier runs the same steps in two fresh source trees from the repository
-root. Each command runs in its own process. Include any cd or environment
-assignments in the command that uses them. Build and test the checked-out source,
-never reuse a binary from another checkout. If a service must run during the
-test, start it from the current checkout and stop it in the same command.
-Do not use source-text assertions, mock the behavior under test, or print the
-evidence strings yourself unless they report an actual checked result. Use
-short, stable excerpts from the test output without paths, timings, or colors.
-Enable verbose output if needed so the same case name appears in both runs.
-Prefer machine-readable JUnit output when the runner supports it (pytest
---junitxml, Vitest --reporter=junit --outputFile, or the repository's equivalent).
-Add "test_report": {{"format":"junit", "path":"<relative XML output path>",
-"case":"<exact testcase name or classname::name>"}} to OSSCOUT_RESULT.json.
-Use the same report-producing command and case on base and patched. Never create
-or edit a test report yourself. The verifier removes stale reports before runs.
-Reports are verification artifacts and must not be included in the PR patch.
-Keep base_failure's first entry as the case identity and remaining entries as
-the bug's actual assertion text; JUnit records, rather than console formatting,
-will establish whether the identical case failed and then passed.
-If the runner cannot produce JUnit, retain the observed log evidence contract.
+Record the commands and results you actually ran; retain machine reports when
+available, but no particular runner, report format or literal output marker is
+required. The program will NOT rerun your tests or ask another AI to review.
+You are responsible for reproducing the bug, verifying the fix, and checking
+related paths and compatibility. Missing dependencies or build/command errors
+are not evidence of the reported bug. Never fabricate logs or successful checks.
+Reports are diagnostic artifacts and must not enter the PR patch.
 Update OSSCOUT_RESULT.json after reproduction and again after patched testing;
 save findings as you go so interruption does not lose completed evidence.
 Save actual command output to OSSCOUT_BASE.log and OSSCOUT_PATCHED.log as you run
@@ -135,19 +112,16 @@ The base failure must demonstrate the reported wrong behavior, not a missing
 new helper module, import error, setup error, or compilation failure. When
 extracting a helper, first reproduce the bug through the existing base behavior;
 do not make the regression depend on a module that only exists after your fix.
-Write real JSON. A missing or incomplete verification plan blocks publication.
+Write real JSON. Include the commands, results and limitations truthfully.
 Include a "coverage" object with:
 {{"entrypoint": {{"path":"<real source path>","symbol":"<entry function>"}},
   "call_chain": [{{"path":"<source path>","symbol":"<function along the actual path>"}}],
   "regression_case":"<test_report.case, or base_failure's first entry>",
   "scenarios":["<actual failing path and related boundary/sibling scenarios exercised>"],
   "limitations":["<paths/checks not exercised; empty only when none>"]}}.
-Include the entrypoint in call_chain. References must be real existing source
-files, not guessed names. This is evidence for the reviewer, not an approval:
-the reviewer will check the actual source and whether the test follows this path.
-For Rust inline tests, keep test edits inside the existing trailing #[cfg(test)]
-module so the verifier can apply the test without applying the production fix.
-Standalone Cargo test-programs executables are also supported as regression tests.
+Include the entrypoint in call_chain. Inspect the actual source and verify that
+your test follows this path. Inline Rust tests and standalone test programs stay
+in the complete delivery patch; there is no external source/test splitting.
 For a bug in an existing test itself, run that original test unchanged on base,
 then the repaired version under the SAME case identity on patched. Explain why
 the test is wrong; preserve its behavioral assertions and coverage. Do not make
@@ -155,7 +129,8 @@ a failure pass by skipping it, deleting assertions, or arbitrarily raising a
 timeout. Report measured timing/environment evidence for timing-related fixes.
 The regression tests will be delivered in the PR with the fix. Keep them in the
 project's normal test locations and run the affected existing tests too.
-Before finishing, inspect the final diff, CONTRIBUTING rules and the repository's
+Before finishing, SELF-CHECK the final diff, real entrypoints and sibling paths,
+edge cases, compatibility, test coverage, CONTRIBUTING rules and the repository's
 PR template (.github/PULL_REQUEST_TEMPLATE.md, .github/pull_request_template.md,
 or the applicable template in .github/PULL_REQUEST_TEMPLATE/).
 Add pr_title and pr_body to OSSCOUT_RESULT.json. Write a concise English change
@@ -163,7 +138,8 @@ title, not a copy of the bug report's title. In pr_body explain the observed
 problem and root cause, the concrete fix and relevant compatibility implications.
 Follow the applicable PR template, preserving its headings and meaningful fields.
 Use exactly one {{VERIFIED_TESTS}} placeholder for all test commands and test
-results: the publisher replaces it with independently verified evidence. Do not
+results: the publisher replaces it with your reported commands and outcomes,
+clearly attributed to your self-test report. Do not
 invent checks, mark unverified checklist items as complete, or claim CI is green.
 Do not add generic AI-assistance or oss-scout promotional text. If a repository
 requires a disclosure or attestation that cannot be satisfied, report the blocker
@@ -173,6 +149,11 @@ set status="blocked", publication_ready=false and blocker="<observed reason>"
 in OSSCOUT_RESULT.json. Do not manufacture a test or success report. Otherwise
 preserve and complete the top-level JSON fields above; do not replace them with
 a prose summary or nest them inside a separate result/verification object.
+You do not need to create a commit, configure Git identity, push or open a PR.
+The trusted publisher handles Git author, committer and DCO sign-off.
+Set publication_ready=true only after your tests and self-check are complete,
+and add self_check and test_results as lists of strings describing actual
+checks and outcomes, e.g. test_results=["cargo test regression: passed"].
 Restore incidental dependency-installation changes before finishing. Do not
 change lockfiles or CI workflows for these automatic bug fixes. If the task
 requires dependency or CI changes, report that blocker instead of broadening it.
@@ -195,46 +176,6 @@ RUN_TASK_MSG = (
 def _git(args: list[str], cwd: Path, check: bool = True) -> subprocess.CompletedProcess:
     return subprocess.run(["git"] + args, cwd=cwd, capture_output=True,
                           text=True, encoding="utf-8", errors="replace", check=check)
-
-
-def _run_cmd(cmd: list[str], cwd: Path, env: dict) -> tuple[int, str, str]:
-    last = (1, "", "")
-    for attempt in range(3):   # Windows 网络栈偶发 10106（与 TLS 抖动同源）：最多 3 次
-        try:
-            p = subprocess.run(cmd, cwd=cwd, env=env, capture_output=True, text=True,
-                               encoding="utf-8", errors="replace", timeout=1800)
-        except FileNotFoundError as exc:
-            return 127, "", str(exc)
-        except subprocess.TimeoutExpired as exc:
-            return 124, str(exc.stdout or ""), str(exc.stderr or "")
-        if p.returncode == 0:
-            return p.returncode, p.stdout, p.stderr
-        last = (p.returncode, p.stdout, p.stderr)
-        if "10106" not in (p.stderr or "") and "10106" not in (p.stdout or ""):
-            return last
-        time.sleep(8)
-    return last
-
-
-def _verify_command(cmd, work, env, out_dir, stage, *, rebuild=False):
-    commands = [["make", "-j", "2"], cmd] if rebuild else [cmd]
-    with (out_dir / "verification-steps.jsonl").open("a", encoding="utf-8") as log_file:
-        for index, command in enumerate(commands):
-            started = time.time()
-            rc, stdout, stderr = _run_cmd(command, work, env)
-            stdout, stderr = _mask_opencode_key(stdout), _mask_opencode_key(stderr)
-            logged_command = [_mask_opencode_key(arg) for arg in command]
-            log_file.write(json.dumps({
-                "stage": stage, "command": logged_command, "started_at_epoch": started,
-                "elapsed_seconds": round(time.time() - started, 2), "returncode": rc,
-            }, ensure_ascii=False) + "\n")
-            log_file.flush()
-            with (out_dir / "verification.log").open("a", encoding="utf-8") as output:
-                output.write(f"=== {stage}: {json.dumps(logged_command, ensure_ascii=False)} (rc={rc}) ===\n"
-                             f"--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}\n")
-            if rebuild and index == 0 and rc:
-                return rc, stdout, f"verification rebuild failed\n{stderr}"
-    return rc, stdout, stderr
 
 
 def _mask_opencode_key(text: str) -> str:
@@ -403,7 +344,7 @@ def _read_result_file(work_dir: Path) -> dict:
         rc = data.get("root_cause") or data.get("cause")
         if isinstance(rc, str) and rc.strip():
             out["root_cause"] = rc.strip()[:300]
-        for key in ("setup_steps", "base_failure", "patched_success", "test_report", "coverage"):
+        for key in ("setup_steps", "base_failure", "patched_success", "test_report", "coverage", "test_results", "self_check"):
             if key in data:
                 out[key] = data[key]
         for key in ("status", "publication_ready", "publication_allowed", "blocker", "blocked_reason", "blockers"):
@@ -411,26 +352,6 @@ def _read_result_file(work_dir: Path) -> dict:
                 out[key] = data[key]
         return out
     return {}
-
-
-def _normalise_test_target(cmd: list[str]) -> list[str]:
-    """去掉 pytest 的 `::test_name` 后缀，只按文件跑。
-
-    2026-10-30 实测：agent 报的命令是
-      pytest -q .../test_x.py::test_from_model_id_accepts_device_string...
-    而它在 base 阶段把测试文件种进树里之后，pytest 报
-      ERROR: not found: ...::test_... (no match in any of [<Module ...>])
-    ——给单个用例名做验证太脆（用例名要完全一致才成立）。按整个文件跑，
-    只要该文件里有用例在 base 上失败就足以构成复现证据。
-    注意：workspace/路径里不会有 `::`，所以这个替换是安全的。
-    """
-    out: list[str] = []
-    for token in cmd:
-        if "::" in token and not token.startswith("-"):
-            out.append(token.split("::", 1)[0])
-        else:
-            out.append(token)
-    return out
 
 
 def _split_cmd(cmd: str) -> list[str]:
@@ -473,18 +394,14 @@ def opencode_patch_producer(job: Job, work_dir: Path, context: str,
     """让 OpenCode 在 work_dir 里自主完成"探索→写测试→修→验证"。
 
     返回 dict：
-        patch       修复补丁（不含回归测试文件）
+        patch       完整交付补丁（含回归测试与二进制文件）
         test_cmd    agent 实际用过的测试命令（argv）
-        test_files  {仓库相对路径: 内容}，agent 新写的回归测试
+        agent_report Agent 自测与自查记录
         root_cause  一句话归因
         notes       过程声明
 
-    设计变更（2026-10-28）：以前是控制器先猜测试框架、让 API 生成测试文件、
-    再叫 agent 只改源码。那样 agent 拿不到 shell、看不到真实报错，实际只能
-    处理"我们预先猜到怎么测"的仓库。现在测试由 agent 自己写、自己跑——我们只在
-    出口做结果验证（干净 base 上失败 → 打补丁后通过）。
+    Agent 自主完成测试和自查，程序只收集完整补丁与真实日志。
     """
-    ai_test_paths = list(ai_test_paths or [])
     managed_client = client is None
     delivery_deadline = time.monotonic() + 2400
     completion = {}
@@ -501,19 +418,15 @@ def opencode_patch_producer(job: Job, work_dir: Path, context: str,
                      else "opencode auth: no OPENCODE_API_KEY in env")
     detail = ""
     try:
-        # 1200s：agent 现在要装依赖、跑测试、迭代，比只改文件慢得多。
         # 40 分钟总预算：35 分钟实现，最多预留 5 分钟补齐真实交付材料。
-        # pulumi 这类 Go 大仓库，agent 先要摸清 workspace 布局
-        # 再装工具链、跑 go test。2026-10-30 实测 1200s 正好在"还没开始改"时被
-        # 掐断。workflow 本身有 90 分钟预算，这里给 40 分钟留给 agent，剩下
-        # 50 分钟够两轮测试跑完。
         if client is None:
             if job.repair_agent == "codex":
                 from .codex_client import CodexClient
                 client = CodexClient(timeout_seconds=2100, workdir=work_dir,
                                      diagnostics_dir=diagnostics_dir)
             else:
-                client = OpenCodeClient(timeout_seconds=2100, workdir=work_dir)
+                client = OpenCodeClient(timeout_seconds=2100, workdir=work_dir,
+                                        diagnostics_dir=diagnostics_dir)
         model = model or (job.model or "").strip()
         if not model and job.repair_agent == "opencode":
             model = resolve_model()
@@ -608,164 +521,29 @@ def opencode_patch_producer(job: Job, work_dir: Path, context: str,
     # 优先读 agent 落盘的结果文件，读不到再退回解析 stdout
     markers = _read_result_file(work_dir) or _parse_markers(detail)
 
-    # agent 新增/修改过的文件（含测试）。用 --cached 才能把新文件纳入。
     _git(["add", "-A"], work_dir)
-    changed = [p for p in _git(["diff", "--cached", "--name-only"], work_dir)
-               .stdout.splitlines() if p.strip()]
-    excludes = [p for p in ("opencode.json", TASK_FILE, RESULT_FILE,
-                            ".oss-scout-result.json") if p in changed]
-    from .test_reports import report_spec
-    try:
-        declared_report = report_spec(markers)
-    except ValueError:
-        declared_report = None  # Invalid plans are rejected by the verifier.
-
-    test_file = markers.get("test_file", "")
+    changed = _git(["diff", "--cached", "--name-only"], work_dir).stdout.splitlines()
     from .publish_remote import _JUNK_PATH, filter_patch_junk
-    test_files: dict[str, str] = {}
-    mixed_tests: dict[str, tuple[str, str]] = {}
-    for path in changed:
-        if declared_report and path == declared_report["path"]:
-            excludes.append(path)
-            continue
-        if _JUNK_PATH.search(path):
-            excludes.append(path)
-            continue
-        rust_program = _is_rust_test_program(path, work_dir, baseline)
-        is_test = (path == test_file) or _looks_like_test(path) or rust_program
-        if not is_test:
-            continue
-        full = work_dir / path
-        if (path == test_file and path.endswith(".rs") and not _looks_like_test(path)
-                and not rust_program and full.is_file()):
-            old = _git(["show", f"{baseline}:{path}"], work_dir, check=False)
-            current = full.read_text(encoding="utf-8")
-            baseline_parts = _rust_inline_tests(old.stdout) if old.returncode == 0 else None
-            current_parts = _rust_inline_tests(current)
-            if not baseline_parts or not current_parts or baseline_parts[1] == current_parts[1]:
-                raise RuntimeError(f"cannot separate inline regression test from Rust source: {path}")
-            base_source, base_tests = baseline_parts
-            new_source, new_tests = current_parts
-            original = full.read_bytes()
-            try:
-                full.write_bytes((new_source + base_tests).encode("utf-8"))
-                _git(["add", "--", path], work_dir)
-            finally:
-                full.write_bytes(original)
-            mixed_tests[path] = (base_source + new_tests, current)
-            continue
-        if full.is_file():
-            try:
-                test_files[path] = full.read_text(encoding="utf-8", errors="replace")
-            except OSError:
-                pass
-        excludes.append(path)
-    excludes.extend(ai_test_paths)
-
+    excluded = {"opencode.json", TASK_FILE, RESULT_FILE, ".oss-scout-result.json"}
+    report = markers.get("test_report")
+    if isinstance(report, dict) and isinstance(report.get("path"), str):
+        excluded.add(report["path"])
+    excludes = [path for path in changed if path in excluded or _JUNK_PATH.search(path)]
     if excludes:
-        _git(["reset", "-q", "--", *excludes], work_dir, check=False)
-    patch = _git(["diff", "--cached"], work_dir).stdout
-    # Verify the same source patch that the publisher will actually apply.
-    patch = filter_patch_junk(patch)
-    test_repair_files = []
+        _git(["reset", "-q", "--", *excludes], work_dir)
+    patch = filter_patch_junk(_git(["diff", "--cached", "--binary"], work_dir).stdout)
     if not patch.strip():
-        # A repair to an existing test must NOT be injected into the base tree.
-        # Preserve the original test on base and deliver its changed version.
-        for path in sorted(set(test_files) | set(mixed_tests)):
-            if not (path in mixed_tests or _looks_like_test(path)
-                    or _is_rust_test_program(path, work_dir, baseline)):
-                continue
-            old = _git(["show", f"{baseline}:{path}"], work_dir, check=False)
-            current = test_files.get(path) if path in test_files else mixed_tests[path][1]
-            if old.returncode or old.stdout == current:
-                continue
-            mixed_tests[path] = (old.stdout, current)
-            test_files.pop(path, None)
-            _git(["add", "--", path], work_dir)
-            test_repair_files.append(path)
-        patch = filter_patch_junk(_git(["diff", "--cached"], work_dir).stdout)
-    if not patch.strip():
-        # 诊断信息必须带出 agent 自己说了什么、动了哪些文件——否则"没改源码"
-        # 这句话无法区分"它没找到地方"和"它改了但我们的分类把它当测试剔掉了"。
-        raise RuntimeError(
-            "agent produced no source change "
-            f"(changed={changed or 'nothing'}, tests={sorted(test_files) or 'none'}); "
-            f"agent said: {(detail or '')[:400]}")
-
-    cmd_str = markers.get("test_cmd", "").strip()
-    has_plan = any(key in markers for key in ("setup_steps", "base_failure", "patched_success", "test_report"))
+        raise RuntimeError(f"agent produced no deliverable changes; agent said: {detail[:400]}")
     return {
-        "patch": patch,
-        "test_cmd": _split_cmd(cmd_str) if has_plan else _normalise_test_target(_split_cmd(cmd_str)),
-        "verification_plan": {key: markers.get(key) for key in
-                              ("setup_steps", "base_failure", "patched_success", "test_report")} if has_plan else None,
-        "test_files": test_files,
-        "mixed_tests": mixed_tests,
-        "repair_kind": "test_only" if test_repair_files else "source_fix",
-        "test_repair_files": test_repair_files,
-        "coverage": markers.get("coverage") or {},
-        "delivery_preflight": completion,
-        "root_cause": markers.get("root_cause", "")[:300],
-        "pr_title": markers.get("pr_title", ""),
-        "pr_body": markers.get("pr_body", ""),
-        "notes": notes,
-        "baseline": baseline,
-        # 保留 agent 的收尾输出与它改动过的文件清单：失败时这是唯一能判断
-        # "它到底理解到哪一步"的线索
-        "agent_output": (detail or "")[:4000],
-        "agent_failure": (detail or f"{job.repair_agent} did not complete successfully")[:400] if not ok else "",
-        "changed_files": changed,
-        "markers_found": bool(markers),
+        "patch": patch, "test_cmd": _split_cmd(markers.get("test_cmd", "")),
+        "agent_report": markers, "verification_mode": "agent",
+        "root_cause": markers.get("root_cause", ""),
+        "pr_title": markers.get("pr_title", ""), "pr_body": markers.get("pr_body", ""),
+        "coverage": markers.get("coverage") or {}, "delivery_preflight": completion,
+        "notes": notes, "baseline": baseline, "agent_output": detail or "",
+        "agent_failure": (detail or f"{job.repair_agent} did not complete successfully") if not ok else "",
+        "changed_files": changed, "markers_found": bool(markers),
     }
-
-
-def _is_rust_test_program(path: str, work: Path, baseline: str) -> bool:
-    """Recognize Wasmtime-style executable tests using the original Cargo manifest.
-
-    A production src/bin executable or an agent-created manifest is not enough.
-    """
-    import tomllib
-
-    match = re.fullmatch(r"(.*/)?(test-programs|test_programs)/src/bin/[^/]+(?:/main)?\.rs", path)
-    if not match or (work / path).is_symlink():
-        return False
-    manifest = path.split("/src/bin/", 1)[0] + "/Cargo.toml"
-    original = _git(["show", f"{baseline}:{manifest}"], work, check=False)
-    if original.returncode:
-        return False
-    try:
-        package = tomllib.loads(original.stdout).get("package", {})
-        return (package.get("name") in ("test-programs", "test_programs")
-                and package.get("publish") is False)
-    except (tomllib.TOMLDecodeError, AttributeError):
-        return False
-
-
-def _rust_inline_tests(text: str) -> tuple[str, str] | None:
-    """Split a conventional trailing, top-level cfg(test) module."""
-    matches = list(re.finditer(r"(?m)^#\[cfg\(test\)\][ \t]*\nmod tests[ \t]*\{[^\n]*\n", text))
-    if len(matches) != 1:
-        return None
-    start = matches[0].start()
-    # Reject code following the first top-level closing brace. The split only
-    # supports the conventional trailing module, with indented nested blocks.
-    if not re.fullmatch(r"[\s\S]*?\n\}[ \t]*\s*", text[start:]) or re.search(
-            r"(?m)^\}[ \t]*\n\s*\S", text[start:]):
-        return None
-    return text[:start], text[start:]
-
-
-def _looks_like_test(path: str) -> bool:
-    """路径像测试文件吗？只用于把 agent 新增的测试从 PR 补丁里剔出来。"""
-    p = path.replace("\\", "/").lower()
-    name = p.rsplit("/", 1)[-1]
-    if "/tests/" in p or "/test/" in p or p.startswith("tests/") or p.startswith("test/"):
-        return True
-    if name.startswith("test_") or name.endswith("_test.py") or name.endswith("_test.go"):
-        return True
-    if ".test." in name or ".spec." in name or name.endswith("_test.rs"):
-        return True
-    return False
 
 
 # 测试框架"根本没跑起来"的特征串。命中任何一个都说明退出码反映的是环境缺失，
@@ -797,255 +575,9 @@ _BROKEN_ENV_MARKERS = (
 )
 
 
-def _terminal_text(text: str) -> str:
-    """Remove terminal decoration for evidence matching, without changing raw logs."""
-    # OSC includes hyperlinks/title metadata; keep hyperlink labels, not hidden URLs.
-    text = re.sub(r"\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)", "", text or "")
-    text = re.sub(r"(?:\x1b\[|\x9b)[0-?]*[ -/]*[@-~]", "", text)
-    return text.replace("\r\n", "\n").replace("\r", "\n")
-
-
-def _evidence_matches(markers: list[str], stdout: str, stderr: str) -> bool:
-    output = _terminal_text(f"{stdout}\n{stderr}")
-    expected = [_terminal_text(marker).strip() for marker in markers]
-    return all(marker and marker in output for marker in expected)
-
-
-def _test_env_broken(stdout: str, stderr: str) -> str | None:
-    """判断退出码是否只是"测试环境不可用"。返回命中的特征串，未命中返回 None。"""
-    text = _terminal_text((stderr or "") + "\n" + (stdout or "")).lower()
-    # pytest-parallel reports its own empty work list even when pytest executes
-    # the selected tests serially. Require an actual pytest result before ignoring
-    # that one diagnostic; genuine empty collection and other errors still block.
-    if re.search(r"(?m)^=+\s+[^\n]*\b[1-9]\d* (?:passed|failed)\b[^\n]* in [\d.]+s\s+=+$", text):
-        text = re.sub(r"(?m)^collected 0 items to run in parallel\s*$", "", text)
-    for marker in _BROKEN_ENV_MARKERS:
-        if marker in text:
-            return marker
-    return None
-
-
-def _verification_error(rc: int, stdout: str, stderr: str, kind: str = "test") -> tuple[str, str] | None:
-    if not rc and kind != "test":
-        return None
-    text = _terminal_text(f"{stdout}\n{stderr}").lower()
-    if rc == 124:
-        return "timeout", "verification timed out"
-    missing = re.search(
-        r"no module named [^\n]+|cannot find module [^\n]+|[^\n]+was not found in path"
-        r"|fatal error: [^\n]+no such file or directory|could not find a package configuration file[^\n]*",
-        text)
-    if missing:
-        return "missing_dependency", missing.group().strip()[:180]
-    if rc in (126, 127, 9009) or (rc == 2 and "syntax error" in text):
-        return "command_error", f"command could not run (exit {rc})"
-    if "verification rebuild failed" in text or (rc and (
-        kind == "build" or re.search(
-            r"\[build failed\]|error\[e\d+\]|fatal error:|(?:^|\n)[^\n]+:\d+(?::\d+)?: error:"
-            r"|error ts\d+:|compilation failed|could not compile", text)
-    )):
-        return "compile_failed", "build or test compilation failed"
-    broken = _test_env_broken(stdout, stderr)
-    if broken:
-        return "command_error", broken
-    if rc and kind == "setup":
-        return "setup_failed", f"environment preparation failed (exit {rc})"
-    return None
-
-
-def _verification_plan_valid(plan: dict) -> bool:
-    from .test_reports import report_spec
-    try:
-        report_spec(plan)
-    except ValueError:
-        return False
-    steps = plan.get("setup_steps")
-    if not isinstance(steps, list) or not all(
-        isinstance(step, dict) and step.get("kind") in ("setup", "build")
-        and isinstance(step.get("command"), str) and step["command"].strip()
-        for step in steps
-    ):
-        return False
-    for key, minimum in (("base_failure", 2), ("patched_success", 0 if report_spec(plan) else 1)):
-        markers = (plan.get(key) or []) if key == "patched_success" and report_spec(plan) else plan.get(key)
-        if (not isinstance(markers, list) or not all(isinstance(marker, str) and marker.strip()
-                                                     for marker in markers)
-                or len({marker.strip() for marker in markers}) < minimum):
-            return False
-    return True
-
-
-def _test_case_identity(marker: str) -> str:
-    """A runner's FAIL/ok suffix changes while the case identity stays fixed."""
-    marker = re.sub(r"^(?:FAILED|FAIL|ERROR|PASSED|PASS)[: ]+", "", _terminal_text(marker).strip())
-    return re.sub(r"\s+(?:\.{2,}\s*)?(?:FAILED|FAIL|ERROR|PASSED|PASS|OK|ok)$", "", marker)
-
-
-def _wrapper_success_matches(cmd: list[str], plan: dict, base_stdout: str,
-                             base_stderr: str, stdout: str, stderr: str) -> bool:
-    """Hermes' per-file runner hides successful case names, but runs the whole file.
-
-    Bind its success to the base's failed case, the identical unfiltered command,
-    and matching executed counts. A generic passing summary is insufficient.
-    """
-    import shlex
-
-    base = _terminal_text(f"{base_stdout}\n{base_stderr}")
-    output = _terminal_text(f"{stdout}\n{stderr}")
-    case = re.escape(_test_case_identity(plan["base_failure"][0]))
-    failed = re.search(r"(?m)^FAILED (\S+\.py)::" + case + r"(?:\s|$)", base)
-    if not failed or not _evidence_matches(plan["patched_success"], stdout, stderr):
-        return False
-    path = failed[1]
-    tokens = list(cmd)
-    if len(tokens) == 3 and tokens[0] in ("/bin/sh", "/bin/bash", "sh", "bash") and tokens[1] == "-c":
-        try:
-            tokens = shlex.split(tokens[2])
-        except ValueError:
-            return False
-    if tokens and tokens[0].startswith("HERMES_PYTHON="):
-        tokens.pop(0)
-    if (len(tokens) < 2 or tokens[0] not in ("scripts/run_tests.sh", "./scripts/run_tests.sh")
-            or tokens[1] != path or any(arg not in ("-v", "-vv") for arg in tokens[2:])):
-        return False
-    if re.search(r"\b[1-9]\d* (?:skipped|deselected|xfailed|xpassed)\b", base + "\n" + output):
-        return False
-    base_count = re.search(r"(?m)^=+\s+(\d+) failed(?:, (\d+) passed)? in [\d.]+s\s+=+\s*$", base)
-    file_count = re.search(r"(?m)^\[[^\n]+\] ✓ " + re.escape(path) + r" \((\d+)✓, [\d.]+s\)\s*$", output)
-    summary = re.search(r"(?m)^=== Summary: 1 files, (\d+) tests passed, 0 failed "
-                        r"\(100% complete\) in [\d.]+s \(\d+ workers\) ===\s*$", output)
-    return bool(base_count and file_count and summary
-                and int(summary[1]) > 0
-                and int(summary[1]) == int(file_count[1])
-                == int(base_count[1]) + int(base_count[2] or 0))
-
-
-def _replay_regression(cmd, plan, work, env, out_dir, stage, *, rebuild=False):
-    if plan and plan["setup_steps"]:
-        # Include new source and test files from the patch in the source guard.
-        _git(["add", "-N", "--", "."], work)
-        source = _git(["diff", "HEAD", "--binary"], work).stdout
-        for index, step in enumerate(plan["setup_steps"], 1):
-            kind = step["kind"]
-            rc, stdout, stderr = _verify_command(
-                _split_cmd(step["command"]), work, env, out_dir, f"{stage}-{kind}-{index}")
-            if error := _verification_error(rc, stdout, stderr, kind):
-                return rc, stdout, stderr, error
-        if source != _git(["diff", "HEAD", "--binary"], work).stdout:
-            return 1, "", "", ("setup_changed_sources", "setup modified tracked source or tests")
-    from .test_reports import prepare_report
-    try:
-        prepare_report(work, plan)
-    except ValueError as exc:
-        return 1, "", "", ("structured_report_invalid", str(exc))
-    rc, stdout, stderr = _verify_command(cmd, work, env, out_dir, stage, rebuild=rebuild)
-    return rc, stdout, stderr, _verification_error(rc, stdout, stderr)
-
-
-def _write_base_diagnostics(out_dir: Path, job: Job, cmd: list[str], rc: int,
-                            stdout: str, stderr: str,
-                            test_files: dict, patch: str, *, failure_kind: str, plan: dict | None) -> None:
-    """base 阶段中止时也要留下可诊断的证据。
-
-    2026-10-30：blocked 分支原样返回，test-report 不生成，于是"测试在 base 上
-    没失败"这句话没有上下文——看不到跑的什么命令、agent 的测试长什么样、
-    那条命令输出了什么。
-    """
-    try:
-        (out_dir / "test-report.json").write_text(json.dumps({
-            "schema_version": 1, "job_id": job.job_id, "base_sha": job.base_sha,
-            "stage": "base", "test_cmd": cmd, "base_returncode": rc,
-            "failure_kind": failure_kind, "verification_plan": plan,
-            "base_stdout_tail": stdout[-4000:], "base_stderr_tail": stderr[-4000:],
-            "regression_test_files": sorted(test_files),
-            "patch_bytes": len(patch or ""),
-        }, ensure_ascii=False, indent=1), encoding="utf-8")
-        for rel, content in (test_files or {}).items():
-            safe = Path(rel).name
-            (out_dir / f"agent-test-{safe}").write_text(content, encoding="utf-8")
-    except OSError:
-        pass
-
-
-def _restore_sources_to_base(work: Path, base_sha: str) -> None:
-    """Restore the index and sources, including removal of newly staged files."""
-    _git(["restore", f"--source={base_sha}", "--staged", "--worktree", "--", "."], work)
-
-
 def _checkout_repair_tree(repo_dir: Path, work: Path, base_sha: str) -> None:
     _git(["clone", "--quiet", str(repo_dir), str(work)], repo_dir)
     _git(["checkout", "--quiet", "--detach", base_sha], work)
-
-
-def _seed_test_files(repo_dir: Path,
-                     files: dict[str, str] | None) -> list[tuple[Path, str | None]]:
-    """把 agent 的测试写进 base 树，供 base 阶段的运行使用。
-
-    返回 [(path, 原内容或 None)]：None 表示这个文件是我们新建的（清理时删除），
-    有内容表示它原本就存在（清理时写回）。
-
-    必须覆盖已存在的文件（2026-10-30 实测）：agent 常常在仓库**已有**的测试
-    文件里追加用例，而 base 版本没有那个用例。早期实现"文件已存在就跳过"，
-    结果 base 阶段跑 `pytest path::test_new_case` 直接 "no match" —— 看起来像
-    环境坏了，其实是我们的种子逻辑把测试丢了。
-    """
-    created: list[tuple[Path, str | None]] = []
-    for rel, content in (files or {}).items():
-        target = repo_dir / rel
-        original: str | None = None
-        if target.exists():
-            try:
-                original = target.read_text(encoding="utf-8", errors="replace")
-            except OSError:
-                continue
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(content, encoding="utf-8")
-        created.append((target, original))
-    return created
-
-
-def _unseed_test_files(repo_dir: Path,
-                       created: list[tuple[Path, str | None]]) -> None:
-    """恢复 _seed_test_files 动过的文件：新建的删除，原有的写回。"""
-    for p, original in reversed(created):
-        try:
-            if original is None:
-                p.unlink(missing_ok=True)
-            else:
-                p.write_text(original, encoding="utf-8")
-                continue
-        except OSError:
-            continue
-        # 只在目录确实空了时向上删，避免动到仓库原有结构
-        parent = p.parent
-        while parent != repo_dir and parent.is_dir():
-            try:
-                parent.rmdir()
-            except OSError:
-                break
-            parent = parent.parent
-
-
-def _strip_test_files_from_patch(patch: str, paths: list[str]) -> str:
-    """从 unified diff 中剔除指定文件的整段改动。
-
-    按 `diff --git a/<path> b/<path>` 分段；只保留不涉及这些路径的段。
-    路径比较用纯 posix 形式，兼容 a/ b/ 前缀。
-    """
-    want = {p.replace("\\", "/").lstrip("./") for p in paths if p}
-    if not want:
-        return patch
-    out: list[str] = []
-    keep = True
-    for line in patch.splitlines(keepends=True):
-        if line.startswith("diff --git "):
-            parts = line.split()
-            # 形如 diff --git a/x b/x
-            cand = {p[2:] for p in parts[2:4] if p[:2] in ("a/", "b/")}
-            keep = not (cand & want)
-        if keep:
-            out.append(line)
-    return "".join(out)
 
 
 # 这些命令的退出码只反映"某个字符串/文件在不在"，跟被测代码的行为无关。
@@ -1057,55 +589,6 @@ _NON_VERIFYING_BINARIES = {
     # 目录切换本身不验证任何行为：`cd sub && grep -q x f` 的退出码仍只反映 grep
     "cd", "export", "source", ".", "set", "pushd", "popd", "mkdir",
 }
-
-
-def _implausible_verification(cmd: list[str], patch: str,
-                              test_files: dict[str, str]) -> str | None:
-    """拒绝不可能真正验证这次改动的测试命令。
-
-    只拦两种可证明无效的情形，不做风格审查：
-    1) 命令行里没有任何测试运行器（全是 grep/ls/git 这类），退出码只反映文件或
-       字符串是否存在；
-    2) agent 没写任何回归测试，补丁却凭空"修好"了某个行为——没有测试就无从验证。
-    """
-    if not patch.strip():
-        return "empty patch"
-    if not test_files:
-        return "no regression test was produced"
-    import os as _os
-    import shlex
-    # shell 包装（["/bin/sh","-c","cd x && pytest ..."] 或 ["cmd","/c","..."]）
-    # 要拆回去再判断，否则 sh 被当成 runner，grep-only 的命令就能蒙混过关。
-    tokens = list(cmd)
-    if len(tokens) >= 3 and _os.path.basename(tokens[0]).lower() in (
-            "sh", "bash", "dash", "cmd"):
-        # 第 2 个 token 是 -c 或 /c
-        payload = " ".join(tokens[2:])
-        try:
-            lexer = shlex.shlex(payload, posix=True, punctuation_chars=";&|")
-            lexer.whitespace_split = True
-            tokens = list(lexer)
-        except ValueError:
-            tokens = payload.split()
-    # 只看命令的"程序名"位置：首词，以及 `&&` / `;` / `|` 之后的词。
-    # 中间参数常是文件名（`grep -c foo x.py` 里 x.py 不是程序），不能算 runner。
-    progs: list[str] = []
-    expect_prog = True
-    for token in tokens:
-        if token in ("&&", "||", ";", "|"):
-            expect_prog = True
-            continue
-        if expect_prog:
-            if _ENV_ASSIGNMENT.match(token) or token == "env":
-                continue
-            progs.append(token)
-            expect_prog = False
-    names = {_os.path.basename(p).lower() for p in progs if p and not p.startswith("-")}
-    runners = names - _NON_VERIFYING_BINARIES
-    if not runners:
-        return (f"command cannot verify code behaviour: {cmd} "
-                f"(only uses {sorted(names)})")
-    return None
 
 
 def check_patch_content(patch: str) -> list[str]:
@@ -1124,305 +607,82 @@ def run_repair(job: Job, repo_dir: Path, out_dir: Path, *,
                patch_producer=None, env_base: dict | None = None,
                extra_test_files: dict[str, str] | None = None,
                backend_name: str = "local") -> Result:
-    """完整 repair 证据链。repo_dir 必须已 checkout 到 job.base_sha。
+    """Collect the Agent's complete delivery without rerunning tests or AI review.
 
-    顺序（2026-10-28 结构性调整）：
-      1. 让 agent 自己探索仓库、写回归测试、跑、修、再跑。我们不再预先规定
-         测试框架——那正是之前只能覆盖 pytest 项目的原因。
-      2. 我们做**结果验证**：把 agent 写的测试放回干净 base，它必须失败；
-         打上 agent 的修复补丁后，它必须通过。
-    证据标准没有放松，只是把"怎么测"的决定权交给了 agent。
-
-    test_cmd：可选。给了就用作兜底（agent 没报命令时）。
+    The Agent owns tests and self-check. This worker only checks the delivery's
+    safety and records provenance. Legacy evidence booleans stay false: no
+    independent regression replay has taken place.
     """
+    from .quality_gate import check_delivery_scope, patch_files
+    from .delivery_materials import reported_blocker, redact_log
+
     out_dir.mkdir(parents=True, exist_ok=True)
-    unverified: list[str] = []
-    # 验证环境必须和 agent 用过的**同一个**环境。
-    # 2026-10-29 实测：agent 在真实 HOME 里装了 uv（报出的命令是 ~/.local/bin/uv），
-    # 而验证时把 HOME 重定向到 sandbox_home，那条命令立刻 127 "not found"，
-    # 于是一个完全正确的补丁被判成"未复现"。
-    # 隔离的理由是"跑不可信代码"，但 agent 阶段已经在跑同一份代码了，
-    # 再在验证阶段换一个干净的 HOME 只会让装好的依赖消失。
-    # 仍保留：敏感变量剥离（令牌/密钥不进子进程）。
-    env = sanitized_env(env_base, home=None)
+    def stopped(reason, outcome="failed"):
+        (out_dir / "worker.log").write_text(redact_log(reason), encoding="utf-8")
+        return Result(job_id=job.job_id, backend=backend_name, outcome=outcome,
+                      base_sha=job.base_sha, verification_mode="agent",
+                      logs_path=f"artifacts/{job.job_id}/worker.log",
+                      unverified_items=[reason[:1000]])
 
-    # ---- 阶段 1：agent 自主修复 ----
-    patch = ""
-    ai_cmd: list[str] = []
-    plan = None
-    test_files: dict[str, str] = dict(extra_test_files or {})
-    mixed_tests: dict[str, tuple[str, str]] = {}
-    root_cause = ""
-    repair_kind, test_repair_files = "source_fix", []
-    coverage, delivery_preflight = {}, {}
-    agent_out = ""
-    pr_title, pr_body = "", ""
     with ExitStack() as workspace:
-        agent_dir = _RepairWorkspace(out_dir)
-        work = Path(workspace.enter_context(agent_dir)) / "work"
+        work = Path(workspace.enter_context(_RepairWorkspace(out_dir))) / "work"
         _checkout_repair_tree(repo_dir, work, job.base_sha)
-        # 控制器若已备好测试文件（旧路径/兜底），先放进去让 agent 看得到
-        for rel_path, content in (extra_test_files or {}).items():
-            tf = work / rel_path
-            tf.parent.mkdir(parents=True, exist_ok=True)
-            tf.write_text(content, encoding="utf-8")
+        # Old injected test payloads are not part of the production screening path.
+        for rel, content in (extra_test_files or {}).items():
+            from .quality_gate import check_patch_path
+            if check_patch_path(rel):
+                return stopped("unsafe supplied test path", "blocked")
+            path = work / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content, encoding="utf-8")
         try:
-            if patch_producer is None:
-                produced = opencode_patch_producer(
-                    job, work, context,
-                    ai_test_paths=list((extra_test_files or {}).keys()), diagnostics_dir=out_dir)
-            else:
-                produced = patch_producer(job, work, context)
-        except RuntimeError as e:
-            (out_dir / "worker.log").write_text(str(e), encoding="utf-8")
-            return Result(job_id=job.job_id, backend=backend_name, outcome="failed",
-                          base_sha=job.base_sha,
-                          logs_path=f"artifacts/{job.job_id}/worker.log",
-                          unverified_items=[str(e)[:300]])
-
-        if isinstance(produced, dict):
-            patch = produced.get("patch") or ""
-            ai_cmd = list(produced.get("test_cmd") or [])
-            plan = produced.get("verification_plan")
-            test_files.update(produced.get("test_files") or {})
-            mixed_tests = produced.get("mixed_tests") or {}
-            repair_kind = produced.get("repair_kind", "source_fix")
-            test_repair_files = produced.get("test_repair_files") or []
-            coverage = produced.get("coverage") or {}
-            delivery_preflight = produced.get("delivery_preflight") or {}
-            root_cause = produced.get("root_cause") or ""
-            pr_title = produced.get("pr_title") or ""
-            pr_body = produced.get("pr_body") or ""
-            unverified.extend(produced.get("notes") or [])
-            # agent 的收尾输出单独落盘：失败时据此判断它理解到哪一步，
-            # 而不是只看到"没改源码"这一句。
-            agent_out = produced.get("agent_output") or ""
-            if agent_out:
-                (out_dir / "agent-output.txt").write_text(agent_out, encoding="utf-8")
-            if produced.get("changed_files") is not None:
-                (out_dir / "agent-changed.json").write_text(
-                    json.dumps({"changed": produced.get("changed_files"),
-                                "tests": sorted(produced.get("test_files") or {}),
-                                "markers_found": produced.get("markers_found"),
-                                "coverage": coverage, "delivery_preflight": delivery_preflight},
-                               ensure_ascii=False, indent=1), encoding="utf-8")
-            # A provisional report may exist when the CLI is interrupted. Keep
-            # the original error (including legacy communication errors) ahead
-            # of missing-plan/command errors so the controller can retry safely.
-            if produced.get("agent_failure"):
-                reason = f"{job.repair_agent} repair run failed: {produced['agent_failure']}"
-                (out_dir / "worker.log").write_text(reason, encoding="utf-8")
-                return Result(job_id=job.job_id, backend=backend_name, outcome="failed",
-                              base_sha=job.base_sha, logs_path=f"artifacts/{job.job_id}/worker.log",
-                              unverified_items=[reason[:300]])
-        else:                      # 兼容旧 producer：(patch, notes)
+            produced = (opencode_patch_producer(job, work, context, diagnostics_dir=out_dir)
+                        if patch_producer is None else patch_producer(job, work, context))
+        except RuntimeError as exc:
+            return stopped(str(exc))
+        if not isinstance(produced, dict):
             patch, notes = produced
-            unverified.extend(notes or [])
-
-        cmd = ai_cmd or list(test_cmd or [])
-        if not cmd:
-            # 说清楚是哪一种失败。2026-10-30 实测：pulumi 那次 agent 超时且零改动，
-            # 却只报"没报测试命令"，读起来像它只忘了写结果文件，实际是根本没干活。
-            if not (patch or "").strip():
-                raise_no_cmd = (
-                    "agent produced no changes and no test command - it likely ran out "
-                    f"of time or never located the code; agent said: {(agent_out or '')[:300]}")
-            else:
-                agent_failure = produced.get("agent_failure") if isinstance(produced, dict) else ""
-                raise_no_cmd = ("agent changed files but did not report a test command, "
-                                "so the change cannot be verified")
-                if agent_failure:
-                    raise_no_cmd = f"{agent_failure[:210]} · {raise_no_cmd}"
-            (out_dir / "worker.log").write_text(raise_no_cmd, encoding="utf-8")
-            return Result(job_id=job.job_id, backend=backend_name, outcome="failed",
-                          base_sha=job.base_sha,
-                          logs_path=f"artifacts/{job.job_id}/worker.log",
-                          unverified_items=[raise_no_cmd])
-
-        raw_patch = patch          # 剔除测试文件之前的完整改动（供完整性检查）
-        if (patch_producer is None or plan is not None) and not (
-            isinstance(plan, dict) and _verification_plan_valid(plan)
-        ):
-            reason = "verification_plan_invalid: missing setup steps or observed test evidence"
-            (out_dir / "worker.log").write_text(reason, encoding="utf-8")
-            return Result(job_id=job.job_id, backend=backend_name, outcome="blocked",
-                          base_sha=job.base_sha, logs_path=f"artifacts/{job.job_id}/worker.log",
-                          unverified_items=[reason])
-        from .quality_gate import check_delivery_scope, patch_files, check_patch_path
-        errs = check_patch_content(patch) + check_delivery_scope(patch)
-        for path in test_files | mixed_tests:
-            errs.extend(check_patch_path(path))
-        if errs:
-            (out_dir / "worker.log").write_text(patch[:2000], encoding="utf-8")
-            return Result(job_id=job.job_id, backend=backend_name, outcome="blocked",
-                          base_sha=job.base_sha,
-                          logs_path=f"artifacts/{job.job_id}/worker.log",
-                          unverified_items=errs)
-
-        # 最小完整性检查（2026-10-28 审计）：结果闸只比较退出码，所以像
-        # `grep -q <补丁新增的字符串> file` 这类命令能让"什么都没修"的补丁
-        # 通过验证（base 失败 → 打了补丁后 grep 命中）。不是要审查 agent 的
-        # 每个决定，只排除"验证根本不可能反映这个 bug"的几种形态。
-        #
-        # 只对真实 agent 产物生效：自定义 producer 是测试/运维注入，它自己负责
-        # 证据语义（很多用例故意只给补丁不给测试文件）。
-        if patch_producer is None or plan is not None:
-            bad = _implausible_verification(cmd, raw_patch, test_files | mixed_tests)
-            if bad:
-                (out_dir / "worker.log").write_text(
-                    f"verification rejected: {bad}\n\ncmd: {cmd}\n"
-                    f"test files: {sorted(test_files)}\n", encoding="utf-8")
-                return Result(job_id=job.job_id, backend=backend_name, outcome="failed",
-                              base_sha=job.base_sha,
-                              logs_path=f"artifacts/{job.job_id}/worker.log",
-                              unverified_items=[f"verification rejected: {bad}"])
-
-        # Base verification needs test-only changes separated from the fix.
-        # Reassemble them into the exact deliverable before patched verification.
-        patch = _strip_test_files_from_patch(patch, list(test_files.keys()))
-        rebuild = (plan is None and job.repo.lower() == "python/cpython" and cmd[0] == "./python"
-                   and bool(re.search(r"(?m)^diff --git a/.+\.[ch] b/.+\.[ch]$", patch)))
-
-        # Legacy injected producers can still reuse the agent's work tree.
-        # 2026-10-29 教训：在 repo_dir 上验证是错的。agent 把依赖装在 work/
-        # （.venv、~/.local/bin/uv、node_modules），repo_dir 里什么都没有，
-        # 于是同一份代码在"能跑的环境"外被验证，必然 127。
-        # 现在：在 work 里把源码退回 base、只保留 agent 装的依赖，再跑同一条命令。
-        if plan is not None:
-            agent_dir.cleanup()
-            base_dir = _RepairWorkspace(out_dir)
-            work = Path(workspace.enter_context(base_dir)) / "verify-base"
-            _checkout_repair_tree(repo_dir, work, job.base_sha)
-        else:
-            _restore_sources_to_base(work, job.base_sha)
-        baseline_tests = test_files | {path: versions[0] for path, versions in mixed_tests.items()}
-        seeded = _seed_test_files(work, baseline_tests)
-        from .test_reports import collect_report, check_report, report_spec
-        base_evidence = {"format": "log"}
-        patched_evidence = {"format": "log"}
-        try:
-            base_rc, base_out, base_err, error = _replay_regression(
-                cmd, plan, work, env, out_dir, "base", rebuild=rebuild)
-            if error is None and report_spec(plan):
-                try:
-                    base_evidence = collect_report(work, out_dir, plan, "base")
-                    check_report(base_evidence, plan, "base")
-                except ValueError as exc:
-                    error = "structured_report_invalid", str(exc)
-        finally:
-            _unseed_test_files(work, seeded)
-        if error is None and base_rc == 0:
-            error = "base_test_passed", "test does not fail on base"
-        if error is None and plan and not report_spec(plan) and not _evidence_matches(plan["base_failure"], base_out, base_err):
-            error = "base_failure_unconfirmed", "target test and bug symptom not found in base output"
-        if error:
-            kind, detail = error
-            reason = f"{kind} on base: {detail}"
-            (out_dir / "worker.log").write_text(
-                f"{reason}\n\n"
-                f"--- stdout ---\n{base_out[-2000:]}\n--- stderr ---\n{base_err[-2000:]}",
-                encoding="utf-8")
-            _write_base_diagnostics(out_dir, job, cmd, base_rc, base_out, base_err,
-                                    baseline_tests, raw_patch, failure_kind=kind, plan=plan)
-            return Result(job_id=job.job_id, backend=backend_name,
-                          outcome="blocked" if kind == "base_test_passed" else "failed",
-                          base_sha=job.base_sha, test_report_path=f"artifacts/{job.job_id}/test-report.json",
-                          logs_path=f"artifacts/{job.job_id}/worker.log",
-                          unverified_items=[reason])
-
-        # ---- 阶段 3：补丁后必须通过 ----
-        if plan is not None:
-            base_dir.cleanup()
-            work = Path(workspace.enter_context(_RepairWorkspace(out_dir))) / "verify-patched"
-            _checkout_repair_tree(repo_dir, work, job.base_sha)
-        else:
-            _restore_sources_to_base(work, job.base_sha)
-        ap = subprocess.run(["git", "apply", "--whitespace=nowarn", "-"], cwd=work,
-                            input=patch, capture_output=True, text=True,
-                            encoding="utf-8", errors="replace")
-        if ap.returncode != 0:
-            (out_dir / "worker.log").write_text(
-                "base fail evidence kept; patch apply failed:\n" + ap.stderr, encoding="utf-8")
-            return Result(job_id=job.job_id, backend=backend_name, outcome="failed",
-                          base_sha=job.base_sha, reproduced_on_base=True,
-                          logs_path=f"artifacts/{job.job_id}/worker.log",
-                          unverified_items=["patch failed to apply on base"])
-        # Stage only the fix and the regression files, never setup/build output.
-        _seed_test_files(work, test_files | {path: versions[1] for path, versions in mixed_tests.items()})
-        delivery_files = sorted(set(patch_files(patch)) | set(test_files) | set(mixed_tests))
-        if delivery_files:
-            _git(["add", "-A", "--", *delivery_files], work)
-        delivery_patch = _git(["diff", "--cached", "--binary"], work).stdout
-        fixed_rc, out, err, error = _replay_regression(
-            cmd, plan, work, env, out_dir, "patched", rebuild=rebuild)
-        if error is None and report_spec(plan):
-            try:
-                patched_evidence = collect_report(work, out_dir, plan, "patched")
-                check_report(patched_evidence, plan, "patched", base_evidence)
-            except ValueError as exc:
-                error = "structured_report_invalid", str(exc)
-        if error is None and fixed_rc:
-            error = "patched_test_failed", f"regression failed on the patch (exit {fixed_rc})"
-        if error is None and plan and not report_spec(plan) and not _evidence_matches(
-                [_test_case_identity(plan["base_failure"][0]), *plan["patched_success"]], out, err) and not _wrapper_success_matches(
-                    cmd, plan, base_out, base_err, out, err):
-            error = "patched_test_unconfirmed", "target test success not found in patched output"
-        fixed = error is None
-        failure = f"{error[0]} on patched: {error[1]}" if error else ""
-        additional_checks = {}
-        additional_check_output = {}
-        if fixed and job.repo.lower() == "rclone/rclone":
-            for command in (["go", "build"], ["make", "quicktest"]):
-                name = " ".join(command)
-                rc, check_out, check_err = _verify_command(
-                    command, work, env, out_dir, "rclone-" + "-".join(command))
-                additional_checks[name] = rc
-                if rc != 0:
-                    additional_check_output[name] = {"stdout_tail": check_out[-3000:],
-                                                     "stderr_tail": check_err[-3000:]}
-                    error = "additional_check_failed", f"required rclone check failed: {name} (exit {rc})"
-                    failure = f"{error[0]}: {error[1]}"
-                    break
-        if fixed and not failure and delivery_files:
-            after = _git(["diff", "HEAD", "--binary", "--", *delivery_files], work).stdout
-            if after != delivery_patch:
-                fixed = False
-                error = "delivery_changed_during_verification", "tests/setup changed files intended for publication"
-                failure = f"{error[0]}: {error[1]}"
-        if root_cause:
-            unverified.append(f"agent root cause: {root_cause[:200]}")
-        (out_dir / "change.patch").write_bytes(delivery_patch.encode("utf-8"))
-        (out_dir / "test-report.json").write_text(json.dumps({
-            "schema_version": 1, "job_id": job.job_id, "base_sha": job.base_sha,
-            "test_cmd": cmd, "base_returncode": base_rc, "patched_returncode": fixed_rc,
-            "failure_kind": error[0] if error else None, "verification_plan": plan,
-            "base_evidence": base_evidence, "patched_evidence": patched_evidence,
-            # base 输出必须留存：否则"复现证据"无法审计，假阳性也无从发现
-            "base_stdout_tail": base_out[-3000:], "base_stderr_tail": base_err[-3000:],
-            "patched_stdout_tail": out[-3000:], "patched_stderr_tail": err[-3000:],
-            "regression_test_files": sorted(baseline_tests),
-            "repair_kind": repair_kind, "test_repair_files": test_repair_files,
-            "coverage": coverage, "delivery_preflight": delivery_preflight,
-            "delivery_files": patch_files(delivery_patch),
-            "delivery_patch_sha256": hashlib.sha256((out_dir / "change.patch").read_bytes()).hexdigest(),
-            "root_cause": root_cause,
-            "pr_title": pr_title, "pr_body": pr_body,
+            produced = {"patch": patch, "notes": notes}
+        if produced.get("agent_output"):
+            (out_dir / "agent-output.txt").write_text(redact_log(produced["agent_output"]), encoding="utf-8")
+        if produced.get("agent_failure"):
+            return stopped(f"{job.repair_agent} repair run failed: {produced['agent_failure']}")
+        agent_report = produced.get("agent_report") or {}
+        blocker = reported_blocker(agent_report)
+        if blocker or agent_report.get("publication_ready") is False:
+            return stopped("agent_reported_blocker: " + (blocker or "Agent did not approve publication"), "blocked")
+        patch = produced.get("patch") or ""
+        if not patch.strip():
+            return stopped("agent produced no deliverable changes", "blocked")
+        errors = check_patch_content(patch) + check_delivery_scope(patch)
+        if errors:
+            return stopped("; ".join(errors), "blocked")
+        # Complete patch is delivered unchanged, including tests/binary fixtures.
+        # No source/test classification or additional build/test command runs here.
+        (out_dir / "change.patch").write_bytes(patch.encode("utf-8"))
+        cmd = produced.get("test_cmd") or list(test_cmd or [])
+        report = {
+            "schema_version": 2, "verification_mode": "agent",
+            "job_id": job.job_id, "base_sha": job.base_sha,
+            "test_cmd": cmd, "agent_report": agent_report,
+            "root_cause": produced.get("root_cause") or agent_report.get("root_cause", ""),
+            "pr_title": produced.get("pr_title") or agent_report.get("pr_title", ""),
+            "pr_body": produced.get("pr_body") or agent_report.get("pr_body", ""),
+            "coverage": produced.get("coverage") or agent_report.get("coverage", {}),
+            "regression_test_files": [agent_report["test_file"]] if agent_report.get("test_file") else [],
+            "delivery_preflight": produced.get("delivery_preflight") or {},
+            "delivery_files": patch_files(patch),
+            "delivery_patch_sha256": hashlib.sha256(patch.encode("utf-8")).hexdigest(),
             "repair_agent": job.repair_agent, "model": job.model,
-            "additional_checks": additional_checks,
-            "additional_check_output": additional_check_output,
-        }, ensure_ascii=False, indent=1), encoding="utf-8")
+        }
+        (out_dir / "test-report.json").write_text(json.dumps(report, ensure_ascii=False, indent=1), encoding="utf-8")
         (out_dir / "worker.log").write_text(
-            f"=== base (rc={base_rc}) ===\n{base_out[-2000:]}\n{base_err[-2000:]}\n"
-            f"=== patched (rc={fixed_rc}) ===\n{out[-4000:]}\n{err[-4000:]}",
+            "Agent completed repair, tests and self-check. No independent test replay or extra AI review.\n"
+            "See agent-handoff.json, Agent command logs and CLI diagnostics for reported results.\n",
             encoding="utf-8")
-
-    return Result(job_id=job.job_id, backend=backend_name,
-                  outcome="failed" if failure else "succeeded",
-                  base_sha=job.base_sha,
-                  reproduced_on_base=True,
-                  fixed_on_patch=fixed,
-                  regression_tests_passed=fixed,
+    return Result(job_id=job.job_id, backend=backend_name, outcome="succeeded",
+                  base_sha=job.base_sha, verification_mode="agent",
                   patch_path=f"artifacts/{job.job_id}/change.patch",
                   test_report_path=f"artifacts/{job.job_id}/test-report.json",
                   logs_path=f"artifacts/{job.job_id}/worker.log",
-                  unverified_items=[failure, *unverified] if failure else unverified)
+                  unverified_items=["Tests and self-check performed by the Agent; not independently replayed."])
