@@ -477,24 +477,24 @@ repositories:
     note: 禁止Agent广泛扫描issue后提交 unsolicited fixes；描述、评论须人写。
     pr_rules:
     - 禁止Agent广泛扫描issue后提交 unsolicited fixes；描述、评论须人写。
-  bytecodealliance/wasm-tools:
+  mark3labs/mcp-go:
     lane: open
     pool: honor
     issue_scan: true
-    purpose: WebAssembly 分析、转换与测试工具
-    merged_by_us: 1
-    note: 组织政策要求human-in-the-loop；AGENTS明确PR、评论由人手动发布；禁止AI修good first issue。
+    purpose: Go MCP 客户端和服务端 SDK
+    merged_by_us: 0
+    note: 按贡献指南增加回归测试并运行相关 Go 测试；协议改动注明规范章节，涉及 otel 子模块时单独测试。
     pr_rules:
-    - 组织政策要求human-in-the-loop；AGENTS明确PR、评论由人手动发布；禁止AI修good first issue。
-  bytecodealliance/wasmtime:
+    - 按贡献指南增加回归测试并运行相关 Go 测试；协议改动注明规范章节，涉及 otel 子模块时单独测试。
+  gptme/gptme:
     lane: open
     pool: honor
     issue_scan: true
-    purpose: WebAssembly/WASI 运行时
-    merged_by_us: 2
-    note: 组织政策要求human-in-the-loop；AGENTS明确PR、评论由人手动发布；禁止AI修good first issue。
+    purpose: 终端编程 Agent 与工具框架
+    merged_by_us: 0
+    note: '优先处理标记为 autonomous-friendly 且 status: ready 的问题；开工前按指南认领，跳过 needs-human-judgment，使用 Conventional Commits 并运行相关测试。'
     pr_rules:
-    - 组织政策要求human-in-the-loop；AGENTS明确PR、评论由人手动发布；禁止AI修good first issue。
+    - '优先处理标记为 autonomous-friendly 且 status: ready 的问题；开工前按指南认领，跳过 needs-human-judgment，使用 Conventional Commits 并运行相关测试。'
   clickhouse/clickhouse:
     lane: observe
     pool: honor

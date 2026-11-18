@@ -17,8 +17,8 @@ rules:
       public repair task.
   ruvnet/RuVector:
     note: ''
-  bytecodealliance/wasmtime:
-    note: 按受影响模块执行 Rust 或 Wasm 回归测试。
+  gptme/gptme:
+    note: '优先处理标记为 autonomous-friendly 且 status: ready 的问题；开工前按指南认领，跳过 needs-human-judgment，使用 Conventional Commits 并运行相关测试。'
   agentscope-ai/agentscope-java:
     note: ''
   kgateway-dev/kgateway:
@@ -31,8 +31,8 @@ rules:
     note: ''
   redis/redis-py:
     note: ''
-  bytecodealliance/wasm-tools:
-    note: 按受影响 crate 运行测试，保留可复跑的 Wasm 输入。
+  mark3labs/mcp-go:
+    note: 按贡献指南增加回归测试并运行相关 Go 测试；协议改动注明规范章节，涉及 otel 子模块时单独测试。
   infiniflow/ragflow:
     note: ''
   bytedance/deer-flow:

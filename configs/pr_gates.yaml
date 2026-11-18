@@ -80,8 +80,8 @@ repositories:
   prometheus/prometheus: {requires_invite: false, claim_comment: true}
   redis/go-redis: {requires_invite: false}
   agentgateway/agentgateway: {requires_invite: false}
-  bytecodealliance/wasm-tools: {requires_invite: false}
-  bytecodealliance/wasmtime: {requires_invite: false}
+  mark3labs/mcp-go: {requires_invite: false}
+  gptme/gptme: {requires_invite: false, claim_comment: true}
   clickhouse/clickhouse: {requires_invite: false}
   modelcontextprotocol/rust-sdk: {requires_invite: false}
   PrefectHQ/fastmcp: {requires_invite: false, requires_assignment: true, assignment_exempt_labels: [prs welcome]}

@@ -855,7 +855,8 @@ def test_exact_roster_is_preserved():
     assert set(gates["repositories"]) == monitored
     assert all(repos["repositories"][repo]["lane"] == "open" for repo in set(worker))
     assert {"rancher/rancher", "langgenius/dify", "dapr/dapr", "PrefectHQ/fastmcp"} <= monitored
-    assert "bytecodealliance/wasm-tools" in monitored
+    assert {"mark3labs/mcp-go", "gptme/gptme"} <= monitored
+    assert {"bytecodealliance/wasm-tools", "bytecodealliance/wasmtime"}.isdisjoint(monitored)
     assert {"nodejs/node", "jlowin/fastmcp", "pydantic/pydantic-ai-harness"}.isdisjoint(monitored)
     assert {"sqlfluff/sqlfluff", "delta-io/delta-rs", "strands-agents/harness-sdk",
             "kubescape/kubescape"}.isdisjoint(monitored)
