@@ -647,6 +647,8 @@ def candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen:
                     latest = queue.get(key)
                     if latest is not None and latest.get("status") != "staged":
                         return {"id": key, "abort": "candidate already running or terminal"}
+                    if latest is not None and (latest.get("dispatch_job_id") or latest.get("dispatch_started_at")):
+                        return {"id": key, "abort": "dispatcher busy"}
                     work = {**entry, **(latest or {})}
                     repo = work.get("repo") or key.rsplit("#", 1)[0]
                     backed = {candidate.lower() for candidate in ledger.reserved_candidates()}
@@ -680,13 +682,30 @@ def candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen:
                     raise
             finally:
                 try:
-                    ledger.release_preparation(job_id)
                     pending = ledger.pending_publication(job_id)
                     if reserved and pending is None:
+                        evicted = []
+                        preserve_preparation = False
                         with queue_transaction(root) as queue:
-                            if queue.get(key, {}).get("dispatch_job_id") == job_id:
-                                queue[key].pop("dispatch_job_id", None)
-                        release_direct_start(root, key)
+                            current = queue.get(key) or {}
+                            preserve_preparation = bool(current.get("dispatch_started_at")
+                                                        or current.get("status") == "running")
+                            if (current.get("dispatch_job_id") == job_id
+                                    and not current.get("dispatch_started_at")
+                                    and current.get("status") != "running"):
+                                # One durable JSON replacement removes both markers.
+                                # Keep the SQLite seat until this succeeds, so a
+                                # failed queue write cannot expose an unbacked seat.
+                                current.pop("dispatch_job_id", None)
+                                current.pop("direct_start_reserved_at", None)
+                                current["updated_at"] = business_now().isoformat()
+                                from ..state_store import rotate_staged_queue
+                                evicted = [(old, queue[old].get("abort_reason", ""))
+                                           for old in rotate_staged_queue(root, queue)]
+                        if not preserve_preparation:
+                            ledger.release_preparation(job_id)
+                        for old, reason in evicted:
+                            log(root, "queue_evicted", old, reason)
                     elif not reserved and pending is None:
                         # This thread owns both admission and the candidate lock.
                         # A pre-reservation policy/capacity error must not leave

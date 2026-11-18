@@ -212,6 +212,7 @@ jobs:
                 - /opt/oss-scout-data:/data
               environment:
                 - TZ=Asia/Shanghai
+                - MALLOC_ARENA_MAX=2
                 - OSSCOUT_DASHBOARD_ROOT=/data
                 - DASHBOARD_PASSWORD=\${DASHBOARD_PASSWORD}
                 - GH_TOKEN=\${GH_TOKEN}

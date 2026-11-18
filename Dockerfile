@@ -37,6 +37,9 @@ COPY --chmod=0755 docker/entrypoint-dashboard.sh /entrypoint.sh
 RUN useradd -m scout && mkdir -p /data && chown -R scout:scout /app /data
 USER scout
 ENV TZ=Asia/Shanghai
+# Keep glibc from retaining a separate large heap arena for every background
+# thread on the small controller host. Does not limit remote repair workers.
+ENV MALLOC_ARENA_MAX=2
 ENV OSSCOUT_DASHBOARD_ROOT=/data
 VOLUME ["/data"]
 

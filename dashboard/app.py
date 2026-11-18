@@ -497,12 +497,17 @@ def create_app(root: Path | None = None, gh_runner=None,
                 with candidate_execution_lock(root, candidate) as owned:
                     if not owned:
                         continue
-                    ledger.release_preparation(job_id)
                     with queue_transaction(root) as queue:
                         entry = queue.get(candidate)
-                        if entry and entry.get("dispatch_job_id") == job_id:
+                        if entry and (entry.get("status") == "running" or entry.get("dispatch_started_at")
+                                      or entry.get("dispatch_job_id") not in (None, job_id)):
+                            continue  # A started or different owner needs remote reconciliation.
+                        if entry:
                             entry.pop("dispatch_job_id", None)
                             entry.pop("direct_start_reserved_at", None)
+                    # Persist both queue markers before releasing its durable seat.
+                    # A failed JSON replacement must leave the preparation reserved.
+                    ledger.release_preparation(job_id)
             protected = {key.lower() for key in ledger.reserved_candidates()}
         finally:
             ledger.close()

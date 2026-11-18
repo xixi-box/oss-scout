@@ -86,3 +86,96 @@ def test_unreserved_direct_release_obeys_latest_fifo_pool_limit(tmp_path, monkey
     assert current[key]["staged_at"] == entry["staged_at"]
     assert current["traefik/traefik#2"]["status"] == "staged"
     assert sum(item["status"] == "staged" for item in current.values()) == 1
+
+
+def test_timeline_failure_clears_own_markers_before_releasing_preparation_and_next_today_runs(tmp_path, monkeypatch):
+    key, entry = handoff(tmp_path, ai_verdict={"usable": True}, discovered_at=business_now().isoformat())
+    policy = SimpleNamespace(tz_name="Asia/Shanghai", max_claims_per_day=5,
+                             repo_lane=lambda repo: "open", pr_assignment=lambda repo: {})
+    monkeypatch.setattr(pipeline.PolicyEngine, "load", lambda _: (policy, None))
+    monkeypatch.setattr(pipeline, "_fine_rescreen_due", lambda _: False)
+    monkeypatch.setattr(pipeline, "_eligible", lambda *args, **kwargs: True)
+    monkeypatch.setattr(pipeline, "monitored_repo", lambda _: True)
+    monkeypatch.setattr(pipeline, "gh_read", lambda _: {"state": "active"})
+    monkeypatch.setattr(pipeline, "recheck_candidate", lambda *args, **kwargs:
+                        SimpleNamespace(complete=False, errors=["timeline fetch failed"]))
+    release = ClaimLedger.release_preparation
+    def checked_release(ledger, job):
+        current = json.loads((tmp_path / "queue/candidates.json").read_text())[key]
+        assert not current.get("dispatch_job_id") and not current.get("direct_start_reserved_at")
+        return release(ledger, job)
+    monkeypatch.setattr(ClaimLedger, "release_preparation", checked_release)
+    result = pipeline.candidate_pipeline(tmp_path, entry)
+    assert "recheck incomplete" in result["abort"]
+    current = json.loads((tmp_path / "queue/candidates.json").read_text())[key]
+    assert current["status"] == "staged" and current["screen_retry_at"]
+    monkeypatch.setattr(ClaimLedger, "release_preparation", release)
+    monkeypatch.setattr(pipeline, "_candidate_pipeline", lambda root, work, **kwargs:
+                        {"id": work["id"], "started": True})
+    today = {**entry, "id": "traefik/traefik#2", "number": 2}
+    assert pipeline.candidate_pipeline(tmp_path, today)["started"]
+
+
+def test_failed_owner_does_not_clear_a_newer_jobs_markers(tmp_path, monkeypatch):
+    key, entry = handoff(tmp_path)
+    policy = SimpleNamespace(tz_name="Asia/Shanghai", max_claims_per_day=5)
+    monkeypatch.setattr(pipeline.PolicyEngine, "load", lambda _: (policy, None))
+    def replaced(root, work, **kwargs):
+        with pipeline.queue_transaction(root) as queue:
+            queue[key].update(dispatch_job_id="job-another-owner", direct_start_reserved_at="new-owner-stamp")
+        return {"abort": "recheck incomplete"}
+    monkeypatch.setattr(pipeline, "_candidate_pipeline", replaced)
+    pipeline.candidate_pipeline(tmp_path, entry)
+    current = json.loads((tmp_path / "queue/candidates.json").read_text())[key]
+    assert current["dispatch_job_id"] == "job-another-owner"
+    assert current["direct_start_reserved_at"] == "new-owner-stamp"
+
+
+def test_queue_cleanup_write_failure_retains_the_preparation_seat(tmp_path, monkeypatch):
+    from contextlib import contextmanager
+    key, entry = handoff(tmp_path)
+    policy = SimpleNamespace(tz_name="Asia/Shanghai", max_claims_per_day=5)
+    monkeypatch.setattr(pipeline.PolicyEngine, "load", lambda _: (policy, None))
+    original = pipeline.queue_transaction
+    calls = []
+    @contextmanager
+    def transaction(root):
+        calls.append(True)
+        if len(calls) == 2:
+            raise OSError("queue replacement failed")
+        with original(root) as queue:
+            yield queue
+    monkeypatch.setattr(pipeline, "queue_transaction", transaction)
+    monkeypatch.setattr(pipeline, "_candidate_pipeline", lambda *args, **kwargs: {"abort": "temporary recheck failure"})
+    with pytest.raises(OSError, match="queue replacement failed"):
+        pipeline.candidate_pipeline(tmp_path, entry)
+    current = json.loads((tmp_path / "queue/candidates.json").read_text())[key]
+    ledger = ClaimLedger(tmp_path / "state/scout_v2.sqlite3")
+    try:
+        assert ledger.preparations() == [(current["dispatch_job_id"], key)]
+        assert current["direct_start_reserved_at"]
+    finally:
+        ledger.close()
+
+
+@pytest.mark.parametrize("state", ["running", "started"])
+def test_finally_retains_a_preparation_when_queue_indicates_remote_execution(tmp_path, monkeypatch, state):
+    key, entry = handoff(tmp_path)
+    policy = SimpleNamespace(tz_name="Asia/Shanghai", max_claims_per_day=5)
+    monkeypatch.setattr(pipeline.PolicyEngine, "load", lambda _: (policy, None))
+    def uncertain(root, work, **kwargs):
+        with pipeline.queue_transaction(root) as queue:
+            if state == "running":
+                queue[key]["status"] = "running"
+            else:
+                queue[key]["dispatch_started_at"] = business_now().isoformat()
+        return {"abort": "remote execution requires reconciliation"}
+    monkeypatch.setattr(pipeline, "_candidate_pipeline", uncertain)
+    pipeline.candidate_pipeline(tmp_path, entry)
+    current = json.loads((tmp_path / "queue/candidates.json").read_text())[key]
+    ledger = ClaimLedger(tmp_path / "state/scout_v2.sqlite3")
+    try:
+        assert ledger.preparations() == [(current["dispatch_job_id"], key)]
+        assert current["direct_start_reserved_at"]
+    finally:
+        ledger.close()

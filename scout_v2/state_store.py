@@ -11,9 +11,11 @@ import json
 import os
 import sqlite3
 import tempfile
+import hashlib
+import shutil
 from pathlib import Path
 from zoneinfo import ZoneInfo
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 
 JOB_STATES = ("queued", "leased", "running", "collecting",
               "succeeded", "failed", "inconclusive", "blocked")
@@ -316,27 +318,50 @@ def atomic_json_write(path: Path, data, verify: bool = True, backup: bool = True
     discover.py 原版没有 fsync/校验/.bak——0x00 损坏事件后统一走这里。
     """
     path.parent.mkdir(parents=True, exist_ok=True)
-    payload = json.dumps(data, ensure_ascii=False, indent=1)
     fd, tmp_name = tempfile.mkstemp(dir=str(path.parent), prefix=path.name, suffix=".tmp")
     bak = path.with_suffix(path.suffix + ".bak")
+    from .controller_metrics import timed_operation
+    def phase(name):
+        return (timed_operation(path.parent.parent, "queue.persist." + name)
+                if path.name == "candidates.json" and path.parent.name == "queue" else nullcontext())
+    def fingerprint(file):
+        checksum = hashlib.sha256()
+        with open(file, "rb") as source:
+            for chunk in iter(lambda: source.read(1024 * 1024), b""):
+                checksum.update(chunk)
+        return checksum.digest()
     try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            f.write(payload)
-            f.flush()
-            os.fsync(f.fileno())
+        expected = hashlib.sha256()
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as f:
+            # Stream instead of retaining a full Unicode payload alongside the
+            # queue and its transaction snapshot. Checksums verify exact bytes
+            # without constructing two additional parsed queues under the lock.
+            with phase("encode_write"):
+                for chunk in json.JSONEncoder(ensure_ascii=False, indent=1).iterencode(data):
+                    f.write(chunk)
+                    expected.update(chunk.encode("utf-8"))
+            with phase("fsync"):
+                f.flush()
+                os.fsync(f.fileno())
         if verify:
-            json.loads(Path(tmp_name).read_text(encoding="utf-8"))  # 破损直接抛，不落地
+            with phase("verify_temp"):
+                if fingerprint(tmp_name) != expected.digest():
+                    raise ValueError("JSON temporary file checksum mismatch")
         if backup and path.exists():
             # 先备份旧版再替换——.bak 必须是"上一版"，否则零价值
             try:
-                bak.write_text(path.read_text(encoding="utf-8"), encoding="utf-8")
+                with phase("backup"):
+                    shutil.copyfile(path, bak)
             except OSError:
                 pass
-        os.replace(tmp_name, path)
+        with phase("replace"):
+            os.replace(tmp_name, path)
         if verify:
             # 10-22 0x00 事故：NTFS 预分配 + 中断可在 replace 后留下填零文件，
             # 落地后必须回读校验最终文件本身
-            json.loads(path.read_text(encoding="utf-8"))
+            with phase("verify_final"):
+                if fingerprint(path) != expected.digest():
+                    raise ValueError("JSON final file checksum mismatch")
         from .table_sync import notify_path
         notify_path(path)
     finally:
