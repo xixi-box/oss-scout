@@ -123,7 +123,7 @@ def test_deploy_waits_without_interrupting_repair(monkeypatch, tmp_path, busy):
     try:
         exec(compile(source, "deploy-guard", "exec"), {})
         assert waited == [10]
-        assert deployed == [["docker", "compose", "-f", "compose.yaml", "up", "-d", "--remove-orphans"]]
+        assert deployed == [["docker", "compose", "-f", "compose.yaml", "up", "-d", "--no-build", "--remove-orphans"]]
     finally:
         lease.close()
         db.close()

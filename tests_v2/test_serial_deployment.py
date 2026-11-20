@@ -47,7 +47,7 @@ def test_deploy_holds_admission_while_existing_writers_finish():
         events.append('existing_job_finished')
     def run(command,check):
         assert lock.in_transaction and events.count('existing_job_finished')==2
-        assert command==['docker','compose','-f','compose.yaml','up','-d','--remove-orphans']
+        assert command==['docker','compose','-f','compose.yaml','up','-d','--no-build','--remove-orphans']
         events.append('replaced')
     exec(compile(tree,'deployment-drain','exec'),{
         'Path':FakePath,'sqlite3':SimpleNamespace(connect=connect,OperationalError=RuntimeError),
