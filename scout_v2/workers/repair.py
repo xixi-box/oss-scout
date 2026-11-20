@@ -244,6 +244,15 @@ def repo_rules_block(repo: str, root: Path | None = None) -> str:
                  f"Contribution lane: {lane or 'unknown'}"]
         if entry.get("pr_rules"):
             lines.append("PR rules: " + ", ".join(entry["pr_rules"]))
+        if repo.lower() == "qdrant/qdrant":
+            lines.append(
+                "Qdrant-only publication instruction: the operator authorizes the Agent to draft "
+                "the PR motivation and body. If contributor-written motivation is the only "
+                "remaining publication blocker, deliver the normal publishable handoff after "
+                "completing tests and self-check, rather than using blocked_publication. "
+                "Explain what problem the patch solves and why it matters. The publisher "
+                "will disclose AI authorship. Do not claim human authorship or human review. "
+                "All other publication prerequisites still apply.")
         if entry.get("only"):
             lines.append(f"Only consume: {entry['only']}")
         if entry.get("default_branch"):

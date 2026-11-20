@@ -368,10 +368,11 @@ def _rewrite_body(cfg: dict, out_dir: Path, *, repair_agent: str = "opencode") -
             f"`{path}`" for path in report["regression_test_files"]) + ".")
     lines.extend(["", *facts])
     generated = report.get("pr_body")
-    if (isinstance(generated, str) and len(generated) <= 16000
-            and generated.count("{VERIFIED_TESTS}") == 1
-            and "AI assistance:" not in generated
-            and "oss-scout independently replayed" not in generated):
+    usable_draft = (isinstance(generated, str) and len(generated) <= 16000
+                    and generated.count("{VERIFIED_TESTS}") == 1
+                    and "AI assistance:" not in generated
+                    and "oss-scout independently replayed" not in generated)
+    if usable_draft:
         for name, code in (report.get("additional_checks") or {}).items():
             if code == 0:
                 facts.append(f"Additional check passed: `{name}`.")
@@ -382,4 +383,10 @@ def _rewrite_body(cfg: dict, out_dir: Path, *, repair_agent: str = "opencode") -
     if upstream == "qdrant/qdrant" and issue_number and not agent_mode:
         lines.extend(["", f"Repair task: reproduce the bug in #{issue_number}, implement a focused fix, "
                       "and verify that the regression test fails on dev and passes with the patch."])
+    if upstream == "qdrant/qdrant" and agent_mode:
+        agent = {"codex": "Codex", "opencode": "OpenCode"}.get(repair_agent, "An AI agent")
+        disclosure = f"{agent} assisted with the patch and tests."
+        if usable_draft:
+            disclosure = f"{agent} drafted the PR motivation and description and assisted with the patch and tests."
+        lines.extend(["", disclosure])
     return "\n".join(lines).strip() or body

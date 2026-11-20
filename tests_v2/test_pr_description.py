@@ -1,4 +1,7 @@
 import json
+from pathlib import Path
+
+import pytest
 
 from scout_v2.workers import publish_remote, repair
 
@@ -52,3 +55,21 @@ def test_agent_reported_results_are_rendered_without_inventing_verification(tmp_
     assert "Result: No base comparison was run." in body
     assert "fails on base" not in body and "passes with this patch" not in body
     assert "Agent-reported" not in body and "AI assistance" not in body and "oss-scout" not in body
+
+
+def test_only_qdrant_prompt_authorizes_publishing_agent_written_motivation():
+    root = Path(__file__).resolve().parents[1]
+    rules = repair.repo_rules_block("qdrant/qdrant", root)
+    assert "contributor-written motivation is the only" in rules
+    assert "Do not claim human authorship or human review" in rules
+    assert "Qdrant-only publication instruction" not in repair.repo_rules_block("agentgateway/agentgateway", root)
+
+
+@pytest.mark.parametrize(("agent", "name"), [("codex", "Codex"), ("opencode", "OpenCode")])
+def test_qdrant_discloses_agent_written_motivation_and_keeps_test_report(tmp_path, agent, name):
+    report = {"verification_mode": "agent", "test_cmd": ["cargo", "test", "regression"],
+              "pr_body": "## Motivation\nPreserve the expected result for empty inputs.\n{VERIFIED_TESTS}"}
+    (tmp_path / "test-report.json").write_text(json.dumps(report), encoding="utf-8")
+    body = publish_remote._rewrite_body({"upstream": "qdrant/qdrant", "issue_number": 42}, tmp_path, repair_agent=agent)
+    assert "Fixes #42" in body and "## Motivation" in body and "cargo test regression" in body
+    assert f"{name} drafted the PR motivation and description" in body
