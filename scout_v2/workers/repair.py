@@ -141,9 +141,14 @@ Use exactly one {{VERIFIED_TESTS}} placeholder for all test commands and test
 results: the publisher replaces it with your reported commands and outcomes,
 clearly attributed to your self-test report. Do not
 invent checks, mark unverified checklist items as complete, or claim CI is green.
-Do not add generic AI-assistance or oss-scout promotional text. If a repository
-requires a disclosure or attestation that cannot be satisfied, report the blocker
-instead of claiming it was satisfied. Keep the description focused on this diff.
+Do not add generic AI-assistance or oss-scout promotional text. Include any
+required truthful disclosure. Keep the description focused on this diff.
+If the only remaining blocker for a public, non-security issue is a publication
+rule (such as contributor-written motivation or PR text), finish the permitted
+repair and tests and write pr_title and pr_body as an AI-generated working draft
+for the contributor, including suggested motivation. Keep the patch and logs.
+Use status="blocked_publication", publication_ready=false and a concrete blocker.
+Do not complete an attestation the contributor must make or claim human authorship.
 If a real prerequisite or unavailable reproducer prevents a truthful repair,
 set status="blocked", publication_ready=false and blocker="<observed reason>"
 in OSSCOUT_RESULT.json. Do not manufacture a test or success report. Otherwise
@@ -465,7 +470,7 @@ def opencode_patch_producer(job: Job, work_dir: Path, context: str,
             from .delivery_materials import COMPLETION_TASK, material_issues, reported_blocker
             markers = _read_result_file(work_dir)
             blocker = reported_blocker(markers)
-            if blocker:
+            if blocker and markers.get("status") != "blocked_publication":
                 raise RuntimeError("agent_reported_blocker: " + blocker)
             issues = material_issues(markers, work_dir)
             completion = {"initial_issues": issues, "attempts": 0}
@@ -488,7 +493,7 @@ def opencode_patch_producer(job: Job, work_dir: Path, context: str,
                 completion["completion_ok"] = completion_ok
                 markers = _read_result_file(work_dir)
                 blocker = reported_blocker(markers)
-                if blocker:
+                if blocker and markers.get("status") != "blocked_publication":
                     raise RuntimeError("agent_reported_blocker: " + blocker)
             completion["remaining_issues"] = material_issues(markers, work_dir)
             if diagnostics_dir:
@@ -649,9 +654,16 @@ def run_repair(job: Job, repo_dir: Path, out_dir: Path, *,
             return stopped(f"{job.repair_agent} repair run failed: {produced['agent_failure']}")
         agent_report = produced.get("agent_report") or {}
         blocker = reported_blocker(agent_report)
+        patch = produced.get("patch") or ""
+        if blocker and agent_report.get("status") == "blocked_publication":
+            # Manual handoff is diagnostic only. No patch_path or test_report_path
+            # reaches the normal publisher or the automatic recovery path.
+            if (patch.strip() and not check_patch_content(patch) and not check_delivery_scope(patch)
+                    and redact_log(patch) == patch):
+                (out_dir / "manual-review.patch").write_bytes(patch.encode("utf-8"))
+            return stopped("manual_publication_required: " + blocker, "blocked")
         if blocker or agent_report.get("publication_ready") is False:
             return stopped("agent_reported_blocker: " + (blocker or "Agent did not approve publication"), "blocked")
-        patch = produced.get("patch") or ""
         if not patch.strip():
             return stopped("agent produced no deliverable changes", "blocked")
         errors = check_patch_content(patch) + check_delivery_scope(patch)

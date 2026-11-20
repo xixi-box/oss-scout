@@ -43,7 +43,7 @@ def install_client(monkeypatch, *, mode="recover", clock=None):
                 (self.workdir / "calc.py").write_text("def div(a, b):\n    return a / b\n")
                 (self.workdir / "test_regression.py").write_text(
                     "from calc import div\ndef test_fractional():\n    assert div(7, 2) == 3.5\n")
-                if mode != "complete":
+                if mode not in ("complete", "manual_publication"):
                     report.pop("test_cmd")  # Missing basic handoff is completed by the same Agent.
                     report.pop("coverage")
                 if clock is not None:
@@ -68,6 +68,9 @@ def install_client(monkeypatch, *, mode="recover", clock=None):
             elif mode != "completion_failed":
                 report.pop("test_cmd")
                 report.pop("coverage")
+            if mode == "manual_publication":
+                report.update(status="blocked_publication", publication_ready=False,
+                              blocker="The contributor must write the PR motivation.")
             (self.workdir / repair.RESULT_FILE).write_text(json.dumps(report))
             if mode == "completion_failed" and len(self.calls) > 1:
                 return False, ""
@@ -195,6 +198,28 @@ def test_opencode_transient_retries_share_one_timeout_budget(tmp_path, monkeypat
     ok, detail = opencode_client.OpenCodeClient(timeout_seconds=10, workdir=tmp_path).run("fixture", "task")
     assert not ok and "retry budget exhausted" in detail
     assert timeouts == [10, 2]
+
+
+@pytest.mark.parametrize("agent", ["opencode", "codex"])
+def test_publication_only_block_preserves_draft_and_non_publishable_patch(tmp_path, monkeypatch, agent):
+    repo, sha = make_repo(tmp_path)
+    task = job(sha)
+    task.repair_agent, task.model = agent, "fixture"
+    clients = install_client(monkeypatch, mode="manual_publication")
+    out = tmp_path / "out"
+
+    result = repair.run_repair(task, repo, out)
+
+    assert result.outcome == "blocked"
+    assert result.unverified_items == ["manual_publication_required: The contributor must write the PR motivation."]
+    assert result.patch_path is None and result.test_report_path is None
+    assert len(clients[0].calls) == 1
+    handoff = json.loads((out / "agent-handoff.json").read_text())
+    assert handoff["pr_body"] == complete_report()["pr_body"]
+    assert handoff["test_cmd"] == complete_report()["test_cmd"]
+    patch = (out / "manual-review.patch").read_text()
+    assert "calc.py" in patch and "test_regression.py" in patch
+    assert not (out / "change.patch").exists()
 
 
 @pytest.mark.parametrize("agent", ["opencode", "codex"])
