@@ -154,3 +154,29 @@ def test_remote_publication_reservation_remains_protected_even_if_listing_is_emp
         assert read_handoff(tmp_path)["dispatch_job_id"] == "job-dispatching"
     finally:
         ledger.close()
+
+
+@pytest.mark.parametrize("status", ["coarse_blocked", "fine_blocked", "screen_skipped", "escalated"])
+def test_recover_preparation_after_screening_records_final_result(tmp_path, monkeypatch, status):
+    entry = write_handoff(tmp_path, job_id="job-screened-out")
+    entry.update(status=status, abort_reason="screening decision")
+    (tmp_path / "queue/candidates.json").write_text(json.dumps({entry["id"]: entry}))
+    monkeypatch.setattr(pipeline, "_actions_runner_repo", lambda _: "xixi-box/oss-scout")
+    ledger = ClaimLedger(tmp_path / "state/scout_v2.sqlite3")
+    try:
+        assert ledger.reserve_dispatch("Asia/Shanghai", 5, entry["dispatch_job_id"], "a/b", entry["id"])
+        monkeypatch.setattr(pipeline, "_find_repair_run", lambda *args: (None, False))
+        assert recover_abandoned_handoffs(tmp_path) == []
+        assert ledger.preparations()
+
+        monkeypatch.setattr(pipeline, "_find_repair_run", lambda *args: (None, True))
+        assert recover_abandoned_handoffs(tmp_path) == [entry["id"]]
+        assert ledger.preparations() == []
+        actual = read_handoff(tmp_path)
+        assert actual["status"] == status
+        assert actual["abort_reason"] == "screening decision"
+        assert "dispatch_job_id" not in actual
+        assert "direct_start_reserved_at" not in actual
+        assert "retry_authorized_job_id" not in actual
+    finally:
+        ledger.close()

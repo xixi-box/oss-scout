@@ -24,7 +24,11 @@ def recover_abandoned_handoffs(root: Path, *, protected=()) -> list[str]:
     for key, entry in snapshot.items():
         stamp = entry.get("direct_start_reserved_at")
         job_id = entry.get("dispatch_job_id")
-        if (key.lower() in protected or entry.get("status") != "staged"
+        status = entry.get("status")
+        staged = status == "staged"
+        # Screening can persist its final result before preparation cleanup.
+        screened_out = status in {"coarse_blocked", "fine_blocked", "screen_skipped", "escalated"}
+        if (key.lower() in protected or not (staged or (screened_out and job_id))
                 or not (stamp or job_id) or entry.get("dispatch_started_at") or entry.get("pr_url")):
             continue
         # A partial old cleanup can leave only the job id. The candidate's
@@ -56,27 +60,29 @@ def recover_abandoned_handoffs(root: Path, *, protected=()) -> list[str]:
                         continue
                     raise
                 ledger = ClaimLedger(root / "state/scout_v2.sqlite3")
-                if key.lower() in {candidate.lower() for candidate in ledger.reserved_candidates()}:
+                if screened_out or key.lower() in {candidate.lower() for candidate in ledger.reserved_candidates()}:
                     preparation = {(job, candidate.lower()) for job, candidate in ledger.preparations()}
                     if not job_id or (job_id, key.lower()) not in preparation:
                         continue  # A possibly submitted publication is never reclaimed here.
                 with queue_transaction(root) as queue:
                     current = queue.get(key) or {}
-                    if (current.get("status") != "staged" or current.get("dispatch_started_at")
+                    if (current.get("status") != status or current.get("dispatch_started_at")
                             or current.get("pr_url") or current.get("direct_start_reserved_at") != stamp
                             or current.get("dispatch_job_id") != job_id
                             or (not stamp and current.get("updated_at") != age_stamp)):
                         continue
                     if job_id:
                         ledger.release_claim(key)
-                        current.update(repair_job_id=job_id, retry_authorized_job_id=job_id,
-                                       abandoned_dispatch_job_id=job_id)
+                        if staged:
+                            current.update(repair_job_id=job_id, retry_authorized_job_id=job_id,
+                                           abandoned_dispatch_job_id=job_id)
                     current.pop("dispatch_job_id", None)
                     current.pop("direct_start_reserved_at", None)
                     current["updated_at"] = now.isoformat()
                     recovered.append(key)
-                    evicted.extend((old, queue[old].get("abort_reason", ""))
-                                   for old in rotate_staged_queue(root, queue))
+                    if staged:
+                        evicted.extend((old, queue[old].get("abort_reason", ""))
+                                       for old in rotate_staged_queue(root, queue))
                 if job_id:
                     ledger.release_preparation(job_id)
             finally:
