@@ -156,6 +156,49 @@ class TestCompetingPrDetection:
     能发现 #87459 "mount_facts: strip blkid UUID lookup output"。
     """
 
+    @pytest.mark.parametrize("source", ["timeline", "search"])
+    def test_milvus_draft_with_issue_footer_counts_as_competition(self, monkeypatch, source):
+        from scout_v2 import git_host as gh
+
+        pr_url = "https://github.com/milvus-io/milvus/pull/55742"
+        pr = {
+            "number": 55742, "state": "open", "draft": True,
+            "title": "feat: add PK inplace-update with typed deltas and TS-vector storage",
+            "body": "Implements literal PK inplace-update.\n\nIssue: #55738  \nDesign: #55186",
+            "html_url": pr_url,
+            "user": {"login": "MrPresent-Han"}, "pull_request": {"html_url": pr_url},
+        }
+
+        def fake_read(paths):
+            path = paths[0]
+            if "/comments" in path:
+                return []
+            if "/timeline" in path:
+                return ([{"event": "cross-referenced", "source": {"issue": pr}}]
+                        if source == "timeline" else [])
+            if "search/issues" in path:
+                return {"items": [pr] if source == "search" else []}
+            return {"state": "open", "assignees": [], "title": "PK inplace-update", "body": ""}
+
+        monkeypatch.setattr(gh, "gh_read", fake_read)
+        result = gh.recheck_candidate("milvus-io/milvus", 55738)
+        assert result.complete
+        if source == "timeline":
+            assert result.linked_pr_urls == [pr_url]
+        else:
+            assert any("milvus-io/milvus#55742" in hit for hit in result.open_pr_hits)
+
+    @pytest.mark.parametrize("text, local_ref", [
+        ("See related issue: #55738", True),
+        ("Issue: #557380", True),
+        ("Issue: milvus-io/milvus-proto#55738", True),
+        ("Issue: #55738", False),
+    ])
+    def test_issue_footer_does_not_match_unrelated_references(self, text, local_ref):
+        from scout_v2.git_host import _explicit_issue_ref
+
+        assert not _explicit_issue_ref(text, 55738, "milvus-io/milvus", local_ref=local_ref)
+
     def test_module_name_keyword_finds_unlinked_pr(self, monkeypatch):
         from scout_v2 import git_host as gh
 

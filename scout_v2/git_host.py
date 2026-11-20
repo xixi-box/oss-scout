@@ -67,8 +67,9 @@ def _explicit_issue_ref(text: str, number: int, repo: str = "", *, local_ref: bo
             target = rf"(?:{local}|{target})"
     text = re.sub(r"<!--.*?-->", "", text, flags=re.S)
     return re.search(
-        rf"(?im)^\s*(?:[-*]\s+)?(?:fix(?:es|ed)?|clos(?:e|es|ed)|resolv(?:e|es|ed)|refs?)"
-        rf"\s*:?\s+{target}",
+        rf"(?im)^\s*(?:[-*]\s+)?"
+        rf"(?:(?:fix(?:es|ed)?|clos(?:e|es|ed)|resolv(?:e|es|ed)|refs?)\s*:?\s+|issue[ \t]*:[ \t]*)"
+        rf"{target}",
         text,
     ) is not None
 
