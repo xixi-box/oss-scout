@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 from scout_v2.workers import publish_remote, repair
+from scout_v2.workers.delivery_materials import COMPLETION_TASK
 
 
 def test_agent_is_asked_to_use_final_diff_and_actual_repo_template():
@@ -57,12 +58,14 @@ def test_agent_reported_results_are_rendered_without_inventing_verification(tmp_
     assert "Agent-reported" not in body and "AI assistance" not in body and "oss-scout" not in body
 
 
-def test_only_qdrant_prompt_authorizes_publishing_agent_written_motivation():
+@pytest.mark.parametrize("repo", ["qdrant/qdrant", "kgateway-dev/kgateway", "agentgateway/agentgateway"])
+def test_shared_prompt_distinguishes_authorship_from_actual_publication_prerequisites(repo):
     root = Path(__file__).resolve().parents[1]
-    rules = repair.repo_rules_block("qdrant/qdrant", root)
-    assert "contributor-written motivation is the only" in rules
-    assert "Do not claim human authorship or human review" in rules
-    assert "Qdrant-only publication instruction" not in repair.repo_rules_block("agentgateway/agentgateway", root)
+    prompt = repair.FIX_PROMPT.format(context="issue", rules=repair.repo_rules_block(repo, root))
+    assert "For every repository, draft the PR motivation and body yourself" in prompt
+    assert "deliver the normal publishable handoff" in prompt
+    assert "prior\nmaintainer approval" in prompt and "mandatory human attestation" in prompt
+    assert "deliver the normal publishable" in COMPLETION_TASK
 
 
 @pytest.mark.parametrize(("agent", "name"), [("codex", "Codex"), ("opencode", "OpenCode")])

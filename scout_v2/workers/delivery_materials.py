@@ -85,6 +85,9 @@ in OSSCOUT_TASK.md: setup_steps/test_cmd/test_file/base_failure/patched_success/
 test_report/coverage/pr_title/pr_body are top-level fields, not a nested report.
 If the task is genuinely blocked, use status="blocked", publication_ready=false,
 and a concrete blocker with observed evidence; do not invent the missing fields.
-If only publication is blocked, retain status="blocked_publication",
-publication_ready=false and the blocker while completing the working draft.
+Apply the same publication rules as OSSCOUT_TASK.md. If the only outstanding
+concern is who writes the motivation or description, finish the Agent-authored
+text, disclose its authorship as instructed and deliver the normal publishable
+handoff once tests and self-check are complete. Retain status="blocked_publication"
+and publication_ready=false when a separate publication prerequisite is unmet.
 """

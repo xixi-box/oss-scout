@@ -143,12 +143,17 @@ clearly attributed to your self-test report. Do not
 invent checks, mark unverified checklist items as complete, or claim CI is green.
 Do not add generic AI-assistance or oss-scout promotional text. Include any
 required truthful disclosure. Keep the description focused on this diff.
-If the only remaining blocker for a public, non-security issue is a publication
-rule (such as contributor-written motivation or PR text), finish the permitted
-repair and tests and write pr_title and pr_body as an AI-generated working draft
-for the contributor, including suggested motivation. Keep the patch and logs.
-Use status="blocked_publication", publication_ready=false and a concrete blocker.
-Do not complete an attestation the contributor must make or claim human authorship.
+For every repository, draft the PR motivation and body yourself. If the only
+remaining concern is who writes the motivation or description, disclose Agent
+authorship truthfully and deliver the normal publishable handoff after testing
+and self-check. Do not report a wording-only blocker or wait for the contributor
+to rewrite the text. For Qdrant the publisher adds the authorship disclosure.
+If another publication prerequisite prevents posting, such as required prior
+maintainer approval or a mandatory human attestation you cannot truthfully make,
+report the actual blocker with status="blocked_publication" and
+publication_ready=false. For a public, non-security issue, keep any permitted
+repair, test logs and working draft for the contributor. Never claim human
+authorship or human review.
 If a real prerequisite or unavailable reproducer prevents a truthful repair,
 set status="blocked", publication_ready=false and blocker="<observed reason>"
 in OSSCOUT_RESULT.json. Do not manufacture a test or success report. Otherwise
@@ -244,15 +249,6 @@ def repo_rules_block(repo: str, root: Path | None = None) -> str:
                  f"Contribution lane: {lane or 'unknown'}"]
         if entry.get("pr_rules"):
             lines.append("PR rules: " + ", ".join(entry["pr_rules"]))
-        if repo.lower() == "qdrant/qdrant":
-            lines.append(
-                "Qdrant-only publication instruction: the operator authorizes the Agent to draft "
-                "the PR motivation and body. If contributor-written motivation is the only "
-                "remaining publication blocker, deliver the normal publishable handoff after "
-                "completing tests and self-check, rather than using blocked_publication. "
-                "Explain what problem the patch solves and why it matters. The publisher "
-                "will disclose AI authorship. Do not claim human authorship or human review. "
-                "All other publication prerequisites still apply.")
         if entry.get("only"):
             lines.append(f"Only consume: {entry['only']}")
         if entry.get("default_branch"):
