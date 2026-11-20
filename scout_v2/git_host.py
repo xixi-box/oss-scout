@@ -66,10 +66,12 @@ def _explicit_issue_ref(text: str, number: int, repo: str = "", *, local_ref: bo
         if local_ref:
             target = rf"(?:{local}|{target})"
     text = re.sub(r"<!--.*?-->", "", text, flags=re.S)
+    prefix = r"(?:fix(?:es|ed)?|clos(?:e|es|ed)|resolv(?:e|es|ed)|refs?)\s*:?\s+"
+    if local_ref:
+        # A cross-repo Issue footer may point to a downstream consumer or a dependency.
+        prefix += r"|issue[ \t]*:[ \t]*"
     return re.search(
-        rf"(?im)^\s*(?:[-*]\s+)?"
-        rf"(?:(?:fix(?:es|ed)?|clos(?:e|es|ed)|resolv(?:e|es|ed)|refs?)\s*:?\s+|issue[ \t]*:[ \t]*)"
-        rf"{target}",
+        rf"(?im)^\s*(?:[-*]\s+)?(?:{prefix}){target}",
         text,
     ) is not None
 

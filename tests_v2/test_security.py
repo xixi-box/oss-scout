@@ -168,13 +168,20 @@ class TestCompetingPrDetection:
             "html_url": pr_url,
             "user": {"login": "MrPresent-Han"}, "pull_request": {"html_url": pr_url},
         }
+        proto_url = "https://github.com/milvus-io/milvus-proto/pull/700"
+        dependency = {
+            "number": 700, "state": "open", "html_url": proto_url,
+            "body": "Issue: https://github.com/milvus-io/milvus/issues/55738",
+            "user": {"login": "MrPresent-Han"}, "pull_request": {"html_url": proto_url},
+        }
 
         def fake_read(paths):
             path = paths[0]
             if "/comments" in path:
                 return []
             if "/timeline" in path:
-                return ([{"event": "cross-referenced", "source": {"issue": pr}}]
+                return ([{"event": "cross-referenced", "source": {"issue": linked}}
+                         for linked in (dependency, pr)]
                         if source == "timeline" else [])
             if "search/issues" in path:
                 return {"items": [pr] if source == "search" else []}
@@ -193,6 +200,7 @@ class TestCompetingPrDetection:
         ("Issue: #557380", True),
         ("Issue: milvus-io/milvus-proto#55738", True),
         ("Issue: #55738", False),
+        ("Issue: https://github.com/milvus-io/milvus/issues/55738", False),
     ])
     def test_issue_footer_does_not_match_unrelated_references(self, text, local_ref):
         from scout_v2.git_host import _explicit_issue_ref
