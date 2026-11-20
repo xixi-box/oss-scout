@@ -211,6 +211,8 @@ gh workflow run deploy.yml --ref main -f target_env=aliyun -f deploy_ref=main
 gh workflow run worker-deploy.yml --ref main
 ```
 
+控制器镜像由 GitHub 托管 runner 构建并推送到 ACR。部署主机只拉取镜像、切换容器并验证运行状态。构建或推送失败时，在托管 runner 重试。
+
 独立 bug hunter 支线在 Modal 执行，默认每日北京时间 04:00 触发；它与历史候选消费批次
 是两件事，不自动把发现直接发布为新 issue。仓库是否适合自动贡献以最新规则和审计为准，
 不把历史评分或门禁统计当作永久结论。
