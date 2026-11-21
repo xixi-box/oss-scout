@@ -8,7 +8,7 @@ services:
       - "127.0.0.1:18787:8787"   # 宿主 18787（8787 被 ops-agent 占用）；容器内仍 8787
     user: "0:0"    # /data 卷挂载目录属宿主 root；scout 用户无写权限会崩（实测 2026-10-25）
     volumes:
-      - /opt/oss-scout-data:/data   # state/queue/artifacts/configs 持久化
+      - "${PROJECT_DATA_DIR:?PROJECT_DATA_DIR is required}:/data"   # state/queue/artifacts/configs 持久化
     environment:
       - TZ=Asia/Shanghai
       - OSSCOUT_DASHBOARD_ROOT=/data

@@ -114,12 +114,11 @@ def test_deploy_waits_without_interrupting_repair(monkeypatch, tmp_path, busy):
 
     monkeypatch.setattr(time, "sleep", finish_existing_task)
     monkeypatch.setattr(subprocess, "run", lambda args, **kw: deployed.append(args))
-    monkeypatch.setattr(sys, "argv", ["-", "compose.yaml"])
+    monkeypatch.setattr(sys, "argv", ["-", "compose.yaml", str(tmp_path)])
     workflow = yaml.safe_load((ROOT / ".github/workflows/deploy.yml").read_text(encoding="utf-8"))
     scripts = [s.get("run", "") for j in workflow["jobs"].values() for s in j["steps"]]
     script = next(s for s in scripts if "Active repair or pending publication" in s)
     source = script.split("<<'PY'", 1)[1].split("\n", 1)[1].split("\nPY", 1)[0]
-    source = source.replace('Path("/opt/oss-scout-data")', f"Path({str(tmp_path)!r})")
     try:
         exec(compile(source, "deploy-guard", "exec"), {})
         assert waited == [10]

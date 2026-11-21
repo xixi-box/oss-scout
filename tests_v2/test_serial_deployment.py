@@ -52,7 +52,7 @@ def test_deploy_holds_admission_while_existing_writers_finish():
     exec(compile(tree,'deployment-drain','exec'),{
         'Path':FakePath,'sqlite3':SimpleNamespace(connect=connect,OperationalError=RuntimeError),
         'json':json,'subprocess':SimpleNamespace(run=run),
-        'sys':SimpleNamespace(argv=['deploy','compose.yaml']),'time':SimpleNamespace(sleep=wait)})
+        'sys':SimpleNamespace(argv=['deploy','compose.yaml','/data/oss-scout-data']),'time':SimpleNamespace(sleep=wait)})
     assert events==['admission_acquired','existing_job_finished','existing_job_finished','replaced','admission_released']
 
 

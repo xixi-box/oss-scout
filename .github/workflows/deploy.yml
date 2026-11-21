@@ -128,10 +128,12 @@ jobs:
             exit 1
           fi
 
-          DEPLOY_DIR="$HOME/deployments/$(basename '${{ github.repository }}')"
+          PROJECT_NAME="$(basename "$GITHUB_REPOSITORY")"
+          DEPLOY_DIR="$HOME/deployments/$PROJECT_NAME"
+          export PROJECT_DATA_DIR="/data/$PROJECT_NAME-data"
           mkdir -p "$DEPLOY_DIR"
 
-          # 服务定义内联（deploy job 不 checkout）；/opt/oss-scout-data 持久化 state/queue/artifacts
+          # 服务定义内联（deploy job 不 checkout）；数据保存在 PROJECT_DATA_DIR
           cat > "$DEPLOY_DIR/compose.yaml" <<COMPOSE
           services:
             oss-scout:
@@ -144,7 +146,7 @@ jobs:
                 - "127.0.0.1:18787:8787"
                 - "172.17.0.1:18787:8787"
               volumes:
-                - /opt/oss-scout-data:/data
+                - "$PROJECT_DATA_DIR:/data"
               environment:
                 - TZ=Asia/Shanghai
                 - MALLOC_ARENA_MAX=2
@@ -199,12 +201,17 @@ jobs:
             sleep 10
           done
           # 数据目录属主必须是容器运行用户（scout=1000），否则 entrypoint 无法 seed / 写状态
-          mkdir -p /opt/oss-scout-data/{state/runs,queue,artifacts,configs}
-          chown -R 1000:1000 /opt/oss-scout-data 2>/dev/null || true
+          mkdir -p "$PROJECT_DATA_DIR"/{state/runs,queue,artifacts,configs}
+          chown -R 1000:1000 "$PROJECT_DATA_DIR" 2>/dev/null || true
           docker compose -f "$DEPLOY_DIR/compose.yaml" pull
           # Hold the same dispatcher lock during replacement. Never interrupt a
           # pipeline or a remote publication still awaiting reconciliation.
-          python3 - "$DEPLOY_DIR/compose.yaml" <<'PY'
+          if [[ -z "$(docker ps -aq --filter 'name=^/oss-scout$')" &&
+                ! -e "$PROJECT_DATA_DIR/queue/candidates.json" &&
+                ! -e "$PROJECT_DATA_DIR/state/scout_v2.sqlite3" ]]; then
+            docker compose -f "$DEPLOY_DIR/compose.yaml" up -d --no-build --remove-orphans
+          else
+            python3 - "$DEPLOY_DIR/compose.yaml" "$PROJECT_DATA_DIR" <<'PY'
           import json
           import sqlite3
           import subprocess
@@ -212,7 +219,7 @@ jobs:
           import time
           from pathlib import Path
 
-          root = Path("/opt/oss-scout-data")
+          root = Path(sys.argv[2])
           lock = sqlite3.connect(root / "state/dispatcher.sqlite3", timeout=1, isolation_level=None)
           try:
               for attempt in range(660):
@@ -239,6 +246,7 @@ jobs:
           finally:
               lock.close()
           PY
+          fi
           # 清理同仓库旧镜像（保留本次 SHA 与 latest）。
           # 只清 dangling 不够：带 tag 的历史版本会永久堆积（2026-10-27 磁盘打满事故）
           KEEP_SHA="${{ github.sha }}"
