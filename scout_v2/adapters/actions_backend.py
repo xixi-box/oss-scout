@@ -20,7 +20,7 @@ import zipfile
 from pathlib import Path
 from typing import Callable
 
-from ..schemas import Job, Result
+from ..schemas import Job
 
 GH = Callable[[list[str]], tuple[int, str]]     # gh api runner：runner(args) -> (rc, stdout)
 DL = Callable[[list[str]], tuple[int, str]]     # gh run runner：runner(args) -> (rc, output)

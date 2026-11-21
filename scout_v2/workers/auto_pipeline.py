@@ -30,7 +30,7 @@ import time
 from pathlib import Path
 
 from ..adapters.actions_backend import ActionsBackend
-from ..adapters.modal_backend import ModalSandboxBackend, parse_envelope
+from ..adapters.modal_backend import ModalSandboxBackend
 from ..budget import BudgetGuard, ModalCliBilling
 from ..git_host import (ISSUE_CLAIM_MESSAGE, RE_CLAIM, assignment_facts, gh_pages, gh_read,
                         own_issue_claim, recheck_candidate)
@@ -848,10 +848,6 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen
                            extra={"recheck_failures": n, "rescreen_pending": rescreen,
                                   "abort_reason": summary["abort"],
                                   "screen_retry_at": (business_now() + dt.timedelta(minutes=5)).isoformat()})
-            if n >= 3:
-                from ..notify import feishu_send
-                feishu_send(f"⚠️ 候选升级转人工：{key}",
-                            f"复检连续失败 {n} 次：{summary.get('abort', '')[:150]}")
             return summary
         if getattr(recheck, "similar_prs", []):
             log(root, "similar_pr", key, "；".join(recheck.similar_prs))
@@ -922,8 +918,6 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen
         log(root, "abort", key, summary["abort"])
         mark_candidate(root, key, "escalated",
                        extra={"abort_reason": summary["abort"]})
-        from ..notify import feishu_send
-        feishu_send(f"⚠️ 候选尝试超限转人工：{key}", summary["abort"][:150])
         return summary
 
     # Recheck and CLA failures have not started a repair and spend no quota.
@@ -1174,9 +1168,6 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen
     summary["pr"] = pr_url
     log(root, "pr_open", key, f"{pr_url} (auto pipeline, backend={backend})")
     mark_candidate(root, key, "pr_open", extra={"pr_url": pr_url})
-    from ..notify import feishu_send
-    if receipt:
-        feishu_send(f"🚀 新 PR 开出：{key}", f"{job.publish['title']} {pr_url}")
 
     # PR 开出来之后立刻把能自动签的 CLA 签掉。phoenix 这类仓库的 CLA bot 认
     # 一条固定口令的 issue_comment，发出去就生效；剩下要网页 OAuth 的，preflight

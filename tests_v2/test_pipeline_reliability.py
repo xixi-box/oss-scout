@@ -541,7 +541,6 @@ def test_failed_repair_does_not_spend_publication_quota(tmp_path, monkeypatch, m
     monkeypatch.setattr(p, "gh_read", gh_read)
     monkeypatch.setattr(p, "_submit_job", submit)
     monkeypatch.setattr(p, "_collect", lambda *args: {})
-    monkeypatch.setattr("scout_v2.notify.feishu_send", lambda *a, **kw: None)
     monkeypatch.setattr("scout_v2.workers.cla.sign", lambda *a: {})
     for entry in entries.values():
         p.candidate_pipeline(tmp_path, entry, rescreen=mode == "manual",

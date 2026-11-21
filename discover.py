@@ -20,7 +20,6 @@ import re
 import subprocess
 import sys
 import time
-import urllib.request
 from pathlib import Path
 
 sys.stdout.reconfigure(encoding="utf-8")
@@ -272,24 +271,6 @@ def atomic_write(path: Path, data):
     os.replace(tmp, path)
 
 
-def feishu_notify(text: str, dry: bool):
-    hook_file = STATE / "feishu_webhook.txt"
-    if dry or not hook_file.exists():
-        return False
-    url = hook_file.read_text(encoding="utf-8").strip()
-    if not url:
-        return False
-    try:
-        req = urllib.request.Request(
-            url, data=json.dumps({"msg_type": "text", "content": {"text": text}}).encode(),
-            headers={"Content-Type": "application/json"})
-        urllib.request.urlopen(req, timeout=10)
-        return True
-    except Exception as e:  # 通知失败不影响主流程
-        print(f"    [feishu] 通知失败: {e}", file=sys.stderr)
-        return False
-
-
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--repos", help="逗号分隔，只跑这些仓库")
@@ -308,7 +289,6 @@ def main():
     queue = load_json(QUEUE / "candidates.json", {})
     now_iso = dt.datetime.now().isoformat(timespec="seconds")
     new_entries: list[dict] = []
-    report_lines: list[str] = []
 
     for repo, lane in repos:
         print(f"== {repo} [{lane}]")
@@ -373,7 +353,7 @@ def main():
         atomic_write(STATE / "seen.json", seen)
         atomic_write(QUEUE / "candidates.json", queue)
 
-    # 摘要 + 通知（只推 A/B 级）
+    # 控制台摘要只列 A/B 级
     ab = [e for e in new_entries if e["class"] in ("A", "B")]
     summary = (f"[oss-scout {now_iso}] 新候选 {len(new_entries)}"
                f"（A: {sum(1 for e in new_entries if e['class']=='A')}, "
@@ -381,8 +361,6 @@ def main():
                + "\n".join(f"[{e['class']}/{e['lane']}] {e['repo']}#{e['number']} {e['title'][:60]}\n{e['url']}"
                            for e in ab[:8]))
     print("\n" + summary)
-    if new_entries and feishu_notify(summary, args.dry_run):
-        print("(已推送飞书)")
 
 
 if __name__ == "__main__":

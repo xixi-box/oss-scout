@@ -95,26 +95,6 @@ class DataSource:
 
 # ---------- Cloudflare Worker 回传通道（2026-10-25） ----------
 
-def feishu_verification_token(ds) -> str:
-    """飞书卡片回调的 verification token。
-
-    来源（按序）：环境变量 FEISHU_VERIFICATION_TOKEN →
-    /data/state/feishu_app.json 的 verification_token 字段。
-    未配置返回空串——回调接口在未配置时会拒绝所有卡片动作（503），
-    防止匿名端点以我们名义发评论。
-    """
-    tok = (os.environ.get("FEISHU_VERIFICATION_TOKEN") or "").strip()
-    if tok:
-        return tok
-    data_root = os.environ.get("OSSCOUT_DASHBOARD_ROOT", "/data")
-    try:
-        d = json.loads((Path(data_root) / "state" / "feishu_app.json")
-                       .read_text(encoding="utf-8"))
-        return str(d.get("verification_token") or "").strip()
-    except Exception:  # noqa: BLE001
-        return ""
-
-
 def cloudflare_cfg(ds) -> dict:
     """Cloudflare 配置。密钥优先取环境变量，文件里只放非密结构。
 
@@ -591,32 +571,6 @@ def cloudflare_pull(ds) -> dict:
         except Exception:  # noqa: BLE001
             pass   # 删除失败：下轮 seen 去重兜底
     return {"pulled": pulled, "ingested": ingested}
-
-
-def cloudflare_kv_put(ds, key: str, value: str) -> dict:
-    """往 CF KV 写一个键。返回 {"ok": bool, "error": str}。
-
-    KV 免费档 1000 write/天，所以调用方必须自己限流——PR 列表同步是 15 分钟
-    一次（96/天），在预算内。
-    """
-    cfg = cloudflare_cfg(ds)
-    token, account = cfg.get("api_token") or "", cfg.get("account_id") or ""
-    ns = cfg.get("kv_namespace_id") or ""
-    if not (token and account and ns):
-        return {"ok": False, "error": "not configured"}
-    base = (f"https://api.cloudflare.com/client/v4/accounts/{account}"
-            f"/storage/kv/namespaces/{ns}/values/{key}")
-    import urllib.request
-    try:
-        req = urllib.request.Request(
-            base, data=value.encode("utf-8"), method="PUT",
-            headers={"Authorization": f"Bearer {token}",
-                     "Content-Type": "text/plain"})
-        with urllib.request.urlopen(req, timeout=20) as r:
-            body = json.loads(r.read().decode())
-        return {"ok": bool(body.get("success")), "error": ""}
-    except Exception as e:  # noqa: BLE001
-        return {"ok": False, "error": str(e)[:200]}
 
 
 # ---------- Controller runtime settings ----------

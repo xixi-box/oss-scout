@@ -106,14 +106,9 @@ jobs:
       # 移出，改由 Secrets 注入容器环境。
       CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
       CF_INGEST_TOKEN: ${{ secrets.CF_INGEST_TOKEN }}
-      FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
-      # 自建应用身份：发可交互卡片（卡片内改评论 + 一键发 GitHub）并校验回调
+      # 多维表格同步所用的飞书自建应用凭据
       FEISHU_APP_ID: ${{ secrets.FEISHU_APP_ID }}
       FEISHU_APP_SECRET: ${{ secrets.FEISHU_APP_SECRET }}
-      FEISHU_VERIFICATION_TOKEN: ${{ secrets.FEISHU_VERIFICATION_TOKEN }}
-      # 可选：固定通知群 ID。设了就不需要 im:chat:readonly 权限去列群
-      FEISHU_CHAT_ID: ${{ secrets.FEISHU_CHAT_ID }}
-      FEISHU_PR_APPROVER_OPEN_ID: ${{ secrets.FEISHU_PR_APPROVER_OPEN_ID }}
       # PR 台账所在的多维表格（用户自建并分享给应用的 base）
       FEISHU_BITABLE_APP_TOKEN: ${{ secrets.FEISHU_BITABLE_APP_TOKEN }}
     steps:
@@ -164,12 +159,8 @@ jobs:
                 - MODAL_TOKEN_SECRET=\${MODAL_TOKEN_SECRET}
                 - CF_API_TOKEN=\${CF_API_TOKEN}
                 - CF_INGEST_TOKEN=\${CF_INGEST_TOKEN}
-                - FEISHU_WEBHOOK_URL=\${FEISHU_WEBHOOK_URL}
                 - FEISHU_APP_ID=\${FEISHU_APP_ID}
                 - FEISHU_APP_SECRET=\${FEISHU_APP_SECRET}
-                - FEISHU_VERIFICATION_TOKEN=\${FEISHU_VERIFICATION_TOKEN}
-                - FEISHU_CHAT_ID=\${FEISHU_CHAT_ID}
-                - FEISHU_PR_APPROVER_OPEN_ID=\${FEISHU_PR_APPROVER_OPEN_ID}
                 - FEISHU_BITABLE_APP_TOKEN=\${FEISHU_BITABLE_APP_TOKEN}
                 # git/外网经宿主 sing-box（docker0 网桥入站）；国内直连域走 NO_PROXY
                 - HTTPS_PROXY=http://172.17.0.1:7890
@@ -193,12 +184,8 @@ jobs:
             echo "MODAL_TOKEN_SECRET=$MODAL_TOKEN_SECRET"
             echo "CF_API_TOKEN=$CF_API_TOKEN"
             echo "CF_INGEST_TOKEN=$CF_INGEST_TOKEN"
-            echo "FEISHU_WEBHOOK_URL=$FEISHU_WEBHOOK_URL"
             echo "FEISHU_APP_ID=$FEISHU_APP_ID"
             echo "FEISHU_APP_SECRET=$FEISHU_APP_SECRET"
-            echo "FEISHU_VERIFICATION_TOKEN=$FEISHU_VERIFICATION_TOKEN"
-            echo "FEISHU_CHAT_ID=$FEISHU_CHAT_ID"
-            echo "FEISHU_PR_APPROVER_OPEN_ID=$FEISHU_PR_APPROVER_OPEN_ID"
             echo "FEISHU_BITABLE_APP_TOKEN=$FEISHU_BITABLE_APP_TOKEN"
           } > "$DEPLOY_DIR/.env"
           chmod 600 "$DEPLOY_DIR/.env"

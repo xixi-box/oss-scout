@@ -556,49 +556,9 @@ def opencode_patch_producer(job: Job, work_dir: Path, context: str,
     }
 
 
-# 测试框架"根本没跑起来"的特征串。命中任何一个都说明退出码反映的是环境缺失，
-# 而不是被测代码的行为——此时既不能声称复现，也不能声称修好。
-_BROKEN_ENV_MARKERS = (
-    "verification rebuild failed",
-    "no module named pytest",
-    "no module named 'pytest'",
-    "no module named pytest'",
-    "pytest: command not found",
-    "pytest: not found",
-    "module not found",          # node
-    "cannot find module",        # node
-    "command not found",
-    "no such file or directory: 'pytest'",
-    "is not recognized as an internal or external command",   # windows
-    "error: externally-managed-environment",    # PEP 668 拦截安装
-    "no testable syntax",        # go vet 级错误
-    # 用例本身不存在 / 压根没收集到测试：退出码反映的是调用方式错，不是代码行为。
-    # 2026-10-28 实测：base 阶段测试文件还没落盘，pytest 以 usage error(4) 退出，
-    # 曾被记成 reproduced=true。
-    "file or directory not found",
-    "no tests ran",
-    "no tests were found",
-    "collected 0 items",
-    "error: not found:",
-    "unrecognized arguments",
-    "no such option",
-)
-
-
 def _checkout_repair_tree(repo_dir: Path, work: Path, base_sha: str) -> None:
     _git(["clone", "--quiet", str(repo_dir), str(work)], repo_dir)
     _git(["checkout", "--quiet", "--detach", base_sha], work)
-
-
-# 这些命令的退出码只反映"某个字符串/文件在不在"，跟被测代码的行为无关。
-# 允许它们出现在复合命令里（如 `cmd && pytest`），但整条命令不能只有它们。
-_NON_VERIFYING_BINARIES = {
-    "grep", "egrep", "fgrep", "rg", "ag", "test", "[", "true", "false",
-    "ls", "dir", "cat", "head", "tail", "wc", "stat", "find", "git", "echo",
-    "printf", "sleep", "curl", "wget", "diff", "cmp",
-    # 目录切换本身不验证任何行为：`cd sub && grep -q x f` 的退出码仍只反映 grep
-    "cd", "export", "source", ".", "set", "pushd", "popd", "mkdir",
-}
 
 
 def check_patch_content(patch: str) -> list[str]:

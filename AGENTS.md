@@ -70,7 +70,6 @@ queue/candidates.json  候选池（发现层只新增条目；消费者只改 st
 state/health.json      健康周检产物（>7 天先重跑 health_check.py）
 state/worklog.jsonl    动作审计账本（append-only）
 state/runs/YYYY-MM-DD.md  每日报告
-state/feishu_webhook.txt  可选：飞书自定义机器人 URL，存在即启用通知
 repos/<name>/          懒 clone 缓存（origin=xixi-box fork, --filter=blob:none）
 worktrees/<repo>-<issueN>/  每个候选一个 worktree
 ```
@@ -107,7 +106,7 @@ worktrees/<repo>-<issueN>/  每个候选一个 worktree
    如实记录失败原因和日志，停止自动发布；不得用未验证的 Draft PR 绕过交付验证。
 6. 过合规门（§4）→ 开 PR（`Fixes #N`；标题遵循仓库约定；`maintainer_can_modify=true`；
    改动+测试完整才 ready-for-review）。
-7. 更新候选状态、worklog、每日报告；有 A 级认领/新 PR/blocker 时发飞书（若启用）。
+7. 更新候选状态、worklog、每日报告和飞书业务表。
 
 **闸门池专属**：不直接开 PR。发分析评论（模板见 §5）→ status=`awaiting_assignment`。
 此后每天消费段开头查一次 assignees：指派给我 → 走实现；指派给他人 → `competed`。
@@ -118,7 +117,7 @@ worktrees/<repo>-<issueN>/  每个候选一个 worktree
 ## 3. A/B/C 判定（discover 给粗分，最终判断在这里做）
 
 升级为 A 的额外条件：根因能定位到具体模块、回归测试可行、预期 ≤5 文件、无 API 重设计。
-任何一条不满足但值得做 → B（只通知）。涉及大重构/依赖升级/协议变更 → C（忽略）。
+任何一条不满足但值得做 → B（只记录）。涉及大重构/依赖升级/协议变更 → C（忽略）。
 `health.json` 的 `lane_advisory` 与 config 冲突时**以 health 为准**（仓库健康变了）。
 
 ## 3.5 加仓库前的准入闸（2026-10-30 补）
@@ -201,4 +200,4 @@ Happy to prepare a PR if that approach works for you.
 
 每日写 `state/runs/YYYY-MM-DD.md`：发现、筛选、修复与发布结果、新候选清单、认领/PR 动作、blocker、健康分异动。
 最终 chat 回复给用户一段简明结论（做了什么/发现了什么/什么被挡住了）。
-有新鲜 A 级候选或 blocker 时，若 `state/feishu_webhook.txt` 存在则同步飞书。
+候选和 PR 结果通过飞书业务表查看。
