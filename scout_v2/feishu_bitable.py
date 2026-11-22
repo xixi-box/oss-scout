@@ -299,7 +299,7 @@ def sync_table(root: Path, rows: list[dict], *, table_name: str, fields: list,
     binding_key 缓存 table_id。键列恒为"键"（repo#number 或 repo 本身）。
     allow_empty 仅在确认拿到完整快照时启用，空结果也会清理旧行。
     默认保留空结果保护，避免源查询故障清空飞书。
-    record_cache 只用于字段固定的扫描表，每次全量对账重新分页。
+    record_cache 只用于字段固定的业务表，每次全量对账重新分页。
     """
     binding = load_binding(root)
     app_token = _binding_app_token(root)
@@ -333,7 +333,7 @@ def sync_table(root: Path, rows: list[dict], *, table_name: str, fields: list,
     if delta:
         existing = cached
     elif record_cache is not None:
-        # The scan table converter has a fixed schema. Keep only IDs and
+        # Cached tables have a fixed schema. Keep only IDs and
         # fingerprints while paging the remote snapshot.
         existing = {}
         for record in record_pages(app_token, table_id):

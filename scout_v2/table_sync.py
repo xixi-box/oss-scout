@@ -112,9 +112,11 @@ class TableSyncSchedule:
         for name, (future, full) in list(self.inflight.items()):
             if not future.done():
                 continue
+            retry_after = 0
             try:
                 result = future.result()
                 ok = bool(result) and not result.get("error") and not isinstance(result.get("skipped"), str)
+                retry_after = (result or {}).get("retry_after_seconds", 0)
             except Exception:
                 ok = False
             del self.inflight[name]
@@ -124,7 +126,7 @@ class TableSyncSchedule:
             else:
                 count = self.failures.get(name, 0) + 1
                 self.failures[name] = count
-                self.retry_at[name] = now + min(60, 5 * 2 ** min(count - 1, 4))
+                self.retry_at[name] = now + max(retry_after, min(60, 5 * 2 ** min(count - 1, 4)))
                 self.pending.add(name)
                 if full:
                     self.reconcile.add(name)

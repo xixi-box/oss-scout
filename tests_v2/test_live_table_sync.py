@@ -98,6 +98,27 @@ def test_fifteen_minute_full_reconciliation_and_thirty_second_pr_poll(tmp_path):
     assert {(name, full) for name, full, _ in executor.calls} == {(name, True) for name in TABLES}
 
 
+def test_pr_rate_limit_delays_only_pr_and_preserves_full_reconciliation(tmp_path):
+    feed = subscribe(tmp_path)
+    executor = DeferredExecutor()
+    sync = TableSyncSchedule(feed, executor, lambda *_: None)
+    sync.tick(0)
+    for name, _, future in executor.calls:
+        future.set_result({"error": "rate limited", "retry_after_seconds": 120}
+                          if name == "pr" else {"unchanged": True})
+    sync.tick(1)
+    executor.calls.clear()
+    feed.mark({"pr", "scan"})
+    sync.tick(30)
+    assert ("scan", False) in [(name, full) for name, full, _ in executor.calls]
+    assert all(name != "pr" for name, _, _ in executor.calls)
+    executor.finish()
+    sync.tick(120)
+    assert all(name != "pr" for name, _, _ in executor.calls)
+    sync.tick(121)
+    assert ("pr", True) in [(name, full) for name, full, _ in executor.calls]
+
+
 def test_external_file_edit_detected_without_in_process_notification(tmp_path):
     feed, executor, sync = schedule(tmp_path)
     (tmp_path / "configs").mkdir()
@@ -156,20 +177,18 @@ def test_slow_pr_query_does_not_block_candidate_sync(tmp_path):
 def test_snapshot_failure_does_not_advance_cache_and_full_reconcile_bypasses_cache(tmp_path, monkeypatch):
     (tmp_path / "state").mkdir()
     from dashboard.app import _sync_bitables
-    from scout_v2 import feishu_bitable as fb
-    # _sync_bitables loads a fresh module, but all_my_prs uses this shared subprocess module.
-    import subprocess
-    from types import SimpleNamespace
+    from scout_v2 import feishu_bitable as fb, pr_feed
     monkeypatch.setattr(fb, "configured", lambda _: True)
     available = [True]
-    def github(args, **kwargs):
+    def github(cursor, cutoff):
         if not available[0]:
-            return SimpleNamespace(returncode=1, stdout="")
+            raise RuntimeError("unavailable")
         row = {"repository": {"nameWithOwner": "example/backend"}, "number": 2,
                "title": "fix: regression", "url": "https://github.com/example/backend/pull/2",
-               "state": "open", "createdAt": "2026-11-17T01:00:00Z"}
-        return SimpleNamespace(returncode=0, stdout=json.dumps([row] if "open" in args else []))
-    monkeypatch.setattr(subprocess, "run", github)
+               "state": "OPEN", "createdAt": "2026-11-17T01:00:00Z",
+               "updatedAt": "2026-11-17T01:00:00Z", "closedAt": None}
+        return {"totalCount": 1, "nodes": [row], "pageInfo": {"hasNextPage": False}}
+    monkeypatch.setattr(pr_feed, "_read_page", github)
     writes = []
     monkeypatch.setattr(fb, "sync_table", lambda root, rows, **kw: writes.append((rows, kw)) or {"updated": 1})
     cache = {}
@@ -221,16 +240,17 @@ def test_new_pr_backfill_uses_confirmed_url_and_closed_state_ignores_search_lag(
 def test_complete_empty_pr_snapshot_can_clear_but_failed_fetch_cannot(tmp_path, monkeypatch):
     (tmp_path / "state").mkdir()
     from dashboard.app import _sync_bitables
-    from scout_v2 import feishu_bitable as fb
-    import subprocess
-    from types import SimpleNamespace
+    from scout_v2 import feishu_bitable as fb, pr_feed
     monkeypatch.setattr(fb, "configured", lambda _: True)
-    monkeypatch.setattr(subprocess, "run", lambda *_, **kw: SimpleNamespace(returncode=0, stdout="[]"))
+    monkeypatch.setattr(pr_feed, "_read_page", lambda *_: {
+        "totalCount": 0, "nodes": [], "pageInfo": {"hasNextPage": False}})
     calls = []
     monkeypatch.setattr(fb, "sync_table", lambda root, rows, **kw: calls.append((rows, kw["allow_empty"])) or {"pruned": 1})
     assert _sync_bitables(tmp_path, table_names={"pr"})["pr"]["pruned"] == 1
     assert calls == [([], True)]
-    monkeypatch.setattr(subprocess, "run", lambda *_, **kw: SimpleNamespace(returncode=1, stdout=""))
+    def unavailable(*_):
+        raise RuntimeError("unavailable")
+    monkeypatch.setattr(pr_feed, "_read_page", unavailable)
     assert "error" in _sync_bitables(tmp_path, table_names={"pr"})["pr"]
     assert len(calls) == 1
 

@@ -83,26 +83,6 @@ class TestBuildRows:
         assert rows[0]["state"] == "merged"
         assert "reply_status" not in rows[0]
 
-    def test_all_my_prs_dedupes_open_and_closed(self, monkeypatch):
-        raw = {
-            "open": [{"repository": {"nameWithOwner": "a/b"}, "number": 1,
-                      "title": "t", "state": "OPEN", "url": "u",
-                      "createdAt": "c", "updatedAt": "u", "closedAt": None}],
-            "closed": [{"repository": {"nameWithOwner": "a/b"}, "number": 2,
-                        "title": "t2", "state": "MERGED", "url": "u2",
-                        "createdAt": "c", "updatedAt": "u", "closedAt": "x"}],
-        }
-        def fake_gh(args, timeout=90):
-            state = args[args.index("--state") + 1]
-            return json.dumps(raw[state])
-
-        monkeypatch.setattr(mp, "_gh", fake_gh)
-        got = mp.all_my_prs()
-        assert {(r["repo"], r["number"]) for r in got} == {("a/b", 1), ("a/b", 2)}
-        states = {r["number"]: r["state"] for r in got}
-        assert states[2] == "merged"
-
-
 class TestRowToFields:
     def test_pr_columns_and_link(self):
         assert fb.row_to_fields(_row()) == {"键": [{

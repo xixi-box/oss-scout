@@ -102,6 +102,7 @@ def _sync_bitables(root: Path, *, ds=None, activity_only=False, activity_cache=N
                    full_reconcile=True) -> dict:
     """Independent table snapshots; a failed source cannot clear remote data."""
     from scout_v2 import feishu_bitable as fb
+    from scout_v2.pr_feed import PullRequestFeed, PullRequestRateLimited
     from .console_activity import candidate_activity
     import importlib.util
     if not fb.configured(root):
@@ -147,8 +148,8 @@ def _sync_bitables(root: Path, *, ds=None, activity_only=False, activity_cache=N
                         and signature == activity_cache.get(signature_key)):
                     results[name] = {"unchanged": True}
                     continue
-                scan_cache = (activity_cache.setdefault("scan:records", {})
-                              if name == "scan" and activity_cache is not None else None)
+                record_cache = (activity_cache.setdefault(name + ":records", {})
+                                if name in {"scan", "pr"} and activity_cache is not None else None)
                 scan_log = (activity_cache.setdefault("scan:worklog", {})
                             if name == "scan" and activity_cache is not None else None)
                 if full_reconcile and scan_log is not None:
@@ -161,7 +162,15 @@ def _sync_bitables(root: Path, *, ds=None, activity_only=False, activity_cache=N
                         raw = source.read_text(encoding="utf-8")
                         yaml.safe_load(raw) if source.suffix == ".yaml" else json.loads(raw)
                         del raw
-                    if name == "scan":
+                    if name == "pr" and activity_cache is not None:
+                        pr_feed = activity_cache.setdefault("pr:github", PullRequestFeed())
+                        github_rows = pr_feed.snapshot(full=full_reconcile)
+                        signature = (*signature, pr_feed.version)
+                        if not full_reconcile and signature == activity_cache.get(signature_key):
+                            results[name] = {"unchanged": True}
+                            continue
+                        rows = build(root, github_rows=github_rows, read_pr=pr_feed.read_pr)
+                    elif name == "scan":
                         running, published, pr_states = activity
                         rows = build(root, running, published, pr_states, strict=True, worklog_cache=scan_log)
                     elif tracks_activity:
@@ -173,18 +182,21 @@ def _sync_bitables(root: Path, *, ds=None, activity_only=False, activity_cache=N
                     activity_cache[signature_key] = signature
                     results[name] = {"unchanged": True}
                     continue
-                options = ({"record_cache": scan_cache, "full_reconcile": full_reconcile}
-                           if scan_cache is not None else {})
+                options = ({"record_cache": record_cache, "full_reconcile": full_reconcile}
+                           if record_cache is not None else {})
                 results[name] = fb.sync_table(root, rows, table_name=table, fields=fields,
                                               to_fields=convert, binding_key=binding,
                                               allow_empty=source is not None or name == "pr", **options)
                 successful = (not results[name].get("error")
                               and not isinstance(results[name].get("skipped"), str))
                 if activity_cache is not None and successful:
-                    if name != "scan":
+                    if name not in {"scan", "pr"}:
                         activity_cache[name] = rows
                     activity_cache[signature_key] = signature
                 _audit(root, "bitable_sync_" + name, table, json.dumps(results[name]))
+        except PullRequestRateLimited as ex:
+            results[name] = {"error": str(ex), "retry_after_seconds": ex.retry_after}
+            _audit(root, "bitable_sync_error", name, str(ex))
         except Exception as ex:
             results[name] = {"error": str(ex)[:200]}
             _audit(root, "bitable_sync_error", name, str(ex)[:200])
@@ -434,15 +446,16 @@ def create_app(root: Path | None = None, gh_runner=None,
         _thr.Thread(target=_loop, daemon=True, name="issue-screening").start()
 
 
+    bitable_cache = {}
+
     def _bitable_loop():
         def _loop():
             if os.environ.get("OSSCOUT_DISABLE_AUTO_REPAIR") == "1":
                 return
             from concurrent.futures import ThreadPoolExecutor
             from scout_v2.table_sync import TableSyncSchedule
-            activity_cache = {}
             def sync(name, full):
-                result = _sync_bitables(root, ds=ds, activity_cache=activity_cache,
+                result = _sync_bitables(root, ds=ds, activity_cache=bitable_cache,
                                         table_names={name}, full_reconcile=full)
                 return result.get(name, {"skipped": "Feishu not configured"})
 
@@ -700,7 +713,7 @@ def create_app(root: Path | None = None, gh_runner=None,
     @app.post("/api/pr/bitable/sync")
     def api_pr_bitable_sync():
         """手动触发一次多维表格全量同步。"""
-        return JSONResponse(_sync_bitables(root, ds=ds))
+        return JSONResponse(_sync_bitables(root, ds=ds, activity_cache=bitable_cache))
 
     # ---------------- 飞书卡片回调（卡片里一键发送） ----------------
 

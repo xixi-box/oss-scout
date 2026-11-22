@@ -20,39 +20,10 @@ def _gh(args: list[str], timeout: int = 90) -> str:
 
 
 
-def all_my_prs(limit: int = 1000) -> list[dict]:
-    """我们开出去的全部 PR（open + closed + merged），搜索接口一次拿一类。
+def all_my_prs() -> list[dict]:
+    from scout_v2.pr_feed import PullRequestFeed
 
-    closed 和 merged 共用 `--state closed`，结果的 state 字段能区分二者；
-    所以只打两次搜索。搜索结果不带仓库全名时从 repository.nameWithOwner 取。
-    """
-    out: dict = {}
-    for state in ("open", "closed"):
-        raw = _gh(["search", "prs", "--author", "@me", "--state", state,
-                   "--limit", str(limit),
-                   "--json", "repository,number,title,state,url,createdAt,"
-                             "updatedAt,closedAt"])
-        try:
-            if not raw:
-                raise RuntimeError(f"PR {state} snapshot unavailable")
-            items = json.loads(raw)
-        except json.JSONDecodeError as ex:
-            raise RuntimeError("invalid PR snapshot") from ex
-        if not isinstance(items, list) or len(items) >= limit:
-            raise RuntimeError("PR snapshot incomplete; refusing to prune ledger")
-        for it in items:
-            key = (it["repository"]["nameWithOwner"], str(it["number"]))
-            out[key] = {
-                "repo": it["repository"]["nameWithOwner"],
-                "number": int(it["number"]),
-                "title": it.get("title") or "",
-                "state": str(it.get("state") or "").lower(),
-                "url": it.get("url") or "",
-                "created_at": it.get("createdAt") or "",
-                "updated_at": it.get("updatedAt") or "",
-                "closed_at": it.get("closedAt") or "",
-            }
-    return list(out.values())
+    return PullRequestFeed().snapshot(full=True)
 
 
 # 台账口径（用户裁定 2026-11-04）：未合并就关掉的 PR 不进表；自己名下的
@@ -74,13 +45,9 @@ def ledger_excludes(row: dict) -> bool:
     return False
 
 
-def build_pr_rows(root) -> list[dict]:
-    """多维表格的行：GitHub 全量 PR 与源 issue 发现时间。
-
-    本地状态是增强，不是来源——GitHub 拉不到（如网络抖动）时行照样产出，
-    只是增强列为空。
-    """
-    rows = all_my_prs()
+def build_pr_rows(root, *, github_rows=None, read_pr=None) -> list[dict]:
+    """Enrich the confirmed GitHub PR snapshot with local discovery times."""
+    rows = all_my_prs() if github_rows is None else github_rows
 
     seen = {}
     queue = {}
@@ -104,7 +71,7 @@ def build_pr_rows(root) -> list[dict]:
                 raise
         finally:
             conn.close()
-        # Search indexing can lag behind a successful create/close. Overlay only
+        # The list can lag behind a successful create/close. Overlay only
         # GitHub-confirmed ledger states, and fetch missing new PRs directly.
         from contextlib import closing
         from scout_v2.state_store import business_now
@@ -125,8 +92,11 @@ def build_pr_rows(root) -> list[dict]:
                 number = url.rsplit("/", 1)[-1]
                 if not number.isascii() or not number.isdecimal():
                     raise RuntimeError("invalid confirmed PR URL")
-                raw = _gh(["api", f"repos/{repo}/pulls/{number}"])
-                item = json.loads(raw) if raw else {}
+                if read_pr is None:
+                    raw = _gh(["api", f"repos/{repo}/pulls/{number}"])
+                    item = json.loads(raw) if raw else {}
+                else:
+                    item = read_pr(repo, number)
                 if item.get("html_url", "").lower() != url.lower() or item.get("state") not in ("open", "closed"):
                     raise RuntimeError("new confirmed PR snapshot unavailable")
                 row = {"repo": repo, "number": int(number), "url": url, "title": item["title"],
