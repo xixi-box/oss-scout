@@ -332,14 +332,28 @@ def atomic_json_write(path: Path, data, verify: bool = True, backup: bool = True
         return checksum.digest()
     try:
         expected = hashlib.sha256()
-        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as f:
-            # Stream instead of retaining a full Unicode payload alongside the
-            # queue and its transaction snapshot. Checksums verify exact bytes
-            # without constructing two additional parsed queues under the lock.
+        with os.fdopen(fd, "wb") as f:
             with phase("encode_write"):
-                for chunk in json.JSONEncoder(ensure_ascii=False, indent=1).iterencode(data):
-                    f.write(chunk)
-                    expected.update(chunk.encode("utf-8"))
+                def write(chunk):
+                    payload = chunk.encode("utf-8")
+                    f.write(payload)
+                    if verify:
+                        expected.update(payload)
+
+                is_candidate_map = (path.name == "candidates.json" and path.parent.name == "queue"
+                                    and isinstance(data, dict) and all(isinstance(key, str) for key in data))
+                if is_candidate_map:
+                    # Serialize one candidate at a time with the compact encoder.
+                    # This bounds temporary buffers and reduces backup/verification I/O.
+                    encoder = json.JSONEncoder(ensure_ascii=False, separators=(",", ":"))
+                    separator = "{"
+                    for key, row in data.items():
+                        write(separator + encoder.encode(key) + ":" + encoder.encode(row))
+                        separator = ",\n"
+                    write("}" if data else "{}")
+                else:
+                    for chunk in json.JSONEncoder(ensure_ascii=False, indent=1).iterencode(data):
+                        write(chunk)
             with phase("fsync"):
                 f.flush()
                 os.fsync(f.fileno())

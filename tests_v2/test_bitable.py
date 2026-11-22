@@ -172,6 +172,53 @@ class TestSyncDiff:
         fake.records["r1"]["最终结果"][0] = {**link, "extra": "returned by Feishu"}
         assert fb.sync_table(tmp_path, [row], **kwargs)["skipped"] == 1
 
+    def test_scan_delta_skips_remote_listing_and_full_sync_corrects_remote_edits(self, fake, tmp_path, monkeypatch):
+        cache = {}
+        first = {"key": "a/b#1", "status": "staged"}
+        second = {"key": "a/b#2", "status": "staged"}
+        kwargs = dict(table_name=fb.SCAN_TABLE_NAME, fields=fb.SCAN_FIELDS,
+                      to_fields=fb.scan_row_to_fields, binding_key="scan_table_id", record_cache=cache)
+        reads = []
+        record_pages = fb.record_pages
+
+        def pages(*args):
+            reads.append(args)
+            return record_pages(*args)
+
+        monkeypatch.setattr(fb, "record_pages", pages)
+        assert fb.sync_table(tmp_path, [first], **kwargs)["created"] == 1
+        first["status"] = "running"
+        delta = fb.sync_table(tmp_path, [first, second], full_reconcile=False, **kwargs)
+        assert delta["updated"] == delta["created"] == len(reads) == 1
+        assert fb.sync_table(tmp_path, [first, second], full_reconcile=False, **kwargs)["skipped"] == 2
+        assert len(reads) == 1
+        fake.records["r2"]["最终结果"] = "manual edit"
+        result = fb.sync_table(tmp_path, [first, second], **kwargs)
+        assert result == {"created": 0, "updated": 1, "skipped": 1, "pruned": 0}
+        assert len(reads) == 2
+
+    def test_scan_delta_rereads_remote_after_lost_create_response(self, fake, tmp_path, monkeypatch):
+        cache = {}
+        kwargs = dict(table_name=fb.SCAN_TABLE_NAME, fields=fb.SCAN_FIELDS,
+                      to_fields=fb.scan_row_to_fields, binding_key="scan_table_id",
+                      record_cache=cache, allow_empty=True, full_reconcile=False)
+        fb.sync_table(tmp_path, [], **kwargs)
+        row = {"key": "a/b#1", "status": "staged"}
+
+        def lose_reply(method, url, payload=None, token=None):
+            reply = fake.request(method, url, payload, token)
+            if url.endswith("records/batch_create"):
+                raise TimeoutError("lost response after remote commit")
+            return reply
+
+        with monkeypatch.context() as patcher:
+            patcher.setattr(fb.feishu_app, "_request", lose_reply)
+            with pytest.raises(TimeoutError):
+                fb.sync_table(tmp_path, [row], **kwargs)
+        assert not cache
+        assert fb.sync_table(tmp_path, [row], **kwargs)["skipped"] == 1
+        assert fake.created == ["a/b#1"]
+
     def test_unknown_empty_snapshot_keeps_old_rows(self, tmp_path, fake):
         fake.records = {"r1": {"键": "a/b#1"}}
         out = fb.sync_rows(tmp_path, [])
@@ -217,11 +264,13 @@ class TestSyncDiff:
                          for rid, fs in self.records.items()]
                 return {"code": 0, "data": {"items": items, "has_more": False}}
             if url.endswith("records/batch_create"):
+                created = []
                 for rec in payload["records"]:
                     rid = f"r{len(self.records)+1}"
                     self.records[rid] = rec["fields"]
                     self.created.append(fb._key_label(rec["fields"]["键"]))
-                return {"code": 0}
+                    created.append({"record_id": rid, "fields": {"键": {"text": self.created[-1]}}})
+                return {"code": 0, "data": {"records": created}}
             if url.endswith("records/batch_update"):
                 for rec in payload["records"]:
                     self.records[rec["record_id"]].update(rec["fields"])
@@ -419,6 +468,27 @@ def test_scan_outcomes_follow_candidate_and_publication_state(tmp_path):
     assert fields["a/b#8"]["最终结果"][0]["link"] == "https://github.com/a/b/pull/18"
     assert fields["a/b#6"]["粗筛结果"] == "人工签署"
     assert all(row["细筛结果"] == "OpenJev 0.99" for row in fields.values())
+
+
+def test_scan_worklog_cursor_reuses_entries_and_retries_partial_line(tmp_path):
+    state = tmp_path / "state"
+    state.mkdir()
+    (state / "seen.json").write_text(json.dumps({"a/b#1": {"first_seen": "2026-11-16T00:00:00Z"}}))
+    worklog = state / "worklog.jsonl"
+    event = {"action": "pipeline_coarse_screen", "target": "a/b#1", "ts": "2026-11-16T01:00:00Z"}
+    first_line = json.dumps(event) + "\n"
+    newer = json.dumps({**event, "ts": "2026-11-16T02:00:00Z"})
+    worklog.write_bytes(first_line.encode() + newer[:20].encode())
+    cursor = {}
+    first = mp.build_scan_rows(tmp_path, strict=True, worklog_cache=cursor)
+    assert cursor["offset"] == len(first_line)
+    with worklog.open("ab") as stream:
+        stream.write((newer[20:] + "\n").encode())
+    updated = mp.build_scan_rows(tmp_path, strict=True, worklog_cache=cursor)
+    assert updated == mp.build_scan_rows(tmp_path, strict=True)
+    assert updated != first
+    worklog.write_bytes(b"")
+    assert mp.build_scan_rows(tmp_path, strict=True, worklog_cache=cursor) == mp.build_scan_rows(tmp_path, strict=True)
 
 
 def test_scan_update_time_includes_linked_pr_followup(tmp_path):

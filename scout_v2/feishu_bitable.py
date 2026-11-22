@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
 import json
 import os
 import re
@@ -290,13 +291,15 @@ def sync_rows(root: Path, rows: list[dict], *, force: bool = False) -> dict:
 
 def sync_table(root: Path, rows: list[dict], *, table_name: str, fields: list,
                to_fields, binding_key: str, force: bool = False,
-               allow_empty: bool = False) -> dict:
+               allow_empty: bool = False, record_cache: dict | None = None,
+               full_reconcile: bool = True) -> dict:
     """把行 upsert 进指定表；表和字段不存在就建。返回计数摘要。
 
     同一个 base 里可挂多张表（PR 记录 / 仓库池 / 候选池…），每张表用自己的
     binding_key 缓存 table_id。键列恒为"键"（repo#number 或 repo 本身）。
     allow_empty 仅在确认拿到完整快照时启用，空结果也会清理旧行。
     默认保留空结果保护，避免源查询故障清空飞书。
+    record_cache 只用于字段固定的扫描表，每次全量对账重新分页。
     """
     binding = load_binding(root)
     app_token = _binding_app_token(root)
@@ -307,29 +310,66 @@ def sync_table(root: Path, rows: list[dict], *, table_name: str, fields: list,
     cached_table = binding.get(binding_key) if binding.get("app_token") == app_token else None
     table_id = cached_table or find_or_create_table(
         app_token, table_name, fields)
-    save_binding(root, {"app_token": app_token, binding_key: table_id})
-    ensure_columns(app_token, table_id, fields or [])
-    # 兼容其他使用 sync_table 的表，自动补齐转换器产出的字段。
-    produced = set()
-    for row in rows[:5]:
-        produced.update(to_fields(row).keys())
-    declared = {f.get("field_name") for f in (fields or [])}
-    missing = sorted(produced - declared)
-    if missing:
-        ensure_columns(app_token, table_id,
-                       [{"field_name": n, "type": 1} for n in missing])
+    # Each table has one writer. Invalidate before a write whose response may
+    # be lost, so a retry observes any rows the server actually committed.
+    identity = (app_token, table_id)
+    cached = record_cache.pop(identity, None) if record_cache is not None else None
+    if record_cache is not None:
+        record_cache.clear()
+    delta = not full_reconcile and cached is not None and cached_table == table_id
+    names = {f["field_name"] for f in (fields or [])}
+    if not delta:
+        if cached_table != table_id:
+            save_binding(root, {"app_token": app_token, binding_key: table_id})
+        ensure_columns(app_token, table_id, fields or [])
+        produced = {name for row in rows[:5] for name in to_fields(row)}
+        missing = sorted(produced - names)
+        if missing:
+            ensure_columns(app_token, table_id, [{"field_name": n, "type": 1} for n in missing])
+
+    def digest(values):
+        return hashlib.sha256(_fingerprint(values).encode("utf-8")).digest()
+
+    if delta:
+        existing = cached
+    elif record_cache is not None:
+        # The scan table converter has a fixed schema. Keep only IDs and
+        # fingerprints while paging the remote snapshot.
+        existing = {}
+        for record in record_pages(app_token, table_id):
+            raw = record.get("fields") or {}
+            key = _key_label(raw.get("键"))
+            if key:
+                existing[key] = (str(record["record_id"]), digest(
+                    {name: _norm_field(raw.get(name)) for name in names}))
+    else:
+        existing = {key: (value["record_id"], value["fields"])
+                    for key, value in load_records(app_token, table_id).items()}
+
+    incoming = set()
+    next_cache = {}
+    created_digests = {}
+    to_create, to_update = [], []
+    for row in rows:
+        values = to_fields(row)
+        key = _key_label(values["键"])
+        incoming.add(key)
+        hit = existing.get(key)
+        desired = digest(values) if record_cache is not None else _fingerprint(values)
+        if hit is None:
+            to_create.append({"fields": values})
+            if record_cache is not None:
+                created_digests[key] = desired
+        else:
+            record_id, previous = hit
+            if record_cache is None:
+                previous = _fingerprint({name: previous.get(name) for name in values})
+            else:
+                next_cache[key] = (record_id, desired)
+            if force or previous != desired:
+                to_update.append({"record_id": record_id, "fields": values})
 
     tok = feishu_app.tenant_token()
-    existing = load_records(app_token, table_id)
-    all_fields = [to_fields(r) for r in rows]
-    to_create, to_update = [], []
-    for fields in all_fields:
-        key = _key_label(fields["键"])
-        hit = existing.get(key)
-        if hit is None:
-            to_create.append({"fields": fields})
-        elif force or _fingerprint({name: hit["fields"].get(name) for name in fields}) != _fingerprint(fields):
-            to_update.append({"record_id": hit["record_id"], "fields": fields})
 
     def _post(path, payload, method="POST"):
         body = feishu_app._request(
@@ -341,7 +381,13 @@ def sync_table(root: Path, rows: list[dict], *, table_name: str, fields: list,
 
     # 分批：单批 ≤500 条
     for i in range(0, len(to_create), 500):
-        _post("records/batch_create", {"records": to_create[i:i + 500]})
+        body = _post("records/batch_create", {"records": to_create[i:i + 500]})
+        if record_cache is not None:
+            for record in (body.get("data") or {}).get("records") or []:
+                primary = (record.get("fields") or {}).get("键")
+                key = _key_label(primary.get("text") if isinstance(primary, dict) else primary)
+                if key in created_digests and record.get("record_id"):
+                    next_cache[key] = (str(record["record_id"]), created_digests[key])
     for i in range(0, len(to_update), 500):
         _post("records/batch_update", {"records": to_update[i:i + 500]})
 
@@ -349,12 +395,12 @@ def sync_table(root: Path, rows: list[dict], *, table_name: str, fields: list,
     # 只在拿到非空行集时执行——GitHub 全挂时 rows 为空，那不能当"全部剔除"。
     pruned = 0
     if rows or allow_empty:
-        incoming = {_key_label(f["键"]) for f in all_fields}
-        stale = [hit["record_id"] for key, hit in existing.items()
-                 if key not in incoming]
+        stale = [record_id for key, (record_id, _) in existing.items() if key not in incoming]
         for i in range(0, len(stale), 500):
             _post("records/batch_delete", {"records": stale[i:i + 500]})
         pruned = len(stale)
+        if record_cache is not None and next_cache.keys() == incoming:
+            record_cache[identity] = next_cache
 
     return {"created": len(to_create), "updated": len(to_update),
             "skipped": len(rows) - len(to_create) - len(to_update),

@@ -192,7 +192,8 @@ def build_repo_rows(root) -> list[dict]:
     return rows
 
 
-def build_scan_rows(root, running_keys=(), published=None, pr_states=None) -> list[dict]:
+def build_scan_rows(root, running_keys=(), published=None, pr_states=None, *,
+                    strict=False, worklog_cache=None) -> list[dict]:
     """「扫描发现」表的行：seen.json 全量镜像。
 
     这是发现层的总账——Worker 扫到的每个 issue 都在，含被规则否决和
@@ -200,27 +201,29 @@ def build_scan_rows(root, running_keys=(), published=None, pr_states=None) -> li
     按插入顺序，所以行的顺序不影响，但便于调试）。
     """
     seen_path = root / "state" / "seen.json"
-    if not seen_path.exists():
+    if not strict and not seen_path.exists():
         seen_path = ROOT / "state" / "seen.json"
     try:
         seen = json.loads(seen_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
+        if strict:
+            raise
         return []
     queue = {}
     try:
         qpath = root / "queue" / "candidates.json"
-        if not qpath.exists():
+        if not strict and not qpath.exists():
             qpath = ROOT / "queue" / "candidates.json"
         queue = json.loads(qpath.read_text(encoding="utf-8")) or {}
-    except (OSError, json.JSONDecodeError):
+    except FileNotFoundError:
         pass
+    except (OSError, json.JSONDecodeError):
+        if strict:
+            raise
 
     from scout_v2.feishu_bitable import _timestamp
 
     # Earlier competition aborts did not save the reason on the candidate.
-    historical = {key for key, entry in queue.items()
-                  if (entry or {}).get("status") == "aborted_competed"
-                  and not (entry or {}).get("abort_reason")}
     historical_reasons = {}
     activity = {}
     actions = (
@@ -231,23 +234,43 @@ def build_scan_rows(root, running_keys=(), published=None, pr_states=None) -> li
         "dashboard_pr_reply_failed",
     )
     try:
-        with (root / "state" / "worklog.jsonl").open(encoding="utf-8") as worklog:
+        with (root / "state" / "worklog.jsonl").open("rb") as worklog:
+            stat = os.fstat(worklog.fileno())
+            identity = (stat.st_dev, stat.st_ino)
+            offset = 0
+            if (worklog_cache and worklog_cache["identity"] == identity
+                    and worklog_cache["offset"] <= stat.st_size):
+                offset = worklog_cache["offset"]
+                activity = worklog_cache["activity"]
+                historical_reasons = worklog_cache["historical_reasons"]
+            worklog.seek(offset)
+            markers = tuple(action.encode() for action in actions)
             for line in worklog:
-                if not any(action in line for action in actions):
+                if not line.endswith(b"\n") and worklog_cache is not None:
+                    break  # A writer may still be appending this record.
+                offset += len(line)
+                if not any(marker in line for marker in markers):
                     continue
                 try:
                     event = json.loads(line)
-                except json.JSONDecodeError:
+                except (json.JSONDecodeError, UnicodeDecodeError):
                     continue
                 key, reason = str(event.get("target") or ""), str(event.get("result") or "")
                 action = event.get("action")
-                if key in historical and action == "pipeline_abort" and reason.startswith("competed:"):
+                if action == "pipeline_abort" and reason.startswith("competed:"):
                     historical_reasons[key] = reason
                 stamp = event.get("ts")
                 if action in actions and (_timestamp(stamp) or 0) > (_timestamp(activity.get(key.lower())) or 0):
                     activity[key.lower()] = stamp
+            if worklog_cache is not None:
+                worklog_cache.update(identity=identity, offset=offset, activity=activity,
+                                     historical_reasons=historical_reasons)
+    except FileNotFoundError:
+        if worklog_cache is not None:
+            worklog_cache.clear()
     except OSError:
-        pass
+        if strict:
+            raise
 
     rows = []
     for key, v in seen.items():

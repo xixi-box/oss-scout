@@ -147,17 +147,25 @@ def _sync_bitables(root: Path, *, ds=None, activity_only=False, activity_cache=N
                         and signature == activity_cache.get(signature_key)):
                     results[name] = {"unchanged": True}
                     continue
+                scan_cache = (activity_cache.setdefault("scan:records", {})
+                              if name == "scan" and activity_cache is not None else None)
+                scan_log = (activity_cache.setdefault("scan:worklog", {})
+                            if name == "scan" and activity_cache is not None else None)
+                if full_reconcile and scan_log is not None:
+                    scan_log.clear()
                 # Never rebuild multi-megabyte snapshots just to compare identical rows.
                 from scout_v2.controller_metrics import timed_operation
                 with timed_operation(root, "table." + name + ".build"):
                     # Builders tolerate corrupt/missing files by returning []; validate first.
-                    if source:
+                    if source and name != "scan":
                         raw = source.read_text(encoding="utf-8")
                         yaml.safe_load(raw) if source.suffix == ".yaml" else json.loads(raw)
                         del raw
-                    if tracks_activity:
+                    if name == "scan":
                         running, published, pr_states = activity
-                        rows = build(root, running, published, pr_states) if name == "scan" else build(root, running)
+                        rows = build(root, running, published, pr_states, strict=True, worklog_cache=scan_log)
+                    elif tracks_activity:
+                        rows = build(root, activity[0])
                     else:
                         rows = build(root)
                 if (not full_reconcile and activity_cache is not None
@@ -165,13 +173,16 @@ def _sync_bitables(root: Path, *, ds=None, activity_only=False, activity_cache=N
                     activity_cache[signature_key] = signature
                     results[name] = {"unchanged": True}
                     continue
+                options = ({"record_cache": scan_cache, "full_reconcile": full_reconcile}
+                           if scan_cache is not None else {})
                 results[name] = fb.sync_table(root, rows, table_name=table, fields=fields,
                                               to_fields=convert, binding_key=binding,
-                                              allow_empty=source is not None or name == "pr")
+                                              allow_empty=source is not None or name == "pr", **options)
                 successful = (not results[name].get("error")
                               and not isinstance(results[name].get("skipped"), str))
                 if activity_cache is not None and successful:
-                    activity_cache[name] = rows
+                    if name != "scan":
+                        activity_cache[name] = rows
                     activity_cache[signature_key] = signature
                 _audit(root, "bitable_sync_" + name, table, json.dumps(results[name]))
         except Exception as ex:
