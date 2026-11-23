@@ -441,7 +441,8 @@ def prune_candidate_backlog(root: Path) -> list[str]:
     return removed
 
 
-def ingest_cloudflare_issues(ds, items: list[dict], *, refresh: bool = False) -> tuple[int, list[str]]:
+def ingest_cloudflare_issues(ds, items: list[dict], *, refresh: bool = False,
+                             first_received_at: str | None = None) -> tuple[int, list[str]]:
     """Mechanical exclusions, then AI; short atomic writes never enclose network IO."""
     import hashlib
     from scout_v2.state_store import (atomic_json_write,
@@ -475,7 +476,8 @@ def ingest_cloudflare_issues(ds, items: list[dict], *, refresh: bool = False) ->
         lane = eng.repo_lane(repo)
         blockers, verdict = screen_issue(eng, it, lane=lane, live_blockers=live_blockers, timeline=timeline)
         now = business_now().isoformat(timespec="microseconds")
-        rec = {"first_seen": prior.get("first_seen") or now, "updated_at": now, "fingerprint": fingerprint,
+        discovered_at = prior.get("first_seen") or first_received_at or now
+        rec = {"first_seen": discovered_at, "updated_at": now, "fingerprint": fingerprint,
                "status": "blocked" if blockers else "screen_skipped" if verdict.get("skipped") else
                          "queued" if verdict.get("usable") is True else
                          "rejected" if verdict.get("usable") is False else "retry",

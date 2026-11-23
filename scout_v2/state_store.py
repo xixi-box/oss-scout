@@ -262,12 +262,14 @@ class IssueInbox:
                               "key TEXT PRIMARY KEY, payload TEXT NOT NULL, version INTEGER NOT NULL DEFAULT 1,"
                               "ready REAL NOT NULL DEFAULT 0, lease_until REAL NOT NULL DEFAULT 0,"
                               "attempts INTEGER NOT NULL DEFAULT 0, error TEXT NOT NULL DEFAULT '')")
-            if "done_version" not in {r[1] for r in self.conn.execute("PRAGMA table_info(inbox)")}:
-                try:
-                    self.conn.execute("ALTER TABLE inbox ADD COLUMN done_version INTEGER NOT NULL DEFAULT 0")
-                except sqlite3.OperationalError:
-                    if "done_version" not in {r[1] for r in self.conn.execute("PRAGMA table_info(inbox)")}:
-                        raise
+            columns = {r[1] for r in self.conn.execute("PRAGMA table_info(inbox)")}
+            for name, spec in (("done_version", "INTEGER NOT NULL DEFAULT 0"), ("first_received_at", "TEXT")):
+                if name not in columns:
+                    try:
+                        self.conn.execute(f"ALTER TABLE inbox ADD COLUMN {name} {spec}")
+                    except sqlite3.OperationalError:
+                        if name not in {r[1] for r in self.conn.execute("PRAGMA table_info(inbox)")}:
+                            raise
         except BaseException:
             self.conn.close()
             raise
@@ -277,23 +279,39 @@ class IssueInbox:
         self.conn.close()
 
     def put(self, issues: list[dict]) -> int:
+        received_at = business_now().isoformat(timespec="microseconds")
+        inserted = False
         with _write_transaction(self.conn, self.root / "state/issue_inbox.sqlite3", "inbox.put"):
             for issue in issues:
                 key = f"{issue['repo']}#{issue['number']}"
                 payload = json.dumps(issue, ensure_ascii=False)
-                self.conn.execute("INSERT INTO inbox(key,payload) VALUES (?,?) "
-                                  "ON CONFLICT(key) DO UPDATE SET payload=excluded.payload, "
-                                  "version=inbox.version+1,ready=0,error='' WHERE inbox.payload<>excluded.payload",
-                                  (key, payload))
+                written = self.conn.execute(
+                    "INSERT INTO inbox(key,payload,first_received_at) VALUES (?,?,?) "
+                    "ON CONFLICT(key) DO UPDATE SET payload=excluded.payload, "
+                    "version=inbox.version+1,ready=0,error='' WHERE inbox.payload<>excluded.payload "
+                    "RETURNING version", (key, payload, received_at)).fetchone()
+                inserted |= written == (1,)
+        if inserted:
+            from .table_sync import notify
+            notify(self.root, {"scan"}, invalidate=False)
         return len(issues)
 
-    def take(self):
+    def received_at(self, key):
+        row = self.conn.execute("SELECT first_received_at FROM inbox WHERE key=?", (key,)).fetchone()
+        return row[0] if row else None
+
+    def take(self, *, prefer_new=True):
         import time
         now = time.time()
         with _write_transaction(self.conn, self.root / "state/issue_inbox.sqlite3", "inbox.take"):
-            row = self.conn.execute("SELECT key,payload,version,attempts FROM inbox "
-                                    "WHERE done_version<version AND ready<=? AND lease_until<=? ORDER BY rowid LIMIT 1",
-                                    (now, now)).fetchone()
+            fresh = "done_version=0 AND attempts=0"
+            order = (fresh, f"NOT ({fresh})")
+            for lane in (order if prefer_new else reversed(order)):
+                row = self.conn.execute("SELECT key,payload,version,attempts FROM inbox "
+                                        f"WHERE done_version<version AND ready<=? AND lease_until<=? AND {lane} "
+                                        "ORDER BY rowid LIMIT 1", (now, now)).fetchone()
+                if row:
+                    break
             if row:
                 self.conn.execute("UPDATE inbox SET lease_until=? WHERE key=?", (now + 900, row[0]))
         return row
@@ -310,6 +328,19 @@ class IssueInbox:
             # GitHub context for every already-processed payload every minute.
             self.conn.execute("UPDATE inbox SET done_version=MAX(done_version,?),lease_until=0,attempts=0,error='' WHERE key=?",
                               (version, key))
+
+
+def pending_scan_receipts(root: Path) -> list[tuple[str, str | None]]:
+    """Return unprocessed keys without loading issue payloads or acquiring a writer lock."""
+    from contextlib import closing
+
+    path = root / "state/issue_inbox.sqlite3"
+    if not path.is_file():
+        return []
+    with closing(sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True, timeout=5)) as conn:
+        # The writer owns schema migration. A scan just before startup migration
+        # cannot safely treat a legacy source as an empty authoritative snapshot.
+        return conn.execute("SELECT key,first_received_at FROM inbox WHERE done_version=0").fetchall()
 
 
 def atomic_json_write(path: Path, data, verify: bool = True, backup: bool = True) -> None:

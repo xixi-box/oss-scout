@@ -3,7 +3,7 @@ import sqlite3
 
 import pytest
 
-from scout_v2.state_store import IssueInbox, _write_transaction, queue_transaction
+from scout_v2.state_store import IssueInbox, _write_transaction, pending_scan_receipts, queue_transaction
 
 
 def test_failed_inbox_batch_rolls_back_and_releases_writer(tmp_path):
@@ -18,6 +18,41 @@ def test_failed_inbox_batch_rolls_back_and_releases_writer(tmp_path):
             assert other.put([{"repo": "a/b", "number": 2}]) == 1
         finally:
             other.close()
+    finally:
+        inbox.close()
+
+
+def test_inbox_preserves_receipt_time_and_gives_each_lane_a_turn(tmp_path):
+    inbox = IssueInbox(tmp_path)
+    old = {"repo": "a/b", "number": 1, "title": "old"}
+    fresh = {"repo": "a/b", "number": 2, "title": "new"}
+    try:
+        inbox.put([old])
+        key, stamp = pending_scan_receipts(tmp_path)[0]
+        with pytest.raises(KeyError):
+            inbox.put([fresh, {"repo": "a/b"}])
+        assert pending_scan_receipts(tmp_path) == [(key, stamp)]
+        inbox.finish(key, inbox.take()[2])
+        inbox.put([{**old, "title": "updated"}, fresh])
+        assert inbox.received_at(key) == stamp
+        assert [row[0] for row in pending_scan_receipts(tmp_path)] == ["a/b#2"]
+        assert inbox.take(prefer_new=True)[0] == "a/b#2"
+        assert inbox.take(prefer_new=False)[0] == key
+    finally:
+        inbox.close()
+
+
+def test_legacy_inbox_migration_keeps_unknown_receipt_time(tmp_path):
+    state = tmp_path / "state"
+    state.mkdir()
+    with sqlite3.connect(state / "issue_inbox.sqlite3") as conn:
+        conn.execute("CREATE TABLE inbox (key TEXT PRIMARY KEY,payload TEXT,version INTEGER,"
+                     "ready REAL,lease_until REAL,attempts INTEGER,error TEXT)")
+        conn.execute("INSERT INTO inbox VALUES ('a/b#1','{}',1,0,0,0,'')")
+    inbox = IssueInbox(tmp_path)
+    try:
+        assert pending_scan_receipts(tmp_path) == [("a/b#1", None)]
+        assert inbox.take()[0] == "a/b#1"
     finally:
         inbox.close()
 

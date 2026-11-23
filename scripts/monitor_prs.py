@@ -162,8 +162,12 @@ def build_repo_rows(root) -> list[dict]:
     return rows
 
 
+def pending_scan_row(key, stamp):
+    return {"key": key, "first_seen": stamp, "last_activity": stamp, "status": "待筛选"}
+
+
 def build_scan_rows(root, running_keys=(), published=None, pr_states=None, *,
-                    strict=False, worklog_cache=None) -> list[dict]:
+                    strict=False, worklog_cache=None, receipts=()) -> list[dict]:
     """「扫描发现」表的行：seen.json 全量镜像。
 
     这是发现层的总账——Worker 扫到的每个 issue 都在，含被规则否决和
@@ -242,7 +246,8 @@ def build_scan_rows(root, running_keys=(), published=None, pr_states=None, *,
         if strict:
             raise
 
-    rows = []
+    rows = [pending_scan_row(key, stamp) for key, stamp in receipts
+            if key not in seen and key not in queue and key.lower() not in (published or {})]
     for key, v in seen.items():
         v = v or {}
         if "#" not in key:
@@ -305,7 +310,7 @@ def build_scan_rows(root, running_keys=(), published=None, pr_states=None, *,
             "pr_url": pr_url,
             "pr_state": (pr_states or {}).get(pr_url),
         })
-    rows.sort(key=lambda r: r["first_seen"], reverse=True)
+    rows.sort(key=lambda r: r.get("first_seen") or "", reverse=True)
     return rows
 
 

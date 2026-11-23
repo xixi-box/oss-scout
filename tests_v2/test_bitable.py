@@ -199,6 +199,23 @@ class TestSyncDiff:
         assert fb.sync_table(tmp_path, [row], **kwargs)["skipped"] == 1
         assert fake.created == ["a/b#1"]
 
+    def test_pending_scan_insert_preserves_other_rows_and_screened_results(self, fake, tmp_path):
+        from scripts.monitor_prs import pending_scan_row
+
+        cache = {}
+        existing = {"key": "a/b#1", "status": "rejected"}
+        kwargs = dict(table_name=fb.SCAN_TABLE_NAME, fields=fb.SCAN_FIELDS,
+                      to_fields=fb.scan_row_to_fields, binding_key="scan_table_id", record_cache=cache)
+        fb.sync_table(tmp_path, [existing], **kwargs)
+        receipts = [pending_scan_row("a/b#1", None), pending_scan_row("a/b#2", "2026-11-23T13:00:00Z")]
+        out = fb.sync_table(tmp_path, receipts, full_reconcile=False, insert_only=True, **kwargs)
+        assert (out["created"], out["updated"], out["pruned"]) == (1, 0, 0)
+        assert fake.records["r1"]["最终结果"] == "细筛淘汰"
+        assert fake.records["r2"]["最终结果"] == "待筛选"
+        out = fb.sync_table(tmp_path, [existing, {**receipts[1], "status": "rejected"}],
+                            full_reconcile=False, **kwargs)
+        assert (out["created"], out["updated"], out["pruned"]) == (0, 1, 0)
+
     def test_unknown_empty_snapshot_keeps_old_rows(self, tmp_path, fake):
         fake.records = {"r1": {"键": "a/b#1"}}
         out = fb.sync_rows(tmp_path, [])

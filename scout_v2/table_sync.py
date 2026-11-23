@@ -31,12 +31,13 @@ class TableChanges:
         self._stamps = {}
         self._versions = {}
 
-    def mark(self, names):
+    def mark(self, names, *, invalidate=True):
         with self._lock:
             names = set(names) & TABLES
             self._dirty.update(names)
-            for name in names:
-                self._versions[name] = self._versions.get(name, 0) + 1
+            if invalidate:
+                for name in names:
+                    self._versions[name] = self._versions.get(name, 0) + 1
             self.wake.set()
 
     def version(self, name):
@@ -72,11 +73,11 @@ def subscribe(root: Path) -> TableChanges:
         return feed
 
 
-def notify(root: Path, names):
+def notify(root: Path, names, *, invalidate=True):
     with _feeds_lock:
         feed = _feeds.get(_key(root))
     if feed is not None:
-        feed.mark(names)
+        feed.mark(names, invalidate=invalidate)
 
 
 def notify_path(path: Path):

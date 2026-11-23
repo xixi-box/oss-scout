@@ -144,12 +144,30 @@ def _sync_bitables(root: Path, *, ds=None, activity_only=False, activity_cache=N
                 signature = (tuple(stamps), activity if tracks_activity else None,
                              subscribe(root).version(name))
                 signature_key = "source:" + name
-                if (files and not full_reconcile and activity_cache is not None
-                        and signature == activity_cache.get(signature_key)):
+                unchanged = (files and not full_reconcile and activity_cache is not None
+                             and signature == activity_cache.get(signature_key))
+                if unchanged and name != "scan":
                     results[name] = {"unchanged": True}
                     continue
                 record_cache = (activity_cache.setdefault(name + ":records", {})
                                 if name in {"scan", "pr"} and activity_cache is not None else None)
+                if name == "scan":
+                    from scout_v2.state_store import pending_scan_receipts
+                    # Read inbox first. A completed receipt is already durable in seen.json.
+                    receipts = [(key, stamp) for key, stamp in pending_scan_receipts(root)
+                                if modifiable_repo(key.rpartition("#")[0])]
+                    if unchanged and record_cache:
+                        known = next(iter(record_cache.values()))
+                        new_rows = [mod.pending_scan_row(key, stamp) for key, stamp in receipts if key not in known]
+                        if new_rows:
+                            results[name] = fb.sync_table(root, new_rows, table_name=table, fields=fields,
+                                                          to_fields=convert, binding_key=binding,
+                                                          record_cache=record_cache, full_reconcile=False,
+                                                          insert_only=True)
+                            _audit(root, "bitable_sync_" + name, table, json.dumps(results[name]))
+                        else:
+                            results[name] = {"unchanged": True}
+                        continue
                 scan_log = (activity_cache.setdefault("scan:worklog", {})
                             if name == "scan" and activity_cache is not None else None)
                 if full_reconcile and scan_log is not None:
@@ -172,7 +190,8 @@ def _sync_bitables(root: Path, *, ds=None, activity_only=False, activity_cache=N
                         rows = build(root, github_rows=github_rows, read_pr=pr_feed.read_pr)
                     elif name == "scan":
                         running, published, pr_states = activity
-                        rows = build(root, running, published, pr_states, strict=True, worklog_cache=scan_log)
+                        rows = build(root, running, published, pr_states, strict=True,
+                                     worklog_cache=scan_log, receipts=receipts)
                     elif tracks_activity:
                         rows = build(root, activity[0])
                     else:
@@ -399,14 +418,16 @@ def create_app(root: Path | None = None, gh_runner=None,
             from scout_v2.state_store import IssueInbox
             if os.environ.get("OSSCOUT_DISABLE_AUTO_REPAIR") == "1":
                 return
+            turn = 0
             while True:
                 inbox = None
                 try:
                     inbox = IssueInbox(root)
-                    row = inbox.take()
+                    row = inbox.take(prefer_new=turn < 3)
                     if not row:
                         time.sleep(2)
                         continue
+                    turn = (turn + 1) % 4
                     key, payload, version, attempts = row
                     try:
                         queue = json.loads((root / "queue/candidates.json").read_text(encoding="utf-8"))
@@ -420,7 +441,8 @@ def create_app(root: Path | None = None, gh_runner=None,
                         with _inflight_lock:
                             _intake_handoff.add(key)
                         try:
-                            _, added = D.ingest_cloudflare_issues(ds, [item], refresh=True)
+                            _, added = D.ingest_cloudflare_issues(
+                                ds, [item], refresh=True, first_received_at=inbox.received_at(key))
                             seen = json.loads((root / "state/seen.json").read_text(encoding="utf-8"))
                             rec = seen.get(key) or {}
                             if rec.get("status") == "retry":

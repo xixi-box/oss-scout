@@ -4,7 +4,7 @@ import threading
 
 import pytest
 
-from scout_v2.state_store import ClaimLedger, atomic_json_write, business_now
+from scout_v2.state_store import ClaimLedger, IssueInbox, atomic_json_write, business_now
 from scout_v2.table_sync import TABLES, TableSyncSchedule, subscribe
 
 
@@ -46,6 +46,49 @@ def test_successful_state_write_wakes_only_affected_tables(tmp_path):
     atomic_json_write(tmp_path / "state/codex/auth.json", {"secret": "private"})
     sync.tick(0.4)
     assert not executor.calls  # Credentials are never table events or payloads.
+
+
+def test_new_receipt_sync_does_not_rebuild_the_scan_history(tmp_path, monkeypatch):
+    from dashboard import app as service
+    from scout_v2 import feishu_bitable as fb
+    from pathlib import Path
+
+    feed = subscribe(tmp_path)
+    (tmp_path / "state").mkdir()
+    history = tmp_path / "state/seen.json"
+    history.write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(service, "modifiable_repo", lambda _: True)
+    monkeypatch.setattr(fb, "configured", lambda _: True)
+    calls = []
+
+    def sync_table(root, rows, **kwargs):
+        calls.append((rows, kwargs.get("insert_only", False)))
+        kwargs["record_cache"].setdefault(("base", "table"), {}).update(
+            {row["key"]: None for row in rows})
+        return {"created": len(rows)}
+
+    monkeypatch.setattr(fb, "sync_table", sync_table)
+    cache = {}
+    assert service._sync_bitables(tmp_path, activity_cache=cache, table_names={"scan"})["scan"] == {"created": 0}
+    inbox = IssueInbox(tmp_path)
+    try:
+        version = feed.version("scan")
+        inbox.put([{"repo": "a/b", "number": 1}])
+        assert feed.take() == {"scan"} and feed.version("scan") == version
+    finally:
+        inbox.close()
+    read_text = Path.read_text
+
+    def read(path, *args, **kwargs):
+        assert path != history
+        return read_text(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", read)
+    result = service._sync_bitables(tmp_path, activity_cache=cache,
+                                   table_names={"scan"}, full_reconcile=False)
+    assert result["scan"] == {"created": 1}
+    rows, insert_only = calls[-1]
+    assert insert_only and rows[0]["status"] == "待筛选"
 
 
 def test_failed_write_does_not_announce_uncommitted_state(tmp_path, monkeypatch):
