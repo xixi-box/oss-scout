@@ -19,6 +19,7 @@ def test_authenticated_read_and_no_redirect_fallback(tmp_path, monkeypatch):
     def fake(request, timeout):
         assert request.full_url.endswith("/internal/v1/issue-context")
         assert request.get_header("X-ingest-token") == "fixture"
+        assert request.get_header("User-agent") == "oss-scout-controller/1.0"
         assert json.loads(request.data)["number"] == 1
         return {"complete": True}
     monkeypatch.setattr(edge_reads, "_read_json", fake)

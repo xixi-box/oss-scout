@@ -102,7 +102,10 @@ def edge_read(root, route, payload, *, feishu_token=None):
     with _LOCK:
         if _BACKOFF.get(key, 0) > now:
             return None
-    headers = {"Content-Type": "application/json", "X-Ingest-Token": token}
+    # Identify this service explicitly. workers.dev rejects urllib's default
+    # client signature with Cloudflare 1010 before Worker authentication runs.
+    headers = {"Content-Type": "application/json", "User-Agent": "oss-scout-controller/1.0",
+               "X-Ingest-Token": token}
     if feishu_token is not None:
         if route != "feishu-record-index":
             raise ValueError("Feishu token restricted to business record index")

@@ -28,6 +28,8 @@ The existing `GH_TOKEN` and `INGEST_TOKEN` Worker secrets are reused. The contro
 
 Each invocation is bounded to 36 external subrequests, below the Workers Free limit. Deploy via the existing worker-deploy workflow before switching the controller. If the GitHub token does not identify xixi-box, PR retrieval falls back to the existing controller path; no incomplete snapshot can prune Feishu rows.
 
+The Worker release verifies its authenticated status and durable ingress before the controller rollout. The controller and the release check identify themselves as `oss-scout-controller/1.0`. Cloudflare can reject the default Python urllib user agent with error 1010 before the request reaches the Worker.
+
 ## Durable ingress
 
 The `INGRESS` SQLite Durable Object stages issue versions before acknowledging scan delivery; its alarm sends up to 20 issues per controller receipt and retries failed deliveries. Old KV pending keys continue to drain via the existing VPS recovery path. No candidate/PR admission state is moved in this release. Deploy with Wrangler 4 and preserve the DO binding and migration tag on future revisions.
