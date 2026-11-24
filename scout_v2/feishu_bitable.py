@@ -337,12 +337,30 @@ def sync_table(root: Path, rows: list[dict], *, table_name: str, fields: list,
         # Cached tables have a fixed schema. Keep only IDs and
         # fingerprints while paging the remote snapshot.
         existing = {}
-        for record in record_pages(app_token, table_id):
-            raw = record.get("fields") or {}
-            key = _key_label(raw.get("键"))
-            if key:
-                existing[key] = (str(record["record_id"]), digest(
-                    {name: _norm_field(raw.get(name)) for name in names}))
+        edge = None
+        if table_name in {SCAN_TABLE_NAME, TABLE_NAME}:
+            from .edge_reads import edge_read
+            edge = edge_read(root, "feishu-record-index", {
+                "app_token": app_token, "table_id": table_id, "table_name": table_name},
+                feishu_token=feishu_app.tenant_token())
+        if edge is not None:
+            remote = edge.get("rows")
+            if edge.get("complete") is not True or not isinstance(remote, list):
+                raise RuntimeError("Cloudflare Feishu record index incomplete")
+            for record in remote:
+                key, record_id, raw = record.get("key"), record.get("record_id"), record.get("fields")
+                if (not isinstance(key, str) or not key or key in existing
+                        or not isinstance(record_id, str) or not record_id
+                        or not isinstance(raw, dict) or set(raw) != names):
+                    raise RuntimeError("Cloudflare Feishu record index invalid")
+                existing[key] = (record_id, digest(raw))
+        else:
+            for record in record_pages(app_token, table_id):
+                raw = record.get("fields") or {}
+                key = _key_label(raw.get("键"))
+                if key:
+                    existing[key] = (str(record["record_id"]), digest(
+                        {name: _norm_field(raw.get(name)) for name in names}))
     else:
         existing = {key: (value["record_id"], value["fields"])
                     for key, value in load_records(app_token, table_id).items()}

@@ -88,3 +88,16 @@ def test_competition_uses_edge_but_preserves_python_gate(tmp_path, monkeypatch):
     result = git_host.recheck_candidate("a/b", 1, screening_source=(issue, [], []),
                                        use_title_keywords=True, edge_root=tmp_path)
     assert result.complete and result.open_pr_hits
+
+
+def test_feishu_token_only_sent_to_fixed_edge_index_route(tmp_path, monkeypatch):
+    config(tmp_path, monkeypatch)
+    def fake(request, timeout):
+        assert request.full_url.endswith("/internal/v1/feishu-record-index")
+        assert request.get_header("X-feishu-tenant-token") == "temporary"
+        assert "temporary" not in request.data.decode()
+        return {"complete":True,"rows":[]}
+    monkeypatch.setattr(edge_reads, "_read_json", fake)
+    assert edge_reads.edge_read(tmp_path, "feishu-record-index", {}, feishu_token="temporary")["complete"]
+    with pytest.raises(ValueError):
+        edge_reads.edge_read(tmp_path, "issue-context", {}, feishu_token="temporary")

@@ -18,7 +18,7 @@ _LOCK = threading.Lock()
 _DISCOVERY = {}
 _BACKOFF = {}
 _WORKER_HOST = re.compile(r"https://oss-scout-hunter\.[a-z0-9-]+\.workers\.dev/?\Z")
-_ALLOWED = {"issue-context", "pr-snapshot", "repository-policy", "competition-search", "reference-fact"}
+_ALLOWED = {"issue-context", "pr-snapshot", "repository-policy", "competition-search", "reference-fact", "feishu-record-index"}
 
 
 class EdgeRateLimited(RuntimeError):
@@ -82,7 +82,7 @@ def _endpoint(cfg):
     return url
 
 
-def edge_read(root, route, payload):
+def edge_read(root, route, payload, *, feishu_token=None):
     """Return a complete edge response, or None for compatibility fallback.
 
     Rate limiting is surfaced rather than immediately retrying against GitHub.
@@ -102,9 +102,14 @@ def edge_read(root, route, payload):
     with _LOCK:
         if _BACKOFF.get(key, 0) > now:
             return None
+    headers = {"Content-Type": "application/json", "X-Ingest-Token": token}
+    if feishu_token is not None:
+        if route != "feishu-record-index":
+            raise ValueError("Feishu token restricted to business record index")
+        headers["X-Feishu-Tenant-Token"] = feishu_token
     req = urllib.request.Request(
         f"{url}/internal/v1/{route}", data=json.dumps(payload).encode(),
-        headers={"Content-Type": "application/json", "X-Ingest-Token": token}, method="POST")
+        headers=headers, method="POST")
     try:
         result = _read_json(req, 90)
         if not isinstance(result, dict) or result.get("error"):

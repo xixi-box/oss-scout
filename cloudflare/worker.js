@@ -420,10 +420,73 @@ async function edgeReference(env, body, budget) {
   return jsonResponse({complete:true,fact:{repo,number,kind:"issue",state:issue.state,
     state_reason:issue.state_reason ?? null,url:issue.html_url ?? null}});
 }
+// Business table reconciliation reads. Only short-lived tenant tokens are
+// forwarded to the fixed Feishu origin; no model settings or write endpoint.
+const BUSINESS_FIELDS = {
+  "扫描发现": ["键","发现时间","更新时间","最终结果","粗筛结果","细筛结果"],
+  "PR 记录": ["键","标题","PR 状态","发现时间","创建时间"],
+};
+function feishuNorm(value) {
+  if (value === undefined) return null;
+  if (Array.isArray(value)) {
+    if (value.some(seg=>seg && typeof seg==="object" && seg.type==="url" && seg.link))
+      return value.map(seg=>Object.fromEntries(["type","text","link"].filter(k=>Object.hasOwn(seg,k)).map(k=>[k,seg[k]])));
+    const parts=value.filter(seg=>seg && typeof seg==="object" && seg.text!=null).map(seg=>String(seg.text||""));
+    return parts.length?parts.join(""):value;
+  }
+  if (value && typeof value==="object" && Object.hasOwn(value,"text") && Object.hasOwn(value,"link"))
+    return {text:value.text||"",link:value.link||""};
+  return value;
+}
+async function edgeFeishuIndex(env, body, budget, request) {
+  const {app_token:app,table_id:table,table_name:name}=body;
+  const token=request.headers.get("X-Feishu-Tenant-Token");
+  if (!token || token.length>4096 || !/^[A-Za-z0-9]+$/.test(app||"") ||
+      !/^tbl[A-Za-z0-9]+$/.test(table||"") || !Object.hasOwn(BUSINESS_FIELDS,name))
+    return jsonResponse({error:"invalid business table request"},400);
+  const base="https://open.feishu.cn/open-apis/bitable/v1/apps/"+app+"/tables";
+  async function get(path) {
+    if (budget.remaining--<=0) throw new Error("Feishu read budget exhausted");
+    const response=await fetch(base+path,{headers:{"Authorization":"Bearer "+token,"Content-Type":"application/json"},
+      redirect:"error",signal:AbortSignal.timeout(15000)});
+    if (response.status===429) throw new EdgeRateLimit(Math.max(5,Number(response.headers.get("Retry-After"))||30));
+    const result=await response.json();
+    if (!response.ok || result.code!==0 || !result.data) throw new Error("Feishu read incomplete");
+    return result.data;
+  }
+  // Verify the actual table name, rather than trusting caller-supplied names.
+  const metadata=await get("?page_size=100");
+  if (metadata.has_more || !Array.isArray(metadata.items) ||
+      !metadata.items.some(row=>row.table_id===table && row.name===name))
+    throw new Error("business table binding not confirmed");
+  const rows=[], seen=new Set(), cursors=new Set();
+  let cursor=null;
+  for (;;) {
+    const params=new URLSearchParams({page_size:"500",text_field_as_array:"true"});
+    if(cursor) params.set("page_token",cursor);
+    const page=await get("/"+table+"/records?"+params);
+    if(!Array.isArray(page.items) || page.items.length>500) throw new Error("invalid Feishu page");
+    for(const record of page.items) {
+      const raw=record.fields||{};
+      const value=raw["键"];
+      const key=Array.isArray(value)?value.map(seg=>String(seg?.text||"")).join(""):String(value||"");
+      if(!key) continue;
+      if(typeof record.record_id!=="string" || !record.record_id || seen.has(key))
+        throw new Error("invalid or duplicate Feishu row");
+      seen.add(key);
+      rows.push({key,record_id:record.record_id,fields:Object.fromEntries(BUSINESS_FIELDS[name].map(field=>[field,feishuNorm(raw[field])]))});
+    }
+    if(!page.has_more) break;
+    cursor=page.page_token;
+    if(!cursor || cursors.has(cursor)) throw new Error("Feishu cursor stalled");
+    cursors.add(cursor);
+  }
+  return jsonResponse({complete:true,rows});
+}
 const EDGE_READ_ROUTES = {
   "/internal/v1/issue-context":edgeIssueContext, "/internal/v1/pr-snapshot":edgePrSnapshot,
   "/internal/v1/repository-policy":edgeRepositoryPolicy, "/internal/v1/competition-search":edgeCompetitionSearch,
-  "/internal/v1/reference-fact":edgeReference,
+  "/internal/v1/reference-fact":edgeReference, "/internal/v1/feishu-record-index":edgeFeishuIndex,
 };
 async function internalRead(request, env) {
   const path = new URL(request.url).pathname;
@@ -438,7 +501,7 @@ async function internalRead(request, env) {
     const body = JSON.parse(raw);
     if (!body || typeof body !== "object" || Array.isArray(body)) return jsonResponse({error:"bad request"},400);
     const budget = {remaining: 36};
-    return await EDGE_READ_ROUTES[path](env, body, budget);
+    return await EDGE_READ_ROUTES[path](env, body, budget, request);
   } catch (error) {
     if (error instanceof EdgeRateLimit)
       return jsonResponse({error:"rate limited"},429,{"Retry-After":String(error.seconds)});
