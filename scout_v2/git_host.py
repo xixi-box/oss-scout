@@ -190,10 +190,14 @@ def linked_fix_prs(timeline: list, number: int, my_login: str = "xixi-box", *,
 
 def recheck_candidate(repo: str, number: int, *, my_login: str = "xixi-box",
                       root_cause_keywords: list[str] | None = None,
-                      use_title_keywords: bool = False) -> RecheckResult | None:
+                      use_title_keywords: bool = False,
+                      screening_source: tuple | None = None) -> RecheckResult | None:
     """认领前复检。任何一次取数失败 → complete=False（调用方应跳过该候选）。"""
-    issue = gh_read([f"repos/{repo}/issues/{number}"])
-    comments = gh_pages(f"repos/{repo}/issues/{number}/comments", 100)
+    if screening_source is None:
+        issue = gh_read([f"repos/{repo}/issues/{number}"])
+        comments = gh_pages(f"repos/{repo}/issues/{number}/comments", 100)
+    else:
+        issue, comments, _ = screening_source
     if issue is None or comments is None:
         errs = []
         if issue is None:
@@ -248,7 +252,8 @@ def recheck_candidate(repo: str, number: int, *, my_login: str = "xixi-box",
         if assoc in MAINTAINER_ASSOC and _RE_DISPATCH_MENTOR.search(text):
             r.has_claim_signal = True
             break
-    timeline = gh_pages(f"repos/{repo}/issues/{number}/timeline", 100)
+    timeline = (screening_source[2] if screening_source is not None else
+                gh_pages(f"repos/{repo}/issues/{number}/timeline", 100))
     if timeline is None:
         r.complete = False
         r.errors.append("timeline fetch failed")

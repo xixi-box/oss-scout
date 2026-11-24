@@ -6,6 +6,11 @@ name: worker deploy
 # 用 npx wrangler 而不是预装：部署机只需 node。token 从 Secrets 注入，
 # 不走 wrangler login（见 cloudflare/README.md）。
 on:
+  workflow_call:
+    inputs:
+      dry_run:
+        type: boolean
+        default: false
   workflow_dispatch:
     inputs:
       dry_run:
@@ -19,6 +24,9 @@ jobs:
     timeout-minutes: 6
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
 
       - name: Show planned repo list
         shell: bash
@@ -43,9 +51,7 @@ jobs:
           cd cloudflare
           FLAGS=""
           if [ "${{ inputs.dry_run }}" = "true" ]; then FLAGS="--dry-run"; fi
-          # 部署机 node 是 v20，wrangler 4.x 要求 >=22（EBADENGINE）。
-          # 锁 3.x：功能足够部署 Worker，且兼容 node 20。
-          npx --yes wrangler@3 deploy $FLAGS
+          npx --yes wrangler@4 deploy $FLAGS
 
       - name: Verify live roster and schedule
         if: inputs.dry_run != true

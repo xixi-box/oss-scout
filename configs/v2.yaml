@@ -25,24 +25,6 @@ queue:
   lease_timeout_seconds: 1800
 
 budget:
-  modal:
-    enabled: true                     # 2026-10-25：硬限制确认 + 用户 smoke 通过 + token 就绪
-    max_concurrent_sandboxes: 1
-    max_task_minutes: 30
-    fail_closed_on_billing_error: true
-    # 平台硬限制（用户控制台确认 2026-10-25：Usage limit $30 / Spend limit $0 / 本期 $0）
-    platform_hard_limits:
-      included_credits_usd: 30.0
-      usage_limit_usd: 30.0
-      spend_limit_usd: 0.0            # 额度耗尽即停，零自付
-    # 用户约束：只用临时 Sandbox；不创建长期付费 Volume；不使用额外计费的模型推理端点
-    persistent_volumes: false
-    paid_inference_endpoints: false
-    # correctness 专用子集（semgrep-rules 仓库 python/lang/correctness/ 目录）。
-    # 2026-11-01 实测：registry p/python 全集 14 条 findings 全是 security 噪音，
-    # category=correctness 过滤后 0 命中——全集里 correctness 规则本来就稀薄。
-    # 直接指向 correctness 目录，配合 scan.py 的 category 过滤双层保险。
-    semgrep_ruleset: "https://github.com/semgrep/semgrep-rules/tree/develop/python/lang/correctness"
   actions:
     enabled: false                    # P3 前保持 false；测试仓库已就绪 xixi-box/oss-scout-v2-test
     max_minutes_per_job: 60
@@ -50,38 +32,16 @@ budget:
     allow_paid_api: false
 
 features:
-  # bug_hunter 的启停 = budget.modal.enabled（2026-10-31 清理：原来这里有两个
-  # 没有任何代码读取的死开关 bug_hunter_light / bug_hunter_deep_modal）。
   actions_backend: true               # repair 主通道（托管 runner）
   actions_runner_repo: xixi-box/oss-scout   # 执行 repair 的仓库；目标仓库只作只读输入
   opencode_models: true               # P4：opencode-go/deepseek-v4-flash（用户 Go 订阅，2026-10-25）
-
-bug_hunter:
-  # 用户裁定（2026-10-25）：Modal 用量有限，找 Bug 每日 1 次（非每分钟）；
-  # issue 发现靠 Cloudflare Worker（每分钟），AI 细筛后自动进修复流程。
-  daily_scan_hour_local: 4            # 本地每日 04:00 跑一轮 Modal 扫描
-  mvp_repos:
-    - "openai/openai-agents-python"
-    - "browser-use/browser-use"
-    - "langchain-ai/langsmith-sdk"
-    - "Arize-ai/phoenix"
-    - "crewAIInc/crewAI"
-  target_repos_total: 10              # 误报率/成本达标后再扩到 10~20
 
 security:
   worker_github_write_token: false    # worker 固定无 GitHub 写令牌（计划 §4.2/§10）
   sanitize_logs: true
 
 routing:
-  # 2026-10-31 用户裁定：分工独占，互不兜底。
-  #   Modal   = scan（bug hunter）唯一承载。临时沙箱隔离 + $30 额度护栏；
-  #             ToS 禁止托管 runner 跑批量第三方扫描，self-hosted 会抢 VPS 资源。
-  #   Actions = repair/review/ci/reproduce 唯一承载。opencode 交互式 CLI 在
-  #             Modal 精简镜像里卡 bootstrap（上游已知问题），实测 repair 从未
-  #             在 Modal 上成功过——曾经的"兜底"名存实亡，删掉以免静默降级到
-  #             一个跑不通的平台。
-  # 任一后端不可用 → pause 并如实上报；绝不换平台重跑。
-  scan:      {primary: modal,   fallback: ""}
+  # GitHub Actions only; retired active bug scanning has no backend.
   reproduce: {primary: actions, fallback: ""}
   repair:    {primary: actions, fallback: ""}
   review:    {primary: actions, fallback: ""}

@@ -13,6 +13,11 @@
 account_id: 8b5f2575c2c2f0dd4d6e4eaa3d4e7530
 api_token: ""
 ingest_token: ""
+# Read-only issue context and PR pagination run on the deployed Worker.
+# Auto-discover the workers.dev subdomain via the existing CF API token.
+# Disable for rollback, or explicitly set CF_EDGE_URL to the deployed workers.dev URL.
+edge_reads_enabled: true
+edge_url: ""
 ingest_url: https://oss.wangshun.work/api/ingest/issues
 kv_namespace_id: 06f5c54ef44a4e3ab31f7cf0e45646cc
 

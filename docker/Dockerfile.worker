@@ -1,5 +1,5 @@
-# 统一 worker 镜像（计划 §5）：同一份执行器代码跑 Modal / GitHub Actions。
-# 承载 scan（Semgrep）与 repair（OpenCode），内含 git / node / uv 以适配常见项目。
+# 统一 worker 镜像（计划 §5）：同一份执行器代码跑 GitHub Actions。
+# 承载 repair（OpenCode），内含 git / node / uv 以适配常见项目。
 FROM python:3.11-slim
 
 # 安全基线：非 root 运行；worker 内无任何 GitHub 写令牌
@@ -11,7 +11,7 @@ RUN useradd -m worker \
     && rm -rf /var/lib/apt/lists/* \
     # pytest：证据链必须在沙箱里真跑测试（base 失败 → 补丁后通过），没有测试
     # 运行器整条 repair 链都无法成立。用户项目的依赖由 uv/pip 在 job 内另装。
-    && pip install --no-cache-dir semgrep uv pyyaml pytest
+    && pip install --no-cache-dir uv pyyaml pytest
 
 WORKDIR /workspace
 

@@ -15,8 +15,6 @@ services:
       - DASHBOARD_PASSWORD=${DASHBOARD_PASSWORD}
       - GH_TOKEN=${GH_TOKEN}
       - OPENCODE_API_KEY=${OPENCODE_API_KEY}
-      - MODAL_TOKEN_ID=${MODAL_TOKEN_ID}
-      - MODAL_TOKEN_SECRET=${MODAL_TOKEN_SECRET}
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://127.0.0.1:8787/healthz"]
       interval: 60s

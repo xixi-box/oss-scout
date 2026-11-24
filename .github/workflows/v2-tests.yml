@@ -2,11 +2,12 @@
 name: v2-tests
 on:
   push:
-    paths: ["scout_v2/**", "dashboard/**", "tests_v2/**", "tests_dashboard/**", "configs/**"]
+    paths: ["scout_v2/**", "dashboard/**", "tests_v2/**", "tests_dashboard/**", "configs/**", "cloudflare/**", ".github/workflows/**", "requirements.txt", "Dockerfile"]
   workflow_dispatch:
 
 permissions:
   contents: read
+  packages: read
 
 jobs:
   pytest:
@@ -21,3 +22,21 @@ jobs:
       # TestClient 的依赖。
       - run: pip install -r requirements.txt httpx
       - run: python -m pytest tests_v2 tests_dashboard -q
+
+
+  # Only an explicit release marker on a trusted main-branch push authorizes
+  # deployment. Ordinary code pushes and all PR branches remain test-only.
+  deploy_worker:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, '[deploy-oss-scout]')
+    needs: pytest
+    uses: ./.github/workflows/worker-deploy.yml
+    secrets: inherit
+
+  deploy_controller:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, '[deploy-oss-scout]')
+    needs: deploy_worker
+    uses: ./.github/workflows/deploy.yml
+    with:
+      target_env: aliyun
+      deploy_ref: ${{ github.sha }}
+    secrets: inherit

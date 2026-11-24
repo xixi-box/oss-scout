@@ -7,6 +7,14 @@ name: Build and Deploy (Atomic Single-Job)
 #   多模块 Java / 多镜像并行项目请用 deploy-template.yml（pre-build + matrix）。
 
 on:
+  workflow_call:
+    inputs:
+      target_env:
+        type: string
+        default: aliyun
+      deploy_ref:
+        type: string
+        default: main
   workflow_dispatch:
     inputs:
       target_env:
@@ -45,7 +53,7 @@ jobs:
       - name: Checkout source code
         uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.inputs.deploy_ref || 'main' }}
+          ref: ${{ inputs.deploy_ref || 'main' }}
 
       - name: Validate required files
         shell: bash
@@ -85,12 +93,12 @@ jobs:
             .
 
   deploy:
-    name: Deploy to ${{ github.event.inputs.target_env }} (self-hosted)
+    name: Deploy to ${{ inputs.target_env }} (self-hosted)
     needs: build
-    runs-on: [self-hosted, "${{ github.event.inputs.target_env }}"]
+    runs-on: [self-hosted, "${{ inputs.target_env }}"]
     timeout-minutes: 120
     concurrency:
-      group: atomic-${{ github.repository }}-${{ github.event.inputs.target_env }}
+      group: atomic-${{ github.repository }}-${{ inputs.target_env }}
       cancel-in-progress: false
     env:
       ALIYUN_ACR_PASSWORD: ${{ secrets.ALIYUN_ACR_PASSWORD }}
@@ -100,8 +108,6 @@ jobs:
       TYPESAFE_API_KEY: ${{ secrets.TYPESAFE_API_KEY }}
       TYPESAFE_BASE_URL: ${{ vars.TYPESAFE_BASE_URL || 'https://api.codiv.ai' }}
       TYPESAFE_MODEL: ${{ vars.TYPESAFE_MODEL || 'openjev-latest' }}
-      MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
-      MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
       # Cloudflare 凭据：2026-10-31 仓库转公开，token 从 configs/cloudflare.yaml
       # 移出，改由 Secrets 注入容器环境。
       CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
@@ -157,8 +163,6 @@ jobs:
                 - TYPESAFE_API_KEY=\${TYPESAFE_API_KEY}
                 - TYPESAFE_BASE_URL=\${TYPESAFE_BASE_URL}
                 - TYPESAFE_MODEL=\${TYPESAFE_MODEL}
-                - MODAL_TOKEN_ID=\${MODAL_TOKEN_ID}
-                - MODAL_TOKEN_SECRET=\${MODAL_TOKEN_SECRET}
                 - CF_API_TOKEN=\${CF_API_TOKEN}
                 - CF_INGEST_TOKEN=\${CF_INGEST_TOKEN}
                 - FEISHU_APP_ID=\${FEISHU_APP_ID}
@@ -182,8 +186,6 @@ jobs:
             echo "TYPESAFE_API_KEY=$TYPESAFE_API_KEY"
             echo "TYPESAFE_BASE_URL=$TYPESAFE_BASE_URL"
             echo "TYPESAFE_MODEL=$TYPESAFE_MODEL"
-            echo "MODAL_TOKEN_ID=$MODAL_TOKEN_ID"
-            echo "MODAL_TOKEN_SECRET=$MODAL_TOKEN_SECRET"
             echo "CF_API_TOKEN=$CF_API_TOKEN"
             echo "CF_INGEST_TOKEN=$CF_INGEST_TOKEN"
             echo "FEISHU_APP_ID=$FEISHU_APP_ID"

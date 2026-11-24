@@ -159,7 +159,7 @@ SHA-256；发布前核对任务、base、Agent 完成状态及实际暂存补丁
 
 飞书业务表在状态写入成功后立即触发差量同步。短时间内同表变化合并，只创建、更新或删除有变化的行。各表独立执行，慢查询不会挡住候选状态。普通失败按 5–60 秒退避重试，并保留待同步内容。跨进程或手动文件修改每秒检查，运行状态每 **10 秒**核对。
 
-「扫描发现」在 issue 持久入库后显示「待筛选」，筛完沿用同一行和原发现时间。历史积压中没有入库时间的记录在首次筛选前留空。收件箱每四个处理位预留一个给复查和重试，其他优先处理首次待筛。一侧没有到期项时另一侧可以使用空位。
+「扫描发现」只在单条 issue 完成筛选并持久落盘后显示结果，保留原发现时间；每条独立差量 upsert，不把未筛选的收件箱积压提前展示。收件箱每四个处理位预留一个给复查和重试，其他优先处理首次待筛。一侧没有到期项时另一侧可以使用空位。飞书失败由后台重试及全量对账恢复，不阻塞筛选。
 
 「PR 记录」每 **30 秒**通过 GitHub GraphQL 查询近期有变化的 PR，与上次完整快照合并，只写变化行。所有业务表每 **15 分钟**做一次全量对账。PR 取数遇到限流时，按 GitHub 返回的等待时间或额度重置时间重试，其他表继续同步。只有确认完整的空快照才可清理旧行。新 PR 尚未出现在列表时，从已确认发布账本补查具体 PR。
 日常使用飞书，原前端看板已移除，`dashboard/` 保留控制器 API 与后台服务。
@@ -217,8 +217,7 @@ gh workflow run worker-deploy.yml --ref main
 
 控制器镜像由 GitHub 托管 runner 构建并推送到 ACR。部署主机只拉取镜像、切换容器并验证运行状态。构建或推送失败时，在托管 runner 重试。
 
-独立 bug hunter 支线在 Modal 执行，默认每日北京时间 04:00 触发；它与历史候选消费批次
-是两件事，不自动把发现直接发布为新 issue。仓库是否适合自动贡献以最新规则和审计为准，
+主动 Bug Hunter 定时支线已退役，不再使用 Modal 或消耗其额度。凌晨 04:00 仅保留历史候选消费批次。仓库是否适合自动贡献以最新规则和审计为准，
 不把历史评分或门禁统计当作永久结论。
 
 审计记录保存在 `state/worklog.jsonl`。队列 JSON 为兼容飞书与控制器保留，所有运行时
@@ -247,3 +246,9 @@ Camel Quarkus 优先局部 JVM 修复，依赖原生镜像、外部服务或凭�
 `codex-login.yml` 和原 `codex-concurrency-check.yml` 现在均为串行原生登录检查，不向服务器安装登录，
 也不并行刷新。写回权限使用已有的 `GH_TOKEN`，仅可信领取/回存步骤持有，模型和测试进程不持有。
 登录文件不进入仓库、日志或 Actions 产物；临时私有文件在作业结束清理。
+
+### Cloudflare read offload
+
+Worker also exposes authenticated, bounded read-only issue-context and PR-snapshot endpoints. The controller automatically discovers the Worker and prefers complete parallel issue/context reads and PR pagination on Cloudflare; a temporarily unavailable or old Worker uses the existing local read path. All policy decisions, candidate and publication transactions remain on the single VPS controller pending a separately verified state migration. See [cloudflare/README.md](cloudflare/README.md).
+
+Issue discovery now uses a SQLite-backed Cloudflare Durable Object outbox for durable issue delivery and alarm retries. The controller processes up to two network-bound screening tasks concurrently (configurable from one to three with `OSSCOUT_SCREENING_WORKERS`), independently of the one-repair-at-a-time publication gate. A main-branch commit marked `[deploy-oss-scout]` starts the existing Worker/controller release chain only after the full test job passes. Unmarked pushes do not deploy.

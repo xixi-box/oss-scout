@@ -12,8 +12,7 @@ from scout_v2.job_router import JobRouter, RouterConfig  # noqa: E402
 
 
 def cfg(**kw) -> RouterConfig:
-    base = dict(modal_enabled=False, actions_enabled=False, modal_budget_ok=False,
-                actions_eligible=False, modal_platform_ok=True)
+    base = dict(actions_enabled=False, actions_eligible=False)
     base.update(kw)
     return RouterConfig(**base)
 
@@ -22,81 +21,25 @@ def job(mode, scope="project_contribution") -> dict:
     return {"mode": mode, "execution_scope": scope, "base_sha": "abc"}
 
 
-class TestBroadScan:
-    @pytest.mark.parametrize("modal,actions", [(True, True), (False, True)])
-    def test_broad_scan_never_actions(self, modal, actions):
-        r = JobRouter(cfg(modal_enabled=modal, modal_budget_ok=modal,
-                          actions_enabled=actions, actions_eligible=actions))
-        d = r.route(job("scan", "broad_scan"))
-        assert d.backend != "github_actions"
+class TestRouting:
+    @pytest.mark.parametrize("mode,scope", [
+        ("scan", "broad_scan"), ("scan", "project_contribution"),
+        ("repair", "broad_scan")])
+    def test_retired_scans_are_blocked(self, mode, scope):
+        router = JobRouter(cfg(actions_enabled=True, actions_eligible=True))
+        assert router.route(job(mode, scope)).backend == "pause"
 
-    def test_broad_scan_pauses_when_modal_blocked(self):
-        d = JobRouter(cfg(modal_enabled=True, modal_budget_ok=False)).route(
-            job("scan", "broad_scan"))
-        assert d.backend == "pause" and "budget" in d.reason
-
-    def test_broad_scan_modal_ok(self):
-        d = JobRouter(cfg(modal_enabled=True, modal_budget_ok=True)).route(
-            job("scan", "broad_scan"))
-        assert d.backend == "modal"
-
-    def test_broad_scan_only_mode_scan(self):
-        d = JobRouter(cfg(modal_enabled=True, modal_budget_ok=True)).route(
-            job("reproduce", "broad_scan"))
-        assert d.backend == "pause"
-
-
-class TestReproduce:
-    def test_reproduce_actions_primary(self):
-        """用户裁定（2026-10-31）：分工独占——reproduce 主选 Actions。"""
-        r = JobRouter(cfg(actions_enabled=True, actions_eligible=True,
-                          modal_enabled=True, modal_budget_ok=True))
-        d = r.route(job("reproduce"))
-        assert d.backend == "github_actions"
-
-    def test_reproduce_pauses_instead_of_falling_back(self):
-        """Actions 不可用 → pause，绝不静默换到 Modal（那里 opencode 跑不通）。"""
-        r = JobRouter(cfg(actions_enabled=True, actions_eligible=False,
-                          modal_enabled=True, modal_budget_ok=True))
-        d = r.route(job("reproduce"))
-        assert d.backend == "pause"
-        assert "ineligible" in d.reason
-
-    def test_repair_pauses_instead_of_falling_back(self):
-        """对称：repair 只走 Actions。Modal 兜底曾在实测里零成功。"""
-        r = JobRouter(cfg(actions_enabled=True, actions_eligible=False,
-                          modal_enabled=True, modal_budget_ok=True))
-        d = r.route(job("repair"))
-        assert d.backend == "pause"
-
-    def test_pauses_when_both_blocked(self):
-        r = JobRouter(cfg(actions_enabled=True, actions_eligible=False,
-                          modal_enabled=True, modal_budget_ok=False))
-        d = r.route(job("ci"))
-        assert d.backend == "pause"
-
-    def test_p1_default_local(self):
-        # P1：所有 feature flag 关闭 → local（骨架），绝不 Actions
-        d = JobRouter(cfg()).route(job("review"))
-        assert d.backend == "local"
+    @pytest.mark.parametrize("mode", ["repair", "reproduce", "review", "ci"])
+    def test_actions_only(self, mode):
+        assert JobRouter(cfg(actions_enabled=True, actions_eligible=True)).route(job(mode)).backend == "github_actions"
+        assert JobRouter(cfg(actions_enabled=True, actions_eligible=False)).route(job(mode)).backend == "pause"
 
     def test_invalid_mode_rejected(self):
-        d = JobRouter(cfg()).route({"mode": "yolo"})
-        assert d.backend == "pause" and "invalid mode" in d.reason
+        result = JobRouter(cfg()).route(job("yolo"))
+        assert result.backend == "pause" and "invalid mode" in result.reason
 
-    def test_scan_modal_only_regardless_of_scope(self):
-        """scan 一律 Modal，连 project_contribution 也不落 Actions（2026-10-31
-        用户裁定：互不兜底；Modal 被预算挡住就 pause）。"""
-        r = JobRouter(cfg(actions_enabled=True, actions_eligible=True,
-                          modal_enabled=True, modal_budget_ok=False))
-        d = r.route(job("scan", "project_contribution"))
-        assert d.backend == "pause" and "budget" in d.reason
-
-    def test_scan_never_actions_even_when_modal_disabled(self):
-        r = JobRouter(cfg(actions_enabled=True, actions_eligible=True,
-                          modal_enabled=False))
-        d = r.route(job("scan", "broad_scan"))
-        assert d.backend == "pause"
+    def test_legacy_local_fallback_when_disabled(self):
+        assert JobRouter(cfg()).route(job("review")).backend == "local"
 
 
 class TestRepairLoopConcurrency:

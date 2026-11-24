@@ -292,7 +292,7 @@ def sync_rows(root: Path, rows: list[dict], *, force: bool = False) -> dict:
 def sync_table(root: Path, rows: list[dict], *, table_name: str, fields: list,
                to_fields, binding_key: str, force: bool = False,
                allow_empty: bool = False, record_cache: dict | None = None,
-               full_reconcile: bool = True, insert_only: bool = False) -> dict:
+               full_reconcile: bool = True, partial: bool = False) -> dict:
     """把行 upsert 进指定表；表和字段不存在就建。返回计数摘要。
 
     同一个 base 里可挂多张表（PR 记录 / 仓库池 / 候选池…），每张表用自己的
@@ -300,7 +300,7 @@ def sync_table(root: Path, rows: list[dict], *, table_name: str, fields: list,
     allow_empty 仅在确认拿到完整快照时启用，空结果也会清理旧行。
     默认保留空结果保护，避免源查询故障清空飞书。
     record_cache 只用于字段固定的业务表，每次全量对账重新分页。
-    insert_only 用于刚收到的 issue，仅补缺行，保留已有行及其筛选结果。
+    partial=True 只 upsert 已筛选的指定记录，不删除其余记录。
     """
     binding = load_binding(root)
     app_token = _binding_app_token(root)
@@ -356,10 +356,6 @@ def sync_table(root: Path, rows: list[dict], *, table_name: str, fields: list,
         key = _key_label(values["键"])
         incoming.add(key)
         hit = existing.get(key)
-        if insert_only and hit is not None:
-            if record_cache is not None:
-                next_cache[key] = hit
-            continue
         desired = digest(values) if record_cache is not None else _fingerprint(values)
         if hit is None:
             to_create.append({"fields": values})
@@ -399,7 +395,7 @@ def sync_table(root: Path, rows: list[dict], *, table_name: str, fields: list,
     # 剔除：口径外的记录（closed 未合并 / 自有仓库 / optica）从表里删掉。
     # 只在拿到非空行集时执行——GitHub 全挂时 rows 为空，那不能当"全部剔除"。
     pruned = 0
-    if insert_only:
+    if partial:
         if record_cache is not None and next_cache.keys() == incoming:
             existing.update(next_cache)
             record_cache[identity] = existing

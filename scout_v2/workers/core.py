@@ -1,16 +1,15 @@
 """统一执行器入口（计划 §5）：
 
     python -m scout_v2.workers.core --job /workspace/job.json --out /workspace/artifacts
-    python -m scout_v2.workers.core --job-b64 <b64> --out ... --emit-envelope   # Modal Sandbox 用
+    python -m scout_v2.workers.core --job-b64 <b64> --out ... --emit-envelope   # 兼容 job envelope
 
 本入口在本地/云端执行**同一份**模式逻辑；GitHub 写能力不存在于本文件，
 发布由可信 runner／控制器完成。
 
-- scan：Semgrep 精选规则 → 可疑线索（inconclusive，非证据）。
 - reproduce：隔离脱敏环境跑最小失败测试（base 失败 → reproduced_on_base）。
 - repair：OpenCode/Codex 自测、自查后收集完整补丁；不独立复跑或额外 AI 复审。
 - review/ci：仅兼容历史模式的未实现声明，不是自动新 PR 流程。
-- --emit-envelope：stdout 单行信封（Modal Sandbox 无持久卷，结果走 stdout）。
+- --emit-envelope：stdout 单行信封（GitHub Actions 日志传输）。
 """
 from __future__ import annotations
 
@@ -27,7 +26,7 @@ sys.stdout.reconfigure(encoding="utf-8")
 from ..schemas import Job, Result
 from .quality_gate import check_patch_path
 
-RESULT_MARKER = "##OSSCOUT_RESULT##"   # 与 adapters.modal_backend 一致
+RESULT_MARKER = "##OSSCOUT_RESULT##"   # 与 adapters.result_envelope 一致
 LOG_TAIL = 4000
 
 
@@ -56,8 +55,7 @@ def ensure_repo(repo_dir: Path, repo: str, base_sha: str) -> Path:
     if token:
         subprocess.run(["git", "-C", str(repo_dir), "remote", "set-url",
                         "origin", plain_url], capture_output=True, timeout=60)
-    # Modal Sandbox 以 root 跑，镜像内 /workspace 属于 worker → dubious ownership；
-    # 本地 docker（worker 用户）同理可能有属主差。对当前用户加豁免（仅本沙箱内生效）。
+    # 容器用户与工作目录属主可能不同。对当前用户加豁免（仅本沙箱内生效）。
     subprocess.run(["git", "config", "--global", "--add", "safe.directory",
                     str(repo_dir)], capture_output=True, timeout=60)
     co = subprocess.run(["git", "-C", str(repo_dir), "checkout", "--detach", base_sha],
@@ -86,23 +84,13 @@ def execute(job: Job, out_dir: Path, backend: str = "local",
                       base_sha=job.base_sha, unverified_items=errs)
     # repair 也要先把仓库检出到 base_sha：run_repair 以 repo_dir 为"基线仓库"
     # 在工作副本里 clone 它再打补丁，repo_dir 为空时 git clone 直接 128。
-    if repo_dir is not None and job.mode in {"scan", "reproduce", "repair", "review", "ci"}:
+    if repo_dir is not None and job.mode in {"reproduce", "repair", "review", "ci"}:
         try:
             ensure_repo(repo_dir, job.repo, job.base_sha)
         except (subprocess.SubprocessError, OSError) as e:
             return Result(job_id=job.job_id, backend=backend, outcome="failed",
                           base_sha=job.base_sha,
                           unverified_items=[f"repo fetch/checkout failed: {e}"])
-    if job.mode == "scan":
-        from .scan import run_scan
-        # categories 从 payload 传（逗号分隔；Job 无独立字段就共用 ruleset 旁的
-        # 环境约定）。默认 correctness——2026-10-31 实测 p/python 全集 14 条
-        # findings 全是 security 噪音（MD5/0o755/XXE），行为缺陷类才是我们要的。
-        cats = [c.strip() for c in (getattr(job, "categories", "") or "correctness").split(",")
-                if c.strip()]
-        return run_scan(job, repo_dir or out_dir, out_dir,
-                        ruleset=job.ruleset or "p/python",
-                        categories=tuple(cats) or None)
     if job.mode == "reproduce":
         from .reproduce import run_reproduce
         return run_reproduce(job, repo_dir or out_dir, out_dir,
@@ -148,9 +136,6 @@ def emit_envelope(result: Result, out_dir: Path) -> None:
             envelope["test_report"] = json.loads(report.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             pass
-    findings = out_dir / "findings.json"
-    if findings.is_file():
-        envelope["findings"] = json.loads(findings.read_text(encoding="utf-8"))
     print(RESULT_MARKER + json.dumps(envelope, ensure_ascii=False))
 
 
@@ -161,7 +146,7 @@ def main(argv: list[str] | None = None) -> int:
     src.add_argument("--job-b64", help="base64-encoded job JSON (sandbox argv channel)")
     ap.add_argument("--out", required=True, help="artifacts output directory")
     ap.add_argument("--repo-dir", help="workspace for the target repo clone")
-    ap.add_argument("--backend", default="local", choices=["modal", "github_actions", "local"])
+    ap.add_argument("--backend", default="local", choices=["github_actions", "local"])
     ap.add_argument("--emit-envelope", action="store_true",
                     help="print single-line result envelope to stdout")
     args = ap.parse_args(argv)

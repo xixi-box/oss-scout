@@ -169,3 +169,106 @@ test('stale PR tracking KV never causes PR polling or callback delivery', async 
   assert.deepEqual(calls, ['https://api.github.com/graphql']);
   assert.equal(env.stored.get('pr_since'), OLD);
 });
+
+
+test('warm cursor advances only after a durable delivery', async t => {
+  t.after(() => mock.restoreAll());
+  const env = setup({watermarks: JSON.stringify({'a/b': OLD})});
+  const memory = {};
+  mock.method(globalThis, 'fetch', async (url, options) => {
+    if (url === env.INGEST_URL) return response({});
+    return response({data: {r0: gqlPage([issue(1)])}});
+  });
+  await worker.pollOnce(env, memory);
+  assert.equal(memory['a/b'], NOW);
+});
+
+
+test('edge rejects unauthenticated and unmonitored requests without GitHub calls', async t => {
+  t.after(() => mock.restoreAll());
+  const env = setup();
+  const fn = mock.method(globalThis, 'fetch', async () => { throw new Error('must not fetch'); });
+  const url = 'https://worker/internal/v1/issue-context';
+  const denied = await worker.default.fetch(new Request(url, {method:'POST', body:'{}'}), env);
+  assert.equal(denied.status, 403);
+  const unmonitored = await worker.default.fetch(new Request(url, {method:'POST',headers:{'X-Ingest-Token':'fake'},body:JSON.stringify({repo:'other/repo',number:1})}), env);
+  assert.equal(unmonitored.status, 400);
+  assert.equal(fn.mock.callCount(), 0);
+});
+
+test('edge issue context requires complete comment and timeline pages', async t => {
+  t.after(() => mock.restoreAll());
+  const env = setup();
+  mock.method(globalThis, 'fetch', async url => {
+    if (url.includes('/comments?')) return response([{id:1,body:'comment'}]);
+    if (url.includes('/timeline?')) return response([]);
+    return response({number:1,state:'open',comments:1});
+  });
+  const make = () => new Request('https://worker/internal/v1/issue-context',{method:'POST',headers:{'X-Ingest-Token':'fake'},body:JSON.stringify({repo:'a/b',number:1})});
+  const result = await worker.default.fetch(make(),env);
+  assert.equal(result.status,200);
+  assert.equal((await result.json()).comments.length,1);
+  mock.restoreAll();
+  mock.method(globalThis,'fetch',async url => url.includes('/comments?') ? response({},503) : url.includes('/timeline?') ? response([]) : response({number:1,state:'open',comments:1}));
+  assert.equal((await worker.default.fetch(make(),env)).status,503);
+});
+
+test('edge PR snapshot validates author and complete count', async t => {
+  t.after(() => mock.restoreAll());
+  const env = setup();
+  const node = {repository:{nameWithOwner:'a/b'},number:2,state:'OPEN',title:'Fix',url:'https://github.com/a/b/pull/2',createdAt:NOW,updatedAt:NOW,closedAt:null};
+  mock.method(globalThis,'fetch',async (_url, options)=> {
+    const query = JSON.parse(options.body);
+    assert.match(query.query,/viewer/);
+    return response({data:{viewer:{login:'xixi-box',pullRequests:{totalCount:1,nodes:[node],pageInfo:{hasNextPage:false}}}}});
+  });
+  const result = await worker.default.fetch(new Request('https://worker/internal/v1/pr-snapshot',{method:'POST',headers:{'X-Ingest-Token':'fake'},body:JSON.stringify({cutoff:null})}),env);
+  assert.equal(result.status,200);
+  assert.equal((await result.json()).nodes.length,1);
+});
+
+
+test('durable ingress stages versions, retains failed delivery and deduplicates acknowledged replay', async t => {
+  t.after(() => mock.restoreAll());
+  let DatabaseSync;
+  try { ({ DatabaseSync } = await import('node:sqlite')); }
+  catch { t.skip('node:sqlite unavailable'); return; }
+  const db = new DatabaseSync(':memory:');
+  t.after(() => db.close());
+  const env = setup();
+  let alarm = null;
+  const storage = {
+    sql: {exec(sql, ...params) {
+      const statement = db.prepare(sql);
+      if (/^SELECT/i.test(sql)) return {toArray:()=>statement.all(...params)};
+      statement.run(...params); return {};
+    }},
+    transactionSync(fn) { db.exec('BEGIN'); try {fn(); db.exec('COMMIT');} catch(e){db.exec('ROLLBACK');throw e;} },
+    async getAlarm(){return alarm;}, async setAlarm(value){alarm=value;}, async deleteAlarm(){alarm=null;},
+  };
+  const stage = object => new Request('https://internal/stage',{method:'POST',body:JSON.stringify({issues:[object]})});
+  const item = {repo:'a/b',number:1,updated_at:NOW};
+  let ingress = new worker.IssueIngress({storage},env);
+  assert.equal((await ingress.fetch(stage(item))).status,200);
+  assert.ok(alarm);
+  assert.equal((await ingress.fetch(stage(item))).status,200);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM outbox').get().n,1);
+  mock.method(globalThis,'fetch',async ()=>response({},503));
+  await assert.rejects(ingress.alarm(),/receipt unavailable/);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM outbox WHERE sent IS NULL').get().n,1);
+  assert.ok(alarm);
+  mock.restoreAll();
+  let sends=0;
+  mock.method(globalThis,'fetch',async (_url,options)=>{
+    sends++;
+    assert.deepEqual(JSON.parse(options.body).issues,[item]);
+    return response({stored:1});
+  });
+  ingress = new worker.IssueIngress({storage},env);
+  await ingress.alarm();
+  assert.equal(sends,1);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM outbox WHERE sent IS NULL').get().n,0);
+  await ingress.fetch(stage(item));
+  await ingress.alarm();
+  assert.equal(sends,1);
+});

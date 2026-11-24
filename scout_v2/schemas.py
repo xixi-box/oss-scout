@@ -16,8 +16,8 @@ from typing import Any
 
 SCHEMA_VERSION = 1
 
-# Job.mode 的合法值；broad_scan 只允许走 Modal（job_router 强制）
-MODES = {"scan", "reproduce", "repair", "review", "ci"}
+# Job.mode 的合法值；历史 broad_scan 输入保留可识别，但不再派发。
+MODES = {"reproduce", "repair", "review", "ci"}
 EXECUTION_SCOPES = {"broad_scan", "project_contribution"}
 BACKENDS = {"modal", "github_actions", "local"}
 OUTCOMES = {"succeeded", "inconclusive", "failed", "blocked", "timed_out"}

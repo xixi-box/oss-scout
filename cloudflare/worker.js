@@ -30,12 +30,18 @@ function ghHeaders(token) {
 }
 
 let activePoll;
+// Warm cursors avoid re-reading and re-delivering the entire 30-minute window
+// on each tick. KV remains the durable recovery checkpoint across isolate loss.
+const warmMarks = Object.create(null);
 export default {
+  async fetch(request, env) {
+    return internalRead(request, env);
+  },
   scheduled(event, env, ctx) {
     // Different isolates may replay a window. Downstream deduplication and
     // transactional claims handle that; skip overlapping scans in this isolate.
     if (!activePoll) {
-      activePoll = pollOnce(env).finally(() => { activePoll = undefined; });
+      activePoll = pollOnce(env, warmMarks).finally(() => { activePoll = undefined; });
     }
     ctx.waitUntil(activePoll);
   },
@@ -71,6 +77,18 @@ async function checkpoint(env, key, previous, completed, now) {
 }
 
 async function deliverIssues(env, issues, repoCount, now, budget) {
+  // The SQLite-backed outbox accepts each issue version durably before advancing
+  // a repository watermark. Delivery and retry no longer depend on a VPS pull.
+  if (env.INGRESS && issues.length) {
+    const stub = env.INGRESS.get(env.INGRESS.idFromName("issue-ingress-v1"));
+    for (let offset = 0; offset < issues.length; offset += 20) {
+      const response = await stub.fetch("https://internal/stage", {
+        method: "POST", body: JSON.stringify({issues: issues.slice(offset, offset + 20)}),
+      });
+      if (!response.ok) throw new Error("durable ingress failed");
+    }
+    return;
+  }
   for (let offset = 0; offset < issues.length; offset += 100) {
     const payload = JSON.stringify({ repos_scanned: repoCount,
       scanned_at: now.toISOString(), issues: issues.slice(offset, offset + 100) });
@@ -158,10 +176,19 @@ async function issueBatch(env, repos, marks, now, budget) {
   return result;
 }
 
-async function pollIssues(env, now, budget) {
+async function pollIssues(env, now, budget, memory = {}) {
   const repos = (env.REPOS || "").split(",").map(s => s.trim()).filter(Boolean);
   if (!repos.length) return;
   const marks = await readMap(env, "watermarks");
+  // On durable checkpoint ticks scan from the old KV cursor as before; this
+  // catches delayed indexing missed by a warm isolate's shorter overlap.
+  if (now.getUTCMinutes() % 30 !== 0) {
+    for (const repo of repos) {
+      if (Date.parse(memory[repo]) > (Date.parse(marks[repo]) || 0)) {
+        marks[repo] = new Date(Date.parse(memory[repo]) - 4 * 60000).toISOString();
+      }
+    }
+  }
   // Migration only: do not advance the old shared cursor again.
   const legacy = await env.SEEN.get("since");
   const recent = new Date(now.getTime() - 15 * 60000).toISOString();
@@ -200,6 +227,8 @@ async function pollIssues(env, now, budget) {
       }, budget);
     } catch (e) { console.warn("Coarse screening activity unavailable"); }
   }
+  // Advance only after successful direct delivery or durable KV fallback.
+  for (const repo of completed) memory[repo] = now.toISOString();
   if (now.getUTCMinutes() % 30 === 0) {
     await checkpoint(env, "watermarks", marks, completed, now);
     await env.SEEN.put("diag", JSON.stringify({ at: now.toISOString(),
@@ -208,6 +237,207 @@ async function pollIssues(env, now, budget) {
   }
 }
 
-async function pollOnce(env) {
-  await pollIssues(env, new Date(), { remaining: 18 });
+async function pollOnce(env, memory) {
+  await pollIssues(env, new Date(), { remaining: 18 }, memory);
+}
+
+
+// Authenticated, read-only edge data collection. No arbitrary URLs, GitHub
+// mutations, model credentials or authority over quotas/publication.
+function jsonResponse(body, status = 200, headers = {}) {
+  return new Response(JSON.stringify(body), { status, headers: {
+    "Content-Type": "application/json", "Cache-Control": "no-store", ...headers,
+  } });
+}
+function equalToken(expected, actual) {
+  if (!expected || !actual || expected.length !== actual.length) return false;
+  let diff = 0;
+  for (let i = 0; i < expected.length; i++) diff |= expected.charCodeAt(i) ^ actual.charCodeAt(i);
+  return diff === 0;
+}
+class EdgeRateLimit extends Error {
+  constructor(seconds) { super("GitHub rate limited"); this.seconds = seconds; }
+}
+async function edgeGithub(env, path, budget, payload) {
+  if (budget.remaining <= 0) throw new Error("edge read budget exhausted");
+  budget.remaining--;
+  const response = await fetch("https://api.github.com" + path, {
+    method: payload ? "POST" : "GET",
+    headers: { ...ghHeaders(env.GH_TOKEN), ...(payload ? {"Content-Type":"application/json"} : {}) },
+    ...(payload ? {body: JSON.stringify(payload)} : {}),
+    redirect: "error", signal: AbortSignal.timeout(15000),
+  });
+  const result = await response.json();
+  const errors = result && result.errors || [];
+  const limited = response.status === 429 ||
+    (response.status === 403 && (response.headers.get("x-ratelimit-remaining") === "0" ||
+      /rate limit/i.test(result?.message || ""))) ||
+    (Array.isArray(errors) && errors.some(e => e.type === "RATE_LIMITED" || /rate limit/i.test(e.message || "")));
+  if (limited) {
+    const retry = Number(response.headers.get("retry-after")) || 0;
+    const reset = response.headers.get("x-ratelimit-remaining") === "0"
+      ? Number(response.headers.get("x-ratelimit-reset")) - Date.now() / 1000 : 0;
+    throw new EdgeRateLimit(Math.max(60, Math.ceil(retry), Math.ceil(reset || 0)));
+  }
+  if (!response.ok || errors.length || !result) throw new Error("incomplete GitHub evidence");
+  return result;
+}
+async function edgePages(env, path, budget) {
+  const rows = [];
+  for (let page = 1; ; page++) {
+    const batch = await edgeGithub(env, path + "?per_page=100&page=" + page, budget);
+    if (!Array.isArray(batch) || batch.length > 100) throw new Error("invalid GitHub page");
+    rows.push(...batch);
+    if (batch.length < 100) return rows;
+  }
+}
+async function edgeIssueContext(env, body, budget) {
+  const repo = body.repo;
+  const number = body.number;
+  const roster = (env.REPOS || "").split(",").map(s => s.trim().toLowerCase());
+  if (typeof repo !== "string" || !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo) ||
+      !roster.includes(repo.toLowerCase()) || !Number.isSafeInteger(number) || number < 1) {
+    return jsonResponse({error: "invalid or unmonitored issue"}, 400);
+  }
+  const path = "/repos/" + repo + "/issues/" + number;
+  const [issue, comments, timeline] = await Promise.all([
+    edgeGithub(env, path, budget), edgePages(env, path + "/comments", budget),
+    edgePages(env, path + "/timeline", budget),
+  ]);
+  if (issue.number !== number || !["open","closed"].includes(issue.state) ||
+      typeof issue.comments !== "number" || issue.comments !== comments.length) {
+    throw new Error("issue changed or incomplete comments");
+  }
+  return jsonResponse({issue, comments, timeline, complete: true});
+}
+const PR_FRAGMENT = "fragment ScoutPr on PullRequest { repository { nameWithOwner } number title url state createdAt updatedAt closedAt }";
+const PR_FULL = "query($cursor: String) { viewer { login pullRequests(first:100,after:$cursor,orderBy:{field:CREATED_AT,direction:DESC}) { totalCount pageInfo { hasNextPage endCursor } nodes { ...ScoutPr } } } } " + PR_FRAGMENT;
+const PR_DELTA = "query($cursor: String,$terms:String!) { viewer { login } search(query:$terms,type:ISSUE,first:100,after:$cursor) { totalCount:issueCount pageInfo { hasNextPage endCursor } nodes { ...ScoutPr } } } " + PR_FRAGMENT;
+async function edgePrSnapshot(env, body, budget) {
+  const cutoff = body.cutoff;
+  if (cutoff !== null && (typeof cutoff !== "string" ||
+      !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(cutoff) || !Number.isFinite(Date.parse(cutoff)))) {
+    return jsonResponse({error:"invalid cutoff"},400);
+  }
+  let cursor = null, total = null;
+  const nodes = [], cursors = new Set(), keys = new Set();
+  for (;;) {
+    const variables = {cursor};
+    if (cutoff !== null) variables.terms = "is:pr author:xixi-box updated:>=" + cutoff;
+    const result = await edgeGithub(env, "/graphql", budget, {
+      query: cutoff === null ? PR_FULL : PR_DELTA, variables,
+    });
+    if (result.data?.viewer?.login?.toLowerCase() !== "xixi-box") {
+      throw new Error("GitHub PR author token mismatch");
+    }
+    const page = cutoff === null ? result.data.viewer.pullRequests : result.data.search;
+    if (!page || !Array.isArray(page.nodes) || !Number.isSafeInteger(page.totalCount) ||
+        (total !== null && total !== page.totalCount)) throw new Error("incomplete PR snapshot");
+    total = page.totalCount;
+    for (const node of page.nodes) {
+      if (!node?.repository?.nameWithOwner || !Number.isSafeInteger(node.number) ||
+          !["OPEN","CLOSED","MERGED"].includes(node.state)) throw new Error("invalid PR node");
+      const key = node.repository.nameWithOwner.toLowerCase() + "#" + node.number;
+      if (keys.has(key)) throw new Error("duplicate PR node");
+      keys.add(key); nodes.push(node);
+    }
+    if (!page.pageInfo?.hasNextPage) break;
+    cursor = page.pageInfo.endCursor;
+    if (!cursor || cursors.has(cursor) || !page.nodes.length) throw new Error("PR pagination stalled");
+    cursors.add(cursor);
+  }
+  if (nodes.length !== total) throw new Error("incomplete PR snapshot");
+  return jsonResponse({totalCount: total, nodes, pageInfo: {hasNextPage: false, endCursor: null}});
+}
+async function internalRead(request, env) {
+  const path = new URL(request.url).pathname;
+  if (request.method !== "POST" || !["/internal/v1/issue-context", "/internal/v1/pr-snapshot"].includes(path))
+    return jsonResponse({error:"not found"},404);
+  if (!equalToken(env.INGEST_TOKEN, request.headers.get("X-Ingest-Token")))
+    return jsonResponse({error:"forbidden"},403);
+  if (!env.GH_TOKEN) return jsonResponse({error:"GitHub token unavailable"},503);
+  try {
+    const raw = await request.text();
+    if (raw.length > 4096) return jsonResponse({error:"request too large"},413);
+    const body = JSON.parse(raw);
+    if (!body || typeof body !== "object" || Array.isArray(body)) return jsonResponse({error:"bad request"},400);
+    const budget = {remaining: 36};
+    return await (path.endsWith("/issue-context") ? edgeIssueContext(env, body, budget) : edgePrSnapshot(env, body, budget));
+  } catch (error) {
+    if (error instanceof EdgeRateLimit)
+      return jsonResponse({error:"rate limited"},429,{"Retry-After":String(error.seconds)});
+    return jsonResponse({error:"edge read unavailable"},503);
+  }
+}
+
+
+// Durable delivery boundary. The VPS remains the authoritative consumer and
+// deduplicates retries by issue version. No publication authority lives here.
+export class IssueIngress {
+  constructor(state, env) {
+    this.state = state;
+    this.env = env;
+    this.sql = state.storage.sql;
+    this.sql.exec("CREATE TABLE IF NOT EXISTS outbox (key TEXT PRIMARY KEY, payload TEXT NOT NULL, created INTEGER NOT NULL, sent INTEGER)");
+    this.sql.exec("CREATE INDEX IF NOT EXISTS outbox_pending ON outbox(sent,created)");
+    this.flushing = null;
+  }
+  async fetch(request) {
+    if (request.method !== "POST" || new URL(request.url).pathname !== "/stage")
+      return jsonResponse({error:"not found"},404);
+    const {issues} = await request.json();
+    if (!Array.isArray(issues) || !issues.length || issues.length > 20)
+      return jsonResponse({error:"invalid batch"},400);
+    const entries = [];
+    for (const issue of issues) {
+      if (!issue || typeof issue.repo !== "string" || !Number.isSafeInteger(issue.number) || issue.number < 1)
+        return jsonResponse({error:"invalid issue"},400);
+      const payload = JSON.stringify(issue);
+      if (new TextEncoder().encode(payload).length > 256 * 1024)
+        return jsonResponse({error:"issue too large"},413);
+      const bytes = await crypto.subtle.digest("SHA-256",new TextEncoder().encode(payload));
+      const key = Array.from(new Uint8Array(bytes), b => b.toString(16).padStart(2,"0")).join("");
+      entries.push([key,payload]);
+    }
+    // Install an alarm before accepting writes; input gates serialize storage
+    // operations. The alarm also survives a lost Worker response or restart.
+    const alarm = await this.state.storage.getAlarm();
+    if (alarm === null) await this.state.storage.setAlarm(Date.now() + 1000);
+    this.state.storage.transactionSync(() => {
+      for (const [key,payload] of entries)
+        this.sql.exec("INSERT OR IGNORE INTO outbox(key,payload,created) VALUES(?,?,?)",key,payload,Date.now());
+    });
+    // Alarm owns delivery; this request returns only after durable insertion.
+    return jsonResponse({stored:entries.length});
+  }
+  async alarm() {
+    if (this.flushing) return this.flushing;
+    this.flushing = this.flush().finally(() => {this.flushing = null;});
+    return this.flushing;
+  }
+  async flush() {
+    // Schedule a fallback before any network await; failed sends retain rows.
+    await this.state.storage.setAlarm(Date.now() + 60000);
+    for (let n=0;n<4;n++) {
+      const rows = this.sql.exec("SELECT key,payload FROM outbox WHERE sent IS NULL ORDER BY created,key LIMIT 20").toArray();
+      if (!rows.length) break;
+      if (!this.env.INGEST_URL || !this.env.INGEST_TOKEN) throw new Error("ingress destination unavailable");
+      const response = await fetch(this.env.INGEST_URL,{
+        method:"POST",redirect:"error",signal:AbortSignal.timeout(10000),
+        headers:{"Content-Type":"application/json","X-Ingest-Token":this.env.INGEST_TOKEN},
+        body:JSON.stringify({issues:rows.map(row=>JSON.parse(row.payload))}),
+      });
+      if (!response.ok) throw new Error("controller receipt unavailable");
+      const result = await response.json();
+      if (result.stored !== rows.length) throw new Error("incomplete controller receipt");
+      this.state.storage.transactionSync(() => {
+        for (const row of rows) this.sql.exec("UPDATE outbox SET sent=?,payload='' WHERE key=?",Date.now(),row.key);
+      });
+    }
+    // Keep version tombstones for seven days to suppress overlapping scans.
+    this.sql.exec("DELETE FROM outbox WHERE sent IS NOT NULL AND sent<?",Date.now()-7*86400000);
+    const pending = this.sql.exec("SELECT 1 FROM outbox WHERE sent IS NULL LIMIT 1").toArray().length;
+    if (pending) await this.state.storage.setAlarm(Date.now()+1000);
+    else await this.state.storage.deleteAlarm();
+  }
 }
