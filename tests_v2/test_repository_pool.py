@@ -11,7 +11,7 @@ import yaml
 from scout_v2 import feishu_bitable as fb
 from scout_v2.git_host import assignment_facts
 from scout_v2.repo_policy import PolicyEngine
-from scout_v2.roster import monitored_repo
+from scout_v2.roster import monitored_repo, scans_issues
 from scripts.monitor_prs import build_repo_rows
 from scripts.runtime_status import verify_feishu_repos
 
@@ -30,6 +30,7 @@ def test_exact_pool_and_discovery_boundaries():
     assert not err
     for repo, entry in external.items():
         assert monitored_repo(repo)
+        assert scans_issues(repo) == entry["issue_scan"]
         assert policy.repo_lane(repo) == ("open" if entry["issue_scan"] else "observe")
         assert policy.pr_invited(repo, set())
     assert policy.repo_lane("clickhouse/clickhouse") == "observe"

@@ -35,6 +35,36 @@ def test_short_precise_report_reaches_ai(intake):
         assert d.ingest_cloudflare_issues(ds, [issue])[0] == 1
 
 
+@pytest.mark.parametrize("status,private,expected", [(404, False, True), (404, True, False),
+                                                      (404, None, False), (429, False, False),
+                                                      (301, False, False), (503, False, False)])
+def test_issue_unavailable_only_closes_for_confirmed_public_404(monkeypatch, status, private, expected):
+    from scout_v2 import git_host
+
+    monkeypatch.setattr(git_host.subprocess, "run", lambda *a, **kw: SimpleNamespace(
+        returncode=1, stdout=json.dumps({"status": str(status)})))
+    monkeypatch.setattr(git_host, "gh_read", lambda *a, **kw: {"private": private})
+    assert git_host.confirmed_public_issue_missing("prettier/prettier", 20554) is expected
+
+
+def test_terminal_intake_result_is_visible_in_scan_and_keeps_discovery_time(intake):
+    from scout_v2.feishu_bitable import scan_row_to_fields
+    from scripts.monitor_prs import build_scan_rows
+
+    ds, _ = intake
+    key = "prettier/prettier#20554"
+    original = "2026-11-15T10:15:00+08:00"
+    seen = ds.root / "state/seen.json"
+    seen.write_text(json.dumps({key: {"first_seen": original, "status": "retry", "fine_reason": "stale"}}),
+                    encoding="utf-8")
+    assert d.record_intake_blocked(ds.root, key, "GitHub Issue 不可访问（HTTP 404）", None)
+    row, = build_scan_rows(ds.root, strict=True)
+    assert row["first_seen"] == original
+    fields = scan_row_to_fields(row)
+    assert fields["最终结果"] == "粗筛淘汰 · GitHub Issue 不可访问（HTTP 404）"
+    assert fields["细筛结果"] == "未执行"
+
+
 def test_scan_receipt_timestamp_survives_screening(intake):
     from scout_v2.feishu_bitable import scan_row_to_fields
     from scout_v2.state_store import IssueInbox, pending_scan_receipts

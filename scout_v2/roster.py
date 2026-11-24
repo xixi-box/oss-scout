@@ -10,10 +10,18 @@ def repo_key(repo: str) -> str:
     return "prefecthq/fastmcp" if key == "jlowin/fastmcp" else key
 
 
-def monitored_repo(repo: str) -> bool:
+def _worker_repos() -> dict:
     config = Path(__file__).resolve().parents[1] / "cloudflare/wrangler.toml"
     with config.open("rb") as source:
-        variables = tomllib.load(source)["vars"]
+        return tomllib.load(source)["vars"]
+
+
+def monitored_repo(repo: str) -> bool:
+    variables = _worker_repos()
     # PR tracking includes honorary repositories paused for new issue discovery.
     repos = variables.get("TRACKED_REPOS", variables["REPOS"])
     return repo_key(repo) in {repo_key(name) for name in repos.split(",")}
+
+
+def scans_issues(repo: str) -> bool:
+    return repo_key(repo) in {repo_key(name) for name in _worker_repos()["REPOS"].split(",")}

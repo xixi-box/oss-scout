@@ -168,6 +168,10 @@ def _claimish_sentences(body: str) -> list[str]:
     return claim_evidence(body, pattern=_RE_CLAIMISH)
 
 
+class IssueFetchUnavailable(RuntimeError):
+    """The issue itself could not be fetched."""
+
+
 def refresh_issue(item: dict, *, root: Path | None = None) -> tuple[dict, list[str], list]:
     """Get one live snapshot and its mechanical competition checks."""
     from scout_v2.git_host import recheck_candidate
@@ -187,7 +191,9 @@ def refresh_issue(item: dict, *, root: Path | None = None) -> tuple[dict, list[s
             kwargs["edge_root"] = root
     check = recheck_candidate(item["repo"], int(item["number"]), **kwargs)
     if check is None or not check.complete or check.screening_source is None:
-        raise RuntimeError(f"issue context unavailable: {check.errors if check else []}")
+        errors = check.errors if check else []
+        error = IssueFetchUnavailable if "issue fetch failed" in errors else RuntimeError
+        raise error(f"issue context unavailable: {errors}")
     issue, comments, timeline = check.screening_source
     if root is not None and getattr(check, "similar_prs", []):
         from scout_v2.workers.auto_pipeline import log
@@ -452,6 +458,25 @@ def prune_candidate_backlog(root: Path) -> list[str]:
     if expired:
         log(root, "stage_expired", str(len(expired)), "expired before queue consolidation: " + ", ".join(expired[:5]))
     return removed
+
+
+def record_intake_blocked(root: Path, key: str, reason: str, received_at: str | None) -> bool:
+    from scout_v2.state_store import atomic_json_write, business_now, queue_transaction
+
+    path = root / "state/seen.json"
+    now = business_now().isoformat(timespec="microseconds")
+    with queue_transaction(root) as queue:
+        if key in queue:
+            return False
+        try:
+            seen = json.loads(path.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            seen = {}
+        prior = seen.get(key) or {}
+        seen[key] = {"first_seen": prior.get("first_seen") or received_at or now, "updated_at": now,
+                     "status": "blocked", "coarse_reason": reason}
+        atomic_json_write(path, seen)
+    return True
 
 
 def ingest_cloudflare_issues(ds, items: list[dict], *, refresh: bool = False,

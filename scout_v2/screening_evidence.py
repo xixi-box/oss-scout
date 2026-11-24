@@ -33,6 +33,12 @@ _PR_REFERENCE = re.compile(
     r"|(?<![\w/])(?:(?P<short_repo>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+))?#(?P<number>\d+)")
 
 
+_DISCUSSION_REFERENCE = re.compile(
+    r"(?:\bdiscussions?|讨论)\s*[:：]?\s*(?:[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)?#\d+",
+    re.I,
+)
+
+
 class ScreeningEvidenceUnavailable(RuntimeError):
     """A temporary read failure must not become an affirmative or negative verdict."""
 
@@ -205,7 +211,7 @@ def prerequisite_facts(item: dict) -> list[dict]:
         for clause in prose_clauses(text):
             if not _DEPENDENCY_HINT.search(clause):
                 continue
-            for match in _PR_REFERENCE.finditer(clause):
+            for match in _PR_REFERENCE.finditer(_DISCUSSION_REFERENCE.sub(" ", clause)):
                 target_repo = match["repo"] or match["short_repo"] or repo
                 target_number = int(match["url_number"] or match["number"])
                 if target_repo.lower() == repo.lower() and target_number == number:

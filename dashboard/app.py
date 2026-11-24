@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from scout_v2.roster import monitored_repo as modifiable_repo
+from scout_v2.roster import scans_issues
 from scout_v2.feishu_bitable import PR_RECORD_SYNC_SECONDS, FULL_TABLE_SYNC_SECONDS
 
 import base64
@@ -405,8 +406,14 @@ def create_app(root: Path | None = None, gh_runner=None,
         turn = 0
         intake_turn_lock = _thr.Lock()
 
+        def finish_blocked(inbox, key, version, reason):
+            if D.record_intake_blocked(root, key, reason, inbox.received_at(key)):
+                screened_updates.put(key)
+            inbox.finish(key, version)
+
         def _loop():
             nonlocal turn
+            from scout_v2.git_host import confirmed_public_issue_missing
             from scout_v2.state_store import IssueInbox
             if os.environ.get("OSSCOUT_DISABLE_AUTO_REPAIR") == "1":
                 return
@@ -428,14 +435,20 @@ def create_app(root: Path | None = None, gh_runner=None,
                             inbox.finish(key, version)
                             continue
                         item = json.loads(payload)
-                        if not modifiable_repo(item["repo"]):
-                            inbox.finish(key, version)
+                        if not scans_issues(item["repo"]):
+                            finish_blocked(inbox, key, version, "仓库未参与新增 Issue 扫描")
                             continue
                         with _inflight_lock:
                             _intake_handoff.add(key)
                         try:
-                            _, added = D.ingest_cloudflare_issues(
-                                ds, [item], refresh=True, first_received_at=inbox.received_at(key))
+                            try:
+                                _, added = D.ingest_cloudflare_issues(
+                                    ds, [item], refresh=True, first_received_at=inbox.received_at(key))
+                            except D.IssueFetchUnavailable:
+                                if attempts >= 2 and confirmed_public_issue_missing(item["repo"], item["number"]):
+                                    finish_blocked(inbox, key, version, "GitHub Issue 不可访问（HTTP 404）")
+                                    continue
+                                raise
                             seen = json.loads((root / "state/seen.json").read_text(encoding="utf-8"))
                             rec = seen.get(key) or {}
                             if rec:
@@ -807,7 +820,7 @@ def create_app(root: Path | None = None, gh_runner=None,
                     continue
                 repo, number, reason = (event.get(k) for k in ("repo", "number", "reason"))
                 if (isinstance(repo, str) and type(number) is int and number > 0
-                        and isinstance(reason, str) and reason in reasons and modifiable_repo(repo)):
+                        and isinstance(reason, str) and reason in reasons and scans_issues(repo)):
                     records.append({"ts": stamp.isoformat(), "action": "pipeline_coarse_screen",
                                     "target": f"{repo}#{number}", "result": reason})
             def store_telemetry():

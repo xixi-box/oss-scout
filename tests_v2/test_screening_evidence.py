@@ -138,6 +138,16 @@ def test_bare_pr_mention_does_not_trigger_dependency_network_requests(monkeypatc
     assert evidence.prerequisite_facts(candidate) == []
 
 
+def test_docling_discussion_reference_is_not_looked_up_as_an_issue(monkeypatch):
+    candidate = item("qwen_prerequisite")
+    candidate.update(repo="docling-project/docling", number=3671, body_excerpt="", issue_comments=[{
+        "body": "Measured on Windows 11 while debugging discussion #3829 (same error signature): "
+                "the conversion succeeds after the upgrade.",
+    }])
+    monkeypatch.setattr(evidence, "_reference_state", lambda *args: pytest.fail("discussion is not an issue"))
+    assert evidence.prerequisite_facts(candidate) == []
+
+
 def test_policy_fetch_error_is_retryable_and_never_calls_ai(monkeypatch):
     monkeypatch.setattr(evidence, "_get", lambda *a, **kw: (_ for _ in ()).throw(
         evidence.ScreeningEvidenceUnavailable("policy unavailable")))

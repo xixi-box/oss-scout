@@ -109,6 +109,20 @@ def gh_read(args: list[str], max_retries: int = 2) -> Any | None:
     return None
 
 
+def confirmed_public_issue_missing(repo: str, number: int) -> bool:
+    """Distinguish a missing issue from auth, transport, and rate-limit errors."""
+    try:
+        result = subprocess.run(["gh", "api", f"repos/{repo}/issues/{number}"],
+                                capture_output=True, encoding="utf-8", errors="replace", timeout=15)
+        body = json.loads(result.stdout)
+        if not result.returncode or not isinstance(body, dict) or str(body.get("status")) != "404":
+            return False
+        metadata = gh_read([f"repos/{repo}"], max_retries=0)
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        return False
+    return isinstance(metadata, dict) and metadata.get("private") is False
+
+
 def assignment_facts(issue: dict, rule: dict, author: str = "xixi-box") -> dict:
     assignees = {str(item.get("login") or "").lower() for item in issue.get("assignees") or []}
     labels = {str(label.get("name") if isinstance(label, dict) else label).lower()
