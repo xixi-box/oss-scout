@@ -169,3 +169,16 @@ test('stale PR tracking KV never causes PR polling or callback delivery', async 
   assert.deepEqual(calls, ['https://api.github.com/graphql']);
   assert.equal(env.stored.get('pr_since'), OLD);
 });
+
+
+test('warm cursor advances only after a durable delivery', async t => {
+  t.after(() => mock.restoreAll());
+  const env = setup({watermarks: JSON.stringify({'a/b': OLD})});
+  const memory = {};
+  mock.method(globalThis, 'fetch', async (url, options) => {
+    if (url === env.INGEST_URL) return response({});
+    return response({data: {r0: gqlPage([issue(1)])}});
+  });
+  await worker.pollOnce(env, memory);
+  assert.equal(memory['a/b'], NOW);
+});

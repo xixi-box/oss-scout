@@ -30,8 +30,6 @@ import time
 from pathlib import Path
 
 from ..adapters.actions_backend import ActionsBackend
-from ..adapters.modal_backend import ModalSandboxBackend
-from ..budget import BudgetGuard, ModalCliBilling
 from ..git_host import (ISSUE_CLAIM_MESSAGE, RE_CLAIM, assignment_facts, gh_pages, gh_read,
                         own_issue_claim, recheck_candidate)
 from ..job_router import JobRouter, RouterConfig
@@ -105,21 +103,7 @@ def _build_router(root: Path, job: Job, engine: PolicyEngine) -> JobRouter:
     import yaml
     cfg_path = root / "configs" / "v2.yaml"
     v2 = (yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {}) if cfg_path.exists() else {}
-    budget_cfg = ((v2.get("budget") or {}).get("modal") or {})
     feats = v2.get("features") or {}
-
-    modal_enabled = bool(budget_cfg.get("enabled"))
-    modal_budget_ok = False
-    if modal_enabled:
-        try:
-            billing = ModalCliBilling()
-            guard = BudgetGuard(
-                soft_cap_usd=float(budget_cfg.get("monthly_soft_cap_usd", 25.0)),
-                enabled=True, billing=billing,
-                max_concurrent=int(budget_cfg.get("max_concurrent_sandboxes", 1)))
-            modal_budget_ok = guard.can_start(job.max_estimated_compute_usd)[0]
-        except Exception:  # noqa: BLE001 — 无法确认预算即视为不可用（fail-closed）
-            modal_budget_ok = False
 
     # Actions：在**我们自己的**仓库里跑（目标仓库只是只读输入）。
     # 2026-10-28 修正：旧实现要求目标仓库里有我们的 workflow，不可行。
@@ -136,9 +120,7 @@ def _build_router(root: Path, job: Job, engine: PolicyEngine) -> JobRouter:
             actions_eligible = False
 
     return JobRouter(RouterConfig(
-        modal_enabled=modal_enabled,
         actions_enabled=actions_enabled,
-        modal_budget_ok=modal_budget_ok,
         actions_eligible=actions_eligible,
         routing=v2.get("routing"),
     ))
@@ -458,34 +440,8 @@ def _submit_job(root: Path, job: Job, engine: PolicyEngine) -> tuple[str, str, d
     """按路由提交 job。返回 (backend, remote_id, extra)。"""
     router = _build_router(root, job, engine)
     decision = router.route(job.to_dict())
-    if decision.backend in ("pause", "local") or decision.backend not in (
-            "modal", "github_actions"):
+    if decision.backend != "github_actions":
         raise RuntimeError(f"no eligible backend: {decision.reason}")
-
-    if decision.backend == "modal":
-        import yaml
-        cfg_path = root / "configs" / "v2.yaml"
-        v2 = (yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {}) if cfg_path.exists() else {}
-        mb = ((v2.get("budget") or {}).get("modal") or {})
-        billing = ModalCliBilling()
-        guard = BudgetGuard(
-            soft_cap_usd=float(mb.get("monthly_soft_cap_usd", 25.0)), enabled=True,
-            billing=billing, max_concurrent=int(mb.get("max_concurrent_sandboxes", 1)))
-        extra_env = {}
-        key = (os.environ.get("OPENCODE_API_KEY") or "").strip()
-        if key:
-            extra_env["OPENCODE_API_KEY"] = key
-        # 沙箱会执行目标仓库自己的测试代码，所以绝不向它注入任何 GitHub 凭据。
-        # 生产目标（config.json 全部 19 个仓库）与 fixture 仓库都是公开的，
-        # 匿名 https clone 即可；私有仓库请显式设 OSSCOUT_GIT_TOKEN 并在
-        # core.ensure_repo 里走 strip-after-clone 通道，不要复活 GH_TOKEN 回落。
-        image_path = Path(__file__).resolve().parents[2] / "docker" / "Dockerfile.worker"
-        be = ModalSandboxBackend(guard, dockerfile=image_path,
-                                 max_task_minutes=int(mb.get("max_task_minutes", 30)),
-                                 extra_env=extra_env)
-        # Modal 后端内部已处理无代理（no_proxy_context），无需包裹
-        remote_id = be.submit(job.to_dict())
-        return "modal", remote_id, {"backend_obj": be, "note": decision.reason}
 
     be = ActionsBackend(enabled=True, runner_repo=_actions_runner_repo(root),
                         workflow=_actions_workflow_name(root), workflow_exists=True)

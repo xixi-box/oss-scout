@@ -3,6 +3,5 @@ uvicorn
 pyyaml
 tenacity
 pytest
-modal
 
 tzdata

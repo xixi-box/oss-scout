@@ -292,7 +292,7 @@ def sync_rows(root: Path, rows: list[dict], *, force: bool = False) -> dict:
 def sync_table(root: Path, rows: list[dict], *, table_name: str, fields: list,
                to_fields, binding_key: str, force: bool = False,
                allow_empty: bool = False, record_cache: dict | None = None,
-               full_reconcile: bool = True, insert_only: bool = False) -> dict:
+               full_reconcile: bool = True, insert_only: bool = False, partial: bool = False) -> dict:
     """把行 upsert 进指定表；表和字段不存在就建。返回计数摘要。
 
     同一个 base 里可挂多张表（PR 记录 / 仓库池 / 候选池…），每张表用自己的
@@ -399,7 +399,7 @@ def sync_table(root: Path, rows: list[dict], *, table_name: str, fields: list,
     # 剔除：口径外的记录（closed 未合并 / 自有仓库 / optica）从表里删掉。
     # 只在拿到非空行集时执行——GitHub 全挂时 rows 为空，那不能当"全部剔除"。
     pruned = 0
-    if insert_only:
+    if insert_only or partial:
         if record_cache is not None and next_cache.keys() == incoming:
             existing.update(next_cache)
             record_cache[identity] = existing

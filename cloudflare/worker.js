@@ -30,12 +30,15 @@ function ghHeaders(token) {
 }
 
 let activePoll;
+// Warm cursors avoid re-reading and re-delivering the entire 30-minute window
+// on each tick. KV remains the durable recovery checkpoint across isolate loss.
+const warmMarks = Object.create(null);
 export default {
   scheduled(event, env, ctx) {
     // Different isolates may replay a window. Downstream deduplication and
     // transactional claims handle that; skip overlapping scans in this isolate.
     if (!activePoll) {
-      activePoll = pollOnce(env).finally(() => { activePoll = undefined; });
+      activePoll = pollOnce(env, warmMarks).finally(() => { activePoll = undefined; });
     }
     ctx.waitUntil(activePoll);
   },
@@ -158,10 +161,13 @@ async function issueBatch(env, repos, marks, now, budget) {
   return result;
 }
 
-async function pollIssues(env, now, budget) {
+async function pollIssues(env, now, budget, memory = {}) {
   const repos = (env.REPOS || "").split(",").map(s => s.trim()).filter(Boolean);
   if (!repos.length) return;
   const marks = await readMap(env, "watermarks");
+  for (const repo of repos) {
+    if (Date.parse(memory[repo]) > Date.parse(marks[repo])) marks[repo] = memory[repo];
+  }
   // Migration only: do not advance the old shared cursor again.
   const legacy = await env.SEEN.get("since");
   const recent = new Date(now.getTime() - 15 * 60000).toISOString();
@@ -200,6 +206,8 @@ async function pollIssues(env, now, budget) {
       }, budget);
     } catch (e) { console.warn("Coarse screening activity unavailable"); }
   }
+  // Advance only after successful direct delivery or durable KV fallback.
+  for (const repo of completed) memory[repo] = now.toISOString();
   if (now.getUTCMinutes() % 30 === 0) {
     await checkpoint(env, "watermarks", marks, completed, now);
     await env.SEEN.put("diag", JSON.stringify({ at: now.toISOString(),
@@ -208,6 +216,6 @@ async function pollIssues(env, now, budget) {
   }
 }
 
-async function pollOnce(env) {
-  await pollIssues(env, new Date(), { remaining: 18 });
+async function pollOnce(env, memory) {
+  await pollIssues(env, new Date(), { remaining: 18 }, memory);
 }

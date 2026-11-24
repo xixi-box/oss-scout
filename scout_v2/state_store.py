@@ -280,20 +280,15 @@ class IssueInbox:
 
     def put(self, issues: list[dict]) -> int:
         received_at = business_now().isoformat(timespec="microseconds")
-        inserted = False
         with _write_transaction(self.conn, self.root / "state/issue_inbox.sqlite3", "inbox.put"):
             for issue in issues:
                 key = f"{issue['repo']}#{issue['number']}"
                 payload = json.dumps(issue, ensure_ascii=False)
-                written = self.conn.execute(
+                self.conn.execute(
                     "INSERT INTO inbox(key,payload,first_received_at) VALUES (?,?,?) "
                     "ON CONFLICT(key) DO UPDATE SET payload=excluded.payload, "
                     "version=inbox.version+1,ready=0,error='' WHERE inbox.payload<>excluded.payload "
                     "RETURNING version", (key, payload, received_at)).fetchone()
-                inserted |= written == (1,)
-        if inserted:
-            from .table_sync import notify
-            notify(self.root, {"scan"}, invalidate=False)
         return len(issues)
 
     def received_at(self, key):

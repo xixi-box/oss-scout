@@ -99,7 +99,7 @@ _BITABLE_SYNC_LOCKS = {name: threading.Lock() for name in ("pr", "repos", "scan"
 
 
 def _sync_bitables(root: Path, *, ds=None, activity_only=False, activity_cache=None, table_names=None,
-                   full_reconcile=True) -> dict:
+                   full_reconcile=True, scan_keys=None) -> dict:
     """Independent table snapshots; a failed source cannot clear remote data."""
     from scout_v2 import feishu_bitable as fb
     from scout_v2.pr_feed import PullRequestFeed, PullRequestRateLimited
@@ -146,28 +146,11 @@ def _sync_bitables(root: Path, *, ds=None, activity_only=False, activity_cache=N
                 signature_key = "source:" + name
                 unchanged = (files and not full_reconcile and activity_cache is not None
                              and signature == activity_cache.get(signature_key))
-                if unchanged and name != "scan":
+                if unchanged and scan_keys is None:
                     results[name] = {"unchanged": True}
                     continue
                 record_cache = (activity_cache.setdefault(name + ":records", {})
                                 if name in {"scan", "pr"} and activity_cache is not None else None)
-                if name == "scan":
-                    from scout_v2.state_store import pending_scan_receipts
-                    # Read inbox first. A completed receipt is already durable in seen.json.
-                    receipts = [(key, stamp) for key, stamp in pending_scan_receipts(root)
-                                if modifiable_repo(key.rpartition("#")[0])]
-                    if unchanged and record_cache:
-                        known = next(iter(record_cache.values()))
-                        new_rows = [mod.pending_scan_row(key, stamp) for key, stamp in receipts if key not in known]
-                        if new_rows:
-                            results[name] = fb.sync_table(root, new_rows, table_name=table, fields=fields,
-                                                          to_fields=convert, binding_key=binding,
-                                                          record_cache=record_cache, full_reconcile=False,
-                                                          insert_only=True)
-                            _audit(root, "bitable_sync_" + name, table, json.dumps(results[name]))
-                        else:
-                            results[name] = {"unchanged": True}
-                        continue
                 scan_log = (activity_cache.setdefault("scan:worklog", {})
                             if name == "scan" and activity_cache is not None else None)
                 if full_reconcile and scan_log is not None:
@@ -191,7 +174,7 @@ def _sync_bitables(root: Path, *, ds=None, activity_only=False, activity_cache=N
                     elif name == "scan":
                         running, published, pr_states = activity
                         rows = build(root, running, published, pr_states, strict=True,
-                                     worklog_cache=scan_log, receipts=receipts)
+                                     worklog_cache=scan_log, only_keys=scan_keys)
                     elif tracks_activity:
                         rows = build(root, activity[0])
                     else:
@@ -203,12 +186,15 @@ def _sync_bitables(root: Path, *, ds=None, activity_only=False, activity_cache=N
                     continue
                 options = ({"record_cache": record_cache, "full_reconcile": full_reconcile}
                            if record_cache is not None else {})
+                if scan_keys is not None and name == "scan":
+                    # A single screened result is an upsert, never a complete snapshot.
+                    options["partial"] = True
                 results[name] = fb.sync_table(root, rows, table_name=table, fields=fields,
                                               to_fields=convert, binding_key=binding,
                                               allow_empty=source is not None or name == "pr", **options)
                 successful = (not results[name].get("error")
                               and not isinstance(results[name].get("skipped"), str))
-                if activity_cache is not None and successful:
+                if activity_cache is not None and successful and scan_keys is None:
                     if name not in {"scan", "pr"}:
                         activity_cache[name] = rows
                     activity_cache[signature_key] = signature
@@ -253,6 +239,8 @@ def create_app(root: Path | None = None, gh_runner=None,
     app.state.table_changes = table_changes
     _bitable_wake = table_changes.wake
     _intake_handoff: set[str] = set()
+    from queue import SimpleQueue
+    screened_updates = SimpleQueue()
     model_lock = _thr.Lock()
     # Durable quota reservations determine dynamic concurrency across processes.
 
@@ -445,6 +433,9 @@ def create_app(root: Path | None = None, gh_runner=None,
                                 ds, [item], refresh=True, first_received_at=inbox.received_at(key))
                             seen = json.loads((root / "state/seen.json").read_text(encoding="utf-8"))
                             rec = seen.get(key) or {}
+                            if rec:
+                                # The result is durable before it is submitted to Feishu.
+                                screened_updates.put(key)
                             if rec.get("status") == "retry":
                                 raise RuntimeError(rec.get("fine_reason") or "AI unavailable")
                             inbox.finish(key, version)
@@ -469,6 +460,24 @@ def create_app(root: Path | None = None, gh_runner=None,
 
 
     bitable_cache = {}
+
+    def _screened_update_loop():
+        """One screened issue per Feishu upsert, independently of intake and full snapshots."""
+        def _loop():
+            if os.environ.get("OSSCOUT_DISABLE_AUTO_REPAIR") == "1":
+                return
+            while True:
+                key = screened_updates.get()
+                try:
+                    result = _sync_bitables(root, ds=ds, activity_cache=bitable_cache,
+                                            table_names={"scan"}, full_reconcile=False,
+                                            scan_keys={key}).get("scan", {})
+                    if not result or result.get("error") or isinstance(result.get("skipped"), str):
+                        table_changes.mark({"scan"})  # durable state + scheduled retry/reconciliation
+                except Exception as ex:
+                    table_changes.mark({"scan"})
+                    _audit(root, "screened_sync_error", key, str(ex)[:200])
+        _thr.Thread(target=_loop, daemon=True, name="screened-row-sync").start()
 
     def _bitable_loop():
         def _loop():
@@ -596,6 +605,7 @@ def create_app(root: Path | None = None, gh_runner=None,
         _auto_repair_loop()
         _publication_status_loop()
         _bitable_loop()
+        _screened_update_loop()
         _model_settings_loop()
     app.state.ds = ds
     app.state.root = root
