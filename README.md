@@ -246,3 +246,7 @@ Camel Quarkus 优先局部 JVM 修复，依赖原生镜像、外部服务或凭�
 `codex-login.yml` 和原 `codex-concurrency-check.yml` 现在均为串行原生登录检查，不向服务器安装登录，
 也不并行刷新。写回权限使用已有的 `GH_TOKEN`，仅可信领取/回存步骤持有，模型和测试进程不持有。
 登录文件不进入仓库、日志或 Actions 产物；临时私有文件在作业结束清理。
+
+### Cloudflare read offload
+
+Worker also exposes authenticated, bounded read-only issue-context and PR-snapshot endpoints. The controller automatically discovers the Worker and prefers complete parallel issue/context reads and PR pagination on Cloudflare; a temporarily unavailable or old Worker uses the existing local read path. All policy decisions, candidate and publication transactions remain on the single VPS controller pending a separately verified state migration. See [cloudflare/README.md](cloudflare/README.md).

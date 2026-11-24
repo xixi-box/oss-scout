@@ -91,7 +91,8 @@ def _read_page(cursor, cutoff):
 
 class PullRequestFeed:
     """Keep a complete baseline and overlay PRs updated since the previous read."""
-    def __init__(self):
+    def __init__(self, root=None):
+        self.root = root
         self.rows = {}
         self.watermark = None
         self.version = 0
@@ -129,8 +130,19 @@ class PullRequestFeed:
         cursors = set()
         total = None
         try:
+            edge_page = None
+            if self.root is not None:
+                from .edge_reads import EdgeRateLimited, edge_read
+                since = (None if cutoff is None else dt.datetime.fromtimestamp(
+                    cutoff, dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
+                try:
+                    edge_page = edge_read(self.root, "pr-snapshot", {"cutoff": since})
+                except EdgeRateLimited as exc:
+                    raise PullRequestRateLimited(exc.seconds) from exc
+                if edge_page is not None and edge_page.get("pageInfo", {}).get("hasNextPage") is not False:
+                    raise RuntimeError("Cloudflare PR snapshot incomplete")
             while True:
-                page = _read_page(cursor, cutoff)
+                page = edge_page if edge_page is not None else _read_page(cursor, cutoff)
                 expected = page["totalCount"]
                 if total is not None and expected != total:
                     raise RuntimeError("GitHub PR snapshot count changed during pagination")

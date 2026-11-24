@@ -172,7 +172,19 @@ def refresh_issue(item: dict, *, root: Path | None = None) -> tuple[dict, list[s
     """Get one live snapshot and its mechanical competition checks."""
     from scout_v2.git_host import recheck_candidate
 
-    check = recheck_candidate(item["repo"], int(item["number"]), use_title_keywords=True)
+    kwargs = {"use_title_keywords": True}
+    if root is not None:
+        from scout_v2.edge_reads import edge_read
+        edge = edge_read(root, "issue-context", {"repo": item["repo"], "number": int(item["number"])})
+        if edge is not None:
+            issue, comments, timeline = (edge.get(k) for k in ("issue", "comments", "timeline"))
+            if (edge.get("complete") is not True or not isinstance(issue, dict)
+                    or issue.get("number") != int(item["number"])
+                    or not isinstance(comments, list) or not isinstance(timeline, list)
+                    or issue.get("comments") != len(comments)):
+                raise RuntimeError("Cloudflare issue evidence incomplete")
+            kwargs["screening_source"] = (issue, comments, timeline)
+    check = recheck_candidate(item["repo"], int(item["number"]), **kwargs)
     if check is None or not check.complete or check.screening_source is None:
         raise RuntimeError(f"issue context unavailable: {check.errors if check else []}")
     issue, comments, timeline = check.screening_source

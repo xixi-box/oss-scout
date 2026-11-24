@@ -164,7 +164,7 @@ def _sync_bitables(root: Path, *, ds=None, activity_only=False, activity_cache=N
                         yaml.safe_load(raw) if source.suffix == ".yaml" else json.loads(raw)
                         del raw
                     if name == "pr" and activity_cache is not None:
-                        pr_feed = activity_cache.setdefault("pr:github", PullRequestFeed())
+                        pr_feed = activity_cache.setdefault("pr:github", PullRequestFeed(root=root))
                         github_rows = pr_feed.snapshot(full=full_reconcile)
                         signature = (*signature, pr_feed.version)
                         if not full_reconcile and signature == activity_cache.get(signature_key):

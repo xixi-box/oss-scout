@@ -34,6 +34,9 @@ let activePoll;
 // on each tick. KV remains the durable recovery checkpoint across isolate loss.
 const warmMarks = Object.create(null);
 export default {
+  async fetch(request, env) {
+    return internalRead(request, env);
+  },
   scheduled(event, env, ctx) {
     // Different isolates may replay a window. Downstream deduplication and
     // transactional claims handle that; skip overlapping scans in this isolate.
@@ -165,8 +168,14 @@ async function pollIssues(env, now, budget, memory = {}) {
   const repos = (env.REPOS || "").split(",").map(s => s.trim()).filter(Boolean);
   if (!repos.length) return;
   const marks = await readMap(env, "watermarks");
-  for (const repo of repos) {
-    if (Date.parse(memory[repo]) > Date.parse(marks[repo])) marks[repo] = memory[repo];
+  // On durable checkpoint ticks scan from the old KV cursor as before; this
+  // catches delayed indexing missed by a warm isolate's shorter overlap.
+  if (now.getUTCMinutes() % 30 !== 0) {
+    for (const repo of repos) {
+      if (Date.parse(memory[repo]) > (Date.parse(marks[repo]) || 0)) {
+        marks[repo] = new Date(Date.parse(memory[repo]) - 4 * 60000).toISOString();
+      }
+    }
   }
   // Migration only: do not advance the old shared cursor again.
   const legacy = await env.SEEN.get("since");
@@ -218,4 +227,133 @@ async function pollIssues(env, now, budget, memory = {}) {
 
 async function pollOnce(env, memory) {
   await pollIssues(env, new Date(), { remaining: 18 }, memory);
+}
+
+
+// Authenticated, read-only edge data collection. No arbitrary URLs, GitHub
+// mutations, model credentials or authority over quotas/publication.
+function jsonResponse(body, status = 200, headers = {}) {
+  return new Response(JSON.stringify(body), { status, headers: {
+    "Content-Type": "application/json", "Cache-Control": "no-store", ...headers,
+  } });
+}
+function equalToken(expected, actual) {
+  if (!expected || !actual || expected.length !== actual.length) return false;
+  let diff = 0;
+  for (let i = 0; i < expected.length; i++) diff |= expected.charCodeAt(i) ^ actual.charCodeAt(i);
+  return diff === 0;
+}
+class EdgeRateLimit extends Error {
+  constructor(seconds) { super("GitHub rate limited"); this.seconds = seconds; }
+}
+async function edgeGithub(env, path, budget, payload) {
+  if (budget.remaining <= 0) throw new Error("edge read budget exhausted");
+  budget.remaining--;
+  const response = await fetch("https://api.github.com" + path, {
+    method: payload ? "POST" : "GET",
+    headers: { ...ghHeaders(env.GH_TOKEN), ...(payload ? {"Content-Type":"application/json"} : {}) },
+    ...(payload ? {body: JSON.stringify(payload)} : {}),
+    redirect: "error", signal: AbortSignal.timeout(15000),
+  });
+  const result = await response.json();
+  const errors = result && result.errors || [];
+  const limited = response.status === 429 ||
+    (response.status === 403 && (response.headers.get("x-ratelimit-remaining") === "0" ||
+      /rate limit/i.test(result?.message || ""))) ||
+    (Array.isArray(errors) && errors.some(e => e.type === "RATE_LIMITED" || /rate limit/i.test(e.message || "")));
+  if (limited) {
+    const retry = Number(response.headers.get("retry-after")) || 0;
+    const reset = response.headers.get("x-ratelimit-remaining") === "0"
+      ? Number(response.headers.get("x-ratelimit-reset")) - Date.now() / 1000 : 0;
+    throw new EdgeRateLimit(Math.max(60, Math.ceil(retry), Math.ceil(reset || 0)));
+  }
+  if (!response.ok || errors.length || !result) throw new Error("incomplete GitHub evidence");
+  return result;
+}
+async function edgePages(env, path, budget) {
+  const rows = [];
+  for (let page = 1; ; page++) {
+    const batch = await edgeGithub(env, path + "?per_page=100&page=" + page, budget);
+    if (!Array.isArray(batch) || batch.length > 100) throw new Error("invalid GitHub page");
+    rows.push(...batch);
+    if (batch.length < 100) return rows;
+  }
+}
+async function edgeIssueContext(env, body, budget) {
+  const repo = body.repo;
+  const number = body.number;
+  const roster = (env.REPOS || "").split(",").map(s => s.trim().toLowerCase());
+  if (typeof repo !== "string" || !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo) ||
+      !roster.includes(repo.toLowerCase()) || !Number.isSafeInteger(number) || number < 1) {
+    return jsonResponse({error: "invalid or unmonitored issue"}, 400);
+  }
+  const path = "/repos/" + repo + "/issues/" + number;
+  const [issue, comments, timeline] = await Promise.all([
+    edgeGithub(env, path, budget), edgePages(env, path + "/comments", budget),
+    edgePages(env, path + "/timeline", budget),
+  ]);
+  if (issue.number !== number || !["open","closed"].includes(issue.state) ||
+      typeof issue.comments !== "number" || issue.comments !== comments.length) {
+    throw new Error("issue changed or incomplete comments");
+  }
+  return jsonResponse({issue, comments, timeline, complete: true});
+}
+const PR_FRAGMENT = "fragment ScoutPr on PullRequest { repository { nameWithOwner } number title url state createdAt updatedAt closedAt }";
+const PR_FULL = "query($cursor: String) { viewer { login pullRequests(first:100,after:$cursor,orderBy:{field:CREATED_AT,direction:DESC}) { totalCount pageInfo { hasNextPage endCursor } nodes { ...ScoutPr } } } } " + PR_FRAGMENT;
+const PR_DELTA = "query($cursor: String,$terms:String!) { viewer { login } search(query:$terms,type:ISSUE,first:100,after:$cursor) { totalCount:issueCount pageInfo { hasNextPage endCursor } nodes { ...ScoutPr } } } " + PR_FRAGMENT;
+async function edgePrSnapshot(env, body, budget) {
+  const cutoff = body.cutoff;
+  if (cutoff !== null && (typeof cutoff !== "string" ||
+      !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(cutoff) || !Number.isFinite(Date.parse(cutoff)))) {
+    return jsonResponse({error:"invalid cutoff"},400);
+  }
+  let cursor = null, total = null;
+  const nodes = [], cursors = new Set(), keys = new Set();
+  for (;;) {
+    const variables = {cursor};
+    if (cutoff !== null) variables.terms = "is:pr author:xixi-box updated:>=" + cutoff;
+    const result = await edgeGithub(env, "/graphql", budget, {
+      query: cutoff === null ? PR_FULL : PR_DELTA, variables,
+    });
+    if (result.data?.viewer?.login?.toLowerCase() !== "xixi-box") {
+      throw new Error("GitHub PR author token mismatch");
+    }
+    const page = cutoff === null ? result.data.viewer.pullRequests : result.data.search;
+    if (!page || !Array.isArray(page.nodes) || !Number.isSafeInteger(page.totalCount) ||
+        (total !== null && total !== page.totalCount)) throw new Error("incomplete PR snapshot");
+    total = page.totalCount;
+    for (const node of page.nodes) {
+      if (!node?.repository?.nameWithOwner || !Number.isSafeInteger(node.number) ||
+          !["OPEN","CLOSED","MERGED"].includes(node.state)) throw new Error("invalid PR node");
+      const key = node.repository.nameWithOwner.toLowerCase() + "#" + node.number;
+      if (keys.has(key)) throw new Error("duplicate PR node");
+      keys.add(key); nodes.push(node);
+    }
+    if (!page.pageInfo?.hasNextPage) break;
+    cursor = page.pageInfo.endCursor;
+    if (!cursor || cursors.has(cursor) || !page.nodes.length) throw new Error("PR pagination stalled");
+    cursors.add(cursor);
+  }
+  if (nodes.length !== total) throw new Error("incomplete PR snapshot");
+  return jsonResponse({totalCount: total, nodes, pageInfo: {hasNextPage: false, endCursor: null}});
+}
+async function internalRead(request, env) {
+  const path = new URL(request.url).pathname;
+  if (request.method !== "POST" || !["/internal/v1/issue-context", "/internal/v1/pr-snapshot"].includes(path))
+    return jsonResponse({error:"not found"},404);
+  if (!equalToken(env.INGEST_TOKEN, request.headers.get("X-Ingest-Token")))
+    return jsonResponse({error:"forbidden"},403);
+  if (!env.GH_TOKEN) return jsonResponse({error:"GitHub token unavailable"},503);
+  try {
+    const raw = await request.text();
+    if (raw.length > 4096) return jsonResponse({error:"request too large"},413);
+    const body = JSON.parse(raw);
+    if (!body || typeof body !== "object" || Array.isArray(body)) return jsonResponse({error:"bad request"},400);
+    const budget = {remaining: 36};
+    return await (path.endsWith("/issue-context") ? edgeIssueContext(env, body, budget) : edgePrSnapshot(env, body, budget));
+  } catch (error) {
+    if (error instanceof EdgeRateLimit)
+      return jsonResponse({error:"rate limited"},429,{"Retry-After":String(error.seconds)});
+    return jsonResponse({error:"edge read unavailable"},503);
+  }
 }

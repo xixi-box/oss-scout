@@ -182,3 +182,47 @@ test('warm cursor advances only after a durable delivery', async t => {
   await worker.pollOnce(env, memory);
   assert.equal(memory['a/b'], NOW);
 });
+
+
+test('edge rejects unauthenticated and unmonitored requests without GitHub calls', async t => {
+  t.after(() => mock.restoreAll());
+  const env = setup();
+  const fn = mock.method(globalThis, 'fetch', async () => { throw new Error('must not fetch'); });
+  const url = 'https://worker/internal/v1/issue-context';
+  const denied = await worker.default.fetch(new Request(url, {method:'POST', body:'{}'}), env);
+  assert.equal(denied.status, 403);
+  const unmonitored = await worker.default.fetch(new Request(url, {method:'POST',headers:{'X-Ingest-Token':'fake'},body:JSON.stringify({repo:'other/repo',number:1})}), env);
+  assert.equal(unmonitored.status, 400);
+  assert.equal(fn.mock.callCount(), 0);
+});
+
+test('edge issue context requires complete comment and timeline pages', async t => {
+  t.after(() => mock.restoreAll());
+  const env = setup();
+  mock.method(globalThis, 'fetch', async url => {
+    if (url.includes('/comments?')) return response([{id:1,body:'comment'}]);
+    if (url.includes('/timeline?')) return response([]);
+    return response({number:1,state:'open',comments:1});
+  });
+  const make = () => new Request('https://worker/internal/v1/issue-context',{method:'POST',headers:{'X-Ingest-Token':'fake'},body:JSON.stringify({repo:'a/b',number:1})});
+  const result = await worker.default.fetch(make(),env);
+  assert.equal(result.status,200);
+  assert.equal((await result.json()).comments.length,1);
+  mock.restoreAll();
+  mock.method(globalThis,'fetch',async url => url.includes('/comments?') ? response({},503) : url.includes('/timeline?') ? response([]) : response({number:1,state:'open',comments:1}));
+  assert.equal((await worker.default.fetch(make(),env)).status,503);
+});
+
+test('edge PR snapshot validates author and complete count', async t => {
+  t.after(() => mock.restoreAll());
+  const env = setup();
+  const node = {repository:{nameWithOwner:'a/b'},number:2,state:'OPEN',title:'Fix',url:'https://github.com/a/b/pull/2',createdAt:NOW,updatedAt:NOW,closedAt:null};
+  mock.method(globalThis,'fetch',async (_url, options)=> {
+    const query = JSON.parse(options.body);
+    assert.match(query.query,/viewer/);
+    return response({data:{viewer:{login:'xixi-box',pullRequests:{totalCount:1,nodes:[node],pageInfo:{hasNextPage:false}}}}});
+  });
+  const result = await worker.default.fetch(new Request('https://worker/internal/v1/pr-snapshot',{method:'POST',headers:{'X-Ingest-Token':'fake'},body:JSON.stringify({cutoff:null})}),env);
+  assert.equal(result.status,200);
+  assert.equal((await result.json()).nodes.length,1);
+});

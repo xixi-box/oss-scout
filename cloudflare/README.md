@@ -18,3 +18,12 @@ npx wrangler deploy
 
 - API Token：https://dash.cloudflare.com/profile/api-tokens
 - Workers 面板：https://dash.cloudflare.com/?to=/:account/workers
+
+## Read-only edge API
+
+The existing `GH_TOKEN` and `INGEST_TOKEN` Worker secrets are reused. The controller automatically discovers the account workers.dev subdomain using its existing CF API token (Workers Scripts Read or Write), or accepts `CF_EDGE_URL=https://oss-scout-hunter.<subdomain>.workers.dev`. Ensure workers.dev is enabled for this Worker. `edge_reads_enabled: false` restores local reads; old or unavailable Workers temporarily fall back to local reads. A rate limit is never immediately bypassed with a local retry. Both API endpoints require the existing ingest token, and neither can publish or execute code.
+
+- `POST /internal/v1/issue-context`: complete issue, comments, timeline; three independent fetches in parallel, bounded pagination; controller retains mechanical and AI rules.
+- `POST /internal/v1/pr-snapshot`: full/delta GraphQL pagination for xixi-box; complete results only, controller retains the incremental merge and publication ledger.
+
+Each invocation is bounded to 36 external subrequests, below the Workers Free limit. Deploy via the existing worker-deploy workflow before switching the controller. If the GitHub token does not identify xixi-box, PR retrieval falls back to the existing controller path; no incomplete snapshot can prune Feishu rows.
