@@ -76,6 +76,14 @@ async function checkpoint(env, key, previous, completed, now) {
   await env.SEEN.put(key, JSON.stringify(merged));
 }
 
+async function storePendingIssues(env, payload, issues) {
+  const content = JSON.stringify(issues);
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(content));
+  const hash = Array.from(new Uint8Array(digest), x => x.toString(16).padStart(2, "0")).join("");
+  const key = `pending:${hash}`;
+  if (!await env.SEEN.get(key)) await env.SEEN.put(key, payload);
+}
+
 async function deliverIssues(env, issues, repoCount, now, budget) {
   // The SQLite-backed outbox accepts each issue version durably before advancing
   // a repository watermark. Delivery and retry no longer depend on a VPS pull.
@@ -104,13 +112,7 @@ async function deliverIssues(env, issues, repoCount, now, budget) {
     if (!delivered) {
       // Keep until consumed: an outage longer than an hour must not erase issues.
       // KV quota errors propagate, preventing unsafe cursor advancement.
-      const content = JSON.stringify(issues.slice(offset, offset + 100));
-      const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(content));
-      const hash = Array.from(new Uint8Array(digest), x => x.toString(16).padStart(2, "0")).join("");
-      const key = `pending:${hash}`;
-      // Failed POSTs replay the same scan window. Reuse its durable batch instead
-      // of spending a new KV write and retaining a second copy every minute.
-      if (!await env.SEEN.get(key)) await env.SEEN.put(key, payload);
+      await storePendingIssues(env, payload, issues.slice(offset, offset + 100));
     }
   }
 }
@@ -123,7 +125,7 @@ async function issueBatch(env, repos, marks, now, budget) {
       const [owner, name] = item.repo.split("/");
       const since = overlap(marks[item.repo], now, 1);
       return `r${index}: repository(owner:${JSON.stringify(owner)},name:${JSON.stringify(name)}) {
-        issues(first:100,after:${JSON.stringify(item.cursor)},states:[OPEN],
+        issues(first:25,after:${JSON.stringify(item.cursor)},states:[OPEN],
           filterBy:{since:${JSON.stringify(since)}},orderBy:{field:UPDATED_AT,direction:ASC}) {
           nodes { number title url body createdAt updatedAt author { login }
             assignees(first:10) { nodes { login } } labels(first:100) { nodes { name } }
@@ -140,7 +142,11 @@ async function issueBatch(env, repos, marks, now, budget) {
       }, budget);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       data = await response.json();
-      if (!data.data) throw new Error("GraphQL data unavailable");
+      if (!data.data) {
+        const types = (data.errors || []).map(error => error.type)
+          .filter(type => typeof type === "string" && /^[A-Z_]{1,40}$/.test(type));
+        throw new Error(`GraphQL data unavailable${types.length ? ` (${[...new Set(types)].join(", ")})` : ""}`);
+      }
     } catch (error) {
       result.errors.push(...pending.map(item => `${item.repo}: ${String(error).slice(0, 100)}`));
       break;
@@ -149,7 +155,8 @@ async function issueBatch(env, repos, marks, now, budget) {
     pending.forEach((item, index) => {
       const alias = `r${index}`;
       const connection = data.data[alias] && data.data[alias].issues;
-      if (!connection || (data.errors || []).some(error => !error.path || error.path[0] === alias)) {
+      if (!Array.isArray(connection?.nodes) || typeof connection?.pageInfo?.hasNextPage !== "boolean" ||
+          (data.errors || []).some(error => !error.path || error.path[0] === alias)) {
         result.errors.push(`${item.repo}: incomplete GraphQL result`);
         return;
       }
@@ -207,8 +214,8 @@ async function pollIssues(env, now, budget, memory = {}) {
   const rejected = [];
   const completed = [];
   const errors = [];
-  // Ten repositories per GraphQL call: 57 repositories normally cost six
-  // requests, leaving room for PR comments within the free Worker request cap.
+  // Ten repositories per call means six initial requests. Small issue pages
+  // limit GraphQL cost, including the nested labels and assignees selections.
   for (let start = 0; start < repos.length; start += 10) {
     const batch = await issueBatch(env, repos.slice(start, start + 10), marks, now, budget);
     issues.push(...batch.issues);
@@ -229,11 +236,12 @@ async function pollIssues(env, now, budget, memory = {}) {
   }
   // Advance only after successful direct delivery or durable KV fallback.
   for (const repo of completed) memory[repo] = now.toISOString();
+  const diag = { at: now.toISOString(), ok_repos: completed.length, errors: errors.slice(0, 10),
+    found: issues.length, repos: repos.length, has_token: Boolean(env.GH_TOKEN) };
+  console.log("Issue scan", JSON.stringify(diag));
   if (now.getUTCMinutes() % 30 === 0) {
     await checkpoint(env, "watermarks", marks, completed, now);
-    await env.SEEN.put("diag", JSON.stringify({ at: now.toISOString(),
-      ok_repos: completed.length, errors: errors.slice(0, 10), found: issues.length,
-      repos: repos.length, has_token: Boolean(env.GH_TOKEN) }));
+    await env.SEEN.put("diag", JSON.stringify(diag));
   }
 }
 
@@ -265,8 +273,10 @@ async function edgeGithub(env, path, budget, payload, optional = false) {
     method: payload ? "POST" : "GET",
     headers: { ...ghHeaders(env.GH_TOKEN), ...(payload ? {"Content-Type":"application/json"} : {}) },
     ...(payload ? {body: JSON.stringify(payload)} : {}),
-    redirect: "error", signal: AbortSignal.timeout(15000),
+    // Workers supports manual redirects, and the non-2xx checks below reject them.
+    redirect: "manual", signal: AbortSignal.timeout(15000),
   });
+  if (response.status >= 300 && response.status < 400) throw new Error("unexpected GitHub redirect");
   const result = await response.json();
   const errors = result && result.errors || [];
   const limited = response.status === 429 ||
@@ -448,10 +458,11 @@ async function edgeFeishuIndex(env, body, budget, request) {
   async function get(path) {
     if (budget.remaining--<=0) throw new Error("Feishu read budget exhausted");
     const response=await fetch(base+path,{headers:{"Authorization":"Bearer "+token,"Content-Type":"application/json"},
-      redirect:"error",signal:AbortSignal.timeout(15000)});
+      redirect:"manual",signal:AbortSignal.timeout(15000)});
     if (response.status===429) throw new EdgeRateLimit(Math.max(5,Number(response.headers.get("Retry-After"))||30));
+    if (!response.ok) throw new Error("Feishu read incomplete");
     const result=await response.json();
-    if (!response.ok || result.code!==0 || !result.data) throw new Error("Feishu read incomplete");
+    if (result.code!==0 || !result.data) throw new Error("Feishu read incomplete");
     return result.data;
   }
   // Verify the actual table name, rather than trusting caller-supplied names.
@@ -564,15 +575,27 @@ export class IssueIngress {
     for (let n=0;n<4;n++) {
       const rows = this.sql.exec("SELECT key,payload FROM outbox WHERE sent IS NULL ORDER BY created,key LIMIT 20").toArray();
       if (!rows.length) break;
-      if (!this.env.INGEST_URL || !this.env.INGEST_TOKEN) throw new Error("ingress destination unavailable");
-      const response = await fetch(this.env.INGEST_URL,{
-        method:"POST",redirect:"error",signal:AbortSignal.timeout(10000),
-        headers:{"Content-Type":"application/json","X-Ingest-Token":this.env.INGEST_TOKEN},
-        body:JSON.stringify({issues:rows.map(row=>JSON.parse(row.payload))}),
-      });
-      if (!response.ok) throw new Error("controller receipt unavailable");
-      const result = await response.json();
-      if (result.stored !== rows.length) throw new Error("incomplete controller receipt");
+      const issues = rows.map(row => JSON.parse(row.payload));
+      const payload = JSON.stringify({issues});
+      try {
+        if (!this.env.INGEST_URL || !this.env.INGEST_TOKEN) throw new Error("missing destination");
+        const response = await fetch(this.env.INGEST_URL, {
+          method: "POST", redirect: "manual", signal: AbortSignal.timeout(10000),
+          headers: {"Content-Type":"application/json", "User-Agent":"oss-scout-worker/1.0",
+                    "X-Ingest-Token":this.env.INGEST_TOKEN},
+          body: payload,
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const result = await response.json();
+        if (result?.stored !== rows.length) throw new Error("incomplete receipt");
+      } catch (error) {
+        const reason = /^(HTTP \d{3}|incomplete receipt|missing destination)$/.test(error.message)
+          ? error.message : error.name;
+        console.warn("Issue ingress push failed; handing off to KV", reason);
+        // The VPS removes the KV batch only after committing it locally. If KV
+        // is unavailable too, retain the rows and leave the alarm armed.
+        await storePendingIssues(this.env, payload, issues);
+      }
       this.state.storage.transactionSync(() => {
         for (const row of rows) this.sql.exec("UPDATE outbox SET sent=?,payload='' WHERE key=?",Date.now(),row.key);
       });

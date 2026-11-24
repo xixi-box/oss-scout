@@ -44,6 +44,7 @@ test('new repositories do not inherit a stale shared watermark', async t => {
   env.REPOS = 'a/b,c/d';
   mock.method(globalThis, 'fetch', async (_url, options) => {
     const query = JSON.parse(options.body).query;
+    assert.match(query, /issues\(first:25,/);
     assert.match(query, /2026-11-06T02:59:00.000Z/);
     assert.match(query, /2026-11-06T03:44:00.000Z/);
     return response({ data: { r0: gqlPage(), r1: gqlPage() } });
@@ -199,7 +200,8 @@ test('edge rejects unauthenticated and unmonitored requests without GitHub calls
 test('edge issue context requires complete comment and timeline pages', async t => {
   t.after(() => mock.restoreAll());
   const env = setup();
-  mock.method(globalThis, 'fetch', async url => {
+  mock.method(globalThis, 'fetch', async (url, options) => {
+    assert.equal(options.redirect, 'manual');
     if (url.includes('/comments?')) return response([{id:1,body:'comment'}]);
     if (url.includes('/timeline?')) return response([]);
     return response({number:1,state:'open',comments:1});
@@ -211,6 +213,13 @@ test('edge issue context requires complete comment and timeline pages', async t 
   mock.restoreAll();
   mock.method(globalThis,'fetch',async url => url.includes('/comments?') ? response({},503) : url.includes('/timeline?') ? response([]) : response({number:1,state:'open',comments:1}));
   assert.equal((await worker.default.fetch(make(),env)).status,503);
+  mock.restoreAll();
+  const redirect = mock.method(globalThis, 'fetch', async (_url, options) => {
+    assert.equal(options.redirect, 'manual');
+    return response({}, 302, {Location:'https://untrusted.invalid/'});
+  });
+  assert.equal((await worker.default.fetch(make(),env)).status,503);
+  assert.equal(redirect.mock.callCount(),3);
 });
 
 test('edge PR snapshot validates author and complete count', async t => {
@@ -228,7 +237,7 @@ test('edge PR snapshot validates author and complete count', async t => {
 });
 
 
-test('durable ingress stages versions, retains failed delivery and deduplicates acknowledged replay', async t => {
+test('durable ingress retains failures and hands off unacknowledged batches through KV', async t => {
   t.after(() => mock.restoreAll());
   let DatabaseSync;
   try { ({ DatabaseSync } = await import('node:sqlite')); }
@@ -253,18 +262,36 @@ test('durable ingress stages versions, retains failed delivery and deduplicates 
   assert.ok(alarm);
   assert.equal((await ingress.fetch(stage(item))).status,200);
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM outbox').get().n,1);
-  mock.method(globalThis,'fetch',async ()=>response({},503));
-  await assert.rejects(ingress.alarm(),/receipt unavailable/);
+  const put = env.SEEN.put;
+  env.SEEN.put = async () => { throw new Error('KV unavailable'); };
+  mock.method(globalThis,'fetch',async () => { throw new TypeError('Network failure'); });
+  await assert.rejects(ingress.alarm(),/KV unavailable/);
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM outbox WHERE sent IS NULL').get().n,1);
   assert.ok(alarm);
+  env.SEEN.put = put;
+  mock.restoreAll();
+  const redirected = mock.method(globalThis, 'fetch', async (url, options) => {
+    assert.equal(url, env.INGEST_URL);
+    assert.equal(options.redirect,'manual');
+    return response({}, 307, {Location:'https://untrusted.invalid/'});
+  });
+  await ingress.alarm();
+  assert.equal(redirected.mock.callCount(),1);
+  const pending = env.puts.filter(key => key.startsWith('pending:'));
+  assert.equal(pending.length, 1);
+  assert.deepEqual(JSON.parse(env.stored.get(pending[0])), {issues:[item]});
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM outbox WHERE sent IS NULL').get().n,0);
   mock.restoreAll();
   let sends=0;
+  const second = {...item, number:2};
   mock.method(globalThis,'fetch',async (_url,options)=>{
     sends++;
-    assert.deepEqual(JSON.parse(options.body).issues,[item]);
+    assert.equal(options.redirect, 'manual');
+    assert.deepEqual(JSON.parse(options.body).issues,[second]);
     return response({stored:1});
   });
   ingress = new worker.IssueIngress({storage},env);
+  await ingress.fetch(stage(second));
   await ingress.alarm();
   assert.equal(sends,1);
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM outbox WHERE sent IS NULL').get().n,0);
@@ -325,6 +352,7 @@ test('edge Feishu index is read-only, checks table binding and normalizes fields
   let calls=0;
   mock.method(globalThis,'fetch',async (url,options)=>{
     calls++;
+    assert.equal(options.redirect,'manual');
     assert.ok(url.startsWith('https://open.feishu.cn/open-apis/bitable/v1/apps/app1/tables'));
     assert.equal(options.headers.Authorization,'Bearer tenant-fixture');
     assert.ok(!options.method || options.method==='GET');

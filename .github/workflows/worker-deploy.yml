@@ -28,6 +28,9 @@ jobs:
         with:
           node-version: "22"
 
+      - name: Test Worker reliability
+        run: node --test tests_v2/worker_reliability.mjs
+
       - name: Show planned repo list
         shell: bash
         run: |
