@@ -17,7 +17,7 @@ ingest_token: ""
 # Auto-discover the workers.dev subdomain via the existing CF API token.
 # Disable for rollback, or explicitly set CF_EDGE_URL to the deployed workers.dev URL.
 edge_reads_enabled: true
-edge_url: ""
+edge_url: "https://oss-scout-hunter.2606209307.workers.dev"
 ingest_url: https://oss.wangshun.work/api/ingest/issues
 kv_namespace_id: 06f5c54ef44a4e3ab31f7cf0e45646cc
 

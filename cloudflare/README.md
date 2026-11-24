@@ -31,3 +31,13 @@ Each invocation is bounded to 36 external subrequests, below the Workers Free li
 ## Durable ingress
 
 The `INGRESS` SQLite Durable Object stages issue versions before acknowledging scan delivery; its alarm sends up to 20 issues per controller receipt and retries failed deliveries. Old KV pending keys continue to drain via the existing VPS recovery path. No candidate/PR admission state is moved in this release. Deploy with Wrangler 4 and preserve the DO binding and migration tag on future revisions.
+
+
+### Screening evidence offload
+
+The Worker also fetches repository policies at an immutable default-branch SHA (including inherited community files after confirmed 404s), performs bounded competing-PR searches, and reads tracked prerequisite issue/PR facts. The VPS preserves the exact Python multilingual intent, repository policy, AI verdict and publication gates. Cross-repository references outside the roster and independent Actions publication checks remain direct reads. No GitHub write token or model credential is moved into these routes.
+
+
+### Business-table record index
+
+Full Feishu scan/PR reconciliation delegates remote pagination and field normalization to the Worker. The authenticated controller forwards only a short-lived tenant access token over TLS; the Worker verifies the actual business table binding, reads from the fixed Feishu API origin, and returns a complete record index. It cannot write records or access the model-settings table via this route. The VPS keeps the single writer, local desired state and diff application. If the endpoint is unavailable the existing read-only fallback remains safe.

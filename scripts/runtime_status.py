@@ -103,6 +103,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", type=Path, default=Path(os.environ.get("OSSCOUT_DASHBOARD_ROOT", "/data")))
     parser.add_argument("--worker", action="store_true")
+    parser.add_argument("--edge", action="store_true")
     parser.add_argument("--screening", action="store_true")
     parser.add_argument("--feishu-repos", action="store_true")
     args = parser.parse_args()
@@ -157,6 +158,14 @@ def main() -> int:
                 or expected["prerequisite_open"].get("blocking_gate") != "unmet_prerequisite"
                 or expected["prerequisite_merged"].get("blocking_gate") in ("unmet_prerequisite", "prerequisite_unknown")):
             result["policy_screening_warning"] = "Live policy sample classification differed from expectation"
+    if args.edge:
+        from scout_v2.edge_reads import edge_read
+        expected = {"status", "issue-context", "pr-snapshot", "repository-policy",
+                    "competition-search", "reference-fact", "feishu-record-index"}
+        status = edge_read(args.root, "status", {})
+        if not status or status.get("complete") is not True or status.get("ingress") is not True or not expected <= set(status.get("routes", [])):
+            raise SystemExit("Cloudflare authenticated edge routes not ready")
+        result["edge"] = {"authenticated": True, "durable_ingress": True, "routes": sorted(expected)}
     if args.worker:
         import urllib.request
         cfg = yaml.safe_load((args.root / "configs/cloudflare.yaml").read_text(encoding="utf-8"))

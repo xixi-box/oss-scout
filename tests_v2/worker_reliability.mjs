@@ -272,3 +272,71 @@ test('durable ingress stages versions, retains failed delivery and deduplicates 
   await ingress.alarm();
   assert.equal(sends,1);
 });
+
+
+test('edge policy pins repository revision and uses inherited policy only after confirmed 404s', async t => {
+  t.after(()=>mock.restoreAll());
+  const env=setup();
+  const head='a'.repeat(40), content='Keep fixes focused. 中文规则';
+  const calls=[];
+  mock.method(globalThis,'fetch',async url=>{
+    calls.push(url);
+    if(url.endsWith('/repos/a/b')) return response({default_branch:'main'});
+    if(url.endsWith('/commits/main')) return response({sha:head});
+    if(url.includes('/repos/a/b/contents/SECURITY.md')) {
+      assert.ok(url.endsWith('?ref='+head));
+      return response({},404);
+    }
+    if(url.includes('/repos/a/b/contents/CONTRIBUTING.md')) {
+      assert.ok(url.endsWith('?ref='+head));
+      return response({type:'file',encoding:'base64',sha:'b'.repeat(40),size:Buffer.byteLength(content),content:Buffer.from(content).toString('base64')});
+    }
+    return response({},404);
+  });
+  const result=await worker.default.fetch(new Request('https://worker/internal/v1/repository-policy',{method:'POST',headers:{'X-Ingest-Token':'fake'},body:JSON.stringify({repo:'a/b'})}),env);
+  assert.equal(result.status,200);
+  const body=await result.json();
+  assert.deepEqual(body.confirmed_absent,['security']);
+  assert.equal(body.documents[0].content,content);
+  assert.ok(calls.some(url=>url.includes('/repos/a/.github/contents/SECURITY.md')));
+});
+
+test('edge competition uses bounded repo queries and preserves the original evidence',async t=>{
+  t.after(()=>mock.restoreAll());
+  const env=setup();
+  const item={number:2,title:'Fix',body:'Fixes #1',state:'open',user:{login:'someone'}};
+  mock.method(globalThis,'fetch',async url=>{
+    assert.match(new URL(url).searchParams.get('q'),/^repo:a\/b is:pr is:open (?:1|parser)$/);
+    return response({items:[item],incomplete_results:false});
+  });
+  const request=new Request('https://worker/internal/v1/competition-search',{method:'POST',headers:{'X-Ingest-Token':'fake'},body:JSON.stringify({repo:'a/b',terms:['1','parser']})});
+  const result=await worker.default.fetch(request,env);
+  assert.equal(result.status,200);
+  assert.deepEqual((await result.json()).results.map(r=>r.term),['1','parser']);
+});
+
+
+test('edge Feishu index is read-only, checks table binding and normalizes fields', async t=>{
+  t.after(()=>mock.restoreAll());
+  const env=setup();
+  const url='https://worker/internal/v1/feishu-record-index';
+  const req=()=>new Request(url,{method:'POST',headers:{'X-Ingest-Token':'fake','X-Feishu-Tenant-Token':'tenant-fixture'},
+    body:JSON.stringify({app_token:'app1',table_id:'tbl1',table_name:'扫描发现'})});
+  let calls=0;
+  mock.method(globalThis,'fetch',async (url,options)=>{
+    calls++;
+    assert.ok(url.startsWith('https://open.feishu.cn/open-apis/bitable/v1/apps/app1/tables'));
+    assert.equal(options.headers.Authorization,'Bearer tenant-fixture');
+    assert.ok(!options.method || options.method==='GET');
+    if(calls===1) return response({code:0,data:{items:[{name:'扫描发现',table_id:'tbl1'}],has_more:false}});
+    return response({code:0,data:{items:[{record_id:'r1',fields:{'键':[{type:'url',text:'a/b#1',link:'https://github.com/a/b/issues/1',extra:'x'}],
+      '最终结果':[{type:'text',text:'细筛淘汰'}]}}],has_more:false}});
+  });
+  const result=await worker.default.fetch(req(),env);
+  assert.equal(result.status,200);
+  const row=(await result.json()).rows[0];
+  assert.equal(row.key,'a/b#1');
+  assert.equal(row.fields['最终结果'],'细筛淘汰');
+  assert.equal(row.fields['键'][0].extra,undefined);
+  assert.equal(row.fields['发现时间'],null);
+});

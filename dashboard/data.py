@@ -184,6 +184,7 @@ def refresh_issue(item: dict, *, root: Path | None = None) -> tuple[dict, list[s
                     or issue.get("comments") != len(comments)):
                 raise RuntimeError("Cloudflare issue evidence incomplete")
             kwargs["screening_source"] = (issue, comments, timeline)
+            kwargs["edge_root"] = root
     check = recheck_candidate(item["repo"], int(item["number"]), **kwargs)
     if check is None or not check.complete or check.screening_source is None:
         raise RuntimeError(f"issue context unavailable: {check.errors if check else []}")

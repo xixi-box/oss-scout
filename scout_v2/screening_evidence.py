@@ -9,11 +9,13 @@ import base64
 import copy
 import hashlib
 import json
+import os
 import re
 import subprocess
 import threading
 import time
 from urllib.parse import quote
+from pathlib import Path
 
 from .contribution_intent import prose_clauses
 
@@ -91,8 +93,31 @@ def _document(repo, path, ref=None):
     return {"repository": repo, "path": path, "sha": document["sha"], "content": text}
 
 
+def _edge_evidence(route, payload):
+    # Production controller opts in via its Cloudflare configuration; repair
+    # runners keep their independent direct GitHub evidence path.
+    root = os.environ.get("OSSCOUT_DASHBOARD_ROOT")
+    if not root:
+        return None
+    from .edge_reads import EdgeRateLimited, edge_read
+    try:
+        return edge_read(Path(root), route, payload)
+    except EdgeRateLimited as error:
+        raise ScreeningEvidenceUnavailable("Cloudflare GitHub 限流，待重试") from error
+
+
 def repository_policy_documents(repo: str) -> dict:
     def load():
+        edge = _edge_evidence("repository-policy", {"repo": repo})
+        if edge is not None:
+            docs, absent = edge.get("documents"), edge.get("confirmed_absent")
+            if (edge.get("complete") is not True or not isinstance(docs, list)
+                    or not isinstance(absent, list) or any(not isinstance(row, dict) for row in docs)
+                    or sorted([row.get("kind", "") for row in docs] + absent) != ["contributing", "security"]
+                    or any(not all(isinstance(row.get(key), str) for key in
+                                   ("repository", "path", "sha", "content")) for row in docs)):
+                raise ScreeningEvidenceUnavailable("Cloudflare 仓库规则证据不完整，待重试")
+            return edge
         metadata = _get(f"repos/{repo}")
         if not isinstance(metadata, dict) or not isinstance(metadata.get("default_branch"), str):
             raise ScreeningEvidenceUnavailable("仓库默认分支信息不可用，待重试")
@@ -137,6 +162,19 @@ def render_repository_policy(repo: str) -> str:
 
 def _reference_state(repo, number):
     def load():
+        # References may point to repositories outside the monitored roster.
+        # Keep those on the direct public GitHub read path.
+        from .roster import monitored_repo
+        edge = _edge_evidence("reference-fact", {"repo": repo, "number": number}) if monitored_repo(repo) else None
+        if edge is not None:
+            fact = edge.get("fact")
+            if (edge.get("complete") is not True or not isinstance(fact, dict)
+                    or str(fact.get("repo", "")).lower() != repo.lower() or fact.get("number") != number
+                    or fact.get("state") not in ("open", "closed")
+                    or fact.get("kind") not in ("issue", "pull_request")
+                    or (fact["kind"] == "pull_request" and type(fact.get("merged")) is not bool)):
+                raise ScreeningEvidenceUnavailable("Cloudflare 前置依赖证据不完整，待重试")
+            return fact
         pull = _get(f"repos/{repo}/pulls/{number}", optional=True)
         if pull is None:
             issue = _get(f"repos/{repo}/issues/{number}")
