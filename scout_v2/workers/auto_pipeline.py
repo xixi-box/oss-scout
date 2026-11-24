@@ -1,7 +1,7 @@
 """自动修复流水线（用户裁定 2026-10-27）：修复必须跑在后端，不在 VPS 本地。
 
     Worker 粗筛 → AI 细筛 → A 级 → 实时复检 → 合规门 → **JobRouter 选后端**
-    → Modal Sandbox / GitHub Actions 执行 repair → 后端回传 patch + 测试报告
+    → GitHub Actions 执行 repair → 后端回传 patch + 测试报告
     → 质量闸 → VPS 只做 push 分支 + 开 PR（唯一写者）
 
 为什么不在 VPS 本地跑（2026-10-27 重构）：
@@ -428,12 +428,6 @@ def _actions_runner_repo(root: Path) -> str:
         if repo:
             return repo
     return "xixi-box/oss-scout"
-
-
-# Modal 通信不走代理的逻辑已内建进 ModalSandboxBackend（no_proxy_context）：
-# submit/poll/collect 内部自己包裹，调用方无需再包。这里保留名字作别名，
-# scripts/diag_proxy2.py 诊断脚本引用了它。
-from ..adapters.modal_backend import no_proxy_context as _no_proxy_context  # noqa: E402,F401
 
 
 def _submit_job(root: Path, job: Job, engine: PolicyEngine) -> tuple[str, str, dict]:

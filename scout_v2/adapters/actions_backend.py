@@ -97,7 +97,7 @@ class ActionsBackend:
             return False
         if job.get("execution_scope") == "broad_scan":
             return False
-        if job.get("mode") not in {"repair", "review", "ci", "scan", "reproduce"}:
+        if job.get("mode") not in {"repair", "review", "ci", "reproduce"}:
             return False
         # 目标仓库与固定 SHA 由 job payload 携带，缺了 runner 无从 checkout
         return bool(job.get("repo") and job.get("base_sha"))
@@ -207,7 +207,7 @@ class ActionsBackend:
         已带 patch 与 test_report，必须原样返回——早期实现只摊平了 result 和
         test_report，把 patch 丢了，于是配额一满就拿不到补丁，无法开 PR。
         """
-        from ..adapters.modal_backend import parse_envelope
+        from ..adapters.result_envelope import parse_envelope
         text = self._logs_text(remote_job_id)
         if text is None:
             return {"outcome": "inconclusive",
