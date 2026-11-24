@@ -725,6 +725,15 @@ class ClaimLedger:
     def expect_publication(self, job_id: str, url: str) -> None:
         self._conn.execute("UPDATE publications SET expected_url=? WHERE job_id=?", (url, job_id))
 
+    def record_recovered_publication(self, job_id: str, repo: str, head: str, runner_repo: str,
+                                     remote_id: str, candidate: str, day: str, url: str) -> None:
+        self._publication_table()
+        self._conn.execute(
+            "INSERT OR IGNORE INTO publications "
+            "(job_id,repo,head,runner_repo,remote_id,candidate_id,day,url,phase) "
+            "VALUES (?,?,?,?,?,?,?,?,'published')",
+            (job_id, repo, head, runner_repo, remote_id, candidate, day, url))
+
     def finish_publication(self, job_id: str, *, day: str = "", url: str = "") -> None:
         changed = False
         if day and url:

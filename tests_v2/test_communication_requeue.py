@@ -79,6 +79,73 @@ def test_existing_published_pr_wins_over_a_communication_failure(tmp_path,monkey
     ledger.close()
 
 
+@pytest.mark.parametrize("case", ["temporary", "active", "lookup_failed", "published", "permanent"])
+def test_old_claim_without_publication_row_reconciles_automatically(tmp_path, monkeypatch, case):
+    key, ledger = writer(tmp_path)
+    ledger.finish_publication("job-one")
+    path = tmp_path / "queue/candidates.json"
+    entry = json.loads(path.read_text())[key]
+    job_id = "job-64f33c8f-b384-4e44-bb04-4972fefda36a"
+    entry.update(status="escalated", repair_job_id=job_id, retry_authorized_job_id=job_id,
+                 repair_run_id="123")
+    entry.pop("dispatch_job_id")
+    entry.pop("dispatch_started_at")
+    path.write_text(json.dumps({key: entry}))
+    pr = {"html_url": "https://github.com/traefik/traefik/pull/2",
+          "user": {"login": "xixi-box"}, "body": f"<!-- oss-scout-job:{job_id} -->",
+          "created_at": business_now().isoformat()}
+
+    def read(args):
+        if "/actions/runs/" in args[0]:
+            return {"display_title": f"repair {job_id}", "id": 123,
+                    "status": "in_progress" if case == "active" else "completed"}
+        assert "head=xixi-box:fix/issue-1-aaaaaaa-4972fefd" in args
+        return None if case == "lookup_failed" else [pr] if case == "published" else []
+
+    reason = ("manual_publication_required: contributor confirmation" if case == "permanent"
+              else "publication issue, comments, timeline or PR search is incomplete")
+    monkeypatch.setattr(pipeline, "gh_read", read)
+    monkeypatch.setattr(pipeline.ActionsBackend, "collect", lambda *_: {
+        "job_id": job_id, "outcome": "blocked", "base_sha": "a" * 40, "unverified_items": [reason],
+    })
+    resolved = case in {"temporary", "published", "permanent"}
+    assert pipeline.recover_pending_publication(tmp_path) == resolved
+    saved = json.loads(path.read_text(encoding="utf-8"))[key]
+    assert saved["status"] == {"temporary": "staged", "published": "pr_open",
+                               "permanent": "aborted_no_evidence"}.get(case, "escalated")
+    assert ledger.try_claim(TZ, key, retry_failed=True)[0] == (case == "temporary")
+    if case == "temporary":
+        assert saved["rescreen_pending"] and not pipeline._eligible(saved)
+    if case == "published":
+        assert ledger.quota_used(business_now().date().isoformat()) == 1
+    ledger.close()
+
+
+def test_interrupted_preparation_uses_current_dispatch_marker(tmp_path, monkeypatch):
+    key, ledger = writer(tmp_path)
+    ledger.finish_publication("job-one")
+    assert ledger.reserve_dispatch(TZ, 5, "job-two", "traefik/traefik", key)
+    path = tmp_path / "queue/candidates.json"
+    entry = json.loads(path.read_text())[key]
+    entry.update(status="staged", dispatch_job_id="job-two", repair_job_id="job-one", repair_run_id="1")
+    path.write_text(json.dumps({key: entry}))
+    checked = []
+
+    def find(_repo, job_id):
+        checked.append(job_id)
+        return None, True
+
+    monkeypatch.setattr(pipeline, "_find_repair_run", find)
+    assert pipeline.recover_pending_publication(tmp_path)
+    saved = json.loads(path.read_text())[key]
+    assert checked == ["job-two"]
+    assert saved["status"] == "staged" and saved["retry_authorized_job_id"] == "job-two"
+    assert "dispatch_job_id" not in saved and "repair_run_id" not in saved
+    assert not ledger.preparations()
+    assert ledger.try_claim(TZ, key, retry_failed=True)[0]
+    ledger.close()
+
+
 def test_real_pipeline_can_retry_a_confirmed_communication_failure_once(tmp_path,monkeypatch):
     key,ledger=writer(tmp_path)
     ledger.finish_publication('job-one')
@@ -207,6 +274,6 @@ def test_controller_restart_preserves_confirmed_retry_but_protects_unknown_claim
     dashboard.create_app(tmp_path,auth_enabled=False,password='test')
     result=json.loads((tmp_path/'queue/candidates.json').read_text(encoding='utf-8'))
     assert result['traefik/traefik#1']['status']=='staged'
-    assert result['traefik/traefik#2']['status']=='escalated'
-    assert result['traefik/traefik#3']['status']=='escalated'
+    assert result['traefik/traefik#2']['status']=='staged'
+    assert result['traefik/traefik#3']['status']=='reconciling'
     assert result['traefik/traefik#4']['status']=='running'

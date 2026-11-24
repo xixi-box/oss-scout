@@ -373,7 +373,7 @@ def recheck_still_worth(key: str, title: str = "") -> tuple[bool, str]:
 _SCAN_OTHER_OUTCOMES = {
     "queue_evicted": "已清除",
     "stage_expired": "暂存已过期",
-    "escalated": "待人工核查",
+    "escalated": "已停止",
     "needs_cla": "开工拦截 · 需要签署 CLA",
     "needs_maintainer_confirm": "开工拦截 · 等待维护者确认",
     "gated_alignment_only": "开工拦截 · 仓库要求先沟通",
@@ -383,8 +383,10 @@ _SCAN_OTHER_OUTCOMES = {
 
 
 def candidate_activity_state(key: str, status: str, running_keys, entry=None) -> str:
-    if key.lower() in running_keys and status in {"staged", "running", "escalated"}:
+    if key.lower() in running_keys and status in {"staged", "running", "escalated", "reconciling"}:
         return running_keys[key.lower()] if isinstance(running_keys, dict) else "执行中"
+    if status == "reconciling" or (status == "escalated" and (entry or {}).get("retry_authorized_job_id")):
+        return "自动对账中"
     if status == "running":
         return "状态核查中"
     if status == "staged":

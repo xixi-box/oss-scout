@@ -94,8 +94,8 @@ def _emergency_release(root: Path, candidate_id: str = "", tz_name: str = "Asia/
             candidate = queue.get(candidate_id)
             if candidate and (candidate.get("status") == "running" or (
                     candidate.get("status") == "staged" and candidate.get("dispatch_started_at"))):
-                candidate.update(status="escalated", updated_at=business_now(tz_name).isoformat(timespec="seconds"),
-                                 abort_reason="controller interrupted; inspect remote job before retry")
+                candidate.update(status="reconciling", updated_at=business_now(tz_name).isoformat(timespec="seconds"),
+                                 abort_reason="控制器中断，自动核对旧任务")
 
 
 def _build_router(root: Path, job: Job, engine: PolicyEngine) -> JobRouter:
@@ -171,6 +171,7 @@ def _retryable_codex_communication(details: list) -> bool:
     return any(CODEX_COMMUNICATION_RETRY_PREFIX in str(detail)
                or MODEL_COMMUNICATION_RETRY_PREFIX in str(detail)
                or "controller communication unavailable: issue snapshot download" in str(detail)
+               or str(detail) == "publication issue, comments, timeline or PR search is incomplete"
                or re.search(legacy, str(detail))
                for detail in details)
 
@@ -189,6 +190,7 @@ def _communication_retry_fields(entry: dict, job_id: str, reason: str, tz_name: 
     failures = int(entry.get("communication_failures") or 0) + 1
     delay = min(60, 5 * 2 ** min(failures - 1, 4))
     return {"repair_outcome": "communication_unavailable", "abort_reason": reason[:300],
+            "rescreen_pending": True,
             "communication_failures": failures, "last_communication_job_id": job_id,
             "retry_authorized_job_id": job_id,
             "screen_retry_at": (now + dt.timedelta(minutes=delay)).isoformat(),
@@ -198,9 +200,10 @@ def _communication_retry_fields(entry: dict, job_id: str, reason: str, tz_name: 
 
 
 def _reconcile_publication(ledger: ClaimLedger, tz_name: str, *, root: Path | None = None,
-                           worker_result: dict | None = None, job_id: str | None = None) -> dict | None:
+                           worker_result: dict | None = None, job_id: str | None = None,
+                           legacy_head: tuple | None = None) -> dict | None:
     """Resolve one writer; callers own its per-candidate execution lock."""
-    pending = ledger.pending_publication(job_id)
+    pending = legacy_head or ledger.pending_publication(job_id)
     if pending is None:
         return {}
     job_id, repo, head, runner_repo, remote_id, expected_url = pending
@@ -236,12 +239,16 @@ def _reconcile_publication(ledger: ClaimLedger, tz_name: str, *, root: Path | No
                     or f"<!-- oss-scout-job:{job_id} -->" in (p.get("body") or ""))), None)
     if pr is None and expected_url:
         return None
-    if missing_run and prs and pr is None:
+    if prs and pr is None:
         # Unexpected head matches need investigation rather than an assumption
         # that no PR was published.
         return None
     created = dt.datetime.fromisoformat(pr["created_at"].replace("Z", "+00:00")) if pr else None
     issue = re.fullmatch(r"[^:]+:fix/issue-(\d+)-[0-9a-f]+(?:-[0-9a-f]+)?", head)
+    if pr and legacy_head and issue:
+        ledger.record_recovered_publication(job_id, repo, head, runner_repo, remote_id,
+                                            f"{repo}#{issue[1]}", business_day(created, tz_name),
+                                            pr["html_url"])
     if root is not None and issue:
         recovery = worker_result is None
         communication_retry = False
@@ -295,9 +302,9 @@ def _reconcile_publication(ledger: ClaimLedger, tz_name: str, *, root: Path | No
             elif run.get("conclusion") in ("failure", "cancelled", "timed_out"):
                 status, reason = "aborted_pipeline", f"工作流已结束（{run['conclusion']}），未发布 PR"
             elif missing_run:
-                status, reason = "escalated", "Actions 运行记录已不存在；已核对目标分支未开 PR，转人工核查"
+                status, reason = "aborted_pipeline", "Actions 运行记录已不存在，目标分支未开 PR"
             else:
-                status, reason = "escalated", "工作流已结束，未发布 PR，修复结果无法确认"
+                status, reason = "aborted_pipeline", "工作流已结束，目标分支无 PR，缺少有效修复结果"
             extra = {"repair_outcome": "communication_unavailable" if communication_retry else outcome or "unknown",
                      "abort_reason": reason[:300]}
             if publication.get("coarse_reason"):
@@ -327,7 +334,8 @@ def _reconcile_publication(ledger: ClaimLedger, tz_name: str, *, root: Path | No
                 candidate.pop("dispatch_started_at", None)
                 candidate.pop("dispatch_job_id", None)
                 candidate.pop("direct_start_reserved_at", None)
-        if recovery:
+                candidate.pop("reconcile_after", None)
+        if recovery or legacy_head:
             if pr:
                 log(root, "pr_open", key, f"{pr['html_url']} (reconciled from Actions)")
             else:
@@ -356,6 +364,54 @@ def _reconcile_publication(ledger: ClaimLedger, tz_name: str, *, root: Path | No
     return pr or {}
 
 
+def _recover_unreserved_claim(root: Path, ledger: ClaimLedger, key: str, entry: dict,
+                              tz_name: str) -> bool:
+    """Recheck an old writer whose failed publication row was already removed."""
+    job_id = entry.get("dispatch_job_id") or entry.get("repair_job_id")
+    if not job_id or "#" not in key:
+        mark_candidate(root, key, "aborted_pipeline", {"abort_reason": "缺少旧任务编号，无法安全重派"})
+        return True
+    if ledger.pending_publication(job_id):
+        return False
+    runner_repo = _actions_runner_repo(root)
+    remote_id = entry.get("repair_run_id") if job_id == entry.get("repair_job_id") else None
+    if remote_id:
+        run = gh_read([f"repos/{runner_repo}/actions/runs/{remote_id}"])
+    else:
+        run, complete = _find_repair_run(runner_repo, job_id)
+        if run is None and complete and (job_id, key) in ledger.preparations():
+            # A preparation never reached the remote writer; submission first
+            # atomically changes its phase to dispatching.
+            reason = "控制器在派发前中断，暂存重试"
+            ledger.release_claim(key, tz_name)
+            with queue_transaction(root) as queue:
+                current = queue[key]
+                current.update(status="staged", repair_job_id=job_id, updated_at=business_now(tz_name).isoformat(),
+                               **_communication_retry_fields(current, job_id, reason, tz_name))
+                for field in ("dispatch_job_id", "dispatch_started_at", "direct_start_reserved_at",
+                              "repair_run_id", "reconcile_after"):
+                    current.pop(field, None)
+            ledger.release_preparation(job_id)
+            log(root, "reconciled", key, reason)
+            return True
+    if not run or run.get("display_title") != f"repair {job_id}" or run.get("status") != "completed":
+        return False
+    remote_id = str(run["id"])
+    result = ActionsBackend(runner_repo=runner_repo, artifact_dir=root / "artifacts").collect(remote_id)
+    base = str(result.get("base_sha") or "")
+    if result.get("job_id") != job_id or not re.fullmatch(r"[0-9a-f]{40}", base):
+        return False
+    repo, number = key.rsplit("#", 1)
+    suffix = job_id.rsplit("-", 1)[-1][:8]
+    if not number.isdecimal() or not re.fullmatch(r"[0-9a-f]{8}", suffix):
+        return False
+    head = f"{FORK_OWNER}:fix/issue-{number}-{base[:7]}-{suffix}"
+    expected_url = (result.get("publish") or {}).get("pr") or entry.get("pr_url")
+    legacy_head = (job_id, repo, head, runner_repo, remote_id, expected_url)
+    return _reconcile_publication(ledger, tz_name, root=root, worker_result=result,
+                                  legacy_head=legacy_head) is not None
+
+
 def recover_pending_publication(root: Path, tz_name: str = "Asia/Shanghai") -> bool:
     """Reconcile every orphaned writer without blocking live, unrelated jobs."""
     root = _data_root(root)
@@ -374,6 +430,30 @@ def recover_pending_publication(root: Path, tz_name: str = "Asia/Shanghai") -> b
                     changed = receipt is not None or changed
                 except Exception as exc:
                     log(root, "reconcile_error", job_id, str(exc)[:180])
+        path = root / "queue/candidates.json"
+        if not path.exists():
+            return changed
+        now = business_now(tz_name)
+        entries = json.loads(path.read_text(encoding="utf-8"))
+        preparations = set(ledger.preparations())
+        ready = [(key, entry) for key, entry in entries.items()
+                 if (entry.get("status") == "reconciling" or (
+                     entry.get("status") == "escalated" and _authorized_retry(entry)) or (
+                     entry.get("dispatch_started_at")
+                     and (entry.get("dispatch_job_id"), key) in preparations))
+                 and str(entry.get("reconcile_after") or "") <= now.isoformat()]
+        for key, entry in ready[:2]:
+            with candidate_execution_lock(root, key) as owned:
+                if not owned:
+                    continue
+                try:
+                    with queue_transaction(root) as queue:
+                        if queue.get(key) != entry:
+                            continue
+                        queue[key]["reconcile_after"] = (now + dt.timedelta(minutes=5)).isoformat()
+                    changed = _recover_unreserved_claim(root, ledger, key, entry, tz_name) or changed
+                except Exception as exc:
+                    log(root, "reconcile_error", key, str(exc)[:180])
         return changed
     finally:
         ledger.close()
@@ -792,9 +872,9 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen
             log(root, "abort", key, summary["abort"])
             # 粗筛取数失败仍保留暂存，按独立退避时间重试。修复循环
             # 现在每 60 秒一轮，如果 GitHub 持续抖动就会每分钟打一次。记失败次数，
-            # 超过 3 次就标 escalated 不再自动重试，避免无意义刷 API。
+            # 超过 3 次记录具体故障，停止自动重试。
             n = int(entry.get("recheck_failures") or 0) + 1
-            mark_candidate(root, key, "escalated" if n >= 3 else "staged",
+            mark_candidate(root, key, "screen_skipped" if n >= 3 else "staged",
                            extra={"recheck_failures": n, "rescreen_pending": rescreen,
                                   "abort_reason": summary["abort"],
                                   "screen_retry_at": (business_now() + dt.timedelta(minutes=5)).isoformat()})
@@ -841,13 +921,12 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen
     if approved is None:
         approved = (entry.get("ai_grade") or {}).get("grade") == "A"
     if approved is not True:
-        mark_candidate(root, key, "escalated", extra={"abort_reason": "no approved screening verdict"})
+        mark_candidate(root, key, "screen_skipped", extra={"abort_reason": "no approved screening verdict"})
         return _abort_release("candidate has no approved screening verdict")
     if not rescreen and getattr(recheck, "issue_title", None) is not None:
         if ((entry.get("ai_verdict") or {}).get("provider") == "codiv"
                 and (recheck.issue_title != entry.get("title") or recheck.issue_body != entry.get("body_excerpt"))):
-            mark_candidate(root, key, "escalated", extra={"abort_reason": "issue title or body changed after screening"})
-            return _abort_release("issue title or body changed after screening")
+            rescreen = True
         entry = {**entry, "title": recheck.issue_title, "body_excerpt": recheck.issue_body}
 
     # ---- 认领闸 ----
@@ -861,12 +940,11 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen
     # 被认领 6 次、istio#61045 每分钟重试，保险丝永远读不到 3）。worklog 是
     # 只追加的审计账本，认领动作必然留痕，按条数计数并发安全。
     attempts = _todays_claim_count(root, key)
-    retry_authorized = _authorized_retry(entry)
-    if attempts >= MAX_ATTEMPTS_PER_CANDIDATE and not retry_authorized:
+    if attempts >= MAX_ATTEMPTS_PER_CANDIDATE:
         summary["abort"] = (f"candidate attempt limit reached "
                             f"({attempts}/{MAX_ATTEMPTS_PER_CANDIDATE})")
         log(root, "abort", key, summary["abort"])
-        mark_candidate(root, key, "escalated",
+        mark_candidate(root, key, "aborted_pipeline",
                        extra={"abort_reason": summary["abort"]})
         return summary
 
@@ -923,7 +1001,8 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen
             if current is not None and "daily limit" in reason:
                 _stage_entry(current, root, q)
             elif current is not None and "already claimed" in reason:
-                current.update(status="escalated", abort_reason=reason)
+                current.update(status="reconciling" if retry_authorized else "aborted_pipeline",
+                               abort_reason=reason)
             summary["abort"] = f"claim budget: {reason}"
             ledger.close()
             return summary
@@ -1062,7 +1141,7 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen
             return summary
     if not receipt and _retryable_codex_communication(res.unverified_items):
         ledger.close()
-        summary.update(abort="temporary Codex communication failure; staged for retry", retry=True)
+        summary.update(abort="temporary communication failure; staged for retry", retry=True)
         log(root, "communication_retry", key, res.unverified_items[0][:300])
         return summary
     if not receipt:

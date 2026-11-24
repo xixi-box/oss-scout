@@ -736,7 +736,8 @@ def test_missing_actions_writer_is_reconciled_only_with_complete_evidence(tmp_pa
     assert (result is not None) == resolved
     assert (ledger.pending_publication() is None) == resolved
     entry = json.loads(queue.read_text(encoding="utf-8"))[key]
-    assert entry["status"] == ("pr_open" if case == "published" else "escalated")
+    expected = {"published": "pr_open", "missing": "aborted_pipeline"}
+    assert entry["status"] == expected.get(case, "escalated")
     if case == "missing":
         assert "未开 PR" in entry["abort_reason"]
     assert ledger.published_today("Asia/Shanghai") == int(case == "published")

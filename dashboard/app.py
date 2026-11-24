@@ -564,12 +564,10 @@ def create_app(root: Path | None = None, gh_runner=None,
     def _reap_orphan_claim():
         from scout_v2.repo_policy import PolicyEngine
         from scout_v2.state_store import business_now, queue_transaction, ClaimLedger, candidate_execution_lock
-        from scout_v2.workers.auto_pipeline import _authorized_retry
         policy, _ = PolicyEngine.load(root)
         ledger = ClaimLedger(root / "state/scout_v2.sqlite3")
         try:
             ledger.reconcile_legacy_starts(root / "state/worklog.jsonl", "Asia/Shanghai")
-            previously_started = {r[0] for r in ledger._conn.execute("SELECT DISTINCT candidate_id FROM claim_days")}
             active_claims = {r[0].lower() for r in ledger._conn.execute(
                 "SELECT candidate_id FROM claim_days WHERE day=? AND action='claim'",
                 (business_now().date().isoformat(),))}
@@ -607,11 +605,13 @@ def create_app(root: Path | None = None, gh_runner=None,
                     with candidate_execution_lock(root, key) as owned:
                         if owned:
                             entry.pop("direct_start_reserved_at", None)
-                safe_retry = _authorized_retry(entry) and key.lower() not in active_claims
-                if entry.get("status") == "running" or (key in previously_started and not safe_retry and entry.get("status") in (
-                        "new", "recheck_failed", "staged")):
-                    entry.update(status="escalated", abort_reason="controller restarted; inspect remote run before retry")
-                    _audit(root, "orphan_requires_review", key, "daily start retained")
+                status = entry.get("status")
+                if (status == "running" or
+                        (status == "staged" and key.lower() in active_claims) or
+                        (status == "escalated" and str(entry.get("abort_reason") or "").startswith(
+                            ("controller restarted;", "controller interrupted;")))):
+                    entry.update(status="reconciling", abort_reason="控制器恢复后自动核对旧任务")
+                    _audit(root, "orphan_reconciliation", key, "daily start retained")
                 elif entry.get("status") in ("new", "recheck_failed", "staged"):
                     repo = entry.get("repo") or key.split("#", 1)[0]
                     reason = policy.repo_entry(repo).get("review_reason")
