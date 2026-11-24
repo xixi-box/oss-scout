@@ -252,3 +252,8 @@ Camel Quarkus 优先局部 JVM 修复，依赖原生镜像、外部服务或凭�
 Worker also exposes authenticated, bounded read-only issue-context and PR-snapshot endpoints. The controller automatically discovers the Worker and prefers complete parallel issue/context reads and PR pagination on Cloudflare; a temporarily unavailable or old Worker uses the existing local read path. All policy decisions, candidate and publication transactions remain on the single VPS controller pending a separately verified state migration. See [cloudflare/README.md](cloudflare/README.md).
 
 Issue discovery now uses a SQLite-backed Cloudflare Durable Object outbox for durable issue delivery and alarm retries. The controller processes up to two network-bound screening tasks concurrently (configurable from one to three with `OSSCOUT_SCREENING_WORKERS`), independently of the one-repair-at-a-time publication gate. A main-branch commit marked `[deploy-oss-scout]` starts the existing Worker/controller release chain only after the full test job passes. Unmarked pushes do not deploy.
+
+
+### Lightweight VPS coordinator boundary
+
+Cloudflare handles discovery, durable delivery, parallel issue context retrieval, pinned repository policy lookup, competing PR search, tracked prerequisite fact collection and PR pagination. The VPS retains authoritative candidate FIFO/rolling capacity, daily quota and dispatch locking, mechanical and semantic decision rules, settings and Feishu reconciliation. Model inference is performed by the external OpenJev API; the VPS only submits the request and validates the response. GitHub Actions exclusively owns repair, build, test and trusted publishing. The architecture intentionally does not require duplicating the authoritative ledger in D1 or replacing the coordinator with Workflows.

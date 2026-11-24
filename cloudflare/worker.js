@@ -258,7 +258,7 @@ function equalToken(expected, actual) {
 class EdgeRateLimit extends Error {
   constructor(seconds) { super("GitHub rate limited"); this.seconds = seconds; }
 }
-async function edgeGithub(env, path, budget, payload) {
+async function edgeGithub(env, path, budget, payload, optional = false) {
   if (budget.remaining <= 0) throw new Error("edge read budget exhausted");
   budget.remaining--;
   const response = await fetch("https://api.github.com" + path, {
@@ -279,6 +279,7 @@ async function edgeGithub(env, path, budget, payload) {
       ? Number(response.headers.get("x-ratelimit-reset")) - Date.now() / 1000 : 0;
     throw new EdgeRateLimit(Math.max(60, Math.ceil(retry), Math.ceil(reset || 0)));
   }
+  if (optional && response.status === 404) return null;
   if (!response.ok || errors.length || !result) throw new Error("incomplete GitHub evidence");
   return result;
 }
@@ -349,9 +350,84 @@ async function edgePrSnapshot(env, body, budget) {
   if (nodes.length !== total) throw new Error("incomplete PR snapshot");
   return jsonResponse({totalCount: total, nodes, pageInfo: {hasNextPage: false, endCursor: null}});
 }
+function monitoredRepo(env, repo) {
+  return typeof repo === "string" && /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo)
+    && (env.TRACKED_REPOS || env.REPOS || "").split(",").some(name => name.trim().toLowerCase() === repo.toLowerCase());
+}
+const POLICY_PATHS = {
+  security: ["SECURITY.md", ".github/SECURITY.md", "docs/SECURITY.md"],
+  contributing: ["CONTRIBUTING.md", ".github/CONTRIBUTING.md", "docs/CONTRIBUTING.md", "CONTRIBUTING.rst", "CONTRIBUTING"],
+};
+async function edgeDocument(env, repo, path, ref, budget) {
+  const suffix = ref ? "?ref=" + encodeURIComponent(ref) : "";
+  const doc = await edgeGithub(env, "/repos/" + repo + "/contents/" + path + suffix, budget, undefined, true);
+  if (doc === null) return null;
+  if (doc.type !== "file" || doc.encoding !== "base64" || typeof doc.sha !== "string" || !doc.sha ||
+      !Number.isSafeInteger(doc.size) || doc.size < 0 || doc.size > 1000000 || typeof doc.content !== "string")
+    throw new Error("incomplete policy document");
+  const bytes = Uint8Array.from(atob(doc.content.replace(/\s+/g, "")), c => c.charCodeAt(0));
+  if (bytes.length !== doc.size) throw new Error("policy document length mismatch");
+  return {repository:repo, path, sha:doc.sha, content:new TextDecoder("utf-8",{fatal:true}).decode(bytes)};
+}
+async function edgeRepositoryPolicy(env, body, budget) {
+  const repo = body.repo;
+  if (!monitoredRepo(env, repo)) return jsonResponse({error:"invalid or unmonitored repository"},400);
+  const meta = await edgeGithub(env, "/repos/" + repo, budget);
+  if (typeof meta.default_branch !== "string" || !meta.default_branch) throw new Error("missing default branch");
+  const head = await edgeGithub(env, "/repos/" + repo + "/commits/" + encodeURIComponent(meta.default_branch), budget);
+  if (!/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(head.sha || "")) throw new Error("missing policy revision");
+  const results = await Promise.all(Object.entries(POLICY_PATHS).map(async ([kind, paths]) => {
+    for (const path of paths) {
+      const found = await edgeDocument(env, repo, path, head.sha, budget);
+      if (found) return {kind, ...found};
+    }
+    const inherited = await edgeDocument(env, repo.split("/")[0] + "/.github",
+      kind === "security" ? "SECURITY.md" : "CONTRIBUTING.md", null, budget);
+    return inherited ? {kind, ...inherited} : {kind, absent:true};
+  }));
+  return jsonResponse({complete:true, documents:results.filter(x=>!x.absent),
+    confirmed_absent:results.filter(x=>x.absent).map(x=>x.kind)});
+}
+async function edgeCompetitionSearch(env, body, budget) {
+  const {repo, terms} = body;
+  if (!monitoredRepo(env, repo) || !Array.isArray(terms) || !terms.length || terms.length > 4 ||
+      terms.some(t=>typeof t!=="string" || !/^[A-Za-z0-9_.-]{1,300}$/.test(t)) ||
+      new Set(terms).size !== terms.length)
+    return jsonResponse({error:"invalid competition query"},400);
+  const results = await Promise.all(terms.map(async term => {
+    const query = "repo:" + repo + " is:pr is:open " + term;
+    const response = await edgeGithub(env, "/search/issues?q=" + encodeURIComponent(query) + "&per_page=10", budget);
+    if (!Array.isArray(response.items) || response.incomplete_results === true)
+      throw new Error("incomplete competition search");
+    return {term, items:response.items};
+  }));
+  return jsonResponse({complete:true, results});
+}
+async function edgeReference(env, body, budget) {
+  const {repo, number} = body;
+  if (!monitoredRepo(env, repo) || !Number.isSafeInteger(number) || number < 1)
+    return jsonResponse({error:"invalid or unmonitored reference"},400);
+  const pull = await edgeGithub(env, "/repos/" + repo + "/pulls/" + number, budget, undefined, true);
+  if (pull !== null) {
+    if (!["open","closed"].includes(pull.state) || !Object.hasOwn(pull,"merged_at") || pull.number !== number)
+      throw new Error("incomplete reference PR");
+    return jsonResponse({complete:true, fact:{repo,number,kind:"pull_request",state:pull.state,merged:Boolean(pull.merged_at),
+      url:pull.html_url ?? null,base_ref:pull.base?.ref ?? null,head_sha:pull.head?.sha ?? null}});
+  }
+  const issue = await edgeGithub(env, "/repos/" + repo + "/issues/" + number, budget);
+  if (issue.pull_request || !["open","closed"].includes(issue.state) || issue.number !== number)
+    throw new Error("incomplete reference issue");
+  return jsonResponse({complete:true,fact:{repo,number,kind:"issue",state:issue.state,
+    state_reason:issue.state_reason ?? null,url:issue.html_url ?? null}});
+}
+const EDGE_READ_ROUTES = {
+  "/internal/v1/issue-context":edgeIssueContext, "/internal/v1/pr-snapshot":edgePrSnapshot,
+  "/internal/v1/repository-policy":edgeRepositoryPolicy, "/internal/v1/competition-search":edgeCompetitionSearch,
+  "/internal/v1/reference-fact":edgeReference,
+};
 async function internalRead(request, env) {
   const path = new URL(request.url).pathname;
-  if (request.method !== "POST" || !["/internal/v1/issue-context", "/internal/v1/pr-snapshot"].includes(path))
+  if (request.method !== "POST" || !Object.hasOwn(EDGE_READ_ROUTES, path))
     return jsonResponse({error:"not found"},404);
   if (!equalToken(env.INGEST_TOKEN, request.headers.get("X-Ingest-Token")))
     return jsonResponse({error:"forbidden"},403);
@@ -362,7 +438,7 @@ async function internalRead(request, env) {
     const body = JSON.parse(raw);
     if (!body || typeof body !== "object" || Array.isArray(body)) return jsonResponse({error:"bad request"},400);
     const budget = {remaining: 36};
-    return await (path.endsWith("/issue-context") ? edgeIssueContext(env, body, budget) : edgePrSnapshot(env, body, budget));
+    return await EDGE_READ_ROUTES[path](env, body, budget);
   } catch (error) {
     if (error instanceof EdgeRateLimit)
       return jsonResponse({error:"rate limited"},429,{"Retry-After":String(error.seconds)});

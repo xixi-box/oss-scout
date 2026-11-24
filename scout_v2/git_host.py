@@ -191,7 +191,8 @@ def linked_fix_prs(timeline: list, number: int, my_login: str = "xixi-box", *,
 def recheck_candidate(repo: str, number: int, *, my_login: str = "xixi-box",
                       root_cause_keywords: list[str] | None = None,
                       use_title_keywords: bool = False,
-                      screening_source: tuple | None = None) -> RecheckResult | None:
+                      screening_source: tuple | None = None,
+                      edge_root=None) -> RecheckResult | None:
     """认领前复检。任何一次取数失败 → complete=False（调用方应跳过该候选）。"""
     if screening_source is None:
         issue = gh_read([f"repos/{repo}/issues/{number}"])
@@ -292,9 +293,22 @@ def recheck_candidate(repo: str, number: int, *, my_login: str = "xixi-box",
         return hits >= need if len(weak) > 1 else hits >= 1
 
     confirmed, similar = {}, {}
-    for term in dict.fromkeys([str(number), *kws]):
+    terms = list(dict.fromkeys([str(number), *kws]))
+    remote_results = None
+    if edge_root is not None and all(re.fullmatch(r"[A-Za-z0-9_.-]{1,300}", term) for term in terms):
+        from .edge_reads import edge_read
+        edge = edge_read(edge_root, "competition-search", {"repo": repo, "terms": terms})
+        if edge is not None:
+            results = edge.get("results")
+            if (edge.get("complete") is not True or not isinstance(results, list)
+                    or [item.get("term") for item in results] != terms
+                    or any(not isinstance(item.get("items"), list) for item in results)):
+                raise RuntimeError("Cloudflare competition evidence incomplete")
+            remote_results = {item["term"]: {"items": item["items"]} for item in results}
+    for term in terms:
         q = f"repo:{repo} is:pr is:open {term}"
-        res = gh_read([f"search/issues?q={_up.quote(q, safe='')}&per_page=10"])
+        res = (remote_results[term] if remote_results is not None else
+               gh_read([f"search/issues?q={_up.quote(q, safe='')}&per_page=10"]))
         if not isinstance(res, dict):
             r.errors.append(f"pr search failed for {term!r} (non-fatal)")
             continue

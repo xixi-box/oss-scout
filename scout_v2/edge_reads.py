@@ -18,7 +18,7 @@ _LOCK = threading.Lock()
 _DISCOVERY = {}
 _BACKOFF = {}
 _WORKER_HOST = re.compile(r"https://oss-scout-hunter\.[a-z0-9-]+\.workers\.dev/?\Z")
-_ALLOWED = {"issue-context", "pr-snapshot"}
+_ALLOWED = {"issue-context", "pr-snapshot", "repository-policy", "competition-search", "reference-fact"}
 
 
 class EdgeRateLimited(RuntimeError):
