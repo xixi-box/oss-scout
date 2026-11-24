@@ -162,12 +162,8 @@ def build_repo_rows(root) -> list[dict]:
     return rows
 
 
-def pending_scan_row(key, stamp):
-    return {"key": key, "first_seen": stamp, "last_activity": stamp, "status": "待筛选"}
-
-
 def build_scan_rows(root, running_keys=(), published=None, pr_states=None, *,
-                    strict=False, worklog_cache=None, receipts=(), only_keys=None) -> list[dict]:
+                    strict=False, worklog_cache=None, only_keys=None) -> list[dict]:
     """「扫描发现」表的行：seen.json 全量镜像。
 
     这是发现层的总账——Worker 扫到的每个 issue 都在，含被规则否决和

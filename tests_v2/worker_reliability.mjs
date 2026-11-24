@@ -226,3 +226,49 @@ test('edge PR snapshot validates author and complete count', async t => {
   assert.equal(result.status,200);
   assert.equal((await result.json()).nodes.length,1);
 });
+
+
+test('durable ingress stages versions, retains failed delivery and deduplicates acknowledged replay', async t => {
+  t.after(() => mock.restoreAll());
+  let DatabaseSync;
+  try { ({ DatabaseSync } = await import('node:sqlite')); }
+  catch { t.skip('node:sqlite unavailable'); return; }
+  const db = new DatabaseSync(':memory:');
+  t.after(() => db.close());
+  const env = setup();
+  let alarm = null;
+  const storage = {
+    sql: {exec(sql, ...params) {
+      const statement = db.prepare(sql);
+      if (/^SELECT/i.test(sql)) return {toArray:()=>statement.all(...params)};
+      statement.run(...params); return {};
+    }},
+    transactionSync(fn) { db.exec('BEGIN'); try {fn(); db.exec('COMMIT');} catch(e){db.exec('ROLLBACK');throw e;} },
+    async getAlarm(){return alarm;}, async setAlarm(value){alarm=value;}, async deleteAlarm(){alarm=null;},
+  };
+  const stage = object => new Request('https://internal/stage',{method:'POST',body:JSON.stringify({issues:[object]})});
+  const item = {repo:'a/b',number:1,updated_at:NOW};
+  let ingress = new worker.IssueIngress({storage},env);
+  assert.equal((await ingress.fetch(stage(item))).status,200);
+  assert.ok(alarm);
+  assert.equal((await ingress.fetch(stage(item))).status,200);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM outbox').get().n,1);
+  mock.method(globalThis,'fetch',async ()=>response({},503));
+  await assert.rejects(ingress.alarm(),/receipt unavailable/);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM outbox WHERE sent IS NULL').get().n,1);
+  assert.ok(alarm);
+  mock.restoreAll();
+  let sends=0;
+  mock.method(globalThis,'fetch',async (_url,options)=>{
+    sends++;
+    assert.deepEqual(JSON.parse(options.body).issues,[item]);
+    return response({stored:1});
+  });
+  ingress = new worker.IssueIngress({storage},env);
+  await ingress.alarm();
+  assert.equal(sends,1);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM outbox WHERE sent IS NULL').get().n,0);
+  await ingress.fetch(stage(item));
+  await ingress.alarm();
+  assert.equal(sends,1);
+});

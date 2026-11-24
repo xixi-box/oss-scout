@@ -2,12 +2,12 @@
 
     Worker 粗筛 → AI 细筛 → A 级 → 实时复检 → 合规门 → **JobRouter 选后端**
     → GitHub Actions 执行 repair → 后端回传 patch + 测试报告
-    → 质量闸 → VPS 只做 push 分支 + 开 PR（唯一写者）
+    → 质量闸 → 可信 Actions 发布步骤 → VPS 对账
 
 为什么不在 VPS 本地跑（2026-10-27 重构）：
 - 本地 clone 第三方大仓库 + 装依赖会撑爆 2 核 40G 生产机（当天磁盘 100% 事故）；
 - 本地环境没有目标项目的依赖/测试框架，修复与验证都不可信；
-- 架构里本来就有 Modal/Actions 两个后端，旧实现绕过了它们（平行实现）。
+- 修复只在 GitHub Actions 执行。
 
 硬边界（不逾越）：
 - 北京时间当天创建的 PR 最多占用 5 个名额，当天关闭且未合并可补位；
@@ -469,7 +469,7 @@ def _collect(root: Path, backend: str, remote_id: str, extra: dict, timeout_s: i
     if not isinstance(env, dict):
         return {"result": None, "patch": None, "test_report": None, "raw": env}
     # 两个后端回来的形状不同：
-    #   Modal  -> {"result": {...}, "patch": "...", "test_report": {...}}
+    #   信封  -> {"result": {...}, "patch": "...", "test_report": {...}}
     #   Actions-> 摊平的 result dict（含 job_id/outcome/...），patch 与 test_report
     #             作为同级键一起回来（无 artifact 时从 stdout 信封解析）。
     # 早期实现只认 "result" 键，Actions 的 patch 因此被当成 None 丢掉，配额一满就
@@ -985,7 +985,7 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen
         return _abort_release(f"no model resolved: {str(e)[:160]}",
                              give_back=True)   # 配置/凭证问题
     # 路由器会选后端；只有 Actions 能自己写回（runner 有稳定出网 + PAT），
-    # Modal 产出的补丁仍由控制器发布。这里先按路由结论决定要不要带 publish 配置。
+    # Actions 路由确认后才附可信发布配置。
     try:
         decision = _build_router(root, job, eng).route(job.to_dict())
     except Exception as e:  # noqa: BLE001
@@ -1099,7 +1099,7 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen
 
     # ---- 发布：优先用 runner 侧已完成的推送 ----
     # Actions 后端在 payload 带 publish 配置时会自己 push+PR，并把结果放进信封。
-    # 这样 VPS 完全不碰 GitHub 写接口，也就没有出网单点。Modal 后端仍由控制器发布。
+    # 这样 VPS 完全不碰 GitHub 写接口，也就没有出网单点。
     if receipt:
         pr_url = receipt["html_url"]
         summary["steps"].append("published on runner")

@@ -47,12 +47,12 @@ def test_scan_receipt_timestamp_survives_screening(intake):
         key, stamp = pending_scan_receipts(ds.root)[0]
         with (ds.root / "state/seen.json").open("w", encoding="utf-8") as stream:
             json.dump({}, stream)
-        assert build_scan_rows(ds.root, strict=True, receipts=[(key, stamp)]) == []
+        assert build_scan_rows(ds.root, strict=True) == []
         with patch("scout_v2.workers.openjev.OpenJevClient") as cls:
             cls.return_value.score_issue.return_value = {"usable": False, "reason": "not eligible"}
             assert d.ingest_cloudflare_issues(ds, [issue], first_received_at=stamp) == (0, [])
         # A receipt read before screening finished cannot hide its final result.
-        row, = build_scan_rows(ds.root, strict=True, receipts=[(key, stamp)])
+        row, = build_scan_rows(ds.root, strict=True)
         after = scan_row_to_fields(row)
         from scout_v2.feishu_bitable import _timestamp
         assert after["发现时间"] == _timestamp(stamp)

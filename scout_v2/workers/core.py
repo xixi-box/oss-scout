@@ -1,7 +1,7 @@
 """统一执行器入口（计划 §5）：
 
     python -m scout_v2.workers.core --job /workspace/job.json --out /workspace/artifacts
-    python -m scout_v2.workers.core --job-b64 <b64> --out ... --emit-envelope   # Modal Sandbox 用
+    python -m scout_v2.workers.core --job-b64 <b64> --out ... --emit-envelope   # 兼容 job envelope
 
 本入口在本地/云端执行**同一份**模式逻辑；GitHub 写能力不存在于本文件，
 发布由可信 runner／控制器完成。
@@ -9,7 +9,7 @@
 - reproduce：隔离脱敏环境跑最小失败测试（base 失败 → reproduced_on_base）。
 - repair：OpenCode/Codex 自测、自查后收集完整补丁；不独立复跑或额外 AI 复审。
 - review/ci：仅兼容历史模式的未实现声明，不是自动新 PR 流程。
-- --emit-envelope：stdout 单行信封（Modal Sandbox 无持久卷，结果走 stdout）。
+- --emit-envelope：stdout 单行信封（GitHub Actions 日志传输）。
 """
 from __future__ import annotations
 
@@ -55,8 +55,7 @@ def ensure_repo(repo_dir: Path, repo: str, base_sha: str) -> Path:
     if token:
         subprocess.run(["git", "-C", str(repo_dir), "remote", "set-url",
                         "origin", plain_url], capture_output=True, timeout=60)
-    # Modal Sandbox 以 root 跑，镜像内 /workspace 属于 worker → dubious ownership；
-    # 本地 docker（worker 用户）同理可能有属主差。对当前用户加豁免（仅本沙箱内生效）。
+    # 容器用户与工作目录属主可能不同。对当前用户加豁免（仅本沙箱内生效）。
     subprocess.run(["git", "config", "--global", "--add", "safe.directory",
                     str(repo_dir)], capture_output=True, timeout=60)
     co = subprocess.run(["git", "-C", str(repo_dir), "checkout", "--detach", base_sha],
@@ -137,9 +136,6 @@ def emit_envelope(result: Result, out_dir: Path) -> None:
             envelope["test_report"] = json.loads(report.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             pass
-    findings = out_dir / "findings.json"
-    if findings.is_file():
-        envelope["findings"] = json.loads(findings.read_text(encoding="utf-8"))
     print(RESULT_MARKER + json.dumps(envelope, ensure_ascii=False))
 
 
