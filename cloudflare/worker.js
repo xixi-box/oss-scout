@@ -77,6 +77,18 @@ async function checkpoint(env, key, previous, completed, now) {
 }
 
 async function deliverIssues(env, issues, repoCount, now, budget) {
+  // The SQLite-backed outbox accepts each issue version durably before advancing
+  // a repository watermark. Delivery and retry no longer depend on a VPS pull.
+  if (env.INGRESS && issues.length) {
+    const stub = env.INGRESS.get(env.INGRESS.idFromName("issue-ingress-v1"));
+    for (let offset = 0; offset < issues.length; offset += 20) {
+      const response = await stub.fetch("https://internal/stage", {
+        method: "POST", body: JSON.stringify({issues: issues.slice(offset, offset + 20)}),
+      });
+      if (!response.ok) throw new Error("durable ingress failed");
+    }
+    return;
+  }
   for (let offset = 0; offset < issues.length; offset += 100) {
     const payload = JSON.stringify({ repos_scanned: repoCount,
       scanned_at: now.toISOString(), issues: issues.slice(offset, offset + 100) });
@@ -355,5 +367,77 @@ async function internalRead(request, env) {
     if (error instanceof EdgeRateLimit)
       return jsonResponse({error:"rate limited"},429,{"Retry-After":String(error.seconds)});
     return jsonResponse({error:"edge read unavailable"},503);
+  }
+}
+
+
+// Durable delivery boundary. The VPS remains the authoritative consumer and
+// deduplicates retries by issue version. No publication authority lives here.
+export class IssueIngress {
+  constructor(state, env) {
+    this.state = state;
+    this.env = env;
+    this.sql = state.storage.sql;
+    this.sql.exec("CREATE TABLE IF NOT EXISTS outbox (key TEXT PRIMARY KEY, payload TEXT NOT NULL, created INTEGER NOT NULL, sent INTEGER)");
+    this.sql.exec("CREATE INDEX IF NOT EXISTS outbox_pending ON outbox(sent,created)");
+    this.flushing = null;
+  }
+  async fetch(request) {
+    if (request.method !== "POST" || new URL(request.url).pathname !== "/stage")
+      return jsonResponse({error:"not found"},404);
+    const {issues} = await request.json();
+    if (!Array.isArray(issues) || !issues.length || issues.length > 20)
+      return jsonResponse({error:"invalid batch"},400);
+    const entries = [];
+    for (const issue of issues) {
+      if (!issue || typeof issue.repo !== "string" || !Number.isSafeInteger(issue.number) || issue.number < 1)
+        return jsonResponse({error:"invalid issue"},400);
+      const payload = JSON.stringify(issue);
+      if (new TextEncoder().encode(payload).length > 256 * 1024)
+        return jsonResponse({error:"issue too large"},413);
+      const bytes = await crypto.subtle.digest("SHA-256",new TextEncoder().encode(payload));
+      const key = Array.from(new Uint8Array(bytes), b => b.toString(16).padStart(2,"0")).join("");
+      entries.push([key,payload]);
+    }
+    // Install an alarm before accepting writes; input gates serialize storage
+    // operations. The alarm also survives a lost Worker response or restart.
+    const alarm = await this.state.storage.getAlarm();
+    if (alarm === null) await this.state.storage.setAlarm(Date.now() + 1000);
+    this.state.storage.transactionSync(() => {
+      for (const [key,payload] of entries)
+        this.sql.exec("INSERT OR IGNORE INTO outbox(key,payload,created) VALUES(?,?,?)",key,payload,Date.now());
+    });
+    // Alarm owns delivery; this request returns only after durable insertion.
+    return jsonResponse({stored:entries.length});
+  }
+  async alarm() {
+    if (this.flushing) return this.flushing;
+    this.flushing = this.flush().finally(() => {this.flushing = null;});
+    return this.flushing;
+  }
+  async flush() {
+    // Schedule a fallback before any network await; failed sends retain rows.
+    await this.state.storage.setAlarm(Date.now() + 60000);
+    for (let n=0;n<4;n++) {
+      const rows = this.sql.exec("SELECT key,payload FROM outbox WHERE sent IS NULL ORDER BY created,key LIMIT 20").toArray();
+      if (!rows.length) break;
+      if (!this.env.INGEST_URL || !this.env.INGEST_TOKEN) throw new Error("ingress destination unavailable");
+      const response = await fetch(this.env.INGEST_URL,{
+        method:"POST",redirect:"error",signal:AbortSignal.timeout(10000),
+        headers:{"Content-Type":"application/json","X-Ingest-Token":this.env.INGEST_TOKEN},
+        body:JSON.stringify({issues:rows.map(row=>JSON.parse(row.payload))}),
+      });
+      if (!response.ok) throw new Error("controller receipt unavailable");
+      const result = await response.json();
+      if (result.stored !== rows.length) throw new Error("incomplete controller receipt");
+      this.state.storage.transactionSync(() => {
+        for (const row of rows) this.sql.exec("UPDATE outbox SET sent=?,payload='' WHERE key=?",Date.now(),row.key);
+      });
+    }
+    // Keep version tombstones for seven days to suppress overlapping scans.
+    this.sql.exec("DELETE FROM outbox WHERE sent IS NOT NULL AND sent<?",Date.now()-7*86400000);
+    const pending = this.sql.exec("SELECT 1 FROM outbox WHERE sent IS NULL LIMIT 1").toArray().length;
+    if (pending) await this.state.storage.setAlarm(Date.now()+1000);
+    else await this.state.storage.deleteAlarm();
   }
 }

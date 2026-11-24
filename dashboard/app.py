@@ -402,20 +402,25 @@ def create_app(root: Path | None = None, gh_runner=None,
 
     def _intake_loop():
         """Recoverable background AI screening; request handlers only store input."""
+        turn = 0
+        intake_turn_lock = _thr.Lock()
+
         def _loop():
+            nonlocal turn
             from scout_v2.state_store import IssueInbox
             if os.environ.get("OSSCOUT_DISABLE_AUTO_REPAIR") == "1":
                 return
-            turn = 0
             while True:
                 inbox = None
                 try:
                     inbox = IssueInbox(root)
-                    row = inbox.take(prefer_new=turn < 3)
+                    with intake_turn_lock:
+                        row = inbox.take(prefer_new=turn < 3)
+                        if row:
+                            turn = (turn + 1) % 4
                     if not row:
                         time.sleep(2)
                         continue
-                    turn = (turn + 1) % 4
                     key, payload, version, attempts = row
                     try:
                         queue = json.loads((root / "queue/candidates.json").read_text(encoding="utf-8"))
@@ -456,7 +461,14 @@ def create_app(root: Path | None = None, gh_runner=None,
                 finally:
                     if inbox is not None:
                         inbox.close()
-        _thr.Thread(target=_loop, daemon=True, name="issue-screening").start()
+        # Network-bound context retrieval and AI calls may overlap; the SQLite
+        # lease and existing queue transaction still serialize admission.
+        try:
+            concurrency = max(1, min(3, int(os.environ.get("OSSCOUT_SCREENING_WORKERS", "2"))))
+        except ValueError:
+            concurrency = 2
+        for index in range(concurrency):
+            _thr.Thread(target=_loop, daemon=True, name=f"issue-screening-{index}").start()
 
 
     bitable_cache = {}

@@ -250,3 +250,5 @@ Camel Quarkus 优先局部 JVM 修复，依赖原生镜像、外部服务或凭�
 ### Cloudflare read offload
 
 Worker also exposes authenticated, bounded read-only issue-context and PR-snapshot endpoints. The controller automatically discovers the Worker and prefers complete parallel issue/context reads and PR pagination on Cloudflare; a temporarily unavailable or old Worker uses the existing local read path. All policy decisions, candidate and publication transactions remain on the single VPS controller pending a separately verified state migration. See [cloudflare/README.md](cloudflare/README.md).
+
+Issue discovery now uses a SQLite-backed Cloudflare Durable Object outbox for durable issue delivery and alarm retries. The controller processes up to two network-bound screening tasks concurrently (configurable from one to three with `OSSCOUT_SCREENING_WORKERS`), independently of the one-repair-at-a-time publication gate. A main-branch commit marked `[deploy-oss-scout]` starts the existing Worker/controller release chain only after the full test job passes. Unmarked pushes do not deploy.

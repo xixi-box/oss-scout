@@ -91,7 +91,7 @@ class TestModelFallback:
 class TestLocalBackend:
     def test_roundtrip(self, tmp_path):
         b = LocalBackend(tmp_path)
-        j = Job(mode="review", repo="a/b", idempotency_key="review:a:b:sha:fp",
+        j = Job(mode="review", repo="a/b", base_sha="a" * 40, idempotency_key="review:a:b:sha:fp",
                 execution_scope="project_contribution")
         jid = b.submit(j.to_dict())
         res = b.collect(jid)
