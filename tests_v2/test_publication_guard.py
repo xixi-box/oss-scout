@@ -1,6 +1,7 @@
 import hashlib
 import json
 from pathlib import Path
+import subprocess
 from types import SimpleNamespace
 
 import pytest
@@ -68,6 +69,56 @@ def test_incomplete_refresh_never_means_no_competition(monkeypatch, overrides):
     job = payload()
     evidence = guard.refresh_publication_evidence(job, job["publish"])
     assert not evidence["ok"] and evidence["failure_kind"] == "publication_evidence_unavailable"
+    assert evidence["diagnostics"]["failed_checks"] == (
+        ["pr_search"] if overrides.get("errors") else ["discussion_snapshot"])
+
+
+def test_github_read_retries_timeout_and_5xx_and_reports_recovery(monkeypatch, caplog):
+    from scout_v2 import git_host
+
+    calls, sleeps = [], []
+
+    def run(command, **kwargs):
+        calls.append(command)
+        assert command[:3] == ["gh", "api", "--include"]
+        if len(calls) == 1:
+            raise subprocess.TimeoutExpired(["hidden-credential"], 45)
+        if len(calls) == 2:
+            return SimpleNamespace(returncode=1, stdout="HTTP/2.0 503 Service Unavailable\n\n{}",
+                                   stderr="hidden-credential")
+        return SimpleNamespace(returncode=0, stdout='HTTP/2.0 200 OK\n\n[]', stderr="")
+
+    monkeypatch.setattr(git_host.subprocess, "run", run)
+    monkeypatch.setattr(git_host.time, "sleep", sleeps.append)
+    assert git_host.gh_read(["repos/acme/project/issues/7/timeline?per_page=100&page=2"]) == []
+    assert len(calls) == 3 and sleeps == [3, 6]
+    assert "timeline page=2 attempt=1/3 http=unknown reason=timeout" in caplog.text
+    assert "timeline page=2 attempt=2/3 http=503 reason=http_error" in caplog.text
+    assert "timeline page=2 attempt=3/3 http=200 elapsed=" in caplog.text
+    assert "hidden-credential" not in caplog.text
+
+
+@pytest.mark.parametrize("status,headers,body,retries,sleeps", [
+    (200, "", {"incomplete_results": True, "items": []}, 2, [3, 6]),
+    (429, "Retry-After: 40\n", {}, 2, [40, 50]),
+    (429, "Retry-After: 120\n", {}, 0, []),
+    (404, "", {}, 0, []),
+])
+def test_github_read_stops_after_two_retries_or_a_terminal_error(monkeypatch, caplog, status, headers, body, retries, sleeps):
+    from scout_v2 import git_host
+
+    calls, waited = [], []
+
+    def run(command, **kwargs):
+        calls.append(command)
+        return SimpleNamespace(returncode=int(status != 200), stderr="",
+                               stdout=f"HTTP/2.0 {status} response\n{headers}\n" + json.dumps(body))
+
+    monkeypatch.setattr(git_host.subprocess, "run", run)
+    monkeypatch.setattr(git_host.time, "sleep", waited.append)
+    assert git_host.gh_read(["search/issues?q=untrusted-query"]) is None
+    assert len(calls) == retries + 1 and waited == sleeps
+    assert "untrusted-query" not in caplog.text
 
 
 def test_assignment_requirement_and_account_mismatch_are_explicit(monkeypatch):

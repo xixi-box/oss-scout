@@ -8,11 +8,15 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 import subprocess
+import time
 from dataclasses import dataclass, field
 from typing import Any
 from .contribution_intent import WORK_INTENT_PATTERN, claim_evidence
+
+_LOG = logging.getLogger(__name__)
 
 RE_CLAIM = re.compile(
     r"\bi\s?(?:'m\s+(?:working|on\s+it)|(?:'ll|will|'d\s+like\s+to)\s+(?:fix|work\s+on|take|handle|implement))\b"
@@ -88,24 +92,76 @@ def own_issue_claim(comment: dict, author: str = "xixi-box") -> bool:
 
 
 def gh_read(args: list[str], max_retries: int = 2) -> Any | None:
-    """只读 gh api 调用。尊重 Retry-After 语义的退避；失败返回 None。"""
-    cmd = ["gh", "api"] + args
-    for attempt in range(max_retries + 1):
+    """Retry transient read failures and log only allowlisted request metadata."""
+    route, _, query = args[0].partition("?")
+    endpoint = route if re.fullmatch(r"[A-Za-z0-9_./-]+", route) else "github_api"
+    page = re.search(r"(?:^|&)page=([0-9]+)(?:&|$)", query)
+    if page or route.endswith(("/comments", "/timeline")):
+        endpoint += f" page={page[1] if page else 1}"
+    command = ["gh", "api", "--include", *args]
+    total = max_retries + 1
+    for attempt in range(1, total + 1):
+        started = time.monotonic()
+        status = None
+        headers = {}
+        limited = False
         try:
-            p = subprocess.run(cmd, capture_output=True, text=True,
+            p = subprocess.run(command, capture_output=True, text=True,
                                encoding="utf-8", errors="replace", timeout=45)
         except subprocess.TimeoutExpired:
-            return None
-        if p.returncode == 0:
-            return json.loads(p.stdout)
-        err = p.stderr.lower()
-        if "secondary rate limit" in err:
-            import time
-            time.sleep(25 * (attempt + 1))
-            continue
-        if attempt < max_retries:
-            import time
-            time.sleep(3 * (attempt + 1))
+            reason = "timeout"
+        except OSError:
+            reason = "cli_unavailable"
+        else:
+            raw = p.stdout
+            parts = re.split(r"\r?\n\r?\n", raw, maxsplit=1)
+            if len(parts) == 2 and (match := re.match(r"HTTP/\S+ ([0-9]{3})\b", parts[0])):
+                status = int(match[1])
+                headers = {key.lower(): value.strip() for key, _, value in
+                           (line.partition(":") for line in parts[0].splitlines()[1:])}
+                raw = parts[1]
+            stderr = p.stderr.lower()
+            limited = (status == 429 or "rate limit" in stderr
+                       or (status == 403 and headers.get("x-ratelimit-remaining") == "0"))
+            if limited:
+                reason = "rate_limited"
+            elif p.returncode or (status is not None and not 200 <= status < 300):
+                reason = "http_error" if status is not None else "transport_or_cli_error"
+                if status is None and any(marker in stderr for marker in ("tls", "certificate", "ssl")):
+                    reason = "tls_error"
+            else:
+                try:
+                    value = json.loads(raw)
+                except ValueError:
+                    reason = "invalid_json"
+                else:
+                    invalid_search = route == "search/issues" and (
+                        not isinstance(value, dict) or value.get("incomplete_results") is not False
+                        or not isinstance(value.get("items"), list))
+                    invalid_page = route.endswith(("/comments", "/timeline")) and not isinstance(value, list)
+                    if not invalid_search and not invalid_page:
+                        if attempt > 1:
+                            _LOG.warning("GitHub read recovered endpoint=%s attempt=%d/%d http=%s elapsed=%.2fs",
+                                         endpoint, attempt, total, status or "unknown", time.monotonic() - started)
+                        return value
+                    reason = "incomplete_search" if invalid_search else "invalid_page"
+
+        delay = (25 if limited else 3) * attempt
+        retry_after = headers.get("retry-after", "")
+        reset = headers.get("x-ratelimit-reset", "")
+        if retry_after.isdecimal():
+            delay = max(delay, int(retry_after))
+        if limited and headers.get("x-ratelimit-remaining") == "0" and reset.isdecimal():
+            delay = max(delay, int(reset) - int(time.time()) + 1)
+        retryable = limited or status is None or status in (408, 425) or status >= 500 or reason in {
+            "invalid_json", "incomplete_search", "invalid_page"}
+        retry = attempt < total and retryable and delay <= 60
+        _LOG.warning("GitHub read failed endpoint=%s attempt=%d/%d http=%s reason=%s elapsed=%.2fs "
+                     "retry=%s wait_seconds=%d", endpoint, attempt, total, status or "unknown", reason,
+                     time.monotonic() - started, retry, delay if retry or limited else 0)
+        if not retry:
+            break
+        time.sleep(delay)
     return None
 
 

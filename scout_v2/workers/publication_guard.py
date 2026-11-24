@@ -4,6 +4,7 @@ from __future__ import annotations
 import datetime as dt
 import hashlib
 import json
+import logging
 import os
 from pathlib import Path
 import re
@@ -16,6 +17,7 @@ from .quality_gate import check_delivery_scope, check_patch_path, patch_files
 
 
 _OPEN_PR_CAPS = {"nousresearch/hermes-agent": 5}
+_LOG = logging.getLogger(__name__)
 
 
 def _valid_repo(value) -> bool:
@@ -112,9 +114,18 @@ def refresh_publication_evidence(job_dict: dict, cfg: dict) -> dict:
             return {**result, **{key: capacity[key] for key in (
                 "ok", "error", "failure_kind", "coarse_reason") if key in capacity}}
         latest = recheck_candidate(repo, number, my_login=owner, use_title_keywords=True)
-    except (OSError, ValueError, RuntimeError, TypeError, KeyError):
+    except (OSError, ValueError, RuntimeError, TypeError, KeyError) as exc:
+        _LOG.warning("Publication evidence refresh failed repo=%s issue=%s kind=%s", repo, number, type(exc).__name__)
         return blocked("publication evidence refresh failed", incomplete=True)
     if latest is None or not latest.complete or latest.errors or latest.screening_source is None:
+        errors = latest.errors if latest is not None else []
+        checks = sorted({error.split(" fetch failed", 1)[0] for error in errors
+                         if error in {"issue fetch failed", "comments fetch failed", "timeline fetch failed"}})
+        if any(error.startswith("pr search failed") for error in errors):
+            checks.append("pr_search")
+        result["diagnostics"]["failed_checks"] = checks or ["discussion_snapshot"]
+        _LOG.warning("Publication evidence incomplete repo=%s issue=%s checks=%s", repo, number,
+                     ",".join(result["diagnostics"]["failed_checks"]))
         return blocked("publication issue, comments, timeline or PR search is incomplete", incomplete=True)
     source = latest.screening_source
     if (not isinstance(source, (tuple, list)) or len(source) != 3

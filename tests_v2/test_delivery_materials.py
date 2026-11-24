@@ -70,7 +70,7 @@ def install_client(monkeypatch, *, mode="recover", clock=None):
                 report.pop("coverage")
             if mode == "manual_publication":
                 report.update(status="blocked_publication", publication_ready=False,
-                              blocker="The contributor must write the PR motivation.")
+                              blocker="The maintainer requires prior approval for this change.")
             (self.workdir / repair.RESULT_FILE).write_text(json.dumps(report))
             if mode == "completion_failed" and len(self.calls) > 1:
                 return False, ""
@@ -211,7 +211,7 @@ def test_publication_only_block_preserves_draft_and_non_publishable_patch(tmp_pa
     result = repair.run_repair(task, repo, out)
 
     assert result.outcome == "blocked"
-    assert result.unverified_items == ["manual_publication_required: The contributor must write the PR motivation."]
+    assert result.unverified_items == ["manual_publication_required: The maintainer requires prior approval for this change."]
     assert result.patch_path is None and result.test_report_path is None
     assert len(clients[0].calls) == 1
     handoff = json.loads((out / "agent-handoff.json").read_text())

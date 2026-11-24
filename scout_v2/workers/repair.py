@@ -145,15 +145,19 @@ Do not add generic AI-assistance or oss-scout promotional text. Include any
 required truthful disclosure. Keep the description focused on this diff.
 For every repository, draft the PR motivation and body yourself. If the only
 remaining concern is who writes the motivation or description, disclose Agent
-authorship truthfully and deliver the normal publishable handoff after testing
-and self-check. Do not report a wording-only blocker or wait for the contributor
-to rewrite the text. For Qdrant the publisher adds the authorship disclosure.
+authorship truthfully. For Qdrant the publisher adds the authorship disclosure.
+For PR-template attestations about a human reading, understanding, or taking
+responsibility for the change, leave unverified boxes unchecked and omit any
+unverified human claim. Template wording and unchecked attestations alone do
+not block publication. Deliver the normal publishable handoff after testing
+and self-check; set publication_ready=true if the attestation or authorship
+wording is the only outstanding item.
 If another publication prerequisite prevents posting, such as required prior
-maintainer approval or a mandatory human attestation you cannot truthfully make,
+maintainer approval or a separate GitHub permission gate,
 report the actual blocker with status="blocked_publication" and
 publication_ready=false. For a public, non-security issue, keep any permitted
 repair, test logs and working draft for the contributor. Never claim human
-authorship or human review.
+authorship, human review, or human acceptance of responsibility.
 If a real prerequisite or unavailable reproducer prevents a truthful repair,
 set status="blocked", publication_ready=false and blocker="<observed reason>"
 in OSSCOUT_RESULT.json. Do not manufacture a test or success report. Otherwise
