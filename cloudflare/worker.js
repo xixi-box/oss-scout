@@ -483,7 +483,11 @@ async function edgeFeishuIndex(env, body, budget, request) {
   }
   return jsonResponse({complete:true,rows});
 }
+async function edgeStatus(env) {
+  return jsonResponse({complete:true, ingress: Boolean(env.INGRESS), routes:Object.keys(EDGE_READ_ROUTES).map(path=>path.split("/").pop()).sort()});
+}
 const EDGE_READ_ROUTES = {
+  "/internal/v1/status":edgeStatus,
   "/internal/v1/issue-context":edgeIssueContext, "/internal/v1/pr-snapshot":edgePrSnapshot,
   "/internal/v1/repository-policy":edgeRepositoryPolicy, "/internal/v1/competition-search":edgeCompetitionSearch,
   "/internal/v1/reference-fact":edgeReference, "/internal/v1/feishu-record-index":edgeFeishuIndex,

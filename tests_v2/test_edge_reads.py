@@ -101,3 +101,10 @@ def test_feishu_token_only_sent_to_fixed_edge_index_route(tmp_path, monkeypatch)
     assert edge_reads.edge_read(tmp_path, "feishu-record-index", {}, feishu_token="temporary")["complete"]
     with pytest.raises(ValueError):
         edge_reads.edge_read(tmp_path, "issue-context", {}, feishu_token="temporary")
+
+
+def test_coordinator_image_does_not_install_remote_agent():
+    from pathlib import Path
+    dockerfile = (Path(__file__).resolve().parents[1] / "Dockerfile").read_text()
+    assert "opencode.ai/install" not in dockerfile
+    assert "codex install" not in dockerfile
