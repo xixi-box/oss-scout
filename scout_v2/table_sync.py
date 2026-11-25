@@ -13,6 +13,7 @@ SOURCE_TABLES = {
     "configs/repositories.yaml": {"repos"},
     "configs/lane_overrides.yaml": {"repos"},
     "state/pool_audit.json": {"repos"},
+    "state/repo_merge_counts.json": {"repos"},
 }
 _feeds = weakref.WeakValueDictionary()
 _feeds_lock = threading.Lock()

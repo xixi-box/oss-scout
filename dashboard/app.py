@@ -132,7 +132,8 @@ def _sync_bitables(root: Path, *, ds=None, activity_only=False, activity_cache=N
                 files = {
                     "candidates": ("queue/candidates.json",),
                     "scan": ("queue/candidates.json", "state/seen.json"),
-                    "repos": ("configs/repositories.yaml", "configs/lane_overrides.yaml", "state/pool_audit.json"),
+                    "repos": ("configs/repositories.yaml", "configs/lane_overrides.yaml", "state/pool_audit.json",
+                              "state/repo_merge_counts.json"),
                 }.get(name, ())
                 stamps = []
                 for file in files:
@@ -167,6 +168,10 @@ def _sync_bitables(root: Path, *, ds=None, activity_only=False, activity_cache=N
                     if name == "pr" and activity_cache is not None:
                         pr_feed = activity_cache.setdefault("pr:github", PullRequestFeed(root=root))
                         github_rows = pr_feed.snapshot(full=full_reconcile)
+                        try:
+                            mod.update_repo_merge_counts(root, github_rows)
+                        except (OSError, ValueError) as exc:
+                            _audit(root, "repo_merge_counts_error", "repos", type(exc).__name__)
                         signature = (*signature, pr_feed.version)
                         if not full_reconcile and signature == activity_cache.get(signature_key):
                             results[name] = {"unchanged": True}

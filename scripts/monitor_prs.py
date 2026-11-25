@@ -5,6 +5,7 @@ import os
 import re
 import sqlite3
 import subprocess
+from collections import Counter
 from pathlib import Path
 from scout_v2.state_store import STAGED_FULL_REASON
 ROOT = Path(__file__).resolve().parents[1]
@@ -117,18 +118,36 @@ def build_pr_rows(root, *, github_rows=None, read_pr=None) -> list[dict]:
 
 
 
-def build_repo_rows(root) -> list[dict]:
-    """「仓库池」表的行：监控名单 ⊕ 池审计（语言/stars/最近 push）。
+def update_repo_merge_counts(root, github_rows: list[dict]) -> None:
+    """Persist counts from the latest complete, merged PR feed snapshot."""
+    from scout_v2.state_store import atomic_json_write
 
-    两个来源都是本地文件（configs/repositories.yaml + state/pool_audit.json），
-    零 GitHub 调用——池子变化本来就低频，审计文件跑 audit_pool 时刷新。
-    """
+    counts = dict(Counter(row["repo"].lower() for row in github_rows
+                          if row["state"] == "merged" and not ledger_excludes(row)))
+    path = root / "state/repo_merge_counts.json"
+    try:
+        if json.loads(path.read_text(encoding="utf-8")) == counts:
+            return
+    except (FileNotFoundError, ValueError):
+        pass
+    atomic_json_write(path, counts)
+
+
+def build_repo_rows(root) -> list[dict]:
+    """Build repository pool rows from the local roster, audit and PR counts."""
     import yaml
     cfg_path = root / "configs" / "repositories.yaml"
     if not cfg_path.exists():
         cfg_path = ROOT / "configs" / "repositories.yaml"
     cfg = yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {}
     repos = cfg.get("repositories") or {}
+    try:
+        merge_counts = json.loads((root / "state/repo_merge_counts.json").read_text(encoding="utf-8"))
+        if (not isinstance(merge_counts, dict) or any(type(count) is not int or count < 0
+                                                      for count in merge_counts.values())):
+            raise ValueError("invalid repository merge counts")
+    except FileNotFoundError:
+        merge_counts = None  # Roster bootstrap before the first full PR snapshot.
 
     audit: dict = {}
     for path in (root / "state" / "pool_audit.json",
@@ -153,7 +172,8 @@ def build_repo_rows(root) -> list[dict]:
             "pool": spec.get("pool") or "formal",
             "issue_scan": spec.get("issue_scan", True),
             "purpose": spec.get("purpose") or "",
-            "merged_by_us": spec.get("merged_by_us", 0),
+            "merged_by_us": (merge_counts.get(repo.lower(), 0) if merge_counts is not None
+                             else spec.get("merged_by_us", 0)),
             "lang": a.get("lang") or "",
             "stars": a.get("stars"),
             "pushed": a.get("pushed") or "",

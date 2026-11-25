@@ -238,6 +238,56 @@ def test_snapshot_failure_does_not_advance_cache_and_full_reconcile_bypasses_cac
     assert sync()["pr"]["updated"] == 1
 
 
+def test_repo_merge_counts_follow_the_shared_pr_feed(tmp_path, monkeypatch):
+    from dashboard.app import _sync_bitables
+    from scout_v2 import feishu_bitable as fb, pr_feed
+
+    (tmp_path / "configs").mkdir()
+    (tmp_path / "configs/repositories.yaml").write_text(
+        "repositories:\n  Example/Backend:\n    merged_by_us: 9\n  example/other: {}\n",
+        encoding="utf-8")
+    feed = subscribe(tmp_path)
+    reads, writes = [], []
+    state = "OPEN"
+
+    def github(_cursor, cutoff):
+        reads.append(cutoff)
+        if state is None:
+            raise pr_feed.PullRequestRateLimited(30)
+        row = {"repository": {"nameWithOwner": "example/backend"}, "number": 2,
+               "title": "fix", "url": "https://github.com/example/backend/pull/2", "state": state,
+               "createdAt": "2026-11-17T01:00:00Z", "updatedAt": "2026-11-17T01:10:00Z",
+               "closedAt": None}
+        return {"totalCount": 1, "nodes": [row], "pageInfo": {"hasNextPage": False}}
+
+    def write(_root, rows, **options):
+        writes.append((options["table_name"], rows))
+        return {"updated": len(rows)}
+
+    monkeypatch.setattr(pr_feed, "_read_page", github)
+    monkeypatch.setattr(fb, "configured", lambda _: True)
+    monkeypatch.setattr(fb, "sync_table", write)
+    cache = {}
+    _sync_bitables(tmp_path, table_names={"pr"}, activity_cache=cache)
+    assert feed.take() == {"repos"}
+    _sync_bitables(tmp_path, table_names={"repos"}, activity_cache=cache)
+    assert [row["merged_by_us"] for row in writes[-1][1]] == [0, 0]
+
+    state = "MERGED"
+    _sync_bitables(tmp_path, table_names={"pr"}, activity_cache=cache, full_reconcile=False)
+    assert feed.take() == {"repos"}
+    _sync_bitables(tmp_path, table_names={"repos"}, activity_cache=cache, full_reconcile=False)
+    assert [row["merged_by_us"] for row in writes[-1][1]] == [1, 0]
+    assert len(reads) == 2
+
+    state = None
+    result = _sync_bitables(tmp_path, table_names={"pr"}, activity_cache=cache)
+    assert "error" in result["pr"] and not feed.take()
+    _sync_bitables(tmp_path, table_names={"repos"}, activity_cache={})
+    assert [row["merged_by_us"] for row in writes[-1][1]] == [1, 0]
+    assert len(reads) == 3
+
+
 def test_new_pr_backfill_uses_confirmed_url_and_closed_state_ignores_search_lag(tmp_path, monkeypatch):
     from scripts import monitor_prs as monitor
     ledger = ClaimLedger(tmp_path / "state/scout_v2.sqlite3")
