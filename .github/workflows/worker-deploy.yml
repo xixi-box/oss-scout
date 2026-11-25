@@ -88,7 +88,7 @@ jobs:
           assert len(set(repos)) == 56 and repos == cfg["vars"]["REPOS"].split(","), "live roster mismatch"
           tracked = next(b["text"] for b in bindings if b["name"] == "TRACKED_REPOS").split(",")
           assert len(set(tracked)) == 64 and tracked == cfg["vars"]["TRACKED_REPOS"].split(","), "live PR roster mismatch"
-          assert {r.lower() for r in tracked} - {r.lower() for r in repos} == {"clickhouse/clickhouse"}
+          assert set(repos) < set(tracked), "issue scan roster must be a subset of the tracked roster"
           schedules = [item["cron"] for item in read("/schedules")["schedules"]]
           assert schedules == ["* * * * *"], "live schedule mismatch"
           print("Live Worker: exact 56-repository issue scan every minute; PR comment polling removed (64 tracked repositories)")
