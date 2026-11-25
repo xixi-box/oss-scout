@@ -863,6 +863,31 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen
     from dashboard.data import (coarse_issue_blockers, fine_screen_issue, fine_screening_context,
                                 issue_screening_snapshot, live_issue_blockers)
 
+    if reuse_screen and entry.get("context_complete"):
+        # Recheck the cheap issue metadata before trusting the just-completed
+        # screening. An assignment can land while the model is answering or
+        # while the controller waits for its persisted handoff.
+        issue = gh_read([f"repos/{repo}/issues/{number}"], max_retries=0)
+        if (not isinstance(issue, dict) or issue.get("number") != number
+                or issue.get("state") not in ("open", "closed")
+                or not isinstance(issue.get("assignees"), list)
+                or not isinstance(issue.get("labels"), list)):
+            reason = "pre-start issue metadata unavailable"
+            mark_candidate(root, key, "staged", extra={
+                "abort_reason": reason,
+                "screen_retry_at": (business_now() + dt.timedelta(minutes=5)).isoformat()})
+            return _abort_release(reason)
+        fresh_metadata = issue_screening_snapshot(entry, issue, [])
+        blockers = coarse_issue_blockers(eng, fresh_metadata, lane=lane)
+        if blockers:
+            reason = ", ".join(blockers)
+            log(root, "prestart_coarse_screen", key, reason)
+            mark_candidate(root, key, "coarse_blocked", extra={
+                "coarse_reason": reason, "abort_reason": reason, "blockers": blockers,
+                "assignees": fresh_metadata["assignees"]})
+            return _abort_release("coarse screening blocked: " + reason)
+        reuse_screen = bool(issue.get("updated_at") and issue["updated_at"] == entry.get("updated_at"))
+
     if reuse_screen:
         summary["steps"].append("reused live intake screening")
     else:
@@ -1072,7 +1097,9 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen
                              give_back=True)   # 路由层异常
     if decision.backend != "github_actions":
         return _abort_release("no GitHub Actions repair backend")
-    job.publish = _build_publish_cfg(repo, number, base_sha, entry)
+    context = fresh if fresh is not None else entry
+    job.publish = _build_publish_cfg(repo, number, base_sha, {
+        **entry, "issue_item_scope": context.get("issue_item_scope") or {}})
     if assignment_rule.get("base_branch"):
         job.publish["base_branch"] = assignment_rule["base_branch"]
     if assignment_rule.get("requires_assignment"):
@@ -1082,10 +1109,9 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen
     job.publish["branch"] += f"-{job.job_id.rsplit('-', 1)[-1][:8]}"
     job.publish["body"] += f"\n\n<!-- oss-scout-job:{job.job_id} -->"
     head = f"{FORK_OWNER}:{job.publish['branch']}"
-    context = fresh if fresh is not None else entry
     evidence = {k: context.get(k) for k in (
         "title", "body_excerpt", "reporter", "reporter_association", "labels",
-        "assignees", "issue_comments", "related_prs")}
+        "assignees", "issue_comments", "related_prs", "issue_item_scope")}
     evidence["url"] = f"https://github.com/{repo}/issues/{number}"
     context_path = root / "artifacts" / "issue-context" / f"{job.job_id}.json"
     try:
@@ -1135,6 +1161,8 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen
         res.backend = backend
     if not receipt:
         candidate = json.loads(qpath.read_text(encoding="utf-8")).get(key, {})
+        if candidate.get("status") == "coarse_blocked" and candidate.get("repair_job_id") == job.job_id:
+            return _abort_release(str(candidate["coarse_reason"]))
         if candidate.get("status") == "queue_evicted" and candidate.get("repair_job_id") == job.job_id:
             ledger.close()
             summary.update(abort=candidate.get("abort_reason"), queue_evicted=True)
@@ -1303,8 +1331,9 @@ def _build_publish_cfg(repo: str, number: int, base_sha: str,
     # 产出，runner 发布时用 result.json 里的 root_cause 补上（见
     # publish_remote._rewrite_body）。这里只留能确证的事实：关联哪个 issue、
     # 在哪个 base 上验证过。
+    scope = entry.get("issue_item_scope") or {}
     body_lines = [
-        f"Fixes #{number}",
+        f"Part of #{number}" if scope.get("covered") else f"Fixes #{number}",
         "",
         f"Verified by running the failing test at `{base_sha[:12]}` (fails) and "
         f"again with this patch applied (passes).",
@@ -1314,6 +1343,7 @@ def _build_publish_cfg(repo: str, number: int, base_sha: str,
         "upstream": repo,
         "branch": f"fix/issue-{number}-{base_sha[:7]}",
         "issue_number": number,
+        "issue_item_scope": scope,
         "title": pr_title,
         "body": "\n".join(x for x in body_lines if x is not None).strip(),
     }

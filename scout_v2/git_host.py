@@ -258,6 +258,40 @@ def linked_fix_prs(timeline: list, number: int, my_login: str = "xixi-box", *,
     return linked
 
 
+def issue_item_coverage(repo: str, number: int, body: str, timeline: list) -> dict:
+    """Recognize explicit numbered work without promoting a partial PR to a full fix."""
+    fenced = re.compile(r"(?ms)^ {0,3}(`{3,}|~{3,})[^\n]*\n.*?^ {0,3}\1[^\n]*$")
+    prose = fenced.sub("", body)
+    groups = re.findall(r"(?m)^([1-9]\d{0,2})\.\s+\S", prose)
+    items = [int(value) for value in groups]
+    if len(items) < 2 or items != list(range(1, len(items) + 1)):
+        return {}
+    references = re.compile(
+        rf"(?im)^\s*(?:fix(?:es|ed)?[ \t]+)?item[ \t]+([1-9]\d{{0,2}})"
+        rf"[ \t]+of[ \t]+(?:{re.escape(repo)})?#{number}(?![\w/])"
+        rf"(?:[ \t]+\((?:low|medium|high) severity\))?\.?[ \t]*$"
+    )
+    covered = {}
+    for event in timeline:
+        if not isinstance(event, dict) or event.get("event") != "cross-referenced":
+            continue
+        source = (event.get("source") or {}).get("issue") or {}
+        pr = source.get("pull_request")
+        url = str(source.get("html_url") or "")
+        if (not isinstance(pr, dict) or not re.fullmatch(rf"https://github\.com/{re.escape(repo)}/pull/\d+", url, re.I)
+                or not (source.get("state") == "open" or pr.get("merged_at") or source.get("merged_at"))):
+            continue
+        text = re.sub(r"(?s)<!--.*?-->", "", str(source.get("body") or ""))
+        for match in references.finditer(fenced.sub("", text)):
+            item = int(match[1])
+            if item in items:
+                covered[item] = url
+    if not covered:
+        return {}
+    return {"covered": [{"item": item, "pr": covered[item]} for item in sorted(covered)],
+            "remaining": [item for item in items if item not in covered]}
+
+
 def recheck_candidate(repo: str, number: int, *, my_login: str = "xixi-box",
                       root_cause_keywords: list[str] | None = None,
                       use_title_keywords: bool = False,

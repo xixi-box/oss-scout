@@ -73,7 +73,10 @@ class OpenJevClient:
                     "Resolve explicit prerequisite instructions against prerequisite_pull_requests CURRENT facts: "
                     "an already merged prerequisite is not pending merely because an older comment says to wait. "
                     "An ordinary related PR or untrusted suggestion is not a mandatory dependency. "
-                    "A speculative duplicate mention alone does not establish a duplicate."
+                    "A speculative duplicate mention alone does not establish a duplicate. "
+                    "For numbered issues with issue_item_scope, consider only its remaining items. "
+                    "Check related PRs and reporter comments for partial coverage within those items. "
+                    "Answer yes only if a concrete, independently actionable uncovered part remains."
                 ),
                 "criteria": {"true": "Safe and sufficiently scoped to start now",
                              "false": "Do not start now"},

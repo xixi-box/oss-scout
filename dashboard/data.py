@@ -216,6 +216,8 @@ def live_issue_blockers(check) -> list[str]:
 
 
 def issue_screening_snapshot(item: dict, issue: dict, comments: list, timeline=()) -> dict:
+    from scout_v2.git_host import issue_item_coverage
+
     related_prs = {}
     for event in timeline:
         source = (event.get("source") or {}).get("issue") or {}
@@ -227,6 +229,8 @@ def issue_screening_snapshot(item: dict, issue: dict, comments: list, timeline=(
                 "author": (source.get("user") or {}).get("login"),
             }
     return {**item, "title": issue.get("title") or "", "body_excerpt": issue.get("body") or "",
+            "issue_item_scope": issue_item_coverage(item["repo"], int(item["number"]),
+                                                    issue.get("body") or "", timeline),
             "created_at": issue.get("created_at"), "state_reason": issue.get("state_reason"),
             "reporter": (issue.get("user") or {}).get("login"),
             "reporter_association": issue.get("author_association"),
@@ -279,6 +283,9 @@ def coarse_issue_blockers(eng, it: dict, *, lane: str, live_blockers=(), root=No
                 "awaiting more info", "awaiting-more-info", "needs more info", "needs-repro"}
     labels = [str(l) for l in it.get("labels") or []]
     blockers = list(live_blockers)
+    scope = it.get("issue_item_scope") or {}
+    if scope.get("covered") and not scope.get("remaining"):
+        blockers.append("已有修复 PR · 编号子项已全部覆盖 · " + scope["covered"][0]["pr"])
     if repo not in (getattr(eng, "repos_cfg", {}).get("repositories") or {}) or lane == "unknown":
         blockers.append("repo_not_actionable")
     elif lane == "observe":
@@ -392,6 +399,8 @@ def fine_screen_issue(eng, it: dict, *, lane: str, linked_prs: list | None = Non
                          if not own_issue_claim({"user": {"login": c.get("author") or ""},
                                                  "body": c.get("body") or ""})],
             "linked_pull_requests": linked_prs or [],
+            "related_pull_requests": it.get("related_prs") or [],
+            "issue_item_scope": it.get("issue_item_scope") or {},
             "claim_evidence_in_body": claim_sents,
             "reporter_offered_fix": True if offers else None,
             "reporter_offer_evidence": offers[:5],

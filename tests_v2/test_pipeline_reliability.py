@@ -330,6 +330,69 @@ def test_prestart_coarse_blocker_stops_before_claim(tmp_path, monkeypatch, check
     assert saved["coarse_reason"] == reason
 
 
+def test_immediate_dispatch_checks_assignment_after_intake(tmp_path, monkeypatch):
+    from unittest.mock import Mock
+
+    repo, number = "rancher/rancher", 59084
+    key = f"{repo}#{number}"
+    stamp = queue_now().isoformat()
+    entry = {"id": key, "repo": repo, "number": number, "status": "staged",
+             "eligible_at": stamp, "screened_at": stamp, "updated_at": stamp,
+             "context_complete": True, "assignees": [], "ai_verdict": {"usable": True}}
+    (tmp_path / "queue").mkdir()
+    (tmp_path / "state").mkdir()
+    path = tmp_path / "queue/candidates.json"
+    path.write_text(json.dumps({key: entry}), encoding="utf-8")
+    monkeypatch.setattr(p.PolicyEngine, "load", lambda _: (
+        SimpleNamespace(repo_lane=lambda _: "open", tz_name="Asia/Shanghai", max_claims_per_day=5,
+                        repos_cfg={"repositories": {repo: {}}}), None))
+    monkeypatch.setattr(p, "gh_read", lambda args, **_: (
+        {"number": number, "state": "open", "assignees": [{"login": "snasovich"}], "labels": []}
+        if args[0].endswith(f"/issues/{number}") else {"state": "active"}))
+    submit = Mock()
+    monkeypatch.setattr(p, "_submit_job", submit)
+
+    outcome = p.candidate_pipeline(tmp_path, entry, immediate=True)
+
+    assert "已有指派给其他人" in outcome["abort"]
+    saved = json.loads(path.read_text(encoding="utf-8"))[key]
+    assert saved["status"] == "coarse_blocked"
+    assert saved["assignees"] == [{"login": "snasovich"}]
+    submit.assert_not_called()
+    ledger = ClaimLedger(tmp_path / "state/scout_v2.sqlite3")
+    assert not ledger.pending_publications()
+    assert not ledger.claimed_ids(queue_now().date().isoformat())
+    ledger.close()
+
+
+def test_numbered_issue_coverage_does_not_block_remaining_work():
+    from scout_v2.git_host import issue_item_coverage
+
+    repo, number = "gptme/gptme", 5218
+    body = "1. First\n2. Second\n3. Third"
+
+    def reference(pr_number, text, state="open", merged_at=None):
+        return {"event": "cross-referenced", "source": {"issue": {
+            "html_url": f"https://github.com/{repo}/pull/{pr_number}",
+            "body": text, "state": state, "pull_request": {"merged_at": merged_at},
+        }}}
+
+    timeline = [reference(5229, "Fixes item 2 of #5218."),
+                reference(5230, "Portion of item 1 of gptme/gptme#5218"),
+                reference(5231, "Item 3 of #5218.", "closed")]
+    scope = issue_item_coverage(repo, number, body, timeline)
+    assert scope["covered"] == [{"item": 2, "pr": "https://github.com/gptme/gptme/pull/5229"}]
+    assert scope["remaining"] == [1, 3]
+    complete = [*timeline, reference(5232, "Item 1 of #5218."),
+                reference(5233, "Fixes item 3 of #5218 (low severity).", "closed", "2026-11-25T00:00:00Z")]
+    item = d.issue_screening_snapshot({"repo": repo, "number": number},
+                                      {"body": body, "state": "open"}, [], complete)
+    assert item["issue_item_scope"]["remaining"] == []
+    engine = SimpleNamespace(repos_cfg={"repositories": {repo: {}}})
+    [reason] = d.coarse_issue_blockers(engine, item, lane="open")
+    assert "编号子项已全部覆盖" in reason
+
+
 def test_queue_rescreen_input_limit_is_terminal(tmp_path, monkeypatch):
     from scout_v2.feishu_bitable import scan_row_to_fields
     from scripts.monitor_prs import build_candidate_rows, build_scan_rows
@@ -528,7 +591,8 @@ def test_failed_repair_does_not_spend_publication_quota(tmp_path, monkeypatch, m
     (tmp_path / "queue").mkdir()
     (tmp_path / "state").mkdir()
     entries = {f"traefik/traefik#{i}": {"id": f"traefik/traefik#{i}", "repo": "traefik/traefik", "number": i,
-                            "title": "Parser bug", "status": "staged", "eligible_at": "2000-01-01T00:00:00+08:00", "screened_at": queue_now().isoformat(), "context_complete": True,
+                            "title": "Parser bug", "status": "staged", "eligible_at": "2000-01-01T00:00:00+08:00", "screened_at": queue_now().isoformat(),
+                            "updated_at": "2000-01-01T00:00:00Z", "context_complete": True,
                             "ai_verdict": {"usable": True, "provider": "codiv",
                                            "screening_context_version": 1 if mode == "legacy" else 2,
                                            "screening_evidence_sha256": "original"}}
@@ -581,10 +645,14 @@ def test_failed_repair_does_not_spend_publication_quota(tmp_path, monkeypatch, m
         submitted.append(job)
         return "github_actions", str(len(submitted)), {}
 
-    def gh_read(args):
+    def gh_read(args, **_kwargs):
         path = args[0]
         if "/workflows/" in path:
             return {"state": "active"}
+        if "/issues/" in path:
+            number = int(path.rsplit("/", 1)[1])
+            return {"number": number, "state": "open", "assignees": [], "labels": [],
+                    "updated_at": entries[f"traefik/traefik#{number}"]["updated_at"]}
         job = submitted[-1]
         if "/runs/" in path:
             return {"display_title": f"repair {job.job_id}", "status": "completed"}

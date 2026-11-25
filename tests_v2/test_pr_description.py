@@ -7,6 +7,19 @@ from scout_v2.workers import publish_remote, repair
 from scout_v2.workers.delivery_materials import COMPLETION_TASK
 
 
+def test_numbered_item_pr_keeps_parent_open(tmp_path):
+    (tmp_path / "test-report.json").write_text(json.dumps({
+        "pr_body": "Closes: #5218\n\n{VERIFIED_TESTS}",
+    }), encoding="utf-8")
+    body = publish_remote._rewrite_body({
+        "issue_number": 5218, "upstream": "gptme/gptme", "body": "Part of #5218",
+        "issue_item_scope": {"covered": [{"item": 10}], "remaining": [5]},
+    }, tmp_path)
+    assert body.startswith("Part of #5218")
+    assert "Closes" not in body
+    assert "Fixes #5218" not in body
+
+
 def test_agent_is_asked_to_use_final_diff_and_actual_repo_template():
     prompt = repair.FIX_PROMPT.format(context="issue", rules="rules")
     assert "final diff" in prompt and "PULL_REQUEST_TEMPLATE" in prompt

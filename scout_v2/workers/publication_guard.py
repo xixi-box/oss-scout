@@ -12,7 +12,7 @@ import stat
 import subprocess
 import tempfile
 
-from ..git_host import assignment_facts, gh_read, recheck_candidate
+from ..git_host import assignment_facts, gh_read, issue_item_coverage, recheck_candidate
 from .quality_gate import check_delivery_scope, check_patch_path, patch_files
 
 
@@ -159,6 +159,13 @@ def refresh_publication_evidence(job_dict: dict, cfg: dict) -> dict:
         return blocked("claim_signal")
     if latest.has_cross_ref_pr or latest.open_pr_hits:
         return blocked("已有修复 PR · " + ", ".join(result["snapshot"]["confirmed_prs"]))
+    coverage = issue_item_coverage(repo, number, issue.get("body") or "", timeline)
+    authorized = cfg.get("issue_item_scope") or {}
+    if coverage.get("covered"):
+        remaining = set(coverage["remaining"])
+        selected = set(authorized.get("remaining") or ())
+        if not selected or not selected.issubset(remaining):
+            return blocked("已有修复 PR · 编号子项覆盖已变化")
     result["ok"] = True
     return result
 

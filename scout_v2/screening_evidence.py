@@ -230,6 +230,8 @@ def build_screening_context(item: dict, rules: str) -> dict:
     references = prerequisite_facts(item)
     original = {key: item.get(key) for key in (
         "title", "body_excerpt", "reporter", "reporter_association", "reporter_type", "issue_comments")}
+    if item.get("issue_item_scope"):
+        original["issue_item_scope"] = item["issue_item_scope"]
     digest = hashlib.sha256(json.dumps({"original": original, "rules": rules, "prerequisites": references},
                                        sort_keys=True, ensure_ascii=False).encode()).hexdigest()
     return {"screening_context_version": CONTEXT_VERSION, "screening_evidence_sha256": digest,

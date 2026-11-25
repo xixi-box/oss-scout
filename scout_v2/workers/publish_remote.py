@@ -320,6 +320,8 @@ def _rewrite_body(cfg: dict, out_dir: Path, *, repair_agent: str = "opencode") -
     """
     body = str(cfg.get("body") or "")
     issue_number = cfg.get("issue_number")
+    partial = bool((cfg.get("issue_item_scope") or {}).get("covered"))
+    issue_reference = f"Part of #{issue_number}" if partial else f"Fixes #{issue_number}"
     root_cause = ""
     res_file = out_dir / "test-report.json"
     report = {}
@@ -335,14 +337,14 @@ def _rewrite_body(cfg: dict, out_dir: Path, *, repair_agent: str = "opencode") -
         root_cause = ""
     lines = []
     if issue_number:
-        lines.append(f"Fixes #{issue_number}")
+        lines.append(issue_reference)
         lines.append("")
     if root_cause:
         lines.append(f"Root cause: {root_cause[:400]}")
         lines.append("")
     if body:
         kept = [ln for ln in body.splitlines()
-                if not ln.startswith(("Fixes #", "Root cause:", "AI assistance:",
+                if not ln.startswith(("Fixes #", "Part of #", "Root cause:", "AI assistance:",
                                       "Verified by running the failing test at"))]
         kept = [ln for ln in kept if ln.strip()]
         lines.extend(kept)
@@ -379,7 +381,13 @@ def _rewrite_body(cfg: dict, out_dir: Path, *, repair_agent: str = "opencode") -
         rendered = generated.strip().replace("{VERIFIED_TESTS}", "\n".join(facts))
         # Retain the controller's issue link and idempotency marker.
         references = [line for line in body.splitlines() if line.startswith("<!-- oss-scout-job:")]
-        lines = ([f"Fixes #{issue_number}", ""] if issue_number else []) + [rendered, *references]
+        if partial and issue_number:
+            rendered = re.sub(
+                rf"(?i)\b(?:fix(?:es|ed)?|clos(?:e|es|ed)|resolv(?:e|es|ed))\s*:?\s+"
+                rf"(?:(?:{re.escape(upstream)})?#{issue_number}"
+                rf"|https://github\.com/{re.escape(upstream)}/issues/{issue_number})(?![\w/])",
+                issue_reference, rendered)
+        lines = ([issue_reference, ""] if issue_number else []) + [rendered, *references]
     if upstream == "qdrant/qdrant" and issue_number and not agent_mode:
         lines.extend(["", f"Repair task: reproduce the bug in #{issue_number}, implement a focused fix, "
                       "and verify that the regression test fails on dev and passes with the patch."])

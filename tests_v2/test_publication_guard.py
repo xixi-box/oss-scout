@@ -61,6 +61,20 @@ def test_publish_time_changes_are_blocked(monkeypatch, change):
     assert evidence["snapshot"]["comments"]
 
 
+@pytest.mark.parametrize("selected,expected", [([2], True), ([1, 2], False), ([], False)])
+def test_publication_rechecks_numbered_item_overlap(monkeypatch, selected, expected):
+    result = latest(monkeypatch)
+    issue, _, timeline = result.screening_source
+    issue["body"] = "1. First\n2. Second"
+    timeline.append({"event": "cross-referenced", "source": {"issue": {
+        "state": "open", "pull_request": {}, "html_url": "https://github.com/acme/project/pull/8",
+        "body": "Fixes item 1 of #7.",
+    }}})
+    job = payload()
+    job["publish"]["issue_item_scope"] = {"remaining": selected}
+    assert guard.refresh_publication_evidence(job, job["publish"])["ok"] is expected
+
+
 @pytest.mark.parametrize("overrides", [
     {"complete": False}, {"errors": ["pr search failed (non-fatal)"]}, {"screening_source": None},
 ])
