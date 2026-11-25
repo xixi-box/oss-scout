@@ -36,7 +36,6 @@ repositories:
   infiniflow/ragflow: {requires_invite: false}
   obot-platform/obot: {requires_invite: false}
   The-PR-Agent/pr-agent: {requires_invite: false}
-  kubernetes-sigs/agent-sandbox: {requires_invite: false}
   google/adk-go: {requires_invite: false}
   modelcontextprotocol/ruby-sdk: {requires_invite: false}
   opensandbox-group/OpenSandbox: {requires_invite: false}

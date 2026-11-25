@@ -22,20 +22,32 @@ def test_exact_pool_and_discovery_boundaries():
     config = yaml.safe_load((ROOT / "configs/repositories.yaml").read_text(encoding="utf-8"))
     external = {k: v for k, v in config["repositories"].items() if not v.get("internal")}
     variables = tomllib.loads((ROOT / "cloudflare/wrangler.toml").read_text(encoding="utf-8"))["vars"]
-    assert Counter(e["pool"] for e in external.values()) == {"formal": 50, "honor": 8}
+    assert Counter(e["pool"] for e in external.values()) == {"formal": 49, "honor": 15}
     assert set(variables["TRACKED_REPOS"].split(",")) == set(external)
     assert set(variables["REPOS"].split(",")) == {r for r, e in external.items() if e["issue_scan"]}
-    assert len(variables["REPOS"].split(",")) == 57
+    assert len(variables["REPOS"].split(",")) == 56
     policy, err = PolicyEngine.load(ROOT)
     assert not err
     for repo, entry in external.items():
         assert monitored_repo(repo)
         assert scans_issues(repo) == entry["issue_scan"]
         assert policy.repo_lane(repo) == ("open" if entry["issue_scan"] else "observe")
-        assert policy.pr_invited(repo, set())
-    assert policy.repo_lane("clickhouse/clickhouse") == "observe"
-    assert monitored_repo("ClickHouse/ClickHouse")  # Keep existing PR follow-up.
+        if entry["issue_scan"]:
+            assert policy.pr_invited(repo, set())
+    pr_tracking_only = {
+        "clickhouse/clickhouse",
+        "bytecodealliance/wasmtime",
+        "apache/rocketmq",
+        "Arize-ai/phoenix",
+        "bytecodealliance/wasm-tools",
+        "caddyserver/caddy",
+        "pydantic/pydantic-ai-harness",
+        "sparklyi/soj",
+    }
+    assert {repo for repo, entry in external.items() if not entry["issue_scan"]} == pr_tracking_only
+    assert all(external[repo]["pool"] == "honor" for repo in pr_tracking_only)
     assert monitored_repo("jlowin/fastmcp") and monitored_repo("PrefectHQ/fastmcp")
+    assert not monitored_repo("kubernetes-sigs/agent-sandbox")
     assert not monitored_repo("docker/compose")  # Removed from this version.
 
 
@@ -77,7 +89,7 @@ def test_feishu_verifies_membership_and_paused_state(monkeypatch, tmp_path):
     monkeypatch.setattr(fb, "_binding_app_token", lambda _: "fake")
     monkeypatch.setattr(fb, "record_pages", lambda *_: iter(records))
     assert verify_feishu_repos(tmp_path) == {
-        "rows": 58, "exact_match": True, "formal": 50, "honor": 8, "issue_scanning": 57}
+        "rows": 64, "exact_match": True, "formal": 49, "honor": 15, "issue_scanning": 56}
     clickhouse = next(r for r in records if "clickhouse" in fb._key_label(r["fields"]["键"]).lower())
     clickhouse["fields"]["参与状态"] = "扫描与贡献"
     with pytest.raises(SystemExit, match="field mismatch"):

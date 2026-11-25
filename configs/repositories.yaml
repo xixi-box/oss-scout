@@ -1,4 +1,4 @@
-# 50 正式＋8 荣誉；issue_scan=true 与 Worker REPOS 一致，完整名单与 TRACKED_REPOS 一致。
+# 49 正式＋15 荣誉；issue_scan=true 与 Worker REPOS 一致，完整名单与 TRACKED_REPOS 一致。
 
 defaults:
   unknown_repo_action: hold_for_review
@@ -75,15 +75,6 @@ repositories:
     note: 原qodo-ai/pr-agent现迁至The-PR-Agent；有Agent指南，允许定向lint/test；未见必须先认领或AI身份关闭流程。
     pr_rules:
     - 原qodo-ai/pr-agent现迁至The-PR-Agent；有Agent指南，允许定向lint/test；未见必须先认领或AI身份关闭流程。
-  kubernetes-sigs/agent-sandbox:
-    lane: open
-    pool: formal
-    issue_scan: true
-    purpose: Kubernetes上的Agent有状态隔离运行环境
-    merged_by_us: 0
-    note: 提供Agent skills，使用CodeRabbit初审；CNCF CLA必需，不得让AI机器人成为co-author；未见按AI身份自动关PR。
-    pr_rules:
-    - 提供Agent skills，使用CodeRabbit初审；CNCF CLA必需，不得让AI机器人成为co-author；未见按AI身份自动关PR。
   google/adk-go:
     lane: open
     pool: formal
@@ -539,6 +530,48 @@ repositories:
     note: 已查常见贡献文档与候选工作流，未发现专门AI限制；不代表允许无人监督提交。
     pr_rules:
     - 已查常见贡献文档与候选工作流，未发现专门AI限制；不代表允许无人监督提交。
+  bytecodealliance/wasmtime:
+    lane: observe
+    pool: honor
+    issue_scan: false
+    merged_by_us: 2
+    review_reason: 荣誉仓库暂停新增 issue 扫描与修复，仅跟踪存量 PR
+  apache/rocketmq:
+    lane: observe
+    pool: honor
+    issue_scan: false
+    merged_by_us: 1
+    review_reason: 荣誉仓库暂停新增 issue 扫描与修复，仅跟踪存量 PR
+  Arize-ai/phoenix:
+    lane: observe
+    pool: honor
+    issue_scan: false
+    merged_by_us: 1
+    review_reason: 荣誉仓库暂停新增 issue 扫描与修复，仅跟踪存量 PR
+  bytecodealliance/wasm-tools:
+    lane: observe
+    pool: honor
+    issue_scan: false
+    merged_by_us: 1
+    review_reason: 荣誉仓库暂停新增 issue 扫描与修复，仅跟踪存量 PR
+  caddyserver/caddy:
+    lane: observe
+    pool: honor
+    issue_scan: false
+    merged_by_us: 1
+    review_reason: 荣誉仓库暂停新增 issue 扫描与修复，仅跟踪存量 PR
+  pydantic/pydantic-ai-harness:
+    lane: observe
+    pool: honor
+    issue_scan: false
+    merged_by_us: 1
+    review_reason: 荣誉仓库暂停新增 issue 扫描与修复，仅跟踪存量 PR
+  sparklyi/soj:
+    lane: observe
+    pool: honor
+    issue_scan: false
+    merged_by_us: 1
+    review_reason: 荣誉仓库暂停新增 issue 扫描与修复，仅跟踪存量 PR
   xixi-box/oss-scout-v2-test:
     lane: open
     internal: true

@@ -27,7 +27,7 @@ def verify_feishu_repos(root: Path) -> dict:
     records = list(fb.record_pages(fb._binding_app_token(root), table_id))
     labels = [fb._key_label((row.get("fields") or {}).get("键")).lower() for row in records]
     actual = set(labels)
-    if len(expected) != 58 or len(labels) != 58 or actual != set(expected):
+    if len(expected) != 64 or len(labels) != 64 or actual != set(expected):
         raise SystemExit(f"Feishu repo mismatch: {len(labels)} rows, "
                          f"missing={sorted(set(expected) - actual)}, extra={sorted(actual - set(expected))}")
     for record, label in zip(records, labels):
@@ -178,10 +178,10 @@ def main() -> int:
                 payload = json.loads(response.read())
             result["worker_" + key] = len(payload) if key == "watermarks" else payload
     print(json.dumps(result, ensure_ascii=False, indent=2))
-    assert (result["repositories"], result["formal_repositories"], result["honor_repositories"]) == (58, 50, 8), "repository count changed"
+    assert (result["repositories"], result["formal_repositories"], result["honor_repositories"]) == (64, 49, 15), "repository count changed"
     assert result["daily_cap"] > 0, "invalid daily cap"
     if args.screening:
-        assert result["automatic_repositories"] == 57, "active repository count changed"
+        assert result["automatic_repositories"] == 56, "active repository count changed"
         assert result["screening_probe"]["usable"] is not None, "OpenJev screening probe failed"
         assert all(probe.get("usable") is not None for probe in result["intent_screening_probes"].values()), "intent screening service unavailable"
         assert all(probe.get("usable") is not None for probe in result["policy_screening_probes"].values()), "policy screening service unavailable"
