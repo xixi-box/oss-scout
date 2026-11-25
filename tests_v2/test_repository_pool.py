@@ -22,10 +22,10 @@ def test_exact_pool_and_discovery_boundaries():
     config = yaml.safe_load((ROOT / "configs/repositories.yaml").read_text(encoding="utf-8"))
     external = {k: v for k, v in config["repositories"].items() if not v.get("internal")}
     variables = tomllib.loads((ROOT / "cloudflare/wrangler.toml").read_text(encoding="utf-8"))["vars"]
-    assert Counter(e["pool"] for e in external.values()) == {"formal": 49, "honor": 15}
+    assert Counter(e["pool"] for e in external.values()) == {"formal": 50, "honor": 15}
     assert set(variables["TRACKED_REPOS"].split(",")) == set(external)
     assert set(variables["REPOS"].split(",")) == {r for r, e in external.items() if e["issue_scan"]}
-    assert len(variables["REPOS"].split(",")) == 56
+    assert len(variables["REPOS"].split(",")) == 57
     policy, err = PolicyEngine.load(ROOT)
     assert not err
     for repo, entry in external.items():
@@ -63,6 +63,7 @@ def test_fastmcp_assignment_or_explicit_exemption():
 @pytest.mark.parametrize("repo,scope", [
     ("kagent-dev/kagent", "100"),
     ("apache/camel-quarkus", "GraalVM"),
+    ("project-zot/zot", "DCO"),
 ])
 def test_replacement_rules_reach_screening_repair_and_feishu(monkeypatch, repo, scope):
     from dashboard.data import repo_rules_text
@@ -89,7 +90,7 @@ def test_feishu_verifies_membership_and_paused_state(monkeypatch, tmp_path):
     monkeypatch.setattr(fb, "_binding_app_token", lambda _: "fake")
     monkeypatch.setattr(fb, "record_pages", lambda *_: iter(records))
     assert verify_feishu_repos(tmp_path) == {
-        "rows": 64, "exact_match": True, "formal": 49, "honor": 15, "issue_scanning": 56}
+        "rows": 65, "exact_match": True, "formal": 50, "honor": 15, "issue_scanning": 57}
     clickhouse = next(r for r in records if "clickhouse" in fb._key_label(r["fields"]["键"]).lower())
     clickhouse["fields"]["参与状态"] = "扫描与贡献"
     with pytest.raises(SystemExit, match="field mismatch"):

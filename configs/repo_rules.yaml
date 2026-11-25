@@ -1,6 +1,10 @@
 _meta:
   updated: '2026-11-15'
 rules:
+  project-zot/zot:
+    note: Keep bug fixes focused and add regression tests. Discuss substantial changes
+      in the issue before implementation. Link the issue and include test results, a release
+      note for user-facing changes, Conventional Commits, and DCO sign-off.
   kagent-dev/kagent:
     note: Only automate small bug fixes with fewer than 100 changed lines including regression tests, using the direct small-change PR workflow. Large changes, features and refactors require prior discussion and an agreed plan and must be rejected from automatic repair. Respect existing assignments and claims. Every commit needs DCO sign-off. API, persistence, lifecycle or Kubernetes behavior needs the repository-required real E2E coverage; if it cannot be verified, reject the candidate. Do not split large changes to bypass these limits.
   apache/camel-quarkus:

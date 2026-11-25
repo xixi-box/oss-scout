@@ -78,6 +78,7 @@ repositories:
   rancher/rancher: {requires_invite: false}
   prometheus/prometheus: {requires_invite: false, claim_comment: true}
   redis/go-redis: {requires_invite: false}
+  project-zot/zot: {requires_invite: false}
   agentgateway/agentgateway: {requires_invite: false}
   mark3labs/mcp-go: {requires_invite: false}
   gptme/gptme: {requires_invite: false, claim_comment: true}

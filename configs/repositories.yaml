@@ -1,4 +1,4 @@
-# 49 正式＋15 荣誉；issue_scan=true 与 Worker REPOS 一致，完整名单与 TRACKED_REPOS 一致。
+# 50 正式＋15 荣誉；issue_scan=true 与 Worker REPOS 一致，完整名单与 TRACKED_REPOS 一致。
 
 defaults:
   unknown_repo_action: hold_for_review
@@ -459,6 +459,17 @@ repositories:
     note: 已查常见贡献文档与候选工作流，未发现专门AI限制；不代表允许无人监督提交。
     pr_rules:
     - 已查常见贡献文档与候选工作流，未发现专门AI限制；不代表允许无人监督提交。
+  project-zot/zot:
+    lane: open
+    pool: formal
+    issue_scan: true
+    purpose: Go 实现的 OCI 容器镜像与制品仓库
+    merged_by_us: 0
+    note: 欢迎小修；较大改动须先在 issue 中讨论；提交遵循 Conventional Commits 和 DCO。
+    pr_rules:
+    - 只自动处理范围明确、可验证的现有 bug；较大设计改动须先在 issue 中讨论。
+    - 关联目标 issue，按 PR 模板填写真实测试结果；涉及用户可见变化时按模板补充发布说明。
+    - 提交遵循 Conventional Commits 并附 DCO 签名；需要集成测试时保留实测结果。
   agentgateway/agentgateway:
     lane: open
     pool: honor

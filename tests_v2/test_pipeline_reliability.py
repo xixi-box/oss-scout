@@ -974,12 +974,13 @@ def test_exact_roster_is_preserved():
     monitored = {k for k, v in repos["repositories"].items() if not v.get("internal")}
     worker = re.search(r'REPOS = "([^"]+)"', (root / "cloudflare/wrangler.toml").read_text(encoding="utf-8"))[1].split(",")
     gates = yaml.safe_load((root / "configs/pr_gates.yaml").read_text(encoding="utf-8"))
-    assert len(monitored) == 64 and len(worker) == 56
+    assert len(monitored) == 65 and len(worker) == 57
     assert set(worker) == {repo for repo in monitored if repos["repositories"][repo]["issue_scan"]}
     assert set(gates["repositories"]) == set(worker) | {"clickhouse/clickhouse"}
     assert all(repos["repositories"][repo]["lane"] == "open" for repo in set(worker))
     assert {"rancher/rancher", "langgenius/dify", "dapr/dapr", "PrefectHQ/fastmcp"} <= monitored
     assert {"mark3labs/mcp-go", "gptme/gptme"} <= monitored
+    assert "project-zot/zot" in worker
     assert {"bytecodealliance/wasm-tools", "bytecodealliance/wasmtime"}.isdisjoint(worker)
     assert {"nodejs/node", "jlowin/fastmcp", "kubernetes-sigs/agent-sandbox"}.isdisjoint(monitored)
     assert {"sqlfluff/sqlfluff", "delta-io/delta-rs", "strands-agents/harness-sdk",

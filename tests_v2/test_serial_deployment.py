@@ -146,7 +146,7 @@ def test_runtime_smoke_reports_variable_ai_classification_without_blocking_deplo
     from scripts import runtime_status
     from scout_v2.workers.openjev import OpenJevClient
     monkeypatch.setattr(sys,'argv',['runtime_status','--root',str(tmp_path),'--screening'])
-    monkeypatch.setattr(runtime_status,'inspect',lambda root:{'repositories':64,'formal_repositories':49,'honor_repositories':15,'daily_cap':30,'automatic_repositories':56})
+    monkeypatch.setattr(runtime_status,'inspect',lambda root:{'repositories':65,'formal_repositories':50,'honor_repositories':15,'daily_cap':30,'automatic_repositories':57})
     results=iter(({'usable':True},{'usable':True,'probability':0.651},{'usable':False,'probability':0.315},
                   {'usable':False,'blocking_gate':'private_disclosure'},
                   {'usable':False,'blocking_gate':'unmet_prerequisite'}, {'usable':True}))
@@ -165,7 +165,7 @@ def test_runtime_smoke_still_fails_when_screening_service_unavailable(tmp_path,m
     from scripts import runtime_status
     from scout_v2.workers.openjev import OpenJevClient
     monkeypatch.setattr(sys,'argv',['runtime_status','--root',str(tmp_path),'--screening'])
-    monkeypatch.setattr(runtime_status,'inspect',lambda root:{'repositories':64,'formal_repositories':49,'honor_repositories':15,'daily_cap':30,'automatic_repositories':56})
+    monkeypatch.setattr(runtime_status,'inspect',lambda root:{'repositories':65,'formal_repositories':50,'honor_repositories':15,'daily_cap':30,'automatic_repositories':57})
     results=iter(({'usable':True},{'usable':None,'reason':'HTTP 503'},{'usable':False},
                   {'usable':False,'blocking_gate':'private_disclosure'},
                   {'usable':False,'blocking_gate':'unmet_prerequisite'}, {'usable':True}))
