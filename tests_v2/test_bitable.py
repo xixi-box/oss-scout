@@ -134,6 +134,36 @@ def fake(monkeypatch):
 
 
 class TestSyncDiff:
+    def test_repo_weight_is_editable_and_flows_to_existing_candidates(self, tmp_path, fake):
+        from scout_v2.repo_weights import repo_weights
+
+        config = tmp_path / "configs"
+        config.mkdir()
+        (config / "repositories.yaml").write_text(
+            "repositories:\n  a/b: {weight: 1}\n  c/d: {}\n", encoding="utf-8")
+        queue = tmp_path / "queue"
+        queue.mkdir()
+        (queue / "candidates.json").write_text(json.dumps({
+            "A/B#1": {"status": "staged"}, "c/d#2": {"status": "running"},
+        }), encoding="utf-8")
+        rows = mp.build_repo_rows(tmp_path)
+        kwargs = dict(table_name=fb.REPO_TABLE_NAME, fields=fb.REPO_FIELDS,
+                      to_fields=fb.repo_row_to_fields, binding_key="repo_table_id")
+        assert fb.sync_table(tmp_path, rows, **kwargs)["created"] == 2
+        assert [fake.records[k]["仓库权重"] for k in ("r1", "r2")] == [1, 0]
+
+        fake.records["r1"]["仓库权重"] = 3.5
+        rows[0]["note"] = "changed independently"
+        assert fb.sync_table(tmp_path, rows, **kwargs)["updated"] == 1
+        assert fake.records["r1"]["仓库权重"] == 3.5
+        assert repo_weights(tmp_path) == {"a/b": 3.5, "c/d": 0}
+        candidates = [fb.cand_row_to_fields(row) for row in mp.build_candidate_rows(tmp_path)]
+        assert [row["仓库权重"] for row in candidates] == [3.5, 0]
+
+        del fake.records["r1"]["仓库权重"]
+        fb.sync_table(tmp_path, rows, **kwargs)
+        assert fake.records["r1"]["仓库权重"] == repo_weights(tmp_path)["a/b"] == 1
+
     def test_explicit_complete_empty_snapshot_prunes_old_rows(self, tmp_path, fake):
         fake.records = {"r1": {"键": "a/b#1"}}
         out = fb.sync_table(tmp_path, [], table_name=fb.CAND_TABLE_NAME,

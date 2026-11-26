@@ -23,6 +23,8 @@ _BINDING_LOCK = threading.RLock()
 CAND_TABLE_NAME = "候选池"
 SCAN_TABLE_NAME = "扫描发现"
 LINK_FIELDS = [{"field_name": "键", "type": 1}]
+REPO_WEIGHT_FIELD = {"field_name": "仓库权重", "type": 2}
+REPO_FIELDS = [*LINK_FIELDS, REPO_WEIGHT_FIELD]
 DATE_FORMAT = {"date_formatter": "yyyy-MM-dd HH:mm"}
 def _status_field(name: str, colors: dict[str, int]) -> dict:
     return {"field_name": name, "type": 3, "property": {"options": [
@@ -39,6 +41,7 @@ SCAN_FIELDS = [*LINK_FIELDS, {"field_name": "发现时间", "type": 5, "property
                *({"field_name": name, "type": 1} for name in ("最终结果", "粗筛结果", "细筛结果"))]
 CAND_FIELDS = [*LINK_FIELDS, {"field_name": "标题", "type": 1},
                {"field_name": "处理状态", "type": 1},
+               REPO_WEIGHT_FIELD,
                {"field_name": "入队时间", "type": 5, "property": DATE_FORMAT}]
 
 
@@ -124,6 +127,7 @@ def row_to_fields(row: dict) -> dict:
 
 def repo_row_to_fields(row: dict) -> dict:
     return {"键": link_key(row["repo"], "repo"),
+            "仓库权重": row.get("repo_weight", 0),
             "仓库类型": "荣誉仓库" if row.get("pool") == "honor" else "正式仓库",
             "参与状态": "扫描与贡献" if row.get("issue_scan", True) else "仅跟踪存量 PR",
             "用途": row.get("purpose") or None,
@@ -163,6 +167,7 @@ def scan_row_to_fields(row: dict) -> dict:
 
 def cand_row_to_fields(row: dict) -> dict:
     return {"键": link_key(row["key"], "issues"), "标题": row.get("title") or None,
+            "仓库权重": row.get("repo_weight", 0),
             "处理状态": row.get("queue_state") or None,
             "入队时间": (_timestamp(row.get("staged_at"))
                          or _timestamp(row.get("discovered_at")))}
@@ -369,11 +374,22 @@ def sync_table(root: Path, rows: list[dict], *, table_name: str, fields: list,
     next_cache = {}
     created_digests = {}
     to_create, to_update = [], []
+    repo_sync = table_name == REPO_TABLE_NAME and record_cache is None
+    if repo_sync:
+        from .repo_weights import numeric_weight, save_repo_weights
+        from .roster import repo_key
+        weights = {}
     for row in rows:
         values = to_fields(row)
         key = _key_label(values["键"])
         incoming.add(key)
         hit = existing.get(key)
+        if repo_sync:
+            remote_weight = numeric_weight(hit[1].get("仓库权重")) if hit else None
+            weights[repo_key(key)] = values["仓库权重"] if remote_weight is None else remote_weight
+            if remote_weight is not None:
+                # Leave the editable cell out of updates to other columns.
+                values.pop("仓库权重")
         desired = digest(values) if record_cache is not None else _fingerprint(values)
         if hit is None:
             to_create.append({"fields": values})
@@ -424,6 +440,9 @@ def sync_table(root: Path, rows: list[dict], *, table_name: str, fields: list,
         pruned = len(stale)
         if record_cache is not None and next_cache.keys() == incoming:
             record_cache[identity] = next_cache
+
+    if repo_sync and not partial and (rows or allow_empty):
+        save_repo_weights(root, weights)
 
     return {"created": len(to_create), "updated": len(to_update),
             "skipped": len(rows) - len(to_create) - len(to_update),

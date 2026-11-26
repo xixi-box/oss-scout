@@ -11,7 +11,8 @@ TABLES = frozenset({"pr", "repos", "scan", "candidates"})
 SOURCE_TABLES = {
     **dict.fromkeys(CANDIDATE_SOURCES, {"scan", "candidates"}),
     "state/seen.json": {"scan"},
-    "configs/repositories.yaml": {"repos"},
+    "configs/repositories.yaml": {"repos", "candidates"},
+    "state/repo_weights.json": {"candidates"},
     "configs/lane_overrides.yaml": {"repos"},
     "state/pool_audit.json": {"repos"},
     "state/repo_merge_counts.json": {"repos"},

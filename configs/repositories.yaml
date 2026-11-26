@@ -94,6 +94,7 @@ repositories:
     pr_rules:
     - 有Agent开发指南；未见强制指派后方可开PR、AI发布禁令或AI识别关闭流程。
   opensandbox-group/OpenSandbox:
+    weight: 1
     lane: open
     pool: formal
     issue_scan: true
@@ -139,6 +140,7 @@ repositories:
     pr_rules:
     - 贡献指南允许常规fork/PR，有Agent指南；要求离线回归测试，未见AI发布禁令或强制指派。
   volcengine/OpenViking:
+    weight: 1
     lane: open
     pool: formal
     issue_scan: true
@@ -148,6 +150,7 @@ repositories:
     pr_rules:
     - 贡献指南不按工具区分责任；强调理解、解释和验证，优先审查小而完整的变更。
   Tencent/WeKnora:
+    weight: 1
     lane: open
     pool: formal
     issue_scan: true
@@ -187,6 +190,7 @@ repositories:
     - 纯 bug 修复保持 API 兼容，不修改 CHANGELOG.md 或 UPGRADE.md。
     - 安装受影响组件的 Composer 依赖，使用 ./link 指向工作区后运行对应 PHPUnit；涉及真实供应商时如实说明已测范围。
   oceanbase/powercontext:
+    weight: 1
     lane: open
     pool: formal
     issue_scan: true
@@ -454,6 +458,7 @@ repositories:
     pr_rules:
     - 优先个人账号或声明人类负责人；合并要求两双人眼，无人负责的机器人PR需两名维护者批准。
   redis/go-redis:
+    weight: 1
     lane: open
     pool: formal
     issue_scan: true

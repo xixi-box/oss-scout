@@ -82,6 +82,35 @@ def test_daily_dispatch_prefers_today_and_does_not_consume_due_history(queue_roo
     assert [key for key, _ in pipeline._dispatch_candidates(ordered, manual=True)] == ["history", "fresh"]
 
 
+def test_drain_ranks_eligible_candidates_by_live_repo_weight_then_fifo(queue_root, monkeypatch):
+    from scout_v2.repo_weights import save_repo_weights
+
+    config = queue_root / "configs"
+    config.mkdir()
+    (config / "repositories.yaml").write_text(
+        "repositories:\n  a/b: {}\n  c/d: {weight: 1}\n  e/f: {weight: 5}\n", encoding="utf-8")
+    monkeypatch.setattr(pipeline, "monitored_repo", lambda repo: True)
+    entries = {}
+    for number, (repo, time) in enumerate([
+        ("a/b", "12T00:00"), ("c/d", "12T00:05"), ("C/D", "12T00:06"),
+        ("e/f", "11T01:00"), ("e/f", "12T00:10"),
+    ], 1):
+        stamp = f"2026-11-{time}:00+08:00"
+        key = f"{repo}#{number}"
+        entries[key] = {"id": key, "repo": repo, "number": number, "status": "staged",
+                        "discovered_at": stamp, "staged_at": stamp,
+                        "eligible_at": stamp, "ai_verdict": {"usable": True}}
+    entries["e/f#4"]["scheduled_consume_day"] = "2026-11-12"
+    entries["e/f#5"]["screen_retry_at"] = "2026-11-12T03:00:00+08:00"
+    write_queue(queue_root, entries)
+
+    assert [r["id"] for r in pipeline.drain_ai_graded(queue_root, limit=10)] == [
+        "c/d#2", "C/D#3", "a/b#1", "e/f#4"]
+    save_repo_weights(queue_root, {"a/b": 3, "c/d": 1, "e/f": 5})
+    assert [r["id"] for r in pipeline.drain_ai_graded(queue_root, limit=10)] == [
+        "a/b#1", "c/d#2", "C/D#3", "e/f#4"]
+
+
 def test_schedule_snapshots_history_once_and_survives_restart(queue_root, monkeypatch):
     history = {"status": "staged", "discovered_at": "2026-11-11T01:00:00+08:00",
                "staged_at": "2026-11-11T01:00:00+08:00",

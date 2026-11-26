@@ -1675,7 +1675,8 @@ def drain_ai_graded(root: Path, limit: int = 3, dry_run: bool = True,
     （blockers 非空 = 已有 PR / 认领信号 / 纯文档 / 计费抱怨这类不需要判断的事实）。
 
     普通派发优先选择今天发现的候选，历史项必须有当日定时批次授权或
-    当天 PR 关闭释放额度。rescreen=True 是显式手动消费，按 FIFO 重筛。
+    当天 PR 关闭释放额度。各组先按仓库权重降序，同权重按 FIFO。
+    rescreen=True 是显式手动消费，仍会重新粗筛和细筛。
     max_new_claims 保留旧调用参数；实际额度由每日发布账本原子判断。
 
     内部测试仓库（fixture）不参与自动 drain：P5 演练用手动触发，演练轮也
@@ -1717,6 +1718,13 @@ def drain_ai_graded(root: Path, limit: int = 3, dry_run: bool = True,
         finally:
             ledger.close()
     ordered = _order_candidates(eligible, expired_out=expired, refill_day=refill_day)
+    if ordered:
+        from ..repo_weights import repo_weights
+        from ..roster import repo_key
+
+        weights = repo_weights(root)
+        # Python's stable sort preserves the existing FIFO for equal weights.
+        ordered.sort(key=lambda item: -weights.get(repo_key(item[1].get("repo", "")), 0))
     ordered = _dispatch_candidates(ordered, refill_day=refill_day, manual=rescreen)
     if expired and not dry_run:
         for key in expired:

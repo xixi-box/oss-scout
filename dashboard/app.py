@@ -115,7 +115,7 @@ def _sync_bitables(root: Path, *, ds=None, activity_only=False, activity_cache=N
     results = {}
     tables = [
         ("pr", mod.build_pr_rows, fb.TABLE_NAME, fb.PR_FIELDS, fb.row_to_fields, "pr_table_id", None),
-        ("repos", mod.build_repo_rows, fb.REPO_TABLE_NAME, fb.LINK_FIELDS, fb.repo_row_to_fields, "repo_table_id", root / "configs/repositories.yaml"),
+        ("repos", mod.build_repo_rows, fb.REPO_TABLE_NAME, fb.REPO_FIELDS, fb.repo_row_to_fields, "repo_table_id", root / "configs/repositories.yaml"),
         ("scan", mod.build_scan_rows, fb.SCAN_TABLE_NAME, fb.SCAN_FIELDS, fb.scan_row_to_fields, "scan_table_id", root / "state/seen.json"),
         ("candidates", mod.build_candidate_rows, fb.CAND_TABLE_NAME, fb.CAND_FIELDS, fb.cand_row_to_fields, "cand_table_id", candidate_source(root)),
     ]
@@ -131,7 +131,7 @@ def _sync_bitables(root: Path, *, ds=None, activity_only=False, activity_cache=N
                 if tracks_activity and activity is None:
                     activity = candidate_activity(ds if ds is not None else D.DataSource(root))
                 files = {
-                    "candidates": CANDIDATE_SOURCES,
+                    "candidates": (*CANDIDATE_SOURCES, "configs/repositories.yaml", "state/repo_weights.json"),
                     "scan": (*CANDIDATE_SOURCES, "state/seen.json"),
                     "repos": ("configs/repositories.yaml", "configs/lane_overrides.yaml", "state/pool_audit.json",
                               "state/repo_merge_counts.json"),

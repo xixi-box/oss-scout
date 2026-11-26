@@ -138,6 +138,7 @@ def update_repo_merge_counts(root, github_rows: list[dict]) -> None:
 def build_repo_rows(root) -> list[dict]:
     """Build repository pool rows from the local roster, audit and PR counts."""
     import yaml
+    from scout_v2.repo_weights import numeric_weight
     cfg_path = root / "configs" / "repositories.yaml"
     if not cfg_path.exists():
         cfg_path = ROOT / "configs" / "repositories.yaml"
@@ -173,6 +174,7 @@ def build_repo_rows(root) -> list[dict]:
             "internal": bool(spec.get("internal")),
             "pool": spec.get("pool") or "formal",
             "issue_scan": spec.get("issue_scan", True),
+            "repo_weight": numeric_weight(spec.get("weight")) or 0,
             "purpose": spec.get("purpose") or "",
             "merged_by_us": (merge_counts.get(repo.lower(), 0) if merge_counts is not None
                              else spec.get("merged_by_us", 0)),
@@ -422,9 +424,13 @@ def candidate_activity_state(key: str, status: str, running_keys, entry=None) ->
 
 def build_candidate_rows(root, running_keys=()) -> list[dict]:
     """候选池只展示可执行、暂存或正在派发/执行的候选。"""
+    from scout_v2.repo_weights import repo_weights
+    from scout_v2.roster import repo_key
+
     queue = read_candidates(root, statuses=("staged", "running", "reconciling", "escalated"),
                             fields=("status", "title", "discovered_at", "staged_at",
                                     "retry_authorized_job_id", "dispatch_job_id", "direct_start_reserved_at"))
+    weights = repo_weights(root) if queue else {}
     rows = []
     for key, entry in sorted(queue.items()):
         display = candidate_activity_state(key, entry.get("status"), running_keys, entry)
@@ -432,6 +438,7 @@ def build_candidate_rows(root, running_keys=()) -> list[dict]:
             continue
         rows.append({
             "key": key,
+            "repo_weight": weights.get(repo_key(key.rsplit("#", 1)[0]), 0),
             "title": str(entry.get("title") or "")[:300],
             "queue_state": display,
             "discovered_at": entry.get("discovered_at"),
