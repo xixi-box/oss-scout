@@ -17,11 +17,13 @@ jobs:
       - name: Report queue composition
         run: |
           docker exec -i oss-scout python - <<'PY'
-          import json
           import collections
+          from pathlib import Path
           import yaml
 
-          q = json.load(open("/data/queue/candidates.json", encoding="utf-8"))
+          from scout_v2.candidate_store import read_candidates
+
+          q = read_candidates(Path("/data"), missing_ok=False)
           pool = set((yaml.safe_load(open("/app/configs.seed/repositories.yaml",
                                          encoding="utf-8")) or {})
                      .get("repositories") or {})

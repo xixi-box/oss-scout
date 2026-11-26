@@ -210,6 +210,7 @@ jobs:
           # pipeline or a remote publication still awaiting reconciliation.
           if [[ -z "$(docker ps -aq --filter 'name=^/oss-scout$')" &&
                 ! -e "$PROJECT_DATA_DIR/queue/candidates.json" &&
+                ! -e "$PROJECT_DATA_DIR/state/candidates.sqlite3" &&
                 ! -e "$PROJECT_DATA_DIR/state/scout_v2.sqlite3" ]]; then
             docker compose -f "$DEPLOY_DIR/compose.yaml" up -d --no-build --remove-orphans
           else
@@ -219,9 +220,19 @@ jobs:
           import subprocess
           import sys
           import time
+          from contextlib import closing
           from pathlib import Path
 
           root = Path(sys.argv[2])
+          candidate_db = root / "state/candidates.sqlite3"
+
+          def running_candidate():
+              if candidate_db.is_file():
+                  with closing(sqlite3.connect(candidate_db.as_uri() + "?mode=ro", uri=True)) as queue:
+                      return queue.execute("SELECT 1 FROM candidates WHERE status='running' LIMIT 1").fetchone()
+              queue = json.loads((root / "queue/candidates.json").read_text())
+              return any(entry.get("status") == "running" for entry in queue.values())
+
           lock = sqlite3.connect(root / "state/dispatcher.sqlite3", timeout=1, isolation_level=None)
           try:
               for attempt in range(660):
@@ -230,10 +241,9 @@ jobs:
                           lock.execute("BEGIN IMMEDIATE")
                       # Retain admission ownership while existing jobs finish.
                       # This blocks new dispatches without cancelling remote jobs.
-                      queue = json.loads((root / "queue/candidates.json").read_text())
-                      with sqlite3.connect(f"file:{root}/state/scout_v2.sqlite3?mode=ro", uri=True) as db:
+                      with closing(sqlite3.connect(f"file:{root}/state/scout_v2.sqlite3?mode=ro", uri=True)) as db:
                           pending = db.execute("SELECT COUNT(*) FROM publications WHERE day IS NULL").fetchone()[0]
-                      if pending or any(e.get("status") == "running" for e in queue.values()):
+                      if pending or running_candidate():
                           print("Active repair or pending publication; admission paused until reconciliation", flush=True)
                       else:
                           subprocess.run(["docker", "compose", "-f", sys.argv[1], "up", "-d", "--no-build", "--remove-orphans"], check=True)

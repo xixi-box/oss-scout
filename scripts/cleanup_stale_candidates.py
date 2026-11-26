@@ -13,13 +13,15 @@
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import sys
-import tempfile
 from pathlib import Path
 
 import yaml
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from scout_v2.candidate_store import candidate_source, candidate_store_exists, read_candidates
+from scout_v2.state_store import queue_transaction
 
 
 def _pool(root: Path) -> set[str]:
@@ -46,12 +48,11 @@ def main() -> int:
     args = ap.parse_args()
 
     root = Path(args.root)
-    qpath = root / "queue" / "candidates.json"
-    if not qpath.exists():
-        print(f"no candidates at {qpath}", file=sys.stderr)
+    if not candidate_store_exists(root):
+        print(f"no candidates at {candidate_source(root)}", file=sys.stderr)
         return 1
     pool = _pool(root)
-    q = json.loads(qpath.read_text(encoding="utf-8"))
+    q = read_candidates(root, missing_ok=False)
     before = len(q)
 
     ACTIVE = ("new", "recheck_failed")
@@ -100,14 +101,14 @@ def main() -> int:
         print("dry run, nothing written")
         return 0
 
-    for k in (drop_out_of_pool + drop_no_verdict + drop_needs_invite
-              + drop_expired_stage):
-        q.pop(k, None)
-    fd, tmp = tempfile.mkstemp(dir=str(qpath.parent), suffix=".tmp")
-    with os.fdopen(fd, "w", encoding="utf-8") as f:
-        json.dump(q, f, ensure_ascii=False, indent=1)
-    os.replace(tmp, qpath)
-    print(f"wrote {qpath}: {before} -> {len(q)}")
+    with queue_transaction(root) as current:
+        before = len(current)
+        for k in (drop_out_of_pool + drop_no_verdict + drop_needs_invite
+                  + drop_expired_stage):
+            if current.get(k) == q[k]:
+                del current[k]
+        after = len(current)
+    print(f"wrote {candidate_source(root)}: {before} -> {after}")
     return 0
 
 

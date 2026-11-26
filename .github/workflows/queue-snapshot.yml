@@ -17,11 +17,18 @@ jobs:
       - name: Print view
         run: |
           docker exec -i -e VIEW="${{ inputs.view }}" oss-scout python - <<'PY'
-          import json
           import os
+          from pathlib import Path
 
-          q = json.load(open("/data/queue/candidates.json", encoding="utf-8"))
+          from scout_v2.candidate_store import read_candidates
+
           view = os.environ["VIEW"]
+          statuses = {
+              "pr_open": ("pr_open",),
+              "needs_invite": ("needs_invite",),
+              "active": ("new", "queued", "queued_hist", "recheck_failed"),
+          }
+          q = read_candidates(Path("/data"), statuses=statuses[view], missing_ok=False)
 
           if view == "pr_open":
               rows = [(k, v) for k, v in q.items() if v.get("status") == "pr_open"]

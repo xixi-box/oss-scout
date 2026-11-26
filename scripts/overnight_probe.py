@@ -1,6 +1,10 @@
 """只读：过去 10 小时的自动开 PR 与凌晨消费状态。"""
 import json, os, datetime as dt
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from scout_v2.candidate_store import read_candidates
 
 root = Path(os.environ.get("OSSCOUT_DASHBOARD_ROOT", "/data"))
 now = dt.datetime.now()
@@ -34,7 +38,7 @@ for r in recent[-20:]:
           "|", r.get("target"), "|", str(r.get("result"))[:110])
 
 print("\n=== queue: new/staged/aborted_competed counts ===")
-q = json.loads((root / "queue" / "candidates.json").read_text(encoding="utf-8"))
+q = read_candidates(root, missing_ok=False)
 from collections import Counter
 print(" ", dict(Counter((v or {}).get("status") for v in q.values())))
 

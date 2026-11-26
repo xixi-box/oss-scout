@@ -7,6 +7,7 @@ import sqlite3
 import subprocess
 from collections import Counter
 from pathlib import Path
+from scout_v2.candidate_store import candidate_store_exists, read_candidates
 from scout_v2.state_store import STAGED_FULL_REASON
 ROOT = Path(__file__).resolve().parents[1]
 DATA_ROOT = Path(os.environ.get("OSSCOUT_DASHBOARD_ROOT", str(ROOT)))
@@ -50,13 +51,14 @@ def build_pr_rows(root, *, github_rows=None, read_pr=None) -> list[dict]:
     """Enrich the confirmed GitHub PR snapshot with local discovery times."""
     rows = all_my_prs() if github_rows is None else github_rows
 
-    seen = {}
-    queue = {}
-    for name, target in (("state/seen.json", seen), ("queue/candidates.json", queue)):
-        try:
-            target.update(json.loads((root / name).read_text(encoding="utf-8")))
-        except (OSError, ValueError):
-            pass
+    try:
+        seen = json.loads((root / "state/seen.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        seen = {}
+    try:
+        queue = read_candidates(root, fields=("discovered_at", "pr_url"))
+    except (OSError, ValueError):
+        queue = {}
     issue_by_pr = {str(entry["pr_url"]).lower(): key for key, entry in queue.items()
                    if entry.get("pr_url")}
     db = root / "state/scout_v2.sqlite3"
@@ -201,10 +203,12 @@ def build_scan_rows(root, running_keys=(), published=None, pr_states=None, *,
         return []
     queue = {}
     try:
-        qpath = root / "queue" / "candidates.json"
-        if not strict and not qpath.exists():
-            qpath = ROOT / "queue" / "candidates.json"
-        queue = json.loads(qpath.read_text(encoding="utf-8")) or {}
+        queue_root = root if strict or candidate_store_exists(root) else ROOT
+        queue = read_candidates(queue_root, keys=only_keys, fields=(
+            "status", "pr_url", "updated_at", "started_at", "staged_at", "abort_reason",
+            "coarse_reason", "blockers", "fine_reason", "retry_authorized_job_id",
+            "dispatch_job_id", "direct_start_reserved_at",
+        ))
     except FileNotFoundError:
         pass
     except (OSError, json.JSONDecodeError):
@@ -418,11 +422,9 @@ def candidate_activity_state(key: str, status: str, running_keys, entry=None) ->
 
 def build_candidate_rows(root, running_keys=()) -> list[dict]:
     """候选池只展示可执行、暂存或正在派发/执行的候选。"""
-    qpath = root / "queue" / "candidates.json"
-    try:
-        queue = json.loads(qpath.read_text(encoding="utf-8"))
-    except FileNotFoundError:
-        return []
+    queue = read_candidates(root, statuses=("staged", "running", "reconciling", "escalated"),
+                            fields=("status", "title", "discovered_at", "staged_at",
+                                    "retry_authorized_job_id", "dispatch_job_id", "direct_start_reserved_at"))
     rows = []
     for key, entry in sorted(queue.items()):
         display = candidate_activity_state(key, entry.get("status"), running_keys, entry)

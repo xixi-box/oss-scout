@@ -5,10 +5,11 @@ import os
 from pathlib import Path
 import threading
 import weakref
+from .candidate_store import CANDIDATE_SOURCES
 
 TABLES = frozenset({"pr", "repos", "scan", "candidates"})
 SOURCE_TABLES = {
-    "queue/candidates.json": {"scan", "candidates"},
+    **dict.fromkeys(CANDIDATE_SOURCES, {"scan", "candidates"}),
     "state/seen.json": {"scan"},
     "configs/repositories.yaml": {"repos"},
     "configs/lane_overrides.yaml": {"repos"},
@@ -21,6 +22,17 @@ _feeds_lock = threading.Lock()
 
 def _key(root):
     return os.path.normcase(os.path.abspath(root))
+
+
+def source_stamp(path: Path):
+    try:
+        stat = path.stat()
+    except FileNotFoundError:
+        return None
+    if path.name.endswith("-wal") and stat.st_size <= 32:
+        # SQLite readers can create an empty WAL without changing any data.
+        return None
+    return stat.st_mtime_ns, stat.st_size, stat.st_ino
 
 
 class TableChanges:
@@ -54,11 +66,7 @@ class TableChanges:
     def poll_files(self):
         # Other processes and editors do not share the in-process event feed.
         for name, tables in SOURCE_TABLES.items():
-            try:
-                stat = (self.root / name).stat()
-                stamp = (stat.st_mtime_ns, stat.st_size, stat.st_ino)
-            except FileNotFoundError:
-                stamp = None
+            stamp = source_stamp(self.root / name)
             if name in self._stamps and self._stamps[name] != stamp:
                 self.mark(tables)
             self._stamps[name] = stamp

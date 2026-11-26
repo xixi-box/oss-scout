@@ -1,6 +1,10 @@
 """只读：打印今日认领额度与候选消费状态。"""
 import json, os, sqlite3
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from scout_v2.candidate_store import read_candidates
 
 root = Path(os.environ.get("OSSCOUT_DASHBOARD_ROOT", "/data"))
 db = root / "state" / "scout_v2.sqlite3"
@@ -17,7 +21,7 @@ except Exception as e:
 
 print("=== queue status counts ===")
 try:
-    q = json.loads((root / "queue" / "candidates.json").read_text(encoding="utf-8"))
+    q = read_candidates(root, missing_ok=False)
     from collections import Counter
     print(" total:", len(q))
     print(" ", dict(Counter((v or {}).get("status") for v in q.values())))

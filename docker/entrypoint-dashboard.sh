@@ -30,7 +30,7 @@ if [ ! -e /data/config.json ] || ! cmp -s /app/config.json /data/config.json; th
   cp /app/config.json /data/config.json 2>/dev/null || true
 fi
 
-[ -f /data/queue/candidates.json ] || echo '{}' > /data/queue/candidates.json
+python -m scout_v2.candidate_store /data
 [ -f /data/state/seen.json ] || echo '{}' > /data/state/seen.json
 
 exec python -m uvicorn dashboard.app:app --host 0.0.0.0 --port 8787

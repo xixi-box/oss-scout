@@ -13,6 +13,7 @@ from pathlib import Path
 import tenacity
 
 import yaml
+from scout_v2.candidate_store import candidate_items, get_candidate
 
 class GhError(Exception):
     """The GitHub CLI did not return a successful response."""
@@ -441,7 +442,7 @@ def prune_candidate_backlog(root: Path) -> list[str]:
 
     expired = []
     with queue_transaction(root) as queue:
-        for key, entry in queue.items():
+        for key, entry in candidate_items(queue, ("staged", "new", "recheck_failed")):
             if key.lower() in protected or entry.get("dispatch_started_at") or entry.get("direct_start_reserved_at"):
                 protected.add(key.lower())
                 continue
@@ -501,20 +502,15 @@ def ingest_cloudflare_issues(ds, items: list[dict], *, refresh: bool = False,
     if err or eng is None:
         raise RuntimeError(f"policy unavailable: {err}")
     seen_path = ds.root / "state/seen.json"
-    queue_path = ds.root / "queue/candidates.json"
     added = []
     for it in items:
         repo, number = str(it.get("repo") or ""), int(it.get("number") or 0)
         if not repo or number <= 0:
             continue
         key = f"{repo}#{number}"
-        # These files are atomically replaced. Skip known candidates without
-        # taking a writer lock; the commit below still rechecks under the lock.
-        try:
-            if key in json.loads(queue_path.read_text(encoding="utf-8")):
-                continue
-        except FileNotFoundError:
-            pass
+        # Skip known candidates without a writer lock. Recheck on commit.
+        if get_candidate(ds.root, key) is not None:
+            continue
         live_blockers, timeline = (), None
         if refresh:
             it, live_blockers, timeline = refresh_issue(it, root=ds.root)

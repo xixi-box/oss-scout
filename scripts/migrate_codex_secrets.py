@@ -8,6 +8,9 @@ import time
 
 from codex_secret_session import ENVIRONMENT, REPO, SECRET, STATE, digest, gh, validated
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from scout_v2.candidate_store import read_candidates
+
 
 def main():
     root = Path(os.environ.get("OSSCOUT_DASHBOARD_ROOT", "/data"))
@@ -18,10 +21,10 @@ def main():
             try:
                 if not lock.in_transaction:
                     lock.execute("BEGIN IMMEDIATE")
-                queue = json.loads((root / "queue/candidates.json").read_text())
+                queue = read_candidates(root, statuses=("running",), missing_ok=False)
                 with sqlite3.connect(f"file:{root}/state/scout_v2.sqlite3?mode=ro", uri=True) as db:
                     pending = db.execute("SELECT COUNT(*) FROM publications WHERE day IS NULL").fetchone()[0]
-                if pending or any(e.get("status") == "running" for e in queue.values()):
+                if pending or queue:
                     print("Waiting for existing remote jobs and publication reconciliation", flush=True)
                 else:
                     break

@@ -30,6 +30,7 @@ import time
 from pathlib import Path
 
 from ..adapters.actions_backend import ActionsBackend
+from ..candidate_store import candidate_items, candidate_store_exists, get_candidate, read_candidates
 from ..git_host import (ISSUE_CLAIM_MESSAGE, RE_CLAIM, assignment_facts, gh_pages, gh_read,
                         own_issue_claim, recheck_candidate)
 from ..job_router import JobRouter, RouterConfig
@@ -48,10 +49,10 @@ FORK_OWNER = "xixi-box"
 def _data_root(root: Path) -> Path:
     """数据根：queue/state 所在目录（容器里源码在 /app、数据在 /data）。"""
     root = Path(root)
-    if (root / "queue" / "candidates.json").exists():
+    if candidate_store_exists(root):
         return root
     alt = Path(os.environ.get("OSSCOUT_DASHBOARD_ROOT", "/data"))
-    if (alt / "queue" / "candidates.json").exists():
+    if candidate_store_exists(alt):
         return alt
     return root
 
@@ -203,6 +204,7 @@ def _reconcile_publication(ledger: ClaimLedger, tz_name: str, *, root: Path | No
                            worker_result: dict | None = None, job_id: str | None = None,
                            legacy_head: tuple | None = None) -> dict | None:
     """Resolve one writer; callers own its per-candidate execution lock."""
+    reconcile_started = time.monotonic()
     pending = legacy_head or ledger.pending_publication(job_id)
     if pending is None:
         return {}
@@ -313,6 +315,7 @@ def _reconcile_publication(ledger: ClaimLedger, tz_name: str, *, root: Path | No
                              abort_reason=publication["coarse_reason"])
         # Save the candidate first. If the controller stops here, the pending
         # publication still exists and the same result can safely be reconciled.
+        persist_started = time.monotonic()
         with queue_transaction(root) as queue:
             actual_key = next((k for k in queue if k.lower() == key.lower()), key)
             candidate = queue.get(actual_key)
@@ -335,6 +338,7 @@ def _reconcile_publication(ledger: ClaimLedger, tz_name: str, *, root: Path | No
                 candidate.pop("dispatch_job_id", None)
                 candidate.pop("direct_start_reserved_at", None)
                 candidate.pop("reconcile_after", None)
+        persist_seconds = time.monotonic() - persist_started
         if recovery or legacy_head:
             if pr:
                 log(root, "pr_open", key, f"{pr['html_url']} (reconciled from Actions)")
@@ -342,6 +346,9 @@ def _reconcile_publication(ledger: ClaimLedger, tz_name: str, *, root: Path | No
                 log(root, "reconciled", key, f"{status} · {extra['abort_reason']}")
     if pr:
         ledger.finish_publication(job_id, day=business_day(created, tz_name), url=pr["html_url"])
+        if root is not None and issue:
+            log(root, "publication_reconcile_timing", key,
+                f"candidate={persist_seconds:.3f}s total={time.monotonic() - reconcile_started:.3f}s")
     else:
         ledger.finish_publication(job_id)
     if root is not None and not pr and issue:
@@ -430,12 +437,11 @@ def recover_pending_publication(root: Path, tz_name: str = "Asia/Shanghai") -> b
                     changed = receipt is not None or changed
                 except Exception as exc:
                     log(root, "reconcile_error", job_id, str(exc)[:180])
-        path = root / "queue/candidates.json"
-        if not path.exists():
+        if not candidate_store_exists(root):
             return changed
         now = business_now(tz_name)
-        entries = json.loads(path.read_text(encoding="utf-8"))
         preparations = set(ledger.preparations())
+        entries = read_candidates(root, statuses=None if preparations else ("reconciling", "escalated"))
         ready = [(key, entry) for key, entry in entries.items()
                  if (entry.get("status") == "reconciling" or (
                      entry.get("status") == "escalated" and _authorized_retry(entry)) or (
@@ -787,15 +793,12 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen
     key = entry["id"]
     summary: dict = {"id": key, "steps": []}
     ledger = None
-    qpath = root / "queue/candidates.json"
-    latest = None
-    if qpath.exists():
-        latest = json.loads(qpath.read_text(encoding="utf-8")).get(key)
-        if latest is not None:
-            immediate = immediate and latest == entry
-            entry = dict(latest)
-            if entry.get("status") != "staged":
-                return {**summary, "abort": "candidate not currently eligible"}
+    latest = get_candidate(root, key)
+    if latest is not None:
+        immediate = immediate and latest == entry
+        entry = dict(latest)
+        if entry.get("status") != "staged":
+            return {**summary, "abort": "candidate not currently eligible"}
 
     verdict = entry.get("ai_verdict") or {}
     rescreen = (rescreen or _fine_rescreen_due(entry)
@@ -1160,7 +1163,7 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen
     if res.backend in ("", None):
         res.backend = backend
     if not receipt:
-        candidate = json.loads(qpath.read_text(encoding="utf-8")).get(key, {})
+        candidate = get_candidate(root, key) or {}
         if candidate.get("status") == "coarse_blocked" and candidate.get("repair_job_id") == job.job_id:
             return _abort_release(str(candidate["coarse_reason"]))
         if candidate.get("status") == "queue_evicted" and candidate.get("repair_job_id") == job.job_id:
@@ -1173,7 +1176,7 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen
         log(root, "communication_retry", key, res.unverified_items[0][:300])
         return summary
     if not receipt:
-        candidate = json.loads(qpath.read_text(encoding="utf-8")).get(key, {})
+        candidate = get_candidate(root, key) or {}
         if (candidate.get("status") == "staged"
                 and candidate.get("repair_outcome") == "verified_publication_retry"
                 and candidate.get("repair_job_id") == job.job_id):
@@ -1432,7 +1435,7 @@ def _publish_pr(root: Path, entry: dict, base_sha: str, patch_file: Path,
 def expire_staged(root: Path) -> int:
     expired = []
     with queue_transaction(root) as q:
-        for key, entry in q.items():
+        for key, entry in candidate_items(q, ("staged",)):
             if (entry.get("status") == "staged" and not entry.get("dispatch_started_at")
                     and not entry.get("direct_start_reserved_at")
                     and _stage_age_days(entry) > STAGE_TTL_DAYS):
@@ -1626,7 +1629,7 @@ def open_scheduled_batch(root: Path) -> list[str]:
                     entry["scheduled_consume_day"] = day
             return []
         keys = []
-        for key, entry in _order_candidates(list(queue.items())):
+        for key, entry in _order_candidates(list(candidate_items(queue, ("staged",)))):
             if not _discovered_today(entry) and not entry.get("dispatch_started_at"):
                 entry["scheduled_consume_day"] = day
                 keys.append(key)
@@ -1679,8 +1682,7 @@ def drain_ai_graded(root: Path, limit: int = 3, dry_run: bool = True,
     走 candidate_pipeline 单条入口，不走这条。
     """
     root = _data_root(root)
-    qpath = root / "queue" / "candidates.json"
-    q = json.loads(qpath.read_text(encoding="utf-8"))
+    q = read_candidates(root, statuses=(STAGED_STATUS,), missing_ok=False)
     ACTIVE = (STAGED_STATUS,)
     eligible: list[tuple[str, dict]] = []
     for key, e in q.items():

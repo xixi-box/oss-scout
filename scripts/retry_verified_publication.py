@@ -16,6 +16,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from scout_v2.candidate_store import read_candidates
 from scout_v2.git_host import gh_read
 from scout_v2.state_store import ClaimLedger, Worklog, business_now, queue_transaction, rotate_staged_queue
 from scout_v2.workers.delivery_recovery import load_bundle, publication_retry_fields
@@ -56,9 +57,8 @@ def authorize_retry(root: Path, job_id: str, *, apply: bool = False) -> dict:
     prs = gh_read([f"repos/{repo}/pulls", "-X", "GET", "-f", "state=all", "-f", "head=" + head])
     if not isinstance(prs, list) or prs:
         raise ValueError("original head has a PR or its publication status is unavailable")
-    queue_path = root / "queue/candidates.json"
-    queue = json.loads(queue_path.read_text(encoding="utf-8"))
     expected = f"{repo}#{number}"
+    queue = read_candidates(root, missing_ok=False)
     key = next((key for key in queue if key.lower() == expected.lower()), None)
     entry = queue.get(key) if key else None
     if (not entry or entry.get("status") in ("running", "pr_open", "staged") or entry.get("pr_url")

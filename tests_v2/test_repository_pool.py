@@ -98,15 +98,20 @@ def test_feishu_verifies_membership_and_paused_state(monkeypatch, tmp_path):
 
 
 @pytest.mark.parametrize("busy", ["dispatcher", "running", "publication"])
-def test_deploy_waits_without_interrupting_repair(monkeypatch, tmp_path, busy):
+@pytest.mark.parametrize("migrated", [False, True])
+def test_deploy_waits_without_interrupting_repair(monkeypatch, tmp_path, busy, migrated):
     import subprocess
     import sys
     import time
+    from scout_v2.candidate_store import migrate_candidates
+    from scout_v2.state_store import queue_transaction
 
     (tmp_path / "state").mkdir()
     (tmp_path / "queue").mkdir()
     queue = tmp_path / "queue/candidates.json"
     queue.write_text(json.dumps({"a/b#1": {"status": "running" if busy == "running" else "staged"}}))
+    if migrated:
+        migrate_candidates(tmp_path)
     db = sqlite3.connect(tmp_path / "state/scout_v2.sqlite3")
     db.execute("CREATE TABLE publications (day TEXT)")
     if busy == "publication":
@@ -122,7 +127,8 @@ def test_deploy_waits_without_interrupting_repair(monkeypatch, tmp_path, busy):
         assert not deployed
         waited.append(seconds)
         lease.rollback()
-        queue.write_text(json.dumps({"a/b#1": {"status": "pr_open"}}))
+        with queue_transaction(tmp_path) as candidates:
+            candidates["a/b#1"]["status"] = "pr_open"
         db.execute("UPDATE publications SET day='2026-11-14'")
         db.commit()
 

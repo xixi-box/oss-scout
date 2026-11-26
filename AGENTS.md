@@ -19,7 +19,7 @@
 - 超额候选保存原始 staged_at 与 eligible_at；每日北京时间 04:00 为当时已到期的历史暂存生成一次持久消费快照，使用当日剩余额度逐条处理，新发现的候选仍优先。当天创建的 PR 被关闭并释放额度时，历史暂存可按原入队顺序补位，无需先达到当日上限；失败或旧日 PR 关闭不释放新额度。
 - 修复任务恢复全局串行：当日剩余额度 R=0 时停止派发，R>0 时最多 1 个任务在途；准备、已派发、执行和待对账均占执行位。每日额度不决定并发数。存量并行任务不取消，全部自然结束并对账后才继续派发一个。继续保留 SQLite 原子额度预留、候选防重、失败释放和跨日对账。
 - AI/取数临时失败保留并退避重试；正式否决与临时故障分开记录。Codex 新模式仅记录本地执行心跳、不依赖服务器续租；持续通信故障在远程结束且确认未发布 PR 后回暂存，按 5–60 分钟退避；仅为此类故障或用户明确要求的已结束任务授予一次重试资格，不删除认领审计、不重开在途任务。验证证据匹配先去除终端颜色码，保留原始日志。
-- 队列 JSON 的读改写统一使用 queue_transaction 跨线程/进程串行化；SQLite 管持久 inbox、额度与执行互斥。
+- 生产候选存于 `state/candidates.sqlite3`，由 `queue_transaction` 跨线程/进程提交有变化的行；首次启动完整导入旧 JSON 并保留迁移前快照。SQLite 管持久 inbox、额度与执行互斥。
 - 控制器重启后自动对账。旧运行仍在执行或发布状态查不清时继续核对；确认结束且未发布后，临时故障保留认领历史并退避重试，使用最新证据重新粗筛和细筛。明确的终态记录具体原因。
 - 飞书业务表在状态变化后立即触发差量同步，只写变化行；GitHub PR 外部变化每 30 秒检查，各表独立同步并每 15 分钟全量对账；完整空快照清理旧行，源失败不得冒充空结果。
 - Codex 新 issue 修复使用 JSON 事件流，保存脱敏命令、输出、退出码及耗时到 Actions 诊断产物（保留 1 天），凭据目录不上传。退出和超时清理整个子进程树，包括脱离会话的构建 daemon；临时目录清理失败只记录，不覆盖原修复结果。
@@ -66,7 +66,7 @@ configs/repositories.yaml  仓库名单、车道与贡献规则
 configs/pr_gates.yaml      发布门禁与 CLA 规则
 cloudflare/wrangler.toml   Worker 扫描名单与跟踪范围（与仓库配置保持一致）
 state/seen.json        发现层去重（发现层写，他人只读）
-queue/candidates.json  候选池（发现层只新增条目；消费者只改 status/lease 字段）
+state/candidates.sqlite3  候选池（按候选逐行持久化，保留入队顺序）
 state/health.json      健康周检产物（>7 天先重跑 health_check.py）
 state/worklog.jsonl    动作审计账本（append-only）
 state/runs/YYYY-MM-DD.md  每日报告
@@ -74,7 +74,7 @@ repos/<name>/          懒 clone 缓存（origin=xixi-box fork, --filter=blob:no
 worktrees/<repo>-<issueN>/  每个候选一个 worktree
 ```
 
-候选池只展示 `staged`（暂存）和 `running`（执行中）；结束后记录 `pr_open` 或具体淘汰、失败结果。发布状态按 GitHub 同步为 open、merged 或 closed。临时取数/模型故障退避重试，正式否决不作为临时故障重派。JSON 写入使用 queue_transaction 与原子替换。
+候选池只展示 `staged`（暂存）和 `running`（执行中）；结束后记录 `pr_open` 或具体淘汰、失败结果。发布状态按 GitHub 同步为 open、merged 或 closed。临时取数/模型故障退避重试，正式否决不作为临时故障重派。候选读写通过候选存储接口，更新使用 `queue_transaction`。
 
 ## 2. 新 PR 自动流程与发布边界
 

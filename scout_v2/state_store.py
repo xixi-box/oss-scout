@@ -1,6 +1,6 @@
-"""Durable inbox, daily start ledger, job state and serialized JSON queue writes.
+"""Durable inbox, daily start ledger, job state and serialized queue writes.
 
-Queue JSON remains compatible with readers; queue_transaction owns runtime mutations.
+queue_transaction owns runtime mutations; legacy JSON is supported before import.
 ClaimLedger retains every started repair for its Asia/Shanghai business day.
 """
 from __future__ import annotations
@@ -16,6 +16,7 @@ import shutil
 from pathlib import Path
 from zoneinfo import ZoneInfo
 from contextlib import contextmanager, nullcontext
+from .candidate_store import CANDIDATE_DB, LEGACY_CANDIDATES, candidate_items, sqlite_candidate_transaction
 
 JOB_STATES = ("queued", "leased", "running", "collecting",
               "succeeded", "failed", "inconclusive", "blocked")
@@ -25,7 +26,7 @@ STAGED_FULL_REASON = "候选列表已满"
 
 def staged_candidate_count(queue: dict) -> int:
     return sum(entry.get("status") == "staged" and not entry.get("direct_start_reserved_at")
-               for entry in queue.values())
+               for _, entry in candidate_items(queue, ("staged",)))
 
 
 def direct_start_available(root: Path, queue: dict, tz_name: str, cap: int) -> bool:
@@ -46,11 +47,12 @@ def direct_start_available(root: Path, queue: dict, tz_name: str, cap: int) -> b
         backed = {key.lower() for key in ledger.reserved_candidates()}
         unbacked = sum(key.lower() not in backed and e.get("status") in ("staged", "running")
                        and bool(e.get("direct_start_reserved_at") or e.get("dispatch_started_at")
-                                or e.get("status") == "running") for key, e in queue.items())
+                                or e.get("status") == "running")
+                       for key, e in candidate_items(queue, ("staged", "running")))
         if capacity["available"] <= unbacked:
             return False
         from .workers.auto_pipeline import _discovered_today, _order_candidates
-        today = [(key, entry) for key, entry in queue.items()
+        today = [(key, entry) for key, entry in candidate_items(queue, ("staged",))
                  if _discovered_today(entry) and not entry.get("blockers")
                  and not entry.get("direct_start_reserved_at") and not entry.get("dispatch_started_at")
                  and (entry.get("ai_verdict") or {}).get("usable") is True]
@@ -100,7 +102,7 @@ def rotate_staged_queue(root: Path, queue: dict, *, keep=(), protected=(), repla
             except sqlite3.OperationalError as exc:
                 if "no such table" not in str(exc):
                     raise
-    waiting = [(key, entry) for key, entry in queue.items()
+    waiting = [(key, entry) for key, entry in candidate_items(queue, ("staged",))
                if entry.get("status") == "staged" and key.lower() not in protected
                and not entry.get("dispatch_started_at") and not entry.get("direct_start_reserved_at")]
     waiting.sort(key=lambda item: candidate_fifo_key(*item))
@@ -225,12 +227,24 @@ def queue_transaction(root: Path, *, path: Path | None = None, backup: bool = Tr
     Network calls must happen outside this short transaction.
     """
     root = Path(root)
+    sqlite_path = root / CANDIDATE_DB
+    legacy_path = root / LEGACY_CANDIDATES
+    default_store = path is None or path == legacy_path
+    if default_store and sqlite_path.is_file():
+        with sqlite_candidate_transaction(root) as queue:
+            yield queue
+        return
     (root / "state").mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(root / "state/queue_lock.sqlite3"), timeout=60,
                            isolation_level=None)
     try:
         with _write_transaction(conn, root / "state/queue_lock.sqlite3", "queue read/modify/write"):
-            path = path or root / "queue/candidates.json"
+            if default_store and sqlite_path.is_file():
+                # A migration may have committed while this writer waited.
+                with sqlite_candidate_transaction(root) as queue:
+                    yield queue
+                return
+            path = path or legacy_path
             from .controller_metrics import timed_operation
             with timed_operation(root, "queue.read_decode"):
                 queue = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}

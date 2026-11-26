@@ -4,6 +4,7 @@ from __future__ import annotations
 from scout_v2.roster import monitored_repo as modifiable_repo
 from scout_v2.roster import scans_issues
 from scout_v2.feishu_bitable import PR_RECORD_SYNC_SECONDS, FULL_TABLE_SYNC_SECONDS
+from scout_v2.candidate_store import CANDIDATE_SOURCES, candidate_items, candidate_source, get_candidate, read_candidates
 
 import base64
 import asyncio
@@ -116,7 +117,7 @@ def _sync_bitables(root: Path, *, ds=None, activity_only=False, activity_cache=N
         ("pr", mod.build_pr_rows, fb.TABLE_NAME, fb.PR_FIELDS, fb.row_to_fields, "pr_table_id", None),
         ("repos", mod.build_repo_rows, fb.REPO_TABLE_NAME, fb.LINK_FIELDS, fb.repo_row_to_fields, "repo_table_id", root / "configs/repositories.yaml"),
         ("scan", mod.build_scan_rows, fb.SCAN_TABLE_NAME, fb.SCAN_FIELDS, fb.scan_row_to_fields, "scan_table_id", root / "state/seen.json"),
-        ("candidates", mod.build_candidate_rows, fb.CAND_TABLE_NAME, fb.CAND_FIELDS, fb.cand_row_to_fields, "cand_table_id", root / "queue/candidates.json"),
+        ("candidates", mod.build_candidate_rows, fb.CAND_TABLE_NAME, fb.CAND_FIELDS, fb.cand_row_to_fields, "cand_table_id", candidate_source(root)),
     ]
     activity = None
     for name, build, table, fields, convert, binding, source in tables:
@@ -130,20 +131,13 @@ def _sync_bitables(root: Path, *, ds=None, activity_only=False, activity_cache=N
                 if tracks_activity and activity is None:
                     activity = candidate_activity(ds if ds is not None else D.DataSource(root))
                 files = {
-                    "candidates": ("queue/candidates.json",),
-                    "scan": ("queue/candidates.json", "state/seen.json"),
+                    "candidates": CANDIDATE_SOURCES,
+                    "scan": (*CANDIDATE_SOURCES, "state/seen.json"),
                     "repos": ("configs/repositories.yaml", "configs/lane_overrides.yaml", "state/pool_audit.json",
                               "state/repo_merge_counts.json"),
                 }.get(name, ())
-                stamps = []
-                for file in files:
-                    try:
-                        stat = (root / file).stat()
-                        stamps.append((stat.st_mtime_ns, stat.st_size, stat.st_ino))
-                    except FileNotFoundError:
-                        stamps.append(None)
-                from scout_v2.table_sync import subscribe
-                signature = (tuple(stamps), activity if tracks_activity else None,
+                from scout_v2.table_sync import source_stamp, subscribe
+                signature = (tuple(source_stamp(root / file) for file in files), activity if tracks_activity else None,
                              subscribe(root).version(name))
                 signature_key = "source:" + name
                 unchanged = (files and not full_reconcile and activity_cache is not None
@@ -161,10 +155,10 @@ def _sync_bitables(root: Path, *, ds=None, activity_only=False, activity_cache=N
                 from scout_v2.controller_metrics import timed_operation
                 with timed_operation(root, "table." + name + ".build"):
                     # Builders tolerate corrupt/missing files by returning []; validate first.
-                    if source and name != "scan":
-                        raw = source.read_text(encoding="utf-8")
-                        yaml.safe_load(raw) if source.suffix == ".yaml" else json.loads(raw)
-                        del raw
+                    if name == "repos":
+                        yaml.safe_load(source.read_text(encoding="utf-8"))
+                    elif name == "candidates":
+                        source.stat()
                     if name == "pr" and activity_cache is not None:
                         pr_feed = activity_cache.setdefault("pr:github", PullRequestFeed(root=root))
                         github_rows = pr_feed.snapshot(full=full_reconcile)
@@ -224,9 +218,7 @@ def create_app(root: Path | None = None, gh_runner=None,
     def _load_candidate(root_path: Path, key: str) -> dict | None:
         """从队列重读一条候选（线程启动时用最新状态，不用轮询时的快照）。"""
         try:
-            q = json.loads((root_path / "queue" / "candidates.json")
-                           .read_text(encoding="utf-8"))
-            ent = q.get(key)
+            ent = get_candidate(root_path, key)
             if isinstance(ent, dict):
                 ent.setdefault("id", key)
                 return ent
@@ -303,9 +295,8 @@ def create_app(root: Path | None = None, gh_runner=None,
             left = publication_quota_remaining(root, eng.tz_name, eng.max_claims_per_day)
             if left <= 0:
                 from scout_v2.workers.auto_pipeline import _stage_candidates
-                queued = json.loads((root / "queue/candidates.json").read_text(encoding="utf-8"))
-                _stage_candidates(root, [k for k, e in queued.items()
-                                        if e.get("status") == "staged"],
+                queued = read_candidates(root, statuses=("staged",), missing_ok=False)
+                _stage_candidates(root, list(queued),
                                   tz_name=eng.tz_name, cap=eng.max_claims_per_day)
                 return started
             capacity = repair_dispatch_capacity(root, eng.tz_name, eng.max_claims_per_day)
@@ -588,14 +579,14 @@ def create_app(root: Path | None = None, gh_runner=None,
                             entry.pop("dispatch_job_id", None)
                             entry.pop("direct_start_reserved_at", None)
                     # Persist both queue markers before releasing its durable seat.
-                    # A failed JSON replacement must leave the preparation reserved.
+                    # A failed queue commit must leave the preparation reserved.
                     ledger.release_preparation(job_id)
             protected = {key.lower() for key in ledger.reserved_candidates()}
         finally:
             ledger.close()
         # A runner may still publish after the controller restarts. Do not resubmit it.
         with queue_transaction(root) as q:
-            for key, entry in q.items():
+            for key, entry in candidate_items(q, ("staged", "running", "escalated", "new", "recheck_failed")):
                 if key.lower() in protected:
                     continue  # remote/preparing writer still owns its durable reservation
                 if (entry.get("status") == "staged" and entry.get("dispatch_job_id")

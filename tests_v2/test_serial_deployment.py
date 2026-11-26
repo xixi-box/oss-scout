@@ -12,6 +12,8 @@ from scout_v2.state_store import ClaimLedger,candidate_execution_lock
 
 
 def test_deploy_holds_admission_while_existing_writers_finish():
+    from contextlib import closing
+
     workflow=yaml.safe_load((Path(__file__).parents[1]/'.github/workflows/deploy.yml').read_text(encoding='utf-8'))
     source=next(step['run'] for step in workflow['jobs']['deploy']['steps'] if step.get('name')=='Deploy to self-hosted runner')
     script=source.split("python3 - ",1)[1].split("\n",1)[1].split("\nPY",1)[0]
@@ -34,12 +36,14 @@ def test_deploy_holds_admission_while_existing_writers_finish():
         def __exit__(self,*args):pass
         def execute(self,sql):return self
         def fetchone(self):return (next(pending),)
+        def close(self):pass
     def connect(path,**kwargs):
         return Snapshot() if kwargs.get('uri') else lock
     class FakePath:
         def __init__(self,*args):pass
         def __truediv__(self,other):return FakePath()
         def __str__(self):return 'dispatcher.sqlite3'
+        def is_file(self):return False
         def read_text(self):return '{}'
     def wait(seconds):
         assert lock.in_transaction
@@ -50,7 +54,7 @@ def test_deploy_holds_admission_while_existing_writers_finish():
         assert command==['docker','compose','-f','compose.yaml','up','-d','--no-build','--remove-orphans']
         events.append('replaced')
     exec(compile(tree,'deployment-drain','exec'),{
-        'Path':FakePath,'sqlite3':SimpleNamespace(connect=connect,OperationalError=RuntimeError),
+        'Path':FakePath,'closing':closing,'sqlite3':SimpleNamespace(connect=connect,OperationalError=RuntimeError),
         'json':json,'subprocess':SimpleNamespace(run=run),
         'sys':SimpleNamespace(argv=['deploy','compose.yaml','/data/oss-scout-data']),'time':SimpleNamespace(sleep=wait)})
     assert events==['admission_acquired','existing_job_finished','existing_job_finished','replaced','admission_released']

@@ -2,10 +2,10 @@
 from __future__ import annotations
 
 import datetime as dt
-import json
 import sqlite3
 from pathlib import Path
 
+from .candidate_store import read_candidates
 from .state_store import ClaimLedger, business_now, candidate_execution_lock, queue_transaction, rotate_staged_queue
 
 
@@ -13,10 +13,8 @@ def recover_abandoned_handoffs(root: Path, *, protected=()) -> list[str]:
     from .workers.auto_pipeline import _actions_runner_repo, _find_repair_run, log
 
     root = Path(root)
-    path = root / "queue/candidates.json"
-    if not path.exists():
-        return []
-    snapshot = json.loads(path.read_text(encoding="utf-8"))
+    snapshot = read_candidates(root, statuses=("staged", "coarse_blocked", "fine_blocked",
+                                                "screen_skipped", "escalated"))
     protected = {key.lower() for key in protected}
     now = business_now()
     recovered = []

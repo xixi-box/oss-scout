@@ -184,15 +184,16 @@ def sync_model_settings(root: Path, model_lock) -> str:
 
 
 def _apply_runtime_limits(root: Path, before: dict, after: dict) -> None:
+    from .candidate_store import candidate_items, candidate_store_exists
     from .state_store import business_now, queue_transaction, rotate_staged_queue
     from .workers.auto_pipeline import _discovered_today, log
 
-    if not (root / "queue/candidates.json").exists():
+    if not candidate_store_exists(root):
         return
     now = business_now().isoformat()
     with queue_transaction(root) as queue:
         if int(after["daily_pr_quota"]) > int(before["daily_pr_quota"]):
-            for entry in queue.values():
+            for _, entry in candidate_items(queue, ("staged",)):
                 if (entry.get("status") == "staged" and entry.get("defer_reason") == "daily_quota"
                         and _discovered_today(entry) and not entry.get("dispatch_started_at")
                         and not entry.get("direct_start_reserved_at")):

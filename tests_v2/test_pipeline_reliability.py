@@ -714,7 +714,9 @@ def test_publication_reconciled_on_github_creation_day(tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize("published", [False, True])
-def test_controller_restart_recovers_candidate_and_feishu_status(tmp_path, monkeypatch, published):
+@pytest.mark.parametrize("migrated", [False, True])
+def test_controller_restart_recovers_candidate_and_feishu_status(tmp_path, monkeypatch, published, migrated):
+    from scout_v2.candidate_store import get_candidate, migrate_candidates
     from scripts.monitor_prs import build_candidate_rows, build_scan_rows
 
     key = "nodejs/node#67320"
@@ -743,14 +745,14 @@ def test_controller_restart_recovers_candidate_and_feishu_status(tmp_path, monke
     result = {"outcome": "inconclusive", "unverified_items": ["no artifacts and logs unavailable"]}
     monkeypatch.setattr(p.ActionsBackend, "collect", lambda self, run_id: result)
     assert not p.recover_pending_publication(tmp_path)
-    assert json.loads(queue.read_text(encoding="utf-8"))[key]["status"] == "escalated"
+    assert get_candidate(tmp_path, key)["status"] == "escalated"
     run.update(status="completed", conclusion="success")
     if not published:
         assert not p.recover_pending_publication(tmp_path)
         result.update(job_id=job, outcome="failed", unverified_items=["Only tests changed"])
 
     assert p.recover_pending_publication(tmp_path)
-    entry = json.loads(queue.read_text(encoding="utf-8"))[key]
+    entry = get_candidate(tmp_path, key)
     assert entry["status"] == ("pr_open" if published else "aborted_no_evidence")
     assert entry["repair_run_id"] == "703"
     assert entry["workflow_conclusion"] == "success"

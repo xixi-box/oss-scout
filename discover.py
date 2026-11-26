@@ -22,11 +22,12 @@ import sys
 import time
 from pathlib import Path
 
+from scout_v2.state_store import queue_transaction
+
 sys.stdout.reconfigure(encoding="utf-8")
 
 ROOT = Path(__file__).resolve().parent
 STATE = ROOT / "state"
-QUEUE = ROOT / "queue"
 CONFIG = json.loads((ROOT / "config.json").read_text(encoding="utf-8"))
 SEARCH_CFG = CONFIG.get("search", {})
 
@@ -286,7 +287,7 @@ def main():
         repos = [(r, l) for r, l in repos if r in want]
 
     seen = load_json(STATE / "seen.json", {})
-    queue = load_json(QUEUE / "candidates.json", {})
+    seen_updates = {}
     now_iso = dt.datetime.now().isoformat(timespec="seconds")
     new_entries: list[dict] = []
 
@@ -321,7 +322,7 @@ def main():
         new_cnt = 0
         for it in top:
             key = f"{repo}#{it['number']}"
-            if key in seen:      # 已见过：永不重复通知/入队
+            if key in seen or key in seen_updates:      # 已见过：永不重复通知/入队
                 continue
             sig = enrich(repo, it["number"])
             if sig is None:
@@ -329,8 +330,8 @@ def main():
             s, sclass, blockers = score(it["title"], sig, it["created_at"], lane)
             if sclass == "C":
                 # 被阻断（有竞争 PR/认领/feature 性质）或纯低分：记 seen 防重查，不入队
-                seen[key] = {"first_seen": now_iso,
-                             "status": "blocked" if blockers else "lowscore"}
+                seen_updates[key] = {"first_seen": now_iso,
+                                     "status": "blocked" if blockers else "lowscore"}
                 print(f"    [C  {s:2d}] #{it['number']} {it['title'][:70]}"
                       + (f"  ←{blockers}" if blockers else ""))
                 continue
@@ -343,15 +344,21 @@ def main():
                 "status": "new", "lease": None,
             }
             new_entries.append(entry)
-            queue[key] = entry
-            seen[key] = {"first_seen": now_iso, "status": "queued"}
+            seen_updates[key] = {"first_seen": now_iso, "status": "queued"}
             new_cnt += 1
             print(f"    [{sclass} {s:2d}] #{it['number']} {it['title'][:70]}")
         print(f"    原始池 {len(pool)}，新入库 {new_cnt}")
 
-    if not args.dry_run:
-        atomic_write(STATE / "seen.json", seen)
-        atomic_write(QUEUE / "candidates.json", queue)
+    if not args.dry_run and seen_updates:
+        with queue_transaction(ROOT) as queue:
+            live_seen = load_json(STATE / "seen.json", {})
+            unseen = {key: entry for key, entry in seen_updates.items() if key not in live_seen}
+            new_entries = [entry for entry in new_entries if entry["id"] in unseen and entry["id"] not in queue]
+            for entry in new_entries:
+                queue[entry["id"]] = entry
+            if unseen:
+                live_seen.update(unseen)
+                atomic_write(STATE / "seen.json", live_seen)
 
     # 控制台摘要只列 A/B 级
     ab = [e for e in new_entries if e["class"] in ("A", "B")]

@@ -9,6 +9,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from scout_v2 import feishu_bitable as fb, feishu_models as fm
+from scout_v2.candidate_store import read_candidates
 from scout_v2.console_models import effective_models, runtime_limit
 from scout_v2.state_store import STAGED_CANDIDATE_LIMIT, staged_candidate_count
 
@@ -39,7 +40,7 @@ def main():
         else:
             raise AssertionError(f"Retired PR endpoint is still active: {route}")
     assert not (Path(__file__).resolve().parents[1] / "scout_v2/pr_approval.py").exists()
-    candidates = json.loads((root / "queue/candidates.json").read_text(encoding="utf-8"))
+    candidates = read_candidates(root, statuses=("staged",), missing_ok=False)
     staged = staged_candidate_count(candidates)
     limit = runtime_limit(root, "candidate_pool_size", STAGED_CANDIDATE_LIMIT)
     assert staged <= limit, f"Staged backlog exceeds {limit}: {staged}"

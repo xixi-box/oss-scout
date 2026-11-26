@@ -20,7 +20,7 @@ scheduler:
 continuous_consume: true              # 2026-11-06：事件驱动 + 每分钟兜底；暂存次日 04:00 到期
 
 queue:
-  store: "json"                       # 候选真值 = queue/candidates.json（discover.py 兼容）
+  store: "sqlite"                    # 生产候选真值 = state/candidates.sqlite3
   sqlite_path: "state/scout_v2.sqlite3"   # Job/租约/认领锁；单一可信写者
   lease_timeout_seconds: 1800
 

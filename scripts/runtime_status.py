@@ -12,6 +12,7 @@ from pathlib import Path
 import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from scout_v2.candidate_store import read_candidates
 from scout_v2.state_store import business_now
 
 
@@ -47,7 +48,7 @@ def inspect(root: Path) -> dict:
     config = yaml.safe_load((root / "configs/repositories.yaml").read_text(encoding="utf-8"))
     repos = {k: v for k, v in config["repositories"].items() if not v.get("internal")}
     policy, _ = PolicyEngine.load(root)
-    queue = json.loads((root / "queue/candidates.json").read_text(encoding="utf-8"))
+    queue = read_candidates(root, missing_ok=False)
     now = business_now()
     result = {"business_time": now.isoformat(), "repositories": len(repos),
               "formal_repositories": sum(e.get("pool") == "formal" for e in repos.values()),
