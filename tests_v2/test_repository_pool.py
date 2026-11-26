@@ -48,6 +48,7 @@ def test_exact_pool_and_discovery_boundaries():
     assert all(external[repo]["pool"] == "honor" for repo in pr_tracking_only)
     assert monitored_repo("jlowin/fastmcp") and monitored_repo("PrefectHQ/fastmcp")
     assert not monitored_repo("kubernetes-sigs/agent-sandbox")
+    assert not monitored_repo("Mintplex-Labs/anything-llm")
     assert not monitored_repo("docker/compose")  # Removed from this version.
 
 
@@ -64,6 +65,7 @@ def test_fastmcp_assignment_or_explicit_exemption():
     ("kagent-dev/kagent", "100"),
     ("apache/camel-quarkus", "GraalVM"),
     ("project-zot/zot", "DCO"),
+    ("symfony/ai", "PHPUnit"),
 ])
 def test_replacement_rules_reach_screening_repair_and_feishu(monkeypatch, repo, scope):
     from dashboard.data import repo_rules_text

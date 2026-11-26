@@ -47,7 +47,7 @@ repositories:
   Tencent/WeKnora: {requires_invite: false}
   Unstructured-IO/unstructured: {requires_invite: false}
   docling-project/docling: {requires_invite: false}
-  Mintplex-Labs/anything-llm: {requires_invite: false}
+  symfony/ai: {requires_invite: false}
   oceanbase/powercontext: {requires_invite: false}
   HKUDS/RAG-Anything: {requires_invite: false}
   pydantic/logfire: {requires_invite: false}

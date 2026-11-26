@@ -174,15 +174,18 @@ repositories:
     note: 已查常见贡献文档与候选工作流，未发现专门AI限制；不代表允许无人监督提交。
     pr_rules:
     - 已查常见贡献文档与候选工作流，未发现专门AI限制；不代表允许无人监督提交。
-  Mintplex-Labs/anything-llm:
+  symfony/ai:
     lane: open
     pool: formal
     issue_scan: true
-    purpose: 本地优先RAG、Agent与知识应用
+    purpose: Symfony 的 PHP Agent、模型平台和向量存储集成
     merged_by_us: 0
-    note: 贡献指南明确bugfix只需关联issue；新功能须维护者先批准，权限系统重设计由内部维护，本版只推荐可确认的bug修复。
+    note: 各组件独立用 PHPUnit 验证；PR 提交到 main，标题带组件前缀，填写模板的 Bug fix、New feature、Docs 和 Issues。
     pr_rules:
-    - 贡献指南明确bugfix只需关联issue；新功能须维护者先批准，权限系统重设计由内部维护，本版只推荐可确认的bug修复。
+    - 仅处理范围明确、可独立验证的现有 bug；安全问题按仓库私下披露流程处理。
+    - 目标分支 main，标题按受影响组件加方括号前缀并填写上游 PR 模板，Issues 栏关联目标 issue。
+    - 纯 bug 修复保持 API 兼容，不修改 CHANGELOG.md 或 UPGRADE.md。
+    - 安装受影响组件的 Composer 依赖，使用 ./link 指向工作区后运行对应 PHPUnit；涉及真实供应商时如实说明已测范围。
   oceanbase/powercontext:
     lane: open
     pool: formal

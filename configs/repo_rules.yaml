@@ -1,6 +1,10 @@
 _meta:
   updated: '2026-11-15'
 rules:
+  symfony/ai:
+    note: Target main with component-prefixed titles and fill in the PR template.
+      Link the issue, keep bug fixes backward compatible, and leave CHANGELOG.md and
+      UPGRADE.md alone. Use Composer and ./link so PHPUnit tests run against the worktree.
   project-zot/zot:
     note: Keep bug fixes focused and add regression tests. Discuss substantial changes
       in the issue before implementation. Link the issue and include test results, a release
