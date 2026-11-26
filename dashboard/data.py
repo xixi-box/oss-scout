@@ -501,12 +501,20 @@ def ingest_cloudflare_issues(ds, items: list[dict], *, refresh: bool = False,
     if err or eng is None:
         raise RuntimeError(f"policy unavailable: {err}")
     seen_path = ds.root / "state/seen.json"
+    queue_path = ds.root / "queue/candidates.json"
     added = []
     for it in items:
         repo, number = str(it.get("repo") or ""), int(it.get("number") or 0)
         if not repo or number <= 0:
             continue
         key = f"{repo}#{number}"
+        # These files are atomically replaced. Skip known candidates without
+        # taking a writer lock; the commit below still rechecks under the lock.
+        try:
+            if key in json.loads(queue_path.read_text(encoding="utf-8")):
+                continue
+        except FileNotFoundError:
+            pass
         live_blockers, timeline = (), None
         if refresh:
             it, live_blockers, timeline = refresh_issue(it, root=ds.root)
@@ -514,12 +522,10 @@ def ingest_cloudflare_issues(ds, items: list[dict], *, refresh: bool = False,
         fingerprint = hashlib.sha256(
             json.dumps(fingerprint_input, sort_keys=True, ensure_ascii=False).encode()
         ).hexdigest()
-        with queue_transaction(ds.root) as q:
-            seen = _read_json(seen_path, {})()
-            prior = seen.get(key) or {}
-            if key in q or (prior.get("fingerprint") == fingerprint and prior.get("status") in
-                            ("blocked", "rejected", "archived", "screen_skipped")):
-                continue
+        prior = _read_json(seen_path, {})().get(key) or {}
+        if prior.get("fingerprint") == fingerprint and prior.get("status") in (
+                "blocked", "rejected", "archived", "screen_skipped"):
+            continue
         lane = eng.repo_lane(repo)
         blockers, verdict = screen_issue(eng, it, lane=lane, live_blockers=live_blockers, timeline=timeline)
         now = business_now().isoformat(timespec="microseconds")
@@ -535,6 +541,9 @@ def ingest_cloudflare_issues(ds, items: list[dict], *, refresh: bool = False,
             seen = _read_json(seen_path, {})()
             if key in q:
                 continue
+            # Another screening may have recorded the receipt while we were in
+            # GitHub/OpenJev. Preserve its initial discovery timestamp.
+            rec["first_seen"] = discovered_at = (seen.get(key) or {}).get("first_seen") or discovered_at
             if not blockers and verdict.get("usable") is True:
                 stage = publication_quota_remaining(ds.root, eng.tz_name, eng.max_claims_per_day) == 0
                 direct = direct_start_available(ds.root, q, eng.tz_name, eng.max_claims_per_day)

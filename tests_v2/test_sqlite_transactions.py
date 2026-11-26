@@ -36,8 +36,37 @@ def test_inbox_preserves_receipt_time_and_gives_each_lane_a_turn(tmp_path):
         inbox.put([{**old, "title": "updated"}, fresh])
         assert inbox.received_at(key) == stamp
         assert [row[0] for row in pending_scan_receipts(tmp_path)] == ["a/b#2"]
-        assert inbox.take(prefer_new=True)[0] == "a/b#2"
-        assert inbox.take(prefer_new=False)[0] == key
+        assert inbox.take(prefer="new")[0] == "a/b#2"
+        assert inbox.take(prefer="update")[0] == key
+    finally:
+        inbox.close()
+
+
+def test_retry_turn_uses_due_time_and_payload_updates_preserve_backoff(tmp_path, monkeypatch):
+    inbox = IssueInbox(tmp_path)
+    now = 1000.0
+    monkeypatch.setattr("time.time", lambda: now)
+    update, first, second = ({"repo": "a/b", "number": n} for n in range(1, 4))
+    try:
+        inbox.put([update, first, second])
+        key, _, version, _ = inbox.take()
+        inbox.finish(key, version)
+        inbox.put([{**update, "title": "ordinary update"}])
+        first_key, _, first_version, first_attempts = inbox.take()
+        key, _, version, attempts = inbox.take()
+        inbox.finish(key, version, "second unavailable", attempts)
+        now = 1010
+        inbox.finish(first_key, first_version, "first unavailable", first_attempts)
+        inbox.put([{**first, "title": "new evidence"}])
+        assert inbox.conn.execute(
+            "SELECT ready, attempts, error FROM inbox WHERE key='a/b#2'"
+        ).fetchone() == (1040, 1, "first unavailable")
+        now = 1040
+        assert inbox.take(prefer="retry")[0] == "a/b#3"
+        assert inbox.take(prefer="update")[0] == "a/b#1"
+        key, payload, version, attempts = inbox.take(prefer="retry")
+        assert (key, version, attempts) == ("a/b#2", 2, 1)
+        assert json.loads(payload)["title"] == "new evidence"
     finally:
         inbox.close()
 

@@ -408,6 +408,7 @@ def create_app(root: Path | None = None, gh_runner=None,
 
     def _intake_loop():
         """Recoverable background AI screening; request handlers only store input."""
+        lanes = ("new", "new", "new", "retry", "update")
         turn = 0
         intake_turn_lock = _thr.Lock()
 
@@ -427,18 +428,16 @@ def create_app(root: Path | None = None, gh_runner=None,
                 try:
                     inbox = IssueInbox(root)
                     with intake_turn_lock:
-                        row = inbox.take(prefer_new=turn < 3)
+                        row = inbox.take(prefer=lanes[turn])
                         if row:
-                            turn = (turn + 1) % 4
+                            turn = (turn + 1) % len(lanes)
                     if not row:
                         time.sleep(2)
                         continue
                     key, payload, version, attempts = row
                     try:
-                        queue = json.loads((root / "queue/candidates.json").read_text(encoding="utf-8"))
-                        if key in queue:
-                            inbox.finish(key, version)
-                            continue
+                        if attempts:
+                            _audit(root, "intake_retry_start", key, f"retry {attempts}")
                         item = json.loads(payload)
                         if not scans_issues(item["repo"]):
                             finish_blocked(inbox, key, version, "仓库未参与新增 Issue 扫描")

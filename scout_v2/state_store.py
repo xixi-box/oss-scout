@@ -287,7 +287,7 @@ class IssueInbox:
                 self.conn.execute(
                     "INSERT INTO inbox(key,payload,first_received_at) VALUES (?,?,?) "
                     "ON CONFLICT(key) DO UPDATE SET payload=excluded.payload, "
-                    "version=inbox.version+1,ready=0,error='' WHERE inbox.payload<>excluded.payload "
+                    "version=inbox.version+1 WHERE inbox.payload<>excluded.payload "
                     "RETURNING version", (key, payload, received_at)).fetchone()
         return len(issues)
 
@@ -295,16 +295,21 @@ class IssueInbox:
         row = self.conn.execute("SELECT first_received_at FROM inbox WHERE key=?", (key,)).fetchone()
         return row[0] if row else None
 
-    def take(self, *, prefer_new=True):
+    def take(self, *, prefer="new"):
         import time
         now = time.time()
+        lanes = {
+            "new": "done_version=0 AND attempts=0",
+            "retry": "attempts>0",
+            "update": "done_version>0 AND attempts=0",
+        }
+        order = (prefer, *(lane for lane in lanes if lane != prefer))
         with _write_transaction(self.conn, self.root / "state/issue_inbox.sqlite3", "inbox.take"):
-            fresh = "done_version=0 AND attempts=0"
-            order = (fresh, f"NOT ({fresh})")
-            for lane in (order if prefer_new else reversed(order)):
+            for lane in order:
+                priority = "ready, rowid" if lane == "retry" else "rowid"
                 row = self.conn.execute("SELECT key,payload,version,attempts FROM inbox "
-                                        f"WHERE done_version<version AND ready<=? AND lease_until<=? AND {lane} "
-                                        "ORDER BY rowid LIMIT 1", (now, now)).fetchone()
+                                        "WHERE done_version<version AND ready<=? AND lease_until<=? "
+                                        f"AND {lanes[lane]} ORDER BY {priority} LIMIT 1", (now, now)).fetchone()
                 if row:
                     break
             if row:
@@ -321,7 +326,7 @@ class IssueInbox:
         else:
             # Keep a tombstone: overlapping Worker windows must not refetch full
             # GitHub context for every already-processed payload every minute.
-            self.conn.execute("UPDATE inbox SET done_version=MAX(done_version,?),lease_until=0,attempts=0,error='' WHERE key=?",
+            self.conn.execute("UPDATE inbox SET done_version=MAX(done_version,?),ready=0,lease_until=0,attempts=0,error='' WHERE key=?",
                               (version, key))
 
 
