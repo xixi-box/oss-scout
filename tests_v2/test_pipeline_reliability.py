@@ -227,10 +227,10 @@ def test_ai_failure_is_retryable(intake):
     (None, "", "screen_skipped"),
     (400, "This model's maximum context length is 65536 tokens. (parameter=input_tokens)", "screen_skipped"),
     (413, "", "screen_skipped"),
-    (400, "Unknown model", "retry"),
-    (429, "Too many requests", "retry"),
+    (400, "Unknown model", "rejected"),
+    (429, "Too many requests", "rejected"),
 ])
-def test_openjev_input_limit_is_terminal(intake, monkeypatch, http_status, detail, expected):
+def test_openjev_input_limit_and_exhausted_api_retries_are_terminal(intake, monkeypatch, http_status, detail, expected):
     import io
     from urllib.error import HTTPError
     from scout_v2.feishu_bitable import scan_row_to_fields
@@ -240,6 +240,7 @@ def test_openjev_input_limit_is_terminal(intake, monkeypatch, http_status, detai
     monkeypatch.setattr("scout_v2.console_models.read_models", lambda _: {
         "codiv_key": "test-key", "codiv_base": "https://api.codiv.ai", "codiv_model": "openjev-latest",
     })
+    monkeypatch.setattr("scout_v2.workers.openjev.time.sleep", lambda seconds: None)
     if http_status is None:
         monkeypatch.setattr("scout_v2.workers.openjev._CODIV_MAX_REQUEST_BYTES", 100)
 
@@ -250,7 +251,7 @@ def test_openjev_input_limit_is_terminal(intake, monkeypatch, http_status, detai
     with patch("scout_v2.workers.openjev.urllib.request.urlopen", side_effect=failed_request) as request:
         for _ in range(2):
             assert d.ingest_cloudflare_issues(ds, [issue])[0] == 0
-        assert request.call_count == (0 if http_status is None else 1 if expected == "screen_skipped" else 2)
+        assert request.call_count == (0 if http_status is None else 1 if expected == "screen_skipped" else 4)
     row, = build_scan_rows(ds.root)
     assert row["status"] == expected
     fields = scan_row_to_fields(row)
@@ -259,7 +260,7 @@ def test_openjev_input_limit_is_terminal(intake, monkeypatch, http_status, detai
         assert fields["最终结果"] == "已跳过 · 细筛输入超限"
         assert fields["细筛结果"] == "未执行"
     else:
-        assert fields["最终结果"] == "待重试"
+        assert fields["最终结果"] == f"细筛淘汰 · 细筛 API 失败（已重试 3 次） · OpenJev HTTP {http_status}"
 
 
 def test_mechanical_rejection_does_not_call_ai(intake):

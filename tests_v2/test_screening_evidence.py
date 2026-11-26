@@ -209,10 +209,65 @@ def test_context_fingerprint_tracks_policy_comments_and_dependency_state(monkeyp
     assert evidence.build_screening_context(candidate, "policy version one")["screening_evidence_sha256"] != first["screening_evidence_sha256"]
 
 
-def test_missing_safety_answer_is_retryable_even_with_eligible_yes(monkeypatch):
-    model_response(monkeypatch, missing="private_disclosure")
+def test_missing_safety_answer_is_rejected_after_three_inline_retries(monkeypatch):
+    calls = model_response(monkeypatch, missing="private_disclosure")
+    monkeypatch.setattr("scout_v2.workers.openjev.time.sleep", lambda seconds: None)
     result = OpenJevClient().score_issue({"screening_context_version": 2})
-    assert result["usable"] is None
+    assert len(calls) == 4
+    assert result["usable"] is False and result["blocking_gate"] == "screening_api_error"
+    assert "已重试 3 次" in result["reason"]
+
+
+def test_fine_screen_succeeds_after_inline_transport_retries(monkeypatch):
+    calls = []
+
+    def respond(request, **kwargs):
+        calls.append(request.data)
+        if len(calls) <= 3:
+            raise TimeoutError()
+        return io.BytesIO(b'{"answers":{"eligible":{"noul":0.9}}}')
+
+    monkeypatch.setattr("scout_v2.workers.openjev.urllib.request.urlopen", respond)
+    monkeypatch.setattr("scout_v2.workers.openjev.time.sleep", lambda seconds: None)
+    assert OpenJevClient().score_issue({})["usable"] is True
+    assert len(calls) == 4 and len(set(calls)) == 1
+
+
+def test_unresolved_semantic_prerequisite_is_a_fine_rejection(monkeypatch):
+    calls = model_response(monkeypatch, unknown=0.99)
+    result = OpenJevClient().score_issue({"screening_context_version": 2})
+    assert len(calls) == 1
+    assert result["usable"] is False and result["blocking_gate"] == "prerequisite_unknown"
+
+
+@pytest.mark.parametrize("dependency_state,comments,expected", [
+    ("open", [], "仍开放"),
+    ("closed", [], None),
+    ("unavailable", [], "状态未确认"),
+    ("open", [{"author": "maintainer", "association": "MEMBER", "body": "该依赖已撤回。"}], None),
+])
+def test_powercontext_hard_issue_dependency_uses_coarse_screen(monkeypatch, dependency_state, comments, expected):
+    repo = "oceanbase/powercontext"
+    engine = SimpleNamespace(repos_cfg={"repositories": {repo: {}}})
+    issue = {"repo": repo, "number": 2851, "context_complete": True, "reporter": "AlexStocks",
+             "body_excerpt": "状态：APPROVED / STARTABLE\n"
+             "- 硬依赖：#2849 关闭并冻结统一 parser/locator 和评测基线后才能开始格式实现；"
+             "可与 #2850 并行。", "issue_comments": comments}
+
+    def get_fact(target, number):
+        assert (target, number) == (repo, 2849)
+        if dependency_state == "unavailable":
+            raise evidence.ScreeningEvidenceUnavailable("GitHub 读取失败，待重试")
+        return {"kind": "issue", "state": dependency_state}
+
+    monkeypatch.setattr(evidence, "_reference_state", get_fact)
+    if expected is None:
+        assert data.coarse_issue_blockers(engine, issue, lane="open") == []
+    else:
+        monkeypatch.setattr(OpenJevClient, "score_issue", lambda *a: pytest.fail("must stop before fine screen"))
+        blockers, verdict = data.screen_issue(engine, issue, lane="open", timeline=[])
+        assert len(blockers) == 1 and "#2849" in blockers[0] and expected in blockers[0]
+        assert verdict["reason"] == "not screened"
 
 
 def test_semantic_questions_reject_keyword_shortcuts_and_public_issue_authorization(monkeypatch):

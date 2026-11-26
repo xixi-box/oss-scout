@@ -881,6 +881,7 @@ def _candidate_pipeline(root: Path, entry: dict, *, max_files: int = 6, rescreen
                 "screen_retry_at": (business_now() + dt.timedelta(minutes=5)).isoformat()})
             return _abort_release(reason)
         fresh_metadata = issue_screening_snapshot(entry, issue, [])
+        fresh_metadata["context_complete"] = False  # This metadata read does not fetch comments.
         blockers = coarse_issue_blockers(eng, fresh_metadata, lane=lane)
         if blockers:
             reason = ", ".join(blockers)

@@ -1,7 +1,7 @@
 """Read complete repository policies and current prerequisite facts before triage.
 
-Extraction only selects references to look up. It never declares a security bug
-or a mandatory dependency; the semantic scorer receives the original discussion.
+The coarse gate checks explicit opening conditions. The semantic scorer receives
+the original discussion for requirements that need interpretation.
 """
 from __future__ import annotations
 
@@ -29,7 +29,7 @@ _DEPENDENCY_HINT = re.compile(
     r"\b(?:depend\w*|prerequisites?|blocked\s+by|wait\w*|after|before|until|sequence|settle\w*|land\w*|needs?|requires?)\b"
     r"|(?:依赖|前置|等待|落定|先于|之后|再处理|合并后|落地后|阻塞|需先|需要先|先合并|后再|基于)", re.I)
 _PR_REFERENCE = re.compile(
-    r"https://github\.com/(?P<repo>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)/pull/(?P<url_number>\d+)"
+    r"https://github\.com/(?P<repo>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)/(?:issues|pull)/(?P<url_number>\d+)"
     r"|(?<![\w/])(?:(?P<short_repo>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+))?#(?P<number>\d+)")
 
 
@@ -196,6 +196,44 @@ def _reference_state(repo, number):
                 "base_ref": (pull.get("base") or {}).get("ref"),
                 "head_sha": (pull.get("head") or {}).get("sha")}
     return _cached(("reference", repo.lower(), number), _PR_TTL, load)
+
+
+def coarse_prerequisite_blocker(item: dict) -> str | None:
+    # Restrict the mechanical gate to an explicit, unconditional opening rule in
+    # the issue body. A later authoritative comment may supersede it.
+    if any(comment.get("author") == item.get("reporter")
+           or comment.get("association") in {"OWNER", "MEMBER", "COLLABORATOR"}
+           for comment in item.get("issue_comments") or []):
+        return None
+    body = re.sub(r"`(#\d+)`", r"\1", item.get("body_excerpt") or "")
+    for clause in prose_clauses(body):
+        prefix = re.match(r"^(?:[-*]\s+)?(?:\*\*)?(?:硬依赖|Hard (?:dependency|prerequisite))"
+                          r"(?:\*\*)?\s*[：:]\s*(?:\*\*)?", clause, re.I)
+        if not prefix:
+            continue
+        reference = _PR_REFERENCE.match(clause, prefix.end())
+        if not reference:
+            continue
+        condition = re.match(r"\s*(?:\*\*)?\s*(?:(关闭|合并)(?:并冻结[^。!?！？#或]*)?后(?:才(?:能|可)|方可)(?:开始|开工)"
+                             r"|must (?:be )?(closed|merged|merge|close) before (?:starting|implementation))",
+                             clause[reference.end():], re.I)
+        if not condition:
+            continue
+        repo = reference["repo"] or reference["short_repo"] or item["repo"]
+        number = int(reference["url_number"] or reference["number"])
+        if repo.lower() == str(item["repo"]).lower() and number == int(item["number"]):
+            continue
+        try:
+            fact = _reference_state(repo, number)
+        except ScreeningEvidenceUnavailable as error:
+            detail = str(error).split("，待", 1)[0]
+            return f"明确前置依赖状态未确认 · {repo}#{number} · {detail}"
+        if fact["state"] == "open":
+            return f"明确前置依赖尚未满足 · {repo}#{number} 仍开放"
+        requires_merge = (condition[1] or condition[2]).lower() in {"合并", "merge", "merged"}
+        if requires_merge and fact["kind"] == "pull_request" and not fact.get("merged"):
+            return f"明确前置依赖尚未满足 · {repo}#{number} 未合并"
+    return None
 
 
 def prerequisite_facts(item: dict) -> list[dict]:

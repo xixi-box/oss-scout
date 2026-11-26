@@ -310,6 +310,10 @@ def coarse_issue_blockers(eng, it: dict, *, lane: str, live_blockers=(), root=No
         blockers.append("excluded_label")
     if it.get("state_reason") == "duplicate":
         blockers.append("confirmed_duplicate")
+    if not blockers and it.get("context_complete"):
+        from scout_v2.screening_evidence import coarse_prerequisite_blocker
+        if prerequisite := coarse_prerequisite_blocker(it):
+            blockers.append(prerequisite)
     if root is not None and not blockers:
         entry = eng.repo_entry(repo) if hasattr(eng, "repo_entry") else (
             getattr(eng, "repos_cfg", {}).get("repositories", {}).get(repo) or {})

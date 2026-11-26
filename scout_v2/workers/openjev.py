@@ -3,8 +3,10 @@
 import json
 import os
 import re
+import time
 import urllib.error
 import urllib.request
+from http.client import HTTPException
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -24,6 +26,16 @@ class OpenJevClient:
         self.think = int(values.get("codiv_think") or 0)
 
     def score_issue(self, state: dict) -> dict:
+        for attempt in range(1, 5):
+            result = self._score_issue_once(state)
+            if not result.pop("api_error", False):
+                return result
+            if attempt < 4:
+                time.sleep(0.5 * 2 ** (attempt - 1))
+        return {**result, "usable": False, "blocking_gate": "screening_api_error",
+                "reason": f"细筛 API 失败（已重试 3 次） · {result['reason']}"}
+
+    def _score_issue_once(self, state: dict) -> dict:
         verdict = {"usable": None, "model": self.model, "provider": "codiv"}
         base = urlsplit(self.base)
         if (not self.key or not self.model or base.scheme != "https"
@@ -145,9 +157,9 @@ class OpenJevClient:
                         detail = b""
                     if b"maximum context length" in detail and b"input_tokens" in detail:
                         return skipped
-            return {**verdict, "reason": f"OpenJev HTTP {exc.code}"}
-        except (OSError, ValueError, TypeError, KeyError):
-            return {**verdict, "reason": "OpenJev response unavailable or invalid"}
+            return {**verdict, "api_error": True, "reason": f"OpenJev HTTP {exc.code}"}
+        except (OSError, HTTPException, ValueError, TypeError, KeyError):
+            return {**verdict, "api_error": True, "reason": "OpenJev response unavailable or invalid"}
         result = {**verdict, "usable": probability >= 0.5, "probability": probability,
                 "model": data.get("model") or self.model, "usage": data.get("usage") or {},
                 "reason": f"OpenJev eligibility probability {probability:.3f}"}
@@ -156,11 +168,12 @@ class OpenJevClient:
             result.update(usable=False, blocking_gate="private_disclosure",
                           reason="安全披露需私报 · 规范/维护者要求先私下协调，未见可信公开修复许可"
                           + (f"（{document[1]}）" if document else ""))
-        elif gates.get("prerequisite_unknown", 0) >= 0.5:
-            result.update(usable=None, blocking_gate="prerequisite_unknown", reason="前置依赖状态未确认，待重试")
         elif gates.get("unmet_prerequisite", 0) >= 0.5:
             references = [f"{row['repo']}#{row['number']} ({'merged' if row.get('merged') else row.get('state', 'unknown')})"
-                          for row in state.get("prerequisite_pull_requests") or [] if not row.get("merged")]
+                          for row in state.get("prerequisite_pull_requests") or []
+                          if row.get("state") == "open" or (row.get("kind") == "pull_request" and not row.get("merged"))]
             result.update(usable=False, blocking_gate="unmet_prerequisite",
                           reason="明确前置依赖尚未满足" + (" · " + ", ".join(references[:3]) if references else ""))
+        elif gates.get("prerequisite_unknown", 0) >= 0.5:
+            result.update(usable=False, blocking_gate="prerequisite_unknown", reason="前置依赖状态未确认")
         return result
