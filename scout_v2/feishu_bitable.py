@@ -374,9 +374,11 @@ def sync_table(root: Path, rows: list[dict], *, table_name: str, fields: list,
     next_cache = {}
     created_digests = {}
     to_create, to_update = [], []
+    from .repo_weights import numeric_weight
+
     repo_sync = table_name == REPO_TABLE_NAME and record_cache is None
     if repo_sync:
-        from .repo_weights import numeric_weight, save_repo_weights
+        from .repo_weights import save_repo_weights
         from .roster import repo_key
         weights = {}
     for row in rows:
@@ -398,7 +400,10 @@ def sync_table(root: Path, rows: list[dict], *, table_name: str, fields: list,
         else:
             record_id, previous = hit
             if record_cache is None:
-                previous = _fingerprint({name: previous.get(name) for name in values})
+                previous = {name: previous.get(name) for name in values}
+                if "仓库权重" in previous:
+                    previous["仓库权重"] = numeric_weight(previous["仓库权重"])
+                previous = _fingerprint(previous)
             else:
                 next_cache[key] = (record_id, desired)
             if force or previous != desired:

@@ -13,8 +13,15 @@ WEIGHT_STATE = "state/repo_weights.json"
 
 
 def numeric_weight(value):
-    if type(value) is int or (type(value) is float and math.isfinite(value)):
+    if isinstance(value, str):
+        try:
+            value = float(value)
+        except ValueError:
+            return None
+    if type(value) is int:
         return value
+    if type(value) is float and math.isfinite(value):
+        return int(value) if value.is_integer() else value
     return None
 
 

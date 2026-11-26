@@ -152,10 +152,11 @@ class TestSyncDiff:
         assert fb.sync_table(tmp_path, rows, **kwargs)["created"] == 2
         assert [fake.records[k]["仓库权重"] for k in ("r1", "r2")] == [1, 0]
 
-        fake.records["r1"]["仓库权重"] = 3.5
+        # Feishu returns numeric fields as numeric strings on this list endpoint.
+        fake.records["r1"]["仓库权重"] = "3.5"
         rows[0]["note"] = "changed independently"
         assert fb.sync_table(tmp_path, rows, **kwargs)["updated"] == 1
-        assert fake.records["r1"]["仓库权重"] == 3.5
+        assert fake.records["r1"]["仓库权重"] == "3.5"
         assert repo_weights(tmp_path) == {"a/b": 3.5, "c/d": 0}
         candidates = [fb.cand_row_to_fields(row) for row in mp.build_candidate_rows(tmp_path)]
         assert [row["仓库权重"] for row in candidates] == [3.5, 0]
@@ -163,6 +164,14 @@ class TestSyncDiff:
         del fake.records["r1"]["仓库权重"]
         fb.sync_table(tmp_path, rows, **kwargs)
         assert fake.records["r1"]["仓库权重"] == repo_weights(tmp_path)["a/b"] == 1
+
+    def test_candidate_weight_numeric_readback_does_not_rewrite_unchanged_row(self, tmp_path, fake):
+        row = {"key": "a/b#1", "title": "Fix parser", "queue_state": "暂存", "repo_weight": 1}
+        options = dict(table_name=fb.CAND_TABLE_NAME, fields=fb.CAND_FIELDS,
+                       to_fields=fb.cand_row_to_fields, binding_key="cand_table_id")
+        assert fb.sync_table(tmp_path, [row], **options)["created"] == 1
+        fake.records["r1"]["仓库权重"] = "1"
+        assert fb.sync_table(tmp_path, [row], **options)["updated"] == 0
 
     def test_explicit_complete_empty_snapshot_prunes_old_rows(self, tmp_path, fake):
         fake.records = {"r1": {"键": "a/b#1"}}
