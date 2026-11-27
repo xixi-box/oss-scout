@@ -24,7 +24,7 @@ CAND_TABLE_NAME = "候选池"
 SCAN_TABLE_NAME = "扫描发现"
 LINK_FIELDS = [{"field_name": "键", "type": 1}]
 REPO_WEIGHT_FIELD = {"field_name": "仓库权重", "type": 2}
-REPO_FIELDS = [*LINK_FIELDS, REPO_WEIGHT_FIELD]
+REPO_FIELDS = [*LINK_FIELDS, REPO_WEIGHT_FIELD, {"field_name": "开放 PR", "type": 2}]
 DATE_FORMAT = {"date_formatter": "yyyy-MM-dd HH:mm"}
 def _status_field(name: str, colors: dict[str, int]) -> dict:
     return {"field_name": name, "type": 3, "property": {"options": [
@@ -132,6 +132,7 @@ def repo_row_to_fields(row: dict) -> dict:
             "参与状态": "扫描与贡献" if row.get("issue_scan", True) else "仅跟踪存量 PR",
             "用途": row.get("purpose") or None,
             "已合并 PR": str(row.get("merged_by_us", 0)),
+            "开放 PR": row.get("open_by_us"),
             "备注": row.get("note") or None}
 
 
@@ -401,8 +402,8 @@ def sync_table(root: Path, rows: list[dict], *, table_name: str, fields: list,
             record_id, previous = hit
             if record_cache is None:
                 previous = {name: previous.get(name) for name in values}
-                if "仓库权重" in previous:
-                    previous["仓库权重"] = numeric_weight(previous["仓库权重"])
+                for name in previous.keys() & {"仓库权重", "开放 PR"}:
+                    previous[name] = numeric_weight(previous[name])
                 previous = _fingerprint(previous)
             else:
                 next_cache[key] = (record_id, desired)

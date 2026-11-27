@@ -120,13 +120,15 @@ def build_pr_rows(root, *, github_rows=None, read_pr=None) -> list[dict]:
 
 
 
-def update_repo_merge_counts(root, github_rows: list[dict]) -> None:
-    """Persist counts from the latest complete, merged PR feed snapshot."""
+def update_repo_pr_counts(root, github_rows: list[dict]) -> None:
+    """Persist both counts from the latest complete PR feed snapshot."""
     from scout_v2.state_store import atomic_json_write
 
-    counts = dict(Counter(row["repo"].lower() for row in github_rows
-                          if row["state"] == "merged" and not ledger_excludes(row)))
-    path = root / "state/repo_merge_counts.json"
+    counts = {"open": Counter(), "merged": Counter()}
+    for row in github_rows:
+        if row["state"] in counts and not ledger_excludes(row):
+            counts[row["state"]][row["repo"].lower()] += 1
+    path = root / "state/repo_pr_counts.json"
     try:
         if json.loads(path.read_text(encoding="utf-8")) == counts:
             return
@@ -144,13 +146,24 @@ def build_repo_rows(root) -> list[dict]:
         cfg_path = ROOT / "configs" / "repositories.yaml"
     cfg = yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {}
     repos = cfg.get("repositories") or {}
-    try:
-        merge_counts = json.loads((root / "state/repo_merge_counts.json").read_text(encoding="utf-8"))
-        if (not isinstance(merge_counts, dict) or any(type(count) is not int or count < 0
-                                                      for count in merge_counts.values())):
-            raise ValueError("invalid repository merge counts")
-    except FileNotFoundError:
-        merge_counts = None  # Roster bootstrap before the first full PR snapshot.
+    def read_counts(path):
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            return None
+
+    counts = read_counts(root / "state/repo_pr_counts.json")
+    if counts is None:
+        merge_counts = read_counts(root / "state/repo_merge_counts.json")
+        open_counts = None  # Unknown until the first complete PR snapshot.
+    else:
+        if not isinstance(counts, dict) or set(counts) != {"merged", "open"}:
+            raise ValueError("invalid repository PR counts")
+        merge_counts, open_counts = counts["merged"], counts["open"]
+    for entries in (merge_counts, open_counts):
+        if entries is not None and (not isinstance(entries, dict) or any(
+                type(count) is not int or count < 0 for count in entries.values())):
+            raise ValueError("invalid repository PR counts")
 
     audit: dict = {}
     for path in (root / "state" / "pool_audit.json",
@@ -178,6 +191,7 @@ def build_repo_rows(root) -> list[dict]:
             "purpose": spec.get("purpose") or "",
             "merged_by_us": (merge_counts.get(repo.lower(), 0) if merge_counts is not None
                              else spec.get("merged_by_us", 0)),
+            "open_by_us": open_counts.get(repo.lower(), 0) if open_counts is not None else None,
             "lang": a.get("lang") or "",
             "stars": a.get("stars"),
             "pushed": a.get("pushed") or "",

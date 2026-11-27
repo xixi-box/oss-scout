@@ -134,7 +134,7 @@ def _sync_bitables(root: Path, *, ds=None, activity_only=False, activity_cache=N
                     "candidates": (*CANDIDATE_SOURCES, "configs/repositories.yaml", "state/repo_weights.json"),
                     "scan": (*CANDIDATE_SOURCES, "state/seen.json"),
                     "repos": ("configs/repositories.yaml", "configs/lane_overrides.yaml", "state/pool_audit.json",
-                              "state/repo_merge_counts.json"),
+                              "state/repo_pr_counts.json"),
                 }.get(name, ())
                 from scout_v2.table_sync import source_stamp, subscribe
                 signature = (tuple(source_stamp(root / file) for file in files), activity if tracks_activity else None,
@@ -163,9 +163,9 @@ def _sync_bitables(root: Path, *, ds=None, activity_only=False, activity_cache=N
                         pr_feed = activity_cache.setdefault("pr:github", PullRequestFeed(root=root))
                         github_rows = pr_feed.snapshot(full=full_reconcile)
                         try:
-                            mod.update_repo_merge_counts(root, github_rows)
+                            mod.update_repo_pr_counts(root, github_rows)
                         except (OSError, ValueError) as exc:
-                            _audit(root, "repo_merge_counts_error", "repos", type(exc).__name__)
+                            _audit(root, "repo_pr_counts_error", "repos", type(exc).__name__)
                         signature = (*signature, pr_feed.version)
                         if not full_reconcile and signature == activity_cache.get(signature_key):
                             results[name] = {"unchanged": True}

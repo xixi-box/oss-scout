@@ -238,7 +238,7 @@ def test_snapshot_failure_does_not_advance_cache_and_full_reconcile_bypasses_cac
     assert sync()["pr"]["updated"] == 1
 
 
-def test_repo_merge_counts_follow_the_shared_pr_feed(tmp_path, monkeypatch):
+def test_repo_pr_counts_follow_the_shared_pr_feed(tmp_path, monkeypatch):
     from dashboard.app import _sync_bitables
     from scout_v2 import feishu_bitable as fb, pr_feed
 
@@ -272,12 +272,14 @@ def test_repo_merge_counts_follow_the_shared_pr_feed(tmp_path, monkeypatch):
     assert feed.take() == {"repos"}
     _sync_bitables(tmp_path, table_names={"repos"}, activity_cache=cache)
     assert [row["merged_by_us"] for row in writes[-1][1]] == [0, 0]
+    assert [fb.repo_row_to_fields(row)["开放 PR"] for row in writes[-1][1]] == [1, 0]
 
     state = "MERGED"
     _sync_bitables(tmp_path, table_names={"pr"}, activity_cache=cache, full_reconcile=False)
     assert feed.take() == {"repos"}
     _sync_bitables(tmp_path, table_names={"repos"}, activity_cache=cache, full_reconcile=False)
     assert [row["merged_by_us"] for row in writes[-1][1]] == [1, 0]
+    assert [row["open_by_us"] for row in writes[-1][1]] == [0, 0]
     assert len(reads) == 2
 
     state = None
@@ -285,6 +287,7 @@ def test_repo_merge_counts_follow_the_shared_pr_feed(tmp_path, monkeypatch):
     assert "error" in result["pr"] and not feed.take()
     _sync_bitables(tmp_path, table_names={"repos"}, activity_cache={})
     assert [row["merged_by_us"] for row in writes[-1][1]] == [1, 0]
+    assert [row["open_by_us"] for row in writes[-1][1]] == [0, 0]
     assert len(reads) == 3
 
 
