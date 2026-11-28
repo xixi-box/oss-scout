@@ -206,6 +206,56 @@ def test_missing_reference_is_evidence_not_a_retry(monkeypatch):
     assert len(calls) == 2
 
 
+@pytest.mark.parametrize("number,title,body,reason", [
+    (2900, "ci: selected upgrade-acceptance is skipped by its nightly-only dependency",
+     "## Problem\n.github/workflows/master.yml defines the acceptance job.\n"
+     "## Requested fix\nRemove the nightly job from `upgrade-acceptance.needs`.", "需要修改 CI 工作流"),
+    (2901, "ci: a red CI preflight does not block the merge",
+     "## Problem\nA failing check was reported as a downstream skip.\n"
+     "## Requested fix\nAdd `needs.quality.result` to the condition. "
+     "Ruleset 9930477 declares no `required_status_checks`, so CI preflight needs to be required.",
+     "需要仓库管理员调整合并规则"),
+    (0, "ci: application crashes on CI", "## Requested fix\nHandle empty values in `src/app.py`.", None),
+    (0, "fix parser crash found in CI", "CI output from `.github/workflows/master.yml`.\n"
+     "## Requested fix\nHandle empty values in `src/app.py`.", None),
+])
+def test_powercontext_workflow_and_repository_settings_are_coarse_blockers(number, title, body, reason):
+    repo = "oceanbase/powercontext"
+    engine = SimpleNamespace(repos_cfg={"repositories": {repo: {}}})
+    issue = {"repo": repo, "number": number, "context_complete": True, "title": title, "body_excerpt": body}
+    assert data.coarse_issue_blockers(engine, issue, lane="open") == ([reason] if reason else [])
+
+
+@pytest.mark.parametrize("merged,exists_on_default,expected", [(False, False, True), (True, False, False),
+                                                             (False, True, False)])
+def test_gptme_followup_only_in_unmerged_pr(monkeypatch, merged, exists_on_default, expected):
+    repo = "gptme/gptme"
+    head = "ae20b64" + "a" * 33
+    engine = SimpleNamespace(repos_cfg={"repositories": {repo: {}}})
+    issue = {"repo": repo, "number": 5389, "context_complete": True, "title": "server: metadata PATCH status",
+             "body_excerpt": "## Where\n`gptme/server/api_v2.py` (head `ae20b64`) handles the request. "
+             "Supporting code is in `gptme/logmanager/metadata.py`.\n## Context\n"
+             "Found by the AI reviewer on gptme/gptme#5204. Filed as a follow-up rather than fixed in place."}
+    seen = []
+
+    def lookup(target, number):
+        seen.append((target, number))
+        return {"kind": "pull_request", "state": "closed" if merged else "open", "merged": merged, "head_sha": head}
+
+    def content(path, *, optional):
+        assert optional
+        return {"type": "file"} if (exists_on_default or "?ref=" in path or path.endswith("api_v2.py")) else None
+
+    monkeypatch.setattr(evidence, "_reference_state", lookup)
+    monkeypatch.setattr(evidence, "_get", content)
+    assert bool(data.coarse_issue_blockers(engine, issue, lane="open")) is expected
+    assert seen == [(repo, 5204)]
+    seen.clear()
+    issue["body_excerpt"] = "## Related\nSee gptme/gptme#5204 for background."
+    assert data.coarse_issue_blockers(engine, issue, lane="open") == []
+    assert not seen
+
+
 @pytest.mark.parametrize("found", [False, True])
 def test_openviking_feature_component_checked_on_default_branch(monkeypatch, found):
     repo = "volcengine/OpenViking"

@@ -256,6 +256,55 @@ def coarse_branch_scope_blocker(item: dict, scope: dict) -> str | None:
     return None
 
 
+def coarse_delivery_scope_blocker(item: dict) -> str | None:
+    body = re.sub(r"(?ms)^\s*(`{3,}|~{3,})[^\n]*\n.*?^\s*\1[^\n]*$", "", item.get("body_excerpt") or "")
+    requested = re.search(r"^#{2,}[ \t]+(?:requested fix|proposed changes|suggested fix|修复要求|建议修复)\s*$"
+                          r"(.*?)(?=^#{2,}[ \t]|\Z)", body, re.I | re.M | re.S)
+    if requested:
+        action = requested[1].replace("`", "")
+        if (re.search(r"\b(?:rulesets?|branch protection|required_status_checks)\b|分支保护|合并规则", action, re.I)
+                and re.search(r"\b(?:needs? to be required|make .{1,70} required|(?:add|update|enable|configure) "
+                              r"(?:the )?(?:repository )?(?:ruleset|branch protection|required status checks?))\b"
+                              r"|(?:调整|启用|配置)(?:仓库)?(?:合并规则|分支保护)", action, re.I)):
+            return "需要仓库管理员调整合并规则"
+        if re.search(r"\b(?:update|edit|change|modify)\b[^\n]*\.github/(?:workflows|actions)/"
+                     r"|(?:修改|调整)[^\n]*\.github/(?:workflows|actions)/", action, re.I):
+            return "需要修改 CI 工作流"
+        if (re.match(r"\s*ci(?:\([^)]*\))?:", item.get("title") or "", re.I)
+                and re.search(r"\b(?:remove|change|update|add|move|replace|use)\b[^\n]*"
+                              r"(?:\bneeds\b|job dependency|status-check condition)", action, re.I)):
+            return "需要修改 CI 工作流"
+
+    # A follow-up link alone is insufficient. Confirm the cited head and an
+    # affected source file present on that head but absent on the default base.
+    reported_head = re.search(r"\bhead\s+`?([0-9a-f]{7,40})\b", body, re.I)
+    source = re.search(r"\bfound by [^\n.]{1,100}\breviewer on\s+`?", body, re.I)
+    if not reported_head or not source or not re.search(r"\bfollow[- ]up\b", body, re.I):
+        return None
+    reference = _PR_REFERENCE.match(body, source.end())
+    if not reference:
+        return None
+    repo, number = item["repo"], int(reference["url_number"] or reference["number"])
+    target = reference["repo"] or reference["short_repo"] or repo
+    if target.lower() != repo.lower() or number == int(item["number"]):
+        return None
+    fact = _reference_state(repo, number)
+    head = str(fact.get("head_sha") or "").lower()
+    if (fact.get("kind") != "pull_request" or fact.get("state") != "open" or fact.get("merged")
+            or not re.fullmatch(r"[0-9a-f]{40,64}", head) or not head.startswith(reported_head[1].lower())):
+        return None
+    where = re.search(r"^#{2,}[ \t]+(?:where|affected code|受影响代码)\s*$"
+                      r"(.*?)(?=^#{2,}[ \t]|\Z)", body, re.I | re.M | re.S)
+    paths = re.findall(r"`((?:[\w-]+/)+[\w.-]+\.(?:py|go|rs|ts|tsx|js|mjs|java|cpp|c|cs))`", where[1] if where else "")
+    for path in list(dict.fromkeys(paths))[:4]:
+        endpoint = f"repos/{repo}/contents/{quote(path, safe='/')}"
+        if _get(endpoint, optional=True) is None:
+            source_file = _get(f"{endpoint}?ref={head}", optional=True)
+            if isinstance(source_file, dict) and source_file.get("type") == "file":
+                return f"默认分支不含受影响代码 · 前置 PR #{number} 尚未合并 · {path}"
+    return None
+
+
 def prerequisite_facts(item: dict) -> list[dict]:
     repo, number = str(item["repo"]), int(item["number"])
     sources = [{"author": item.get("reporter"), "association": item.get("reporter_association"),

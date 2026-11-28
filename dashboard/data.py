@@ -311,11 +311,12 @@ def coarse_issue_blockers(eng, it: dict, *, lane: str, live_blockers=(), root=No
     if it.get("state_reason") == "duplicate":
         blockers.append("confirmed_duplicate")
     if not blockers and it.get("context_complete"):
-        from scout_v2.screening_evidence import coarse_branch_scope_blocker, coarse_prerequisite_blocker
+        from scout_v2.screening_evidence import (coarse_branch_scope_blocker, coarse_delivery_scope_blocker,
+                                                  coarse_prerequisite_blocker)
         entry = eng.repo_entry(repo) if hasattr(eng, "repo_entry") else eng.repos_cfg["repositories"][repo] or {}
         scope = entry.get("feature_branch_scope")
         reason = coarse_branch_scope_blocker(it, scope) if scope else None
-        if reason := reason or coarse_prerequisite_blocker(it):
+        if reason := reason or coarse_delivery_scope_blocker(it) or coarse_prerequisite_blocker(it):
             blockers.append(reason)
     if root is not None and not blockers:
         entry = eng.repo_entry(repo) if hasattr(eng, "repo_entry") else (
