@@ -24,7 +24,8 @@ CAND_TABLE_NAME = "候选池"
 SCAN_TABLE_NAME = "扫描发现"
 LINK_FIELDS = [{"field_name": "键", "type": 1}]
 REPO_WEIGHT_FIELD = {"field_name": "仓库权重", "type": 2}
-REPO_FIELDS = [*LINK_FIELDS, REPO_WEIGHT_FIELD, {"field_name": "开放 PR", "type": 2}]
+MERGED_PR_FIELD = {"field_name": "已合并 PR", "type": 2, "property": {"formatter": "0"}}
+REPO_FIELDS = [*LINK_FIELDS, REPO_WEIGHT_FIELD, MERGED_PR_FIELD, {"field_name": "开放 PR", "type": 2}]
 DATE_FORMAT = {"date_formatter": "yyyy-MM-dd HH:mm"}
 def _status_field(name: str, colors: dict[str, int]) -> dict:
     return {"field_name": name, "type": 3, "property": {"options": [
@@ -131,7 +132,7 @@ def repo_row_to_fields(row: dict) -> dict:
             "仓库类型": "荣誉仓库" if row.get("pool") == "honor" else "正式仓库",
             "参与状态": "扫描与贡献" if row.get("issue_scan", True) else "仅跟踪存量 PR",
             "用途": row.get("purpose") or None,
-            "已合并 PR": str(row.get("merged_by_us", 0)),
+            "已合并 PR": int(row.get("merged_by_us", 0)),
             "开放 PR": row.get("open_by_us"),
             "备注": row.get("note") or None}
 
@@ -175,7 +176,7 @@ def cand_row_to_fields(row: dict) -> dict:
 
 
 def ensure_columns(app_token: str, table_id: str, fields: list) -> None:
-    """Add missing fields and apply the managed single-select palettes."""
+    """Add missing fields and apply managed field migrations."""
     tok = feishu_app.tenant_token()
     url = (f"https://open.feishu.cn/open-apis/bitable/v1/apps/{app_token}"
            f"/tables/{table_id}/fields")
@@ -188,6 +189,8 @@ def ensure_columns(app_token: str, table_id: str, fields: list) -> None:
         field = existing.get(name)
         if field is None:
             result = feishu_app._request("POST", url, spec, token=tok)
+        elif spec == MERGED_PR_FIELD and field.get("type") == 1:
+            result = feishu_app._request("PUT", f"{url}/{field['field_id']}", spec, token=tok)
         elif spec["type"] == 3:
             old_options = (field.get("property") or {}).get("options") or []
             old = {option["name"]: option for option in old_options}
@@ -402,7 +405,7 @@ def sync_table(root: Path, rows: list[dict], *, table_name: str, fields: list,
             record_id, previous = hit
             if record_cache is None:
                 previous = {name: previous.get(name) for name in values}
-                for name in previous.keys() & {"仓库权重", "开放 PR"}:
+                for name in previous.keys() & {"仓库权重", "已合并 PR", "开放 PR"}:
                     previous[name] = numeric_weight(previous[name])
                 previous = _fingerprint(previous)
             else:

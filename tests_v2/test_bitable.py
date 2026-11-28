@@ -114,6 +114,27 @@ class TestRowToFields:
         options = spec["property"]["options"]
         assert len({o["color"] for o in options}) == 3
 
+    def test_merged_pr_field_migrates_in_place_once(self, monkeypatch):
+        spec = fb.MERGED_PR_FIELD
+        field = {"field_id": "fld-merged", "field_name": spec["field_name"], "type": 1}
+        changes = []
+
+        def request(method, url, payload=None, token=None):
+            if method == "GET":
+                return {"code": 0, "data": {"items": [field]}}
+            assert method == "PUT" and url.endswith("/fields/fld-merged")
+            changes.append(payload)
+            field.update(payload)
+            return {"code": 0}
+
+        monkeypatch.setattr(fb.feishu_app, "tenant_token", lambda: "tok")
+        monkeypatch.setattr(fb.feishu_app, "_request", request)
+        fb.ensure_columns("base", "table", [spec])
+        fb.ensure_columns("base", "table", [spec])
+        assert changes == [spec]
+        assert spec in fb.REPO_FIELDS
+        assert fb.repo_row_to_fields({"repo": "a/b", "merged_by_us": 12})["已合并 PR"] == 12
+
     def test_coarse_rejection_does_not_claim_fine_screen_ran(self):
         fields = fb.scan_row_to_fields({"key": "a/b#9", "status": "blocked",
                                         "coarse_reason": "label", "fine_reason": "not screened"})
