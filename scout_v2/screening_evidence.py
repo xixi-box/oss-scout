@@ -183,7 +183,9 @@ def _reference_state(repo, number):
             return fact
         pull = _get(f"repos/{repo}/pulls/{number}", optional=True)
         if pull is None:
-            issue = _get(f"repos/{repo}/issues/{number}")
+            issue = _get(f"repos/{repo}/issues/{number}", optional=True)
+            if issue is None:
+                return {"repo": repo, "number": number, "kind": "unavailable", "state": "not_found"}
             if not isinstance(issue, dict) or issue.get("pull_request") or issue.get("state") not in ("open", "closed"):
                 raise ScreeningEvidenceUnavailable("前置依赖状态不可用，待重试")
             return {"repo": repo, "number": number, "kind": "issue", "state": issue["state"],
@@ -201,14 +203,15 @@ def _reference_state(repo, number):
 def coarse_prerequisite_blocker(item: dict) -> str | None:
     # Restrict the mechanical gate to an explicit, unconditional opening rule in
     # the issue body. A later authoritative comment may supersede it.
-    if any(comment.get("author") == item.get("reporter")
+    if any((item.get("reporter") and comment.get("author") == item["reporter"])
            or comment.get("association") in {"OWNER", "MEMBER", "COLLABORATOR"}
            for comment in item.get("issue_comments") or []):
         return None
     body = re.sub(r"`(#\d+)`", r"\1", item.get("body_excerpt") or "")
     for clause in prose_clauses(body):
-        prefix = re.match(r"^(?:[-*]\s+)?(?:\*\*)?(?:硬依赖|Hard (?:dependency|prerequisite))"
-                          r"(?:\*\*)?\s*[：:]\s*(?:\*\*)?", clause, re.I)
+        prefix = re.match(r"^(?:[-*]\s+)?(?:\*\*)?(?:(?:硬依赖|Hard (?:dependency|prerequisite))"
+                          r"(?:\*\*)?\s*[：:]\s*|(?P<bare>blocked by|depends on|依赖)(?:\s*[:：]\s*|\s+))(?:\*\*)?",
+                          clause, re.I)
         if not prefix:
             continue
         reference = _PR_REFERENCE.match(clause, prefix.end())
@@ -217,7 +220,8 @@ def coarse_prerequisite_blocker(item: dict) -> str | None:
         condition = re.match(r"\s*(?:\*\*)?\s*(?:(关闭|合并)(?:并冻结[^。!?！？#或]*)?后(?:才(?:能|可)|方可)(?:开始|开工)"
                              r"|must (?:be )?(closed|merged|merge|close) before (?:starting|implementation))",
                              clause[reference.end():], re.I)
-        if not condition:
+        bare = prefix["bare"] and clause[reference.end():].strip(" *.。") == ""
+        if not condition and not bare:
             continue
         repo = reference["repo"] or reference["short_repo"] or item["repo"]
         number = int(reference["url_number"] or reference["number"])
@@ -228,11 +232,27 @@ def coarse_prerequisite_blocker(item: dict) -> str | None:
         except ScreeningEvidenceUnavailable as error:
             detail = str(error).split("，待", 1)[0]
             return f"明确前置依赖状态未确认 · {repo}#{number} · {detail}"
+        if fact["state"] == "not_found":
+            return f"明确前置依赖无法访问 · {repo}#{number} · GitHub HTTP 404"
         if fact["state"] == "open":
             return f"明确前置依赖尚未满足 · {repo}#{number} 仍开放"
-        requires_merge = (condition[1] or condition[2]).lower() in {"合并", "merge", "merged"}
+        requires_merge = bool(bare) or (condition[1] or condition[2]).lower() in {"合并", "merge", "merged"}
         if requires_merge and fact["kind"] == "pull_request" and not fact.get("merged"):
             return f"明确前置依赖尚未满足 · {repo}#{number} 未合并"
+    return None
+
+
+def coarse_branch_scope_blocker(item: dict, scope: dict) -> str | None:
+    branch, component, path = (scope[key] for key in ("branch", "component", "path"))
+    title, body = item.get("title") or "", item.get("body_excerpt") or ""
+    if not (re.search(rf"(?<![\w-]){re.escape(branch)}(?![\w/-])", body)
+            or re.search(rf"(?<![A-Za-z0-9]){re.escape(component)}(?![A-Za-z0-9])", title, re.I)):
+        return None
+    repo = item["repo"]
+    tree_entry = _cached(("default-scope", repo.lower(), path), _POLICY_TTL, lambda:
+                         _get(f"repos/{repo}/contents/{quote(path, safe='/')}", optional=True))
+    if tree_entry is None:
+        return f"默认分支不含 {component} · 该问题涉及 {branch}"
     return None
 
 

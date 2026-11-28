@@ -117,7 +117,8 @@ class OpenJevClient:
                 "prerequisite_unknown": (
                     "Is there a current explicit prerequisite instruction, but its current status is NOT "
                     "provided in prerequisite_pull_requests so readiness cannot be decided? Missing extraction "
-                    "hints do not prove no prerequisite. Do not answer yes for ordinary related PR links, "
+                    "hints do not prove no prerequisite. A not_found fact records a missing or inaccessible "
+                    "reference, not an instruction or a pending merge. Do not answer yes for ordinary related PR links, "
                     "withdrawn requirements or a prerequisite whose satisfied current state is provided."
                 ),
             }.items():

@@ -66,6 +66,31 @@ def test_cli_failure_cannot_publish_a_partial_patch(tmp_path, agent):
     assert not (tmp_path / "out/change.patch").exists()
 
 
+@pytest.mark.parametrize("agent", ["opencode", "codex"])
+def test_agent_switching_base_cannot_deliver_a_patch(tmp_path, agent):
+    repo, sha = make_repo(tmp_path)
+    subprocess.run(["git", "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit",
+                    "--allow-empty", "-qm", "feature branch baseline"], cwd=repo, check=True)
+    other = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=repo, text=True).strip()
+    task = job(sha)
+    task.repair_agent = agent
+
+    def producer(j, work, context):
+        class Client:
+            def run(self, *_):
+                subprocess.run(["git", "checkout", "--detach", other], cwd=work, check=True)
+                (work / "feature.txt").write_text("change on the wrong base\n")
+                return True, "done"
+
+        return repair.opencode_patch_producer(j, work, context, client=Client())
+
+    out = tmp_path / "out"
+    result = repair.run_repair(task, repo, out, patch_producer=producer)
+    assert result.outcome == "failed"
+    assert result.unverified_items == [f"agent_worktree_base_changed: expected {sha}, found {other}"]
+    assert not (out / "change.patch").exists()
+
+
 def test_opencode_full_timeout_output_is_retained_and_redacted(tmp_path, monkeypatch):
     from scout_v2.workers import opencode_client
     monkeypatch.setenv("OPENCODE_API_KEY", "private-model-secret")

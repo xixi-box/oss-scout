@@ -180,6 +180,54 @@ def test_confirmed_404_is_distinct_from_failed_fetch(monkeypatch):
     assert evidence._get("repos/example/repo/contents/SECURITY.md", optional=True) is None
 
 
+def test_missing_reference_is_evidence_not_a_retry(monkeypatch):
+    candidate = {**item("qwen_prerequisite"), "repo": "rancher/rancher", "number": 59105,
+                 "body_excerpt": "Background on this dependency appears in rancher/image-scanning#2423.",
+                 "issue_comments": []}
+    calls = []
+
+    def get(path, *, optional=False):
+        assert optional
+        calls.append(path)
+        return None
+
+    monkeypatch.setattr(evidence, "_get", get)
+    monkeypatch.setattr(evidence, "_edge_evidence", lambda *_: None)
+    monkeypatch.setattr(data, "repo_rules_text", lambda _: "Repository rules")
+    requests = model_response(monkeypatch)
+    assert data.fine_screen_issue(SimpleNamespace(), candidate, lane="open")["usable"] is True
+    fact, = requests[0]["state"]["prerequisite_pull_requests"]
+    assert (fact["repo"], fact["number"], fact["state"]) == ("rancher/image-scanning", 2423, "not_found")
+    assert len(calls) == 2
+
+    candidate["body_excerpt"] = "Blocked by rancher/image-scanning#2423"
+    assert evidence.coarse_prerequisite_blocker(candidate) == (
+        "明确前置依赖无法访问 · rancher/image-scanning#2423 · GitHub HTTP 404")
+    assert len(calls) == 2
+
+
+@pytest.mark.parametrize("found", [False, True])
+def test_openviking_feature_component_checked_on_default_branch(monkeypatch, found):
+    repo = "volcengine/OpenViking"
+    scope = {"branch": "feat/vika", "component": "SuperAgent", "path": "superagent/packages/daemon"}
+    engine = SimpleNamespace(repos_cfg={"repositories": {repo: {"feature_branch_scope": scope}}})
+    issue = {"repo": repo, "number": 8591, "context_complete": True,
+             "title": "Accepted inbox input stays queued after a restart",
+             "body_excerpt": "Reproduced on feat/vika."}
+    calls = []
+
+    def get(path, *, optional):
+        assert optional
+        calls.append(path)
+        return [] if found else None
+
+    monkeypatch.setattr(evidence, "_get", get)
+    assert data.coarse_issue_blockers(engine, issue, lane="open") == (
+        [] if found else ["默认分支不含 SuperAgent · 该问题涉及 feat/vika"])
+    assert data.coarse_issue_blockers(engine, {**issue, "body_excerpt": "Ordinary issue"}, lane="open") == []
+    assert calls == [f"repos/{repo}/contents/superagent/packages/daemon"]
+
+
 def test_policy_cache_retains_full_documents_without_refetching(monkeypatch):
     calls = policy_reads(monkeypatch, "example/repo", security="Private reporting policy\n" * 800)
     first = evidence.render_repository_policy("example/repo")

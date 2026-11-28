@@ -141,6 +141,7 @@ repositories:
     - 贡献指南允许常规fork/PR，有Agent指南；要求离线回归测试，未见AI发布禁令或强制指派。
   volcengine/OpenViking:
     weight: 1
+    feature_branch_scope: {branch: feat/vika, component: SuperAgent, path: superagent/packages/daemon}
     lane: open
     pool: formal
     issue_scan: true

@@ -48,6 +48,9 @@ Do this, in order:
    repo is built and tested (pyproject.toml / Cargo.toml / package.json /
    test dirs / CI config). Do not assume a framework. Read the full issue
    discussion and repository contribution rules before choosing a direction.
+   Keep the supplied checkout at its initial commit. If the affected component
+   only exists on another branch or commit, report that as a blocker in the
+   result. Do not switch bases or deliver a patch for another checkout.
    Check sibling call paths and run the relevant existing tests before changing
    behavior. Budget time for reproduction, repair, related checks and reporting;
    do not spend the whole task on a broad build or unrelated full-repository suite.
@@ -535,6 +538,9 @@ def opencode_patch_producer(job: Job, work_dir: Path, context: str,
     # 优先读 agent 落盘的结果文件，读不到再退回解析 stdout
     markers = _read_result_file(work_dir) or _parse_markers(detail)
 
+    final_head = _git(["rev-parse", "HEAD"], work_dir).stdout.strip()
+    if final_head != baseline:
+        raise RuntimeError(f"agent_worktree_base_changed: expected {baseline}, found {final_head}")
     _git(["add", "-A"], work_dir)
     changed = _git(["diff", "--cached", "--name-only"], work_dir).stdout.splitlines()
     from .publish_remote import _JUNK_PATH, filter_patch_junk
